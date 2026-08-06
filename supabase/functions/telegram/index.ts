@@ -78,13 +78,124 @@ function mainMenu(userId: number) {
   const rows = [
     [{ text: '📍 المحطات القريبة مني', callback_data: 'nearby' }],
     [{ text: '⛽ ابحث حسب نوع الوقود', callback_data: 'products' }],
+    [{ text: '⭐ محطاتي المفضلة', callback_data: 'favs' }],
+    [{ text: '🔔 نغمة التنبيه المخصصة', callback_data: 'tone' }],
     [{ text: '🏪 إدارة محطتي', callback_data: 'manage' }],
     [{ text: '🌐 فتح الموقع', url: SITE }],
   ];
   if (isAdmin(userId)) {
-    rows.splice(3, 0, [{ text: '🛡 لوحة الإدارة', callback_data: 'admin' }]);
+    rows.splice(5, 0, [{ text: '🛡 لوحة الإدارة', callback_data: 'admin' }]);
   }
   return { inline_keyboard: rows };
+}
+
+// ---------- Favourites ----------
+
+async function showFavourites(chat: number, userId: number, messageId?: number) {
+  const { data: favs } = await db
+    .from('telegram_favorites')
+    .select('station_id, stations(name, city)')
+    .eq('telegram_id', userId);
+
+  const rows = (favs ?? []).map((f) => {
+    const s = f.stations as unknown as { name: string; city: string };
+    return [{ text: `⭐ ${s.name} — ${s.city}`, callback_data: `f-:${f.station_id}` }];
+  });
+
+  const text = rows.length
+    ? '⭐ <b>محطاتك المفضلة</b>\n\n' +
+      'يصلك تنبيه فور توفر وقود جديد في أي منها.\n' +
+      'اضغط على محطة لإزالتها من المفضلة.'
+    : '⭐ <b>محطاتك المفضلة</b>\n\n' +
+      'لم تضف أي محطة بعد.\n\n' +
+      'ابحث عن محطة بالاسم أو عبر «المحطات القريبة»، ثم اضغط زر الإضافة للمفضلة.';
+
+  const markup = {
+    inline_keyboard: [...rows, [{ text: '🏠 القائمة', callback_data: 'menu' }]],
+  };
+  if (messageId) await edit(chat, messageId, text, { reply_markup: markup });
+  else await send(chat, text, { reply_markup: markup });
+}
+
+async function addFavourite(
+  chat: number,
+  userId: number,
+  stationId: string,
+  queryId: string
+) {
+  const { data: station } = await db
+    .from('stations')
+    .select('name')
+    .eq('id', stationId)
+    .eq('status', 'approved')
+    .maybeSingle();
+
+  if (!station) {
+    await answer(queryId, 'المحطة غير متاحة');
+    return;
+  }
+
+  await db
+    .from('telegram_favorites')
+    .upsert({ telegram_id: userId, chat_id: chat, station_id: stationId });
+
+  await answer(queryId, `أضيفت ${station.name} للمفضلة ⭐`);
+}
+
+async function removeFavourite(
+  chat: number,
+  messageId: number,
+  userId: number,
+  stationId: string,
+  queryId: string
+) {
+  await db
+    .from('telegram_favorites')
+    .delete()
+    .eq('telegram_id', userId)
+    .eq('station_id', stationId);
+  await answer(queryId, 'أزيلت من المفضلة');
+  await showFavourites(chat, userId, messageId);
+}
+
+// ---------- Custom notification tone ----------
+
+async function showTone(chat: number) {
+  // Telegram accepts custom chat tones up to 5s / 300KB; both files fit,
+  // so they can be saved straight from this chat.
+  for (const [n, title] of [
+    ['1', 'المحطة التقنية — نغمة ١'],
+    ['2', 'المحطة التقنية — نغمة ٢'],
+  ]) {
+    await call('sendAudio', {
+      chat_id: chat,
+      audio: `${SITE}/sounds/alert-${n}.mp3`,
+      title,
+      performer: 'المحطة التقنية',
+      caption: title,
+    });
+  }
+
+  await send(
+    chat,
+    '🔔 <b>كيف تجعل هذه النغمة تنبيه البوت</b>\n\n' +
+      '<b>📱 أندرويد</b>\n' +
+      '1. اضغط مطولاً على المقطع الصوتي أعلاه\n' +
+      '2. اختر «حفظ للإشعارات» أو <i>Save for Notifications</i>\n' +
+      '3. ارجع لمحادثة البوت واضغط على اسمه في الأعلى\n' +
+      '4. الإشعارات ← الصوت ← اختر «المحطة التقنية»\n\n' +
+      '<b>🍎 آيفون</b>\n' +
+      '1. اضغط على المقطع الصوتي ثم زر المشاركة\n' +
+      '2. الإعدادات ← الإشعارات والأصوات ← تحميل صوت\n' +
+      '3. اختر الملف الذي حفظته\n' +
+      '4. ارجع لمحادثة البوت ← اسم البوت ← الإشعارات ← الصوت\n\n' +
+      '💡 بهذا تميّز تنبيهات الوقود عن باقي رسائلك فوراً.',
+    {
+      reply_markup: {
+        inline_keyboard: [[{ text: '🏠 القائمة', callback_data: 'menu' }]],
+      },
+    }
+  );
 }
 
 async function showAdmin(chat: number, userId: number, messageId?: number) {
@@ -192,6 +303,22 @@ function stationLine(s: {
     `☎️ ${s.phone}` +
     (s.slug ? `\n${SITE}/${s.slug}` : '')
   );
+}
+
+/** One station per message, so the favourite button can carry its id. */
+async function sendStationCard(
+  chat: number,
+  s: { id: string; name: string; city: string; address: string; phone: string; slug?: string; distance_km?: number; products?: string[] }
+) {
+  await send(chat, stationLine(s), {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '⭐ تنبيهني عند توفر وقود', callback_data: `f+:${s.id}` }],
+        ...(s.slug ? [[{ text: '🌐 صفحة المحطة', url: `${SITE}/${s.slug}` }]] : []),
+      ],
+    },
+    disable_web_page_preview: true,
+  });
 }
 
 async function showNearby(chat: number) {
@@ -430,6 +557,16 @@ Deno.serve(async (req) => {
       } else if (data === 'manage') {
         await answer(cb.id);
         await showManage(chat, from);
+      } else if (data === 'favs') {
+        await answer(cb.id);
+        await showFavourites(chat, from, messageId);
+      } else if (data === 'tone') {
+        await answer(cb.id);
+        await showTone(chat);
+      } else if (data.startsWith('f+:')) {
+        await addFavourite(chat, from, data.slice(3), cb.id);
+      } else if (data.startsWith('f-:')) {
+        await removeFavourite(chat, messageId, from, data.slice(3), cb.id);
       } else if (data === 'admin') {
         await answer(cb.id);
         await showAdmin(chat, from, messageId);
@@ -468,15 +605,17 @@ Deno.serve(async (req) => {
         p_limit: 5,
       });
 
-      const text = near?.length
-        ? '📍 <b>أقرب المحطات إليك</b>\n\n' +
-          near.map((s: never) => stationLine(s)).join('\n\n')
-        : 'لا توجد محطات مسجّلة بعد.';
-
-      await send(chat, text, {
-        reply_markup: { remove_keyboard: true },
-        disable_web_page_preview: true,
-      });
+      if (!near?.length) {
+        await send(chat, 'لا توجد محطات مسجّلة بعد.', {
+          reply_markup: { remove_keyboard: true },
+        });
+      } else {
+        await send(chat, '📍 <b>أقرب المحطات إليك</b>', {
+          reply_markup: { remove_keyboard: true },
+        });
+        // one message per station so each carries its own favourite button
+        for (const s of near) await sendStationCard(chat, s);
+      }
       await send(chat, 'اختر ما تريد:', { reply_markup: mainMenu(from) });
       return new Response('ok');
     }
@@ -521,7 +660,7 @@ Deno.serve(async (req) => {
     if (q.length >= 2) {
       const { data } = await db
         .from('stations')
-        .select('name, city, address, phone, slug, is_24h, opens_at, closes_at, station_products(product, is_available)')
+        .select('id, name, city, address, phone, slug, is_24h, opens_at, closes_at, station_products(product, is_available)')
         .eq('status', 'approved')
         .or(`name.ilike.%${q}%,city.ilike.%${q}%,address.ilike.%${q}%`)
         .limit(5);
@@ -532,13 +671,14 @@ Deno.serve(async (req) => {
           .station_products.filter((p) => p.is_available).map((p) => p.product),
       }));
 
-      await send(
-        chat,
-        results.length
-          ? `🔍 نتائج البحث عن «${q}»\n\n` + results.map((s) => stationLine(s as never)).join('\n\n')
-          : `لا توجد نتائج لـ «${q}».`,
-        { reply_markup: mainMenu(from), disable_web_page_preview: true }
-      );
+      if (!results.length) {
+        await send(chat, `لا توجد نتائج لـ «${q}».`, { reply_markup: mainMenu(from) });
+        return new Response('ok');
+      }
+
+      await send(chat, `🔍 نتائج البحث عن «${q}»`);
+      for (const s of results) await sendStationCard(chat, s as never);
+      await send(chat, 'اختر ما تريد:', { reply_markup: mainMenu(from) });
       return new Response('ok');
     }
 
