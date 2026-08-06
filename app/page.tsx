@@ -5,10 +5,11 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { distanceKm, loadStations } from '@/lib/stations';
-import { PRODUCT_LABELS, PRODUCT_ORDER } from '@/lib/products';
+import { useSiteStats } from '@/lib/useSiteStats';
+import { PRODUCT_LABELS } from '@/lib/products';
 import { StationCard } from '@/components/StationCard';
-import { AdBanner } from '@/components/AdBanner';
 import { PromoStrip } from '@/components/PromoStrip';
+import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
 import { FuelIcon, ListIcon, MapPinIcon, SearchIcon, SpinnerIcon } from '@/components/icons';
 import type { FuelProduct, StationWithStatus } from '@/types/database';
@@ -31,6 +32,7 @@ export default function HomePage() {
   const [filter, setFilter] = useState<FuelProduct | null>(null);
   const [query, setQuery] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
+  const { visits, online } = useSiteStats();
 
   useEffect(() => {
     // a dropped connection must surface as a retry prompt, not an endless spinner
@@ -83,8 +85,6 @@ export default function HomePage() {
     return rows;
   }, [stations, origin, filter, query]);
 
-  const openCount = stations?.filter((s) => s.products.some((p) => p.is_available)).length ?? 0;
-
   return (
     <>
       <header className="bg-gradient-to-b from-brand-700 to-brand px-4 pb-5 pt-6 text-white">
@@ -93,7 +93,7 @@ export default function HomePage() {
             <FuelIcon className="h-6 w-6" />
             <h1 className="text-lg font-extrabold">المحطة التقنية</h1>
           </div>
-          <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — الرمادي</p>
+          <p className="mt-1 text-center text-xs text-white/80">المحطة التقنية في الأنبار</p>
 
           <div className="relative mt-4">
             <SearchIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -107,17 +107,36 @@ export default function HomePage() {
             />
           </div>
 
-          {stations && (
-            <div className="mt-3 flex justify-center gap-4 text-xs text-white/90">
-              <span>{stations.length} محطة</span>
-              <span aria-hidden>•</span>
-              <span>{openCount} متوفر فيها وقود</span>
-            </div>
-          )}
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {[
+              { label: 'محطة مسجلة', value: stations?.length ?? '—' },
+              { label: 'زائر', value: visits?.toLocaleString('en') ?? '—' },
+              { label: 'متصل الآن', value: online, live: true },
+            ].map((stat) => (
+              <div
+                key={stat.label}
+                className="rounded-xl bg-white/10 py-2 text-center backdrop-blur-sm"
+              >
+                <p className="text-base font-extrabold leading-none">{stat.value}</p>
+                <p className="mt-1 flex items-center justify-center gap-1 text-[11px] text-white/80">
+                  {stat.live && (
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-300" />
+                  )}
+                  {stat.label}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-md px-4 pb-24 pt-4">
+        {stations && (
+          <div className="mb-4">
+            <ProductsDashboard stations={stations} filter={filter} onPick={setFilter} />
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-2 rounded-xl bg-brand-50 p-1">
           {(['list', 'map'] as const).map((v) => (
             <button
@@ -135,42 +154,10 @@ export default function HomePage() {
           ))}
         </div>
 
-        <div className="no-scrollbar -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1">
-          <button
-            type="button"
-            onClick={() => setFilter(null)}
-            aria-pressed={filter === null}
-            className={`min-h-[40px] shrink-0 rounded-full px-4 text-sm font-semibold transition-colors duration-200 ${
-              filter === null ? 'bg-brand text-white' : 'bg-white text-brand-700 ring-1 ring-brand-100'
-            }`}
-          >
-            الكل
-          </button>
-          {PRODUCT_ORDER.map((product) => (
-            <button
-              key={product}
-              type="button"
-              onClick={() => setFilter(filter === product ? null : product)}
-              aria-pressed={filter === product}
-              className={`min-h-[40px] shrink-0 rounded-full px-4 text-sm font-semibold transition-colors duration-200 ${
-                filter === product
-                  ? 'bg-brand text-white'
-                  : 'bg-white text-brand-700 ring-1 ring-brand-100'
-              }`}
-            >
-              {PRODUCT_LABELS[product]}
-            </button>
-          ))}
-        </div>
-
         <button type="button" onClick={locate} className={`btn-ghost mt-3 w-full ${origin ? 'text-brand' : ''}`}>
           <MapPinIcon className="h-4 w-4" />
           {origin ? 'مرتّبة حسب الأقرب إليك' : 'رتّب حسب الأقرب إليّ'}
         </button>
-
-        <div className="mt-4">
-          <AdBanner />
-        </div>
 
         <div className="mt-4">
           {failed && (

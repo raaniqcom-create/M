@@ -25,6 +25,9 @@ export default {
         soft: '0 1px 2px rgba(20,83,45,0.05), 0 4px 14px rgba(20,83,45,0.07)',
         lift: '0 4px 10px rgba(20,83,45,0.08), 0 12px 32px rgba(20,83,45,0.10)',
       },
+      fontFamily: {
+        sans: ['var(--font-tajawal)', 'system-ui', 'sans-serif'],
+      },
       keyframes: {
         ticker: {
           '0%': { transform: 'translateX(-100%)' },
