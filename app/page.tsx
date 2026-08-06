@@ -94,7 +94,14 @@ export default function HomePage() {
       <header className="bg-gradient-to-b from-brand-700 to-brand px-4 pb-5 pt-6 text-white">
         <div className="mx-auto max-w-md">
           <div className="flex items-center justify-center gap-2">
-            <FuelIcon className="h-6 w-6" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/icons/icon-192.png"
+              alt=""
+              width={36}
+              height={36}
+              className="rounded-lg bg-white p-0.5"
+            />
             <h1 className="text-lg font-extrabold">المحطة التقنية</h1>
           </div>
           <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — جميع مدن المحافظة</p>
