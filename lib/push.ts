@@ -21,16 +21,41 @@ export async function isSubscribed(
   return typeof localStorage !== 'undefined' && localStorage.getItem(subKey(stationId, role)) !== null;
 }
 
+/** navigator.serviceWorker.ready never rejects — if the worker fails to
+ *  activate it simply hangs, leaving the button spinning forever. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 async function getPushSubscription(): Promise<PushSubscription | null> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
-  const registration = await navigator.serviceWorker.ready;
-  return (
-    (await registration.pushManager.getSubscription()) ??
+
+  const registration = await withTimeout(navigator.serviceWorker.ready, 15000);
+  if (!registration) return null;
+
+  // Reusing the browser's existing push endpoint is instant; only the very
+  // first activation pays the round trip to the push service (FCM / Apple),
+  // which is what makes that one tap feel slow on mobile data.
+  const existing = await registration.pushManager.getSubscription();
+  if (existing) return existing;
+
+  return withTimeout(
     registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
-    })
+    }),
+    20000
   );
+}
+
+/** Resolved once the worker is active, so the first tap doesn't wait for it. */
+export function warmUpPush(): void {
+  if ('serviceWorker' in navigator && 'PushManager' in window) {
+    void navigator.serviceWorker.ready.then((r) => r.pushManager.getSubscription());
+  }
 }
 
 export async function subscribeToStation(
@@ -38,7 +63,11 @@ export async function subscribeToStation(
   role: 'driver' | 'owner' = 'driver'
 ): Promise<boolean> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
-  if ((await Notification.requestPermission()) !== 'granted') return false;
+
+  // asking again when already granted costs a needless round trip on mobile
+  if (Notification.permission !== 'granted') {
+    if ((await Notification.requestPermission()) !== 'granted') return false;
+  }
 
   const subscription = await getPushSubscription();
   if (!subscription) return false;
@@ -52,7 +81,12 @@ export async function subscribeToStation(
     p256dh: json.keys?.p256dh,
     auth: json.keys?.auth,
   });
-  if (error) return false;
+
+  // 23505 = this device already follows this station, which is the desired
+  // end state. Any upsert/ON CONFLICT form is rejected outright here: RLS
+  // evaluates it against an UPDATE policy that anonymous visitors are not
+  // granted, so a plain insert plus this check is the only thing that works.
+  if (error && error.code !== '23505') return false;
 
   localStorage.setItem(subKey(stationId, role), json.endpoint!);
   return true;

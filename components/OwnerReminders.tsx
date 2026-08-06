@@ -59,6 +59,11 @@ export function OwnerReminders({ stationId }: { stationId: string }) {
         </button>
       </div>
 
+      {state === 'loading' && (
+        <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          جارِ التفعيل… قد يستغرق بضع ثوانٍ في المرة الأولى فقط.
+        </p>
+      )}
       {state === 'on' && (
         <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-xs font-semibold text-brand">
           التذكير مفعّل على هذا الجهاز

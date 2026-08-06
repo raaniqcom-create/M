@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { warmUpPush } from '@/lib/push';
 
 // next-pwa only auto-registers via pages/_document; App Router needs this.
 export function ServiceWorkerRegister() {
@@ -17,7 +18,11 @@ export function ServiceWorkerRegister() {
       return;
     }
 
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker
+      .register('/sw.js')
+      // resolve the worker now so the first notification tap doesn't wait for it
+      .then(() => warmUpPush())
+      .catch(() => {});
   }, []);
 
   return null;

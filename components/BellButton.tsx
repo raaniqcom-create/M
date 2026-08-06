@@ -49,6 +49,9 @@ export function BellButton({ stationId }: { stationId: string }) {
           <BellIcon />
         )}
       </button>
+      {state === 'loading' && (
+        <span className="mt-1 text-[10px] text-slate-500">جارِ التفعيل…</span>
+      )}
       {state === 'denied' && (
         <span className="mt-1 text-[10px] text-slate-400">التنبيهات مرفوضة</span>
       )}
