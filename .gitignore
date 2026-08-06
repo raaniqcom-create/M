@@ -5,3 +5,4 @@ node_modules/
 scratch_query.json
 out/
 .netlify/
+scratch_*
