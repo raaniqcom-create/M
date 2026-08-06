@@ -6,13 +6,19 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { distanceKm, loadStations } from '@/lib/stations';
 import { useSiteStats } from '@/lib/useSiteStats';
+import { isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { StationCard } from '@/components/StationCard';
 import { PromoStrip } from '@/components/PromoStrip';
 import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
 import { InstallPrompt } from '@/components/InstallPrompt';
-import { CITY_NAMES } from '@/lib/cities';
+import {
+  AdvancedFilter,
+  EMPTY_FILTERS,
+  countActive,
+  type Filters,
+} from '@/components/AdvancedFilter';
 import { FuelIcon, ListIcon, MapPinIcon, SearchIcon, SpinnerIcon } from '@/components/icons';
 import type { FuelProduct, StationWithStatus } from '@/types/database';
 
@@ -31,10 +37,9 @@ export default function HomePage() {
   const [stations, setStations] = useState<StationWithStatus[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [origin, setOrigin] = useState<{ lat: number; lng: number } | null>(null);
-  const [filter, setFilter] = useState<FuelProduct | null>(null);
   const [query, setQuery] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
-  const [city, setCity] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const { visits, online } = useSiteStats();
 
   useEffect(() => {
@@ -78,16 +83,39 @@ export default function HomePage() {
           .sort((a, b) => a.distanceKm - b.distanceKm)
       : stations;
 
-    if (city) rows = rows.filter((s) => s.city === city);
-    if (filter) {
-      rows = rows.filter((s) => s.products.some((p) => p.product === filter && p.is_available));
+    // A station with no stock and no announced arrival has nothing to offer a
+    // driver right now — showing it only wastes a tap.
+    rows = rows.filter((s) =>
+      s.products.some((p) => (p.is_available && isOpenNow(s)) || p.expected_at)
+    );
+
+    if (filters.openOnly) rows = rows.filter(isOpenNow);
+    if (filters.city) rows = rows.filter((s) => s.city === filters.city);
+    if (filters.kind) rows = rows.filter((s) => s.kind === filters.kind);
+    if (filters.availableOnly) {
+      rows = rows.filter((s) => isOpenNow(s) && s.products.some((p) => p.is_available));
     }
+    if (filters.product) {
+      rows = rows.filter((s) =>
+        s.products.some(
+          (p) =>
+            p.product === filters.product &&
+            (filters.availableOnly ? p.is_available && isOpenNow(s) : p.is_available || p.expected_at)
+        )
+      );
+    }
+
     const q = query.trim();
-    if (q) {
-      rows = rows.filter((s) => s.name.includes(q) || s.address.includes(q));
-    }
+    if (q) rows = rows.filter((s) => s.name.includes(q) || s.address.includes(q) || s.city.includes(q));
+
     return rows;
-  }, [stations, origin, filter, query, city]);
+  }, [stations, origin, filters, query]);
+
+  const cityCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of stations ?? []) m.set(s.city, (m.get(s.city) ?? 0) + 1);
+    return m;
+  }, [stations]);
 
   return (
     <>
@@ -114,7 +142,7 @@ export default function HomePage() {
           <div className="mt-4 grid grid-cols-3 gap-2">
             {[
               { label: 'محطة مسجلة', value: stations?.length ?? '—' },
-              { label: 'زائر', value: visits?.toLocaleString('en') ?? '—' },
+              { label: 'مفتوحة الآن', value: stations ? stations.filter(isOpenNow).length : '—' },
               { label: 'متصل الآن', value: online, live: true },
             ].map((stat) => (
               <div
@@ -137,7 +165,11 @@ export default function HomePage() {
       <main className="mx-auto max-w-md px-4 pb-24 pt-4">
         {stations && (
           <div className="mb-4">
-            <ProductsDashboard stations={stations} filter={filter} onPick={setFilter} />
+            <ProductsDashboard
+              stations={stations}
+              filter={filters.product}
+              onPick={(product) => setFilters({ ...filters, product })}
+            />
           </div>
         )}
 
@@ -145,34 +177,8 @@ export default function HomePage() {
           <PromoStrip />
         </div>
 
-        <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
-          <button
-            type="button"
-            onClick={() => setCity(null)}
-            aria-pressed={city === null}
-            className={`min-h-[38px] shrink-0 rounded-full px-4 text-[13px] font-semibold transition-colors duration-200 ${
-              city === null ? 'bg-brand text-white' : 'bg-white text-brand-700 ring-1 ring-brand-100'
-            }`}
-          >
-            كل الأنبار
-          </button>
-          {CITY_NAMES.map((c) => {
-            const count = stations?.filter((s) => s.city === c).length ?? 0;
-            if (count === 0 && city !== c) return null;
-            return (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setCity(city === c ? null : c)}
-                aria-pressed={city === c}
-                className={`min-h-[38px] shrink-0 rounded-full px-4 text-[13px] font-semibold transition-colors duration-200 ${
-                  city === c ? 'bg-brand text-white' : 'bg-white text-brand-700 ring-1 ring-brand-100'
-                }`}
-              >
-                {c} ({count})
-              </button>
-            );
-          })}
+        <div className="mb-3">
+          <AdvancedFilter filters={filters} onChange={setFilters} cityCounts={cityCounts} />
         </div>
 
         <div className="grid grid-cols-2 gap-2 rounded-xl bg-brand-50 p-1">
@@ -231,15 +237,15 @@ export default function HomePage() {
                   <p className="mt-3 text-sm font-medium text-slate-600">
                     {query
                       ? `لا توجد نتائج لـ «${query}»`
-                      : filter
-                        ? `لا توجد محطة يتوفر فيها ${PRODUCT_LABELS[filter]} حالياً`
-                        : 'لا توجد محطات معتمدة بعد'}
+                      : filters.product
+                        ? `لا توجد محطة يتوفر فيها ${PRODUCT_LABELS[filters.product]} حالياً`
+                        : 'لا توجد محطات متاحة الآن'}
                   </p>
-                  {(filter || query) && (
+                  {(countActive(filters) > 0 || query) && (
                     <button
                       type="button"
                       onClick={() => {
-                        setFilter(null);
+                        setFilters(EMPTY_FILTERS);
                         setQuery('');
                       }}
                       className="btn-ghost mt-4 px-6"

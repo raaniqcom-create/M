@@ -3,8 +3,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
+import {
+  PRODUCT_LABELS,
+  PRODUCT_ORDER,
+  TRAFFIC_COLORS,
+  TRAFFIC_LABELS,
+  expectedLabel,
+} from '@/lib/products';
 import { ShareButton } from '@/components/ShareButton';
+import { StationLinkCard } from '@/components/StationLinkCard';
+import { ProductControl } from '@/components/ProductControl';
+import { WorkingHours } from '@/components/WorkingHours';
+import type { ExpectedPeriod } from '@/lib/hours';
 import { FuelIcon, LogOutIcon, SpinnerIcon } from '@/components/icons';
 import type { FuelProduct, Station, StationProduct, TrafficLevel } from '@/types/database';
 
@@ -19,10 +29,14 @@ export default function OwnerPage() {
   const [savingProduct, setSavingProduct] = useState<FuelProduct | null>(null);
 
   const load = useCallback(async (uid: string) => {
+    // maybeSingle() errors outright when an owner holds more than one station,
+    // which would render as "no station at all" — take the earliest instead
     const { data: st } = await supabase
       .from('stations')
       .select('*')
       .eq('owner_id', uid)
+      .order('created_at')
+      .limit(1)
       .maybeSingle();
 
     setStation(st ?? null);
@@ -47,7 +61,7 @@ export default function OwnerPage() {
     });
   }, [router, load]);
 
-  async function toggleProduct(product: FuelProduct, next: boolean) {
+  async function setAvailable(product: FuelProduct, next: boolean) {
     if (!station) return;
     setSavingProduct(product);
     setProducts((prev) =>
@@ -78,6 +92,23 @@ export default function OwnerPage() {
       }).catch(() => {});
     }
     setSavingProduct(null);
+  }
+
+  async function setExpected(
+    product: FuelProduct,
+    expected_at: string | null,
+    period: ExpectedPeriod | null
+  ) {
+    if (!station) return;
+    const expected_period = expected_at === null ? null : period;
+    setProducts((prev) =>
+      prev.map((p) => (p.product === product ? { ...p, expected_at, expected_period } : p))
+    );
+    await supabase
+      .from('station_products')
+      .update({ expected_at, expected_period })
+      .eq('station_id', station.id)
+      .eq('product', product);
   }
 
   async function setTraffic(level: TrafficLevel) {
@@ -153,41 +184,39 @@ export default function OwnerPage() {
           <div className="space-y-4">
             <section className="card p-5">
               <h2 className="text-base font-bold">{station.name}</h2>
-              <p className="mt-0.5 text-sm text-slate-500">{station.address}</p>
+              <p className="mt-0.5 text-sm text-slate-500">
+                {station.city} — {station.address}
+              </p>
             </section>
+
+            <WorkingHours
+              station={station}
+              onChange={(patch) => setStation({ ...station, ...patch })}
+            />
+
+            <StationLinkCard
+              stationId={station.id}
+              name={station.name}
+              slug={station.slug}
+              onSlugChange={(slug) => setStation({ ...station, slug })}
+            />
 
             <section className="card p-5">
               <h3 className="text-sm font-bold">توفر المنتجات</h3>
               <p className="mt-1 text-xs text-slate-400">
                 عند تفعيل منتج يصل تنبيه فوري لمتابعي محطتك
               </p>
-              <ul className="mt-3 divide-y divide-slate-100">
-                {PRODUCT_ORDER.map((product) => {
-                  const row = products.find((p) => p.product === product);
-                  const on = row?.is_available ?? false;
-                  return (
-                    <li key={product} className="flex items-center justify-between py-2.5">
-                      <span className="text-sm font-medium">{PRODUCT_LABELS[product]}</span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={on}
-                        aria-label={`${PRODUCT_LABELS[product]} ${on ? 'متوفر' : 'غير متوفر'}`}
-                        disabled={savingProduct === product}
-                        onClick={() => toggleProduct(product, !on)}
-                        className={`relative h-8 w-14 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 ${
-                          on ? 'bg-brand' : 'bg-slate-200'
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200 ${
-                            on ? 'right-1' : 'right-7'
-                          }`}
-                        />
-                      </button>
-                    </li>
-                  );
-                })}
+              <ul className="mt-2 divide-y divide-slate-100">
+                {PRODUCT_ORDER.map((product) => (
+                  <ProductControl
+                    key={product}
+                    product={product}
+                    row={products.find((p) => p.product === product)}
+                    saving={savingProduct === product}
+                    onSetAvailable={(next) => setAvailable(product, next)}
+                    onSetExpected={(date, period) => setExpected(product, date, period)}
+                  />
+                ))}
               </ul>
             </section>
 

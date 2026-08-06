@@ -1,6 +1,7 @@
 'use client';
 
 import { PRODUCT_LABELS, PRODUCT_ORDER } from '@/lib/products';
+import { isOpenNow } from '@/lib/hours';
 import type { FuelProduct, StationWithStatus } from '@/types/database';
 
 export function ProductsDashboard({
@@ -12,8 +13,11 @@ export function ProductsDashboard({
   filter: FuelProduct | null;
   onPick: (p: FuelProduct | null) => void;
 }) {
+  // "available now" must mean collectable now — a closed station holding fuel
+  // is not a place to send a driver
   const counts = new Map<FuelProduct, number>();
   for (const s of stations) {
+    if (!isOpenNow(s)) continue;
     for (const p of s.products) {
       if (p.is_available) counts.set(p.product, (counts.get(p.product) ?? 0) + 1);
     }
@@ -59,7 +63,7 @@ export function ProductsDashboard({
         })}
       </div>
       <p className="mt-2 text-center text-[11px] text-slate-400">
-        العدد يمثل المحطات التي أعلنت توفر المنتج — اضغط للتصفية
+        العدد يمثل المحطات المفتوحة الآن التي يتوفر فيها المنتج — اضغط للتصفية
       </p>
     </section>
   );

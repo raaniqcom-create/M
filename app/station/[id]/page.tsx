@@ -54,7 +54,7 @@ export async function generateMetadata({
   const description = `المتوفر: ${products}${level ? ` — الازدحام: ${TRAFFIC_LABELS[level]}` : ''}`;
 
   return {
-    title: `${station.name} | المحطة التقنية`,
+    title: station.name,
     description,
     openGraph: { title: station.name, description, type: 'website', locale: 'ar_IQ' },
   };
