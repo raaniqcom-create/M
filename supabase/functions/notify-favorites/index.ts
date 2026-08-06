@@ -3,7 +3,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
-const SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')!;
+const CRON_SECRET = Deno.env.get('CRON_SECRET')!;
 const SITE = 'https://muhta.online';
 
 const db = createClient(
@@ -22,7 +22,7 @@ const PRODUCT_LABELS: Record<string, string> = {
 };
 
 Deno.serve(async (req) => {
-  if (req.headers.get('x-cron-secret') !== SECRET) {
+  if (req.headers.get('x-cron-secret') !== CRON_SECRET) {
     return new Response('forbidden', { status: 403 });
   }
 
