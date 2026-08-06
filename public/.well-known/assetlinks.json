@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "online.muhta.app",
+      "sha256_cert_fingerprints": [
+        "BE:28:75:28:38:0F:42:7C:30:F7:DC:97:5B:E3:E5:85:75:CF:8B:DA:A8:F6:67:35:88:3A:06:2F:E8:D6:40:B0"
+      ]
+    }
+  }
+]
