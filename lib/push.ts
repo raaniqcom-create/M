@@ -11,10 +11,14 @@ export function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuf
   return bytes;
 }
 
-const subKey = (stationId: string) => `sub:${stationId}`;
+const subKey = (stationId: string, role: 'driver' | 'owner' = 'driver') =>
+  role === 'owner' ? `sub-owner:${stationId}` : `sub:${stationId}`;
 
-export async function isSubscribed(stationId: string): Promise<boolean> {
-  return typeof localStorage !== 'undefined' && localStorage.getItem(subKey(stationId)) !== null;
+export async function isSubscribed(
+  stationId: string,
+  role: 'driver' | 'owner' = 'driver'
+): Promise<boolean> {
+  return typeof localStorage !== 'undefined' && localStorage.getItem(subKey(stationId, role)) !== null;
 }
 
 async function getPushSubscription(): Promise<PushSubscription | null> {
@@ -29,7 +33,10 @@ async function getPushSubscription(): Promise<PushSubscription | null> {
   );
 }
 
-export async function subscribeToStation(stationId: string): Promise<boolean> {
+export async function subscribeToStation(
+  stationId: string,
+  role: 'driver' | 'owner' = 'driver'
+): Promise<boolean> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
   if ((await Notification.requestPermission()) !== 'granted') return false;
 
@@ -40,23 +47,28 @@ export async function subscribeToStation(stationId: string): Promise<boolean> {
   const json = subscription.toJSON();
   const { error } = await supabase.from('push_subscriptions').insert({
     station_id: stationId,
+    role,
     endpoint: json.endpoint,
     p256dh: json.keys?.p256dh,
     auth: json.keys?.auth,
   });
   if (error) return false;
 
-  localStorage.setItem(subKey(stationId), json.endpoint!);
+  localStorage.setItem(subKey(stationId, role), json.endpoint!);
   return true;
 }
 
-export async function unsubscribeFromStation(stationId: string): Promise<void> {
-  const endpoint = localStorage.getItem(subKey(stationId));
+export async function unsubscribeFromStation(
+  stationId: string,
+  role: 'driver' | 'owner' = 'driver'
+): Promise<void> {
+  const endpoint = localStorage.getItem(subKey(stationId, role));
   if (!endpoint) return;
   await supabase
     .from('push_subscriptions')
     .delete()
     .eq('station_id', stationId)
-    .eq('endpoint', endpoint);
-  localStorage.removeItem(subKey(stationId));
+    .eq('endpoint', endpoint)
+    .eq('role', role);
+  localStorage.removeItem(subKey(stationId, role));
 }

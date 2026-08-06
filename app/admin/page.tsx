@@ -66,6 +66,27 @@ export default function AdminPage() {
     load();
   }
 
+  // Seeded demo rows all carry this fixed prefix, so cleanup is one click and
+  // can never catch a station a real owner registered.
+  const DEMO_PREFIX = 'b0000000-0000-0000-0000-';
+  const demoStations = approved.filter((s) => s.id.startsWith(DEMO_PREFIX));
+
+  async function removeStation(id: string, name: string) {
+    if (!confirm(`حذف «${name}» نهائياً؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    setApproved((prev) => prev.filter((s) => s.id !== id));
+    setPending((prev) => prev.filter((s) => s.id !== id));
+    await supabase.from('stations').delete().eq('id', id);
+    load();
+  }
+
+  async function removeDemoStations() {
+    if (!confirm(`حذف ${demoStations.length} محطة تجريبية نهائياً؟`)) return;
+    const ids = demoStations.map((s) => s.id);
+    setApproved((prev) => prev.filter((s) => !ids.includes(s.id)));
+    await supabase.from('stations').delete().in('id', ids);
+    load();
+  }
+
   async function setKind(id: string, kind: StationKind) {
     setApproved((prev) => prev.map((s) => (s.id === id ? { ...s, kind } : s)));
     await supabase.from('stations').update({ kind }).eq('id', id);
@@ -156,6 +177,17 @@ export default function AdminPage() {
           <section className="card p-5">
             <h2 className="text-sm font-bold">المحطات المعتمدة ({approved.length})</h2>
             <p className="mt-1 text-xs text-slate-400">اضغط على النوع لتبديله بين حكومية وأهلية</p>
+
+            {demoStations.length > 0 && (
+              <button
+                type="button"
+                onClick={removeDemoStations}
+                className="btn mt-3 w-full border border-traffic-red bg-white text-traffic-red"
+              >
+                <XIcon className="h-4 w-4" />
+                حذف المحطات التجريبية ({demoStations.length})
+              </button>
+            )}
             <ul className="mt-3 space-y-3">
               {approved.map((s) => (
                 <li key={s.id} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
@@ -163,7 +195,7 @@ export default function AdminPage() {
                   <p className="text-xs text-slate-500">
                     {s.city} — {s.address}
                   </p>
-                  <div className="mt-2 flex gap-1.5">
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {KINDS.map((k) => (
                       <button
                         key={k}
@@ -177,6 +209,15 @@ export default function AdminPage() {
                         {KIND_LABELS[k]}
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => removeStation(s.id, s.name)}
+                      aria-label={`حذف ${s.name}`}
+                      className="mr-auto flex min-h-[36px] items-center gap-1 rounded-lg px-2.5 text-xs font-semibold text-traffic-red"
+                    >
+                      <XIcon className="h-3.5 w-3.5" />
+                      حذف
+                    </button>
                   </div>
                 </li>
               ))}

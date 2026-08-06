@@ -14,6 +14,7 @@ import { ShareButton } from '@/components/ShareButton';
 import { StationLinkCard } from '@/components/StationLinkCard';
 import { ProductControl } from '@/components/ProductControl';
 import { WorkingHours } from '@/components/WorkingHours';
+import { OwnerReminders } from '@/components/OwnerReminders';
 import type { ExpectedPeriod } from '@/lib/hours';
 import { FuelIcon, LogOutIcon, SpinnerIcon } from '@/components/icons';
 import type { FuelProduct, Station, StationProduct, TrafficLevel } from '@/types/database';
@@ -193,6 +194,8 @@ export default function OwnerPage() {
               station={station}
               onChange={(patch) => setStation({ ...station, ...patch })}
             />
+
+            <OwnerReminders stationId={station.id} />
 
             <StationLinkCard
               stationId={station.id}

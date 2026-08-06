@@ -1,6 +1,6 @@
 // Hand-written service worker. Replaced next-pwa/workbox: that pulled ~500
 // packages and 7 high-severity advisories to generate what these ~70 lines do.
-const CACHE = 'mahatta-v3';
+const CACHE = 'mahatta-v4';
 const OFFLINE_URL = '/offline';
 
 self.addEventListener('install', (event) => {
@@ -77,7 +77,7 @@ self.addEventListener('push', (event) => {
       dir: 'rtl',
       lang: 'ar',
       tag: payload.stationId, // a station's updates collapse instead of stacking
-      data: { url: `/station/${payload.stationId}` },
+      data: { url: payload.url ?? `/station/${payload.stationId}` },
     })
   );
 });

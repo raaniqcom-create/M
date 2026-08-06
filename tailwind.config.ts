@@ -29,9 +29,11 @@ export default {
         sans: ['var(--font-tajawal)', 'system-ui', 'sans-serif'],
       },
       keyframes: {
+        // Slides exactly one copy of the duplicated track, so the loop is
+        // seamless. Runs -50% -> 0 so headlines travel left-to-right.
         ticker: {
-          '0%': { transform: 'translateX(-100%)' },
-          '100%': { transform: 'translateX(0%)' },
+          from: { transform: 'translateX(-50%)' },
+          to: { transform: 'translateX(0)' },
         },
         'fade-slide': {
           '0%, 100%': { opacity: '0', transform: 'translateY(6px)' },
