@@ -9,10 +9,19 @@ import { hoursLabel, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
 import type { StationWithStatus } from '@/types/database';
 import { KIND_LABELS, KIND_STYLES } from '@/lib/stationMeta';
 import { BellButton } from './BellButton';
+import { StarIcon } from './icons';
 import { TrafficVote } from './TrafficVote';
 import { MapPinIcon, PhoneIcon } from './icons';
 
-export function StationCard({ station }: { station: StationWithStatus }) {
+export function StationCard({
+  station,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  station: StationWithStatus;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
+}) {
   const byProduct = new Map(station.products.map((p) => [p.product, p]));
   const open = isOpenNow(station);
   // an owner's manual setting overrides the crowd average
@@ -41,23 +50,38 @@ export function StationCard({ station }: { station: StationWithStatus }) {
             {station.city} — {station.address}
           </p>
           <div className="mt-1.5 flex items-center gap-2">
-            {level ? (
+            {level && (
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${TRAFFIC_COLORS[level].bg} ${TRAFFIC_COLORS[level].text}`}
               >
                 <span className={`h-2 w-2 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
                 {TRAFFIC_LABELS[level]}
-                {station.manual_traffic_level && ' (من المحطة)'}
+                {station.manual_traffic_level && ' · من المحطة'}
               </span>
-            ) : (
-              <span className="text-xs text-slate-400">لا توجد بيانات ازدحام</span>
             )}
             {station.distanceKm !== undefined && (
               <span className="text-xs text-slate-400">{station.distanceKm.toFixed(1)} كم</span>
             )}
           </div>
         </div>
-        <BellButton stationId={station.id} />
+        <div className="flex shrink-0 gap-1.5">
+          {onToggleFavorite && (
+            <button
+              type="button"
+              onClick={onToggleFavorite}
+              aria-pressed={isFavorite}
+              aria-label={isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة'}
+              className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-colors duration-200 ${
+                isFavorite
+                  ? 'border-amber-400 bg-amber-50 text-amber-500'
+                  : 'border-slate-200 bg-white text-slate-400'
+              }`}
+            >
+              <StarIcon filled={isFavorite} />
+            </button>
+          )}
+          <BellButton stationId={station.id} />
+        </div>
       </header>
 
       {/* Only what a driver can act on: in stock, or announced as arriving.

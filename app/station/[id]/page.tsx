@@ -1,9 +1,16 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
+import {
+  PRODUCT_LABELS,
+  PRODUCT_ORDER,
+  TRAFFIC_COLORS,
+  TRAFFIC_LABELS,
+  expectedLabel,
+} from '@/lib/products';
+import { hoursLabel, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
 import { MapPinIcon, PhoneIcon } from '@/components/icons';
-import type { FuelProduct, Station, StationProduct, TrafficLevel } from '@/types/database';
+import type { Station, StationProduct, TrafficLevel } from '@/types/database';
 
 // server-side anon client: same RLS rules, but usable during SSR for OG tags
 const db = createClient(
@@ -28,14 +35,13 @@ async function getStation(id: string) {
     db.from('station_traffic_avg').select('majority_level').eq('station_id', id).maybeSingle(),
   ]);
 
-  const available = ((products ?? []) as StationProduct[])
-    .filter((p) => p.is_available)
-    .map((p) => p.product);
+  const rows = (products ?? []) as StationProduct[];
+  const available = rows.filter((p) => p.is_available).map((p) => p.product);
 
   const level: TrafficLevel | null =
     station.manual_traffic_level ?? (traffic?.majority_level as TrafficLevel | null) ?? null;
 
-  return { station, available, level };
+  return { station, available, rows, level };
 }
 
 export async function generateMetadata({
@@ -65,8 +71,9 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
   const result = await getStation(id);
   if (!result) notFound();
 
-  const { station, available, level } = result;
-  const isAvailable = (p: FuelProduct) => available.includes(p);
+  const { station, rows, level } = result;
+  const byProduct = new Map(rows.map((r) => [r.product, r]));
+  const open = isOpenNow(station);
 
   return (
     <main className="mx-auto max-w-md px-4 pb-16 pt-6">
@@ -85,19 +92,37 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
 
         <h2 className="mt-5 text-sm font-bold">المنتجات</h2>
         <ul className="mt-2 divide-y divide-slate-100">
-          {PRODUCT_ORDER.map((product) => (
-            <li key={product} className="flex items-center justify-between py-2.5 text-sm">
-              <span>{PRODUCT_LABELS[product]}</span>
-              <span
-                className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                  isAvailable(product) ? 'bg-brand-100 text-brand' : 'bg-slate-100 text-slate-400'
-                }`}
-              >
-                {isAvailable(product) ? 'متوفر' : 'غير متوفر'}
-              </span>
-            </li>
-          ))}
+          {PRODUCT_ORDER.map((product) => {
+            const row = byProduct.get(product);
+            const inStock = row?.is_available ?? false;
+            const expected = row?.expected_at ?? null;
+
+            return (
+              <li key={product} className="flex items-center justify-between gap-2 py-2.5 text-sm">
+                <span>{PRODUCT_LABELS[product]}</span>
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    inStock
+                      ? 'bg-brand-100 text-brand'
+                      : expected
+                        ? 'bg-amber-50 text-amber-700'
+                        : 'bg-slate-100 text-slate-400'
+                  }`}
+                >
+                  {inStock
+                    ? 'متوفر'
+                    : expected
+                      ? `${expectedLabel(expected)}${row?.expected_period ? ` ${PERIOD_LABELS[row.expected_period]}` : ''}`
+                      : 'غير متوفر'}
+                </span>
+              </li>
+            );
+          })}
         </ul>
+
+        <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          {open ? `مفتوحة الآن · ${hoursLabel(station)}` : `مغلقة الآن · أوقات العمل ${hoursLabel(station)}`}
+        </p>
 
         <div className="mt-5 grid grid-cols-2 gap-2">
           <a href={`tel:${station.phone}`} className="btn-ghost">

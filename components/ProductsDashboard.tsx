@@ -37,7 +37,7 @@ export function ProductsDashboard({
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2">
-        {PRODUCT_ORDER.map((product) => {
+        {PRODUCT_ORDER.filter((p) => (counts.get(p) ?? 0) > 0 || filter === p).map((product) => {
           const count = counts.get(product) ?? 0;
           const active = filter === product;
           return (
@@ -49,9 +49,7 @@ export function ProductsDashboard({
               className={`flex min-h-[64px] flex-col items-center justify-center rounded-xl border px-1 transition-colors duration-200 ${
                 active
                   ? 'border-brand bg-brand text-white'
-                  : count > 0
-                    ? 'border-brand-100 bg-brand-50 text-brand-900'
-                    : 'border-slate-100 bg-slate-50 text-slate-400'
+                  : 'border-brand-100 bg-brand-50 text-brand-900'
               }`}
             >
               <span className="text-lg font-extrabold leading-none">{count}</span>
@@ -62,9 +60,15 @@ export function ProductsDashboard({
           );
         })}
       </div>
-      <p className="mt-2 text-center text-[11px] text-slate-400">
-        العدد يمثل المحطات المفتوحة الآن التي يتوفر فيها المنتج — اضغط للتصفية
-      </p>
+      {[...counts.values()].length === 0 ? (
+        <p className="py-4 text-center text-sm text-slate-400">
+          لا يتوفر أي منتج في المحطات المفتوحة حالياً
+        </p>
+      ) : (
+        <p className="mt-2 text-center text-[11px] text-slate-400">
+          العدد يمثل المحطات المفتوحة الآن التي يتوفر فيها المنتج — اضغط للتصفية
+        </p>
+      )}
     </section>
   );
 }

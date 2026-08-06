@@ -96,3 +96,15 @@ export const ListIcon = ({ className = 'h-5 w-5' }: IconProps) => (
     <path d="M3 5h.01M3 12h.01M3 19h.01M8 5h13M8 12h13M8 19h13" />
   </svg>
 );
+
+export const StarIcon = ({ className = 'h-5 w-5', filled = false }: IconProps & { filled?: boolean }) => (
+  <svg {...base} className={className} fill={filled ? 'currentColor' : 'none'}>
+    <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.12 2.12 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.12 2.12 0 0 0 1.597-1.16z" />
+  </svg>
+);
+
+export const SlidersIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg {...base} className={className}>
+    <path d="M10 5H3M21 5h-7M6 5v14M18 12v7M18 5v3M14 12H3M21 12h-3M14 19H3M21 19h-3M6 19v-3" />
+  </svg>
+);

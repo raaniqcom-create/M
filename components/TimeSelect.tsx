@@ -30,21 +30,17 @@ export function TimeSelect({
   return (
     <div>
       <span className="label">{label}</span>
+      {/* RTL order: صباحاً/مساءً on the right, then minutes, hour on the left */}
       <div className="grid grid-cols-3 gap-1.5">
         <select
-          id={id}
-          aria-label={`${label} — الساعة`}
-          value={h12}
-          onChange={(e) => emit(Number(e.target.value), minute, isMorning)}
+          aria-label={`${label} — صباحاً أو مساءً`}
+          value={isMorning ? 'am' : 'pm'}
+          onChange={(e) => emit(h12, minute, e.target.value === 'am')}
           className="field px-1 text-center"
         >
-          {HOURS.map((h) => (
-            <option key={h} value={h}>
-              {h}
-            </option>
-          ))}
+          <option value="am">صباحاً</option>
+          <option value="pm">مساءً</option>
         </select>
-
         <select
           aria-label={`${label} — الدقيقة`}
           value={minute}
@@ -59,14 +55,19 @@ export function TimeSelect({
         </select>
 
         <select
-          aria-label={`${label} — صباحاً أو مساءً`}
-          value={isMorning ? 'am' : 'pm'}
-          onChange={(e) => emit(h12, minute, e.target.value === 'am')}
+          id={id}
+          aria-label={`${label} — الساعة`}
+          value={h12}
+          onChange={(e) => emit(Number(e.target.value), minute, isMorning)}
           className="field px-1 text-center"
         >
-          <option value="am">صباحاً</option>
-          <option value="pm">مساءً</option>
+          {HOURS.map((h) => (
+            <option key={h} value={h}>
+              {h}
+            </option>
+          ))}
         </select>
+
       </div>
     </div>
   );

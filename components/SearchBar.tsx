@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { PRODUCT_LABELS, PRODUCT_ORDER } from '@/lib/products';
 import { KIND_LABELS, KINDS } from '@/lib/stationMeta';
 import { CITY_NAMES } from '@/lib/cities';
-import { SearchIcon, XIcon } from './icons';
+import { SearchIcon, SlidersIcon, XIcon } from './icons';
 import type { FuelProduct, StationKind } from '@/types/database';
 
 export interface Filters {
@@ -56,41 +56,84 @@ function Chip({
   );
 }
 
-export function AdvancedFilter({
+export function SearchBar({
+  query,
+  onQueryChange,
   filters,
-  onChange,
+  onFiltersChange,
   cityCounts,
 }: {
+  query: string;
+  onQueryChange: (q: string) => void;
   filters: Filters;
-  onChange: (f: Filters) => void;
+  onFiltersChange: (f: Filters) => void;
   cityCounts: Map<string, number>;
 }) {
   const [open, setOpen] = useState(false);
   const active = countActive(filters);
-  const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
+  const set = (patch: Partial<Filters>) => onFiltersChange({ ...filters, ...patch });
+
+  // one flat list of what's applied, so each can be removed with a single tap
+  const applied: { label: string; clear: () => void }[] = [
+    filters.product && {
+      label: PRODUCT_LABELS[filters.product],
+      clear: () => set({ product: null }),
+    },
+    filters.city && { label: filters.city, clear: () => set({ city: null }) },
+    filters.kind && { label: KIND_LABELS[filters.kind], clear: () => set({ kind: null }) },
+    filters.availableOnly && { label: 'المتوفر الآن', clear: () => set({ availableOnly: false }) },
+    filters.openOnly && { label: 'المفتوحة الآن', clear: () => set({ openOnly: false }) },
+  ].filter(Boolean) as { label: string; clear: () => void }[];
 
   return (
-    <section className="card overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex min-h-[48px] w-full items-center justify-between px-4"
-      >
-        <span className="flex items-center gap-2 text-sm font-bold text-brand-900">
-          <SearchIcon className="h-4 w-4" />
-          بحث متقدم
+    <div>
+      <div className="relative">
+        <SearchIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="ابحث باسم المحطة أو المنطقة"
+          aria-label="بحث عن محطة"
+          className="min-h-[48px] w-full rounded-xl border-0 bg-white pl-14 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-white"
+        />
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label="بحث متقدم"
+          className={`absolute left-1.5 top-1/2 flex h-10 w-11 -translate-y-1/2 items-center justify-center rounded-lg transition-colors duration-200 ${
+            open || active > 0 ? 'bg-brand text-white' : 'text-slate-500'
+          }`}
+        >
+          <SlidersIcon className="h-4 w-4" />
           {active > 0 && (
-            <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] text-white">
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
               {active}
             </span>
           )}
-        </span>
-        <span className="text-xs text-slate-400">{open ? 'إخفاء' : 'عرض'}</span>
-      </button>
+        </button>
+      </div>
+
+      {applied.length > 0 && !open && (
+        <div className="no-scrollbar panel-enter mt-2 flex gap-1.5 overflow-x-auto">
+          {applied.map((f) => (
+            <button
+              key={f.label}
+              type="button"
+              onClick={f.clear}
+              aria-label={`إزالة ${f.label}`}
+              className="flex min-h-[30px] shrink-0 items-center gap-1 rounded-full bg-white/20 px-2.5 text-[12px] font-semibold text-white backdrop-blur-sm"
+            >
+              {f.label}
+              <XIcon className="h-3 w-3" />
+            </button>
+          ))}
+        </div>
+      )}
 
       {open && (
-        <div className="space-y-4 border-t border-brand-100 px-4 py-4">
+        <div className="panel-enter mt-2 space-y-4 rounded-2xl bg-white p-4 text-right shadow-lift">
           <div>
             <p className="mb-1.5 text-xs font-semibold text-slate-500">نوع الوقود</p>
             <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4">
@@ -110,7 +153,7 @@ export function AdvancedFilter({
           </div>
 
           <div>
-            <p className="mb-1.5 text-xs font-semibold text-slate-500">المدينة</p>
+            <p className="mb-1.5 text-xs font-semibold text-slate-500">المدينة أو المنطقة</p>
             <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4">
               <Chip active={filters.city === null} onClick={() => set({ city: null })}>
                 كل الأنبار
@@ -155,7 +198,7 @@ export function AdvancedFilter({
                 onChange={(e) => set({ availableOnly: e.target.checked })}
                 className="h-4 w-4 accent-[#16a34a]"
               />
-              <span className="text-sm">المتوفر الآن فقط (بدون الحجوزات المتوقعة)</span>
+              <span className="text-sm text-slate-700">المتوفر الآن فقط</span>
             </label>
             <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 px-3">
               <input
@@ -164,22 +207,30 @@ export function AdvancedFilter({
                 onChange={(e) => set({ openOnly: e.target.checked })}
                 className="h-4 w-4 accent-[#16a34a]"
               />
-              <span className="text-sm">المحطات المفتوحة الآن فقط</span>
+              <span className="text-sm text-slate-700">المحطات المفتوحة الآن فقط</span>
             </label>
           </div>
 
-          {active > 0 && (
+          <div className="grid grid-cols-2 gap-2">
+            {active > 0 && (
+              <button
+                type="button"
+                onClick={() => onFiltersChange(EMPTY_FILTERS)}
+                className="btn-ghost"
+              >
+                مسح الفلاتر
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => onChange(EMPTY_FILTERS)}
-              className="btn-ghost w-full"
+              onClick={() => setOpen(false)}
+              className={`btn-primary ${active > 0 ? '' : 'col-span-2'}`}
             >
-              <XIcon className="h-4 w-4" />
-              مسح كل الفلاتر
+              عرض النتائج
             </button>
-          )}
+          </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }
