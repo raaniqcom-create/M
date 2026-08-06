@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { phoneToEmail } from '@/lib/phone';
 import { StationRegisterForm } from '@/components/StationRegisterForm';
-import { SpinnerIcon } from '@/components/icons';
+import { FuelIcon, SpinnerIcon } from '@/components/icons';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -51,10 +51,9 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto max-w-md px-4 py-8">
-      <a href="/" className="mb-6 flex items-center justify-center gap-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icons/icon-192.png" alt="" width={40} height={40} />
-        <span className="text-lg font-extrabold text-brand">المحطة التقنية</span>
+      <a href="/" className="mb-6 flex items-center justify-center gap-2 text-brand">
+        <FuelIcon className="h-6 w-6" />
+        <span className="text-lg font-extrabold">المحطة التقنية</span>
       </a>
 
       {mode === 'signup' ? (
