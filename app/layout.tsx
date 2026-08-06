@@ -13,7 +13,7 @@ const DESCRIPTION =
   'المحطة التقنية — منصة وقود الأنبار. اعرف فوراً أي محطة يتوفر فيها البانزين والكاز والغاز و LPG في الرمادي والفلوجة وهيت وحديثة وباقي مدن الأنبار، مع حالة الازدحام مباشرة وتنبيهات فور وصول الوقود. مجاناً وبدون حساب.';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://muhta.netlify.app'),
+  metadataBase: new URL('https://muhta.online'),
   title: {
     default: 'المحطة التقنية | منصة وقود الأنبار',
     template: '%s | المحطة التقنية',
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'ar_IQ',
-    url: 'https://muhta.netlify.app',
+    url: 'https://muhta.online',
     siteName: 'المحطة التقنية',
     title: 'المحطة التقنية | منصة وقود الأنبار',
     description: DESCRIPTION,
