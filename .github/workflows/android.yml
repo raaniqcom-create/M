@@ -36,6 +36,20 @@ jobs:
       # to ask permission to download its own copies.
       - name: Configure bubblewrap
         run: |
+          echo "--- SDK layout ---"
+          ls "$ANDROID_HOME"
+          echo "--- cmdline-tools ---"
+          ls "$ANDROID_HOME/cmdline-tools" || echo "(none)"
+          echo "--- build-tools ---"
+          ls "$ANDROID_HOME/build-tools" || echo "(none)"
+
+          # Bubblewrap looks for cmdline-tools/latest; runners ship versioned
+          # directories instead, so give it the name it expects.
+          if [ ! -d "$ANDROID_HOME/cmdline-tools/latest" ]; then
+            ver=$(ls "$ANDROID_HOME/cmdline-tools" | head -1)
+            ln -s "$ANDROID_HOME/cmdline-tools/$ver" "$ANDROID_HOME/cmdline-tools/latest" || true
+          fi
+
           mkdir -p ~/.bubblewrap
           printf '{"jdkPath":"%s","androidSdkPath":"%s"}\n' "$JAVA_HOME" "$ANDROID_HOME" \
             > ~/.bubblewrap/config.json
