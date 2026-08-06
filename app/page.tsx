@@ -93,16 +93,16 @@ export default function HomePage() {
     <>
       <header className="bg-gradient-to-b from-brand-700 to-brand px-4 pb-5 pt-6 text-white">
         <div className="mx-auto max-w-md">
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex flex-col items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/icons/icon-192.png"
-              alt=""
-              width={36}
-              height={36}
-              className="rounded-lg bg-white p-0.5"
+              alt="المحطة التقنية"
+              width={72}
+              height={72}
+              className="rounded-2xl shadow-lift"
             />
-            <h1 className="text-lg font-extrabold">المحطة التقنية</h1>
+            <h1 className="mt-2 text-lg font-extrabold">المحطة التقنية</h1>
           </div>
           <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — جميع مدن المحافظة</p>
 

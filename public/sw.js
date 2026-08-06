@@ -1,6 +1,6 @@
 // Hand-written service worker. Replaced next-pwa/workbox: that pulled ~500
 // packages and 7 high-severity advisories to generate what these ~70 lines do.
-const CACHE = 'mahatta-v2';
+const CACHE = 'mahatta-v3';
 const OFFLINE_URL = '/offline';
 
 self.addEventListener('install', (event) => {
