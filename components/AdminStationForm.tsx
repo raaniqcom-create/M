@@ -5,7 +5,8 @@ import { supabase } from '@/lib/supabase';
 import { PRODUCT_ORDER } from '@/lib/products';
 import { ANBAR_CITIES } from '@/lib/cities';
 import { KIND_LABELS, KINDS } from '@/lib/stationMeta';
-import { CheckIcon, MapPinIcon, SpinnerIcon } from './icons';
+import { CheckIcon, SpinnerIcon } from './icons';
+import { LocationField } from './LocationField';
 import type { StationKind } from '@/types/database';
 
 // Admin-created stations skip the approval queue — the admin *is* the approver.
@@ -16,18 +17,6 @@ export function AdminStationForm({ adminId, onDone }: { adminId: string; onDone:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-
-  function useCityCentre() {
-    const c = ANBAR_CITIES.find((x) => x.name === city)!;
-    setCoords({ lat: c.lat, lng: c.lng });
-  }
-
-  function useMyLocation() {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => setError('تعذّر تحديد الموقع. استخدم مركز المدينة أو أدخل الإحداثيات يدوياً.')
-    );
-  }
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -143,38 +132,7 @@ export function AdminStationForm({ adminId, onDone }: { adminId: string; onDone:
         <span className="label">
           الموقع <span className="text-traffic-red">*</span>
         </span>
-        <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={useCityCentre} className="btn-ghost">
-            <MapPinIcon className="h-4 w-4" />
-            مركز المدينة
-          </button>
-          <button type="button" onClick={useMyLocation} className="btn-ghost">
-            <MapPinIcon className="h-4 w-4" />
-            موقعي الحالي
-          </button>
-        </div>
-        {coords && (
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <input
-              type="number"
-              step="any"
-              value={coords.lat}
-              onChange={(e) => setCoords({ ...coords, lat: Number(e.target.value) })}
-              className="field"
-              aria-label="خط العرض"
-              dir="ltr"
-            />
-            <input
-              type="number"
-              step="any"
-              value={coords.lng}
-              onChange={(e) => setCoords({ ...coords, lng: Number(e.target.value) })}
-              className="field"
-              aria-label="خط الطول"
-              dir="ltr"
-            />
-          </div>
-        )}
+        <LocationField coords={coords} onChange={setCoords} city={city} />
       </div>
 
       {error && (

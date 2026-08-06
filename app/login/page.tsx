@@ -34,7 +34,16 @@ export default function LoginPage() {
 
     if (signInError) {
       setBusy(false);
-      setError('رقم الهاتف أو كلمة المرور غير صحيحة. تأكد من البيانات وحاول مجدداً.');
+      // a rate limit or a dropped connection is not a wrong password — saying
+      // so sends the user hunting for a typo that isn't there
+      const raw = signInError.message.toLowerCase();
+      setError(
+        raw.includes('rate') || raw.includes('many')
+          ? 'محاولات كثيرة خلال وقت قصير. انتظر دقيقة ثم حاول مجدداً.'
+          : raw.includes('fetch') || raw.includes('network')
+            ? 'تعذّر الاتصال بالخادم. تحقق من الإنترنت وحاول مجدداً.'
+            : 'رقم الهاتف أو كلمة المرور غير صحيحة. تأكد من البيانات وحاول مجدداً.'
+      );
       return;
     }
 

@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { PRODUCT_ORDER } from '@/lib/products';
 import { ANBAR_CITIES } from '@/lib/cities';
 import { isValidIraqiMobile, phoneToEmail, displayPhone } from '@/lib/phone';
-import { CheckIcon, MapPinIcon, SpinnerIcon } from './icons';
+import { SpinnerIcon } from './icons';
+import { LocationField } from './LocationField';
 
 // One screen, plain labels, no jargon: station managers register from a phone,
 // often in a hurry, and a multi-step wizard loses them.
@@ -19,27 +20,8 @@ export function StationRegisterForm() {
   const [samePhone, setSamePhone] = useState(true);
   const [publicPhone, setPublicPhone] = useState('');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  function locate() {
-    setLocating(true);
-    setError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLocating(false);
-      },
-      () => {
-        const c = ANBAR_CITIES.find((x) => x.name === city)!;
-        setCoords({ lat: c.lat, lng: c.lng });
-        setLocating(false);
-        setError('تعذّر تحديد موقعك، فتم اختيار مركز المدينة مؤقتاً. يمكنك تعديله لاحقاً.');
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  }
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -196,17 +178,10 @@ export function StationRegisterForm() {
         <span className="label">
           إضافة العنوان على الخريطة <span className="text-traffic-red">*</span>
         </span>
-        <button type="button" onClick={locate} disabled={locating} className="btn-ghost w-full">
-          {locating ? <SpinnerIcon className="h-4 w-4" /> : <MapPinIcon className="h-4 w-4" />}
-          {coords ? 'إعادة تحديد الموقع' : 'تحديد موقع المحطة'}
-        </button>
-        {coords && (
-          <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-brand">
-            <CheckIcon className="h-4 w-4" />
-            تم تحديد الموقع بنجاح
-          </p>
-        )}
-        <p className="mt-1 text-xs text-slate-400">قف داخل المحطة عند الضغط ليكون الموقع دقيقاً</p>
+        <LocationField coords={coords} onChange={setCoords} city={city} />
+        <p className="mt-1 text-xs text-slate-400">
+          اضغط «موقعك الحالي» وأنت داخل المحطة، أو اختر النقطة من الخريطة
+        </p>
       </div>
 
       <div>
