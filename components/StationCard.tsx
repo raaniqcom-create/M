@@ -1,5 +1,6 @@
 import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
 import type { StationWithStatus } from '@/types/database';
+import { KIND_LABELS, KIND_STYLES } from '@/lib/stationMeta';
 import { BellButton } from './BellButton';
 import { TrafficVote } from './TrafficVote';
 import { MapPinIcon, PhoneIcon } from './icons';
@@ -13,8 +14,17 @@ export function StationCard({ station }: { station: StationWithStatus }) {
     <article className="card p-4">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="truncate text-base font-bold">{station.name}</h2>
-          <p className="mt-0.5 text-sm text-slate-500">{station.address}</p>
+          <div className="flex items-center gap-2">
+            <h2 className="truncate text-base font-bold">{station.name}</h2>
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${KIND_STYLES[station.kind]}`}
+            >
+              {KIND_LABELS[station.kind]}
+            </span>
+          </div>
+          <p className="mt-0.5 text-sm text-slate-500">
+            {station.city} — {station.address}
+          </p>
           <div className="mt-1.5 flex items-center gap-2">
             {level ? (
               <span

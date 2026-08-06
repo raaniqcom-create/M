@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { CheckIcon, LogOutIcon, MapPinIcon, SpinnerIcon, XIcon } from '@/components/icons';
-import type { Station } from '@/types/database';
+import { AdminStationForm } from '@/components/AdminStationForm';
+import { KIND_LABELS, KIND_STYLES, KINDS } from '@/lib/stationMeta';
+import type { Station, StationKind } from '@/types/database';
 
 interface Ad {
   id: string;
@@ -18,16 +20,20 @@ interface Ad {
 export default function AdminPage() {
   const router = useRouter();
   const [allowed, setAllowed] = useState<boolean | null>(null);
-  const [tab, setTab] = useState<'stations' | 'ads'>('stations');
+  const [adminId, setAdminId] = useState<string | null>(null);
+  const [tab, setTab] = useState<'add' | 'requests' | 'ads'>('add');
   const [pending, setPending] = useState<Station[]>([]);
+  const [approved, setApproved] = useState<Station[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
 
   const load = useCallback(async () => {
-    const [{ data: st }, { data: ad }] = await Promise.all([
+    const [{ data: st }, { data: ap }, { data: ad }] = await Promise.all([
       supabase.from('stations').select('*').eq('status', 'pending').order('created_at'),
+      supabase.from('stations').select('*').eq('status', 'approved').order('city'),
       supabase.from('ads').select('*').order('created_at', { ascending: false }),
     ]);
     setPending(st ?? []);
+    setApproved(ap ?? []);
     setAds(ad ?? []);
   }, []);
 
@@ -49,6 +55,7 @@ export default function AdminPage() {
         return;
       }
       setAllowed(true);
+      setAdminId(data.user.id);
       load();
     })();
   }, [router, load]);
@@ -56,6 +63,12 @@ export default function AdminPage() {
   async function decide(id: string, status: 'approved' | 'rejected') {
     setPending((prev) => prev.filter((s) => s.id !== id));
     await supabase.from('stations').update({ status }).eq('id', id);
+    load();
+  }
+
+  async function setKind(id: string, kind: StationKind) {
+    setApproved((prev) => prev.map((s) => (s.id === id ? { ...s, kind } : s)));
+    await supabase.from('stations').update({ kind }).eq('id', id);
   }
 
   async function addAd(e: React.FormEvent<HTMLFormElement>) {
@@ -116,31 +129,81 @@ export default function AdminPage() {
         </button>
       </header>
 
-      <div className="mt-5 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
-        {(['stations', 'ads'] as const).map((t) => (
+      <div className="mt-5 grid grid-cols-3 gap-1 rounded-xl bg-brand-50 p-1">
+        {([
+          ['add', 'إضافة محطة'],
+          ['requests', `الطلبات (${pending.length})`],
+          ['ads', 'الإعلانات'],
+        ] as const).map(([t, label]) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            aria-current={tab === t}
-            className={`min-h-[40px] rounded-lg text-sm font-semibold transition-colors duration-200 ${
-              tab === t ? 'bg-white text-brand shadow-soft' : 'text-slate-500'
+            aria-pressed={tab === t}
+            className={`min-h-[42px] rounded-lg text-[13px] font-semibold transition-colors duration-200 ${
+              tab === t ? 'bg-white text-brand shadow-soft' : 'text-brand-700'
             }`}
           >
-            {t === 'stations' ? `طلبات المحطات (${pending.length})` : 'الإعلانات'}
+            {label}
           </button>
         ))}
       </div>
 
-      {tab === 'stations' && (
+      {tab === 'add' && adminId && (
+        <div className="mt-4 space-y-4">
+          <AdminStationForm adminId={adminId} onDone={load} />
+
+          <section className="card p-5">
+            <h2 className="text-sm font-bold">المحطات المعتمدة ({approved.length})</h2>
+            <p className="mt-1 text-xs text-slate-400">اضغط على النوع لتبديله بين حكومية وأهلية</p>
+            <ul className="mt-3 space-y-3">
+              {approved.map((s) => (
+                <li key={s.id} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+                  <p className="text-sm font-bold">{s.name}</p>
+                  <p className="text-xs text-slate-500">
+                    {s.city} — {s.address}
+                  </p>
+                  <div className="mt-2 flex gap-1.5">
+                    {KINDS.map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        aria-pressed={s.kind === k}
+                        onClick={() => setKind(s.id, k)}
+                        className={`min-h-[36px] rounded-lg px-3 text-xs font-semibold ${
+                          s.kind === k ? KIND_STYLES[k] : 'bg-slate-100 text-slate-400'
+                        }`}
+                      >
+                        {KIND_LABELS[k]}
+                      </button>
+                    ))}
+                  </div>
+                </li>
+              ))}
+              {approved.length === 0 && (
+                <li className="text-sm text-slate-400">لا توجد محطات معتمدة بعد</li>
+              )}
+            </ul>
+          </section>
+        </div>
+      )}
+
+      {tab === 'requests' && (
         <div className="mt-4 space-y-3">
           {pending.length === 0 && (
             <p className="card p-6 text-center text-sm text-slate-400">لا توجد طلبات معلّقة</p>
           )}
           {pending.map((s) => (
             <article key={s.id} className="card p-4">
-              <h2 className="text-base font-bold">{s.name}</h2>
-              <p className="mt-0.5 text-sm text-slate-500">{s.address}</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold">{s.name}</h2>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${KIND_STYLES[s.kind]}`}>
+                  {KIND_LABELS[s.kind]}
+                </span>
+              </div>
+              <p className="mt-0.5 text-sm text-slate-500">
+                {s.city} — {s.address}
+              </p>
               <p className="mt-1 text-sm text-slate-500" dir="ltr">
                 {s.phone}
               </p>

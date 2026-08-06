@@ -11,6 +11,8 @@ import { StationCard } from '@/components/StationCard';
 import { PromoStrip } from '@/components/PromoStrip';
 import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
+import { InstallPrompt } from '@/components/InstallPrompt';
+import { CITY_NAMES } from '@/lib/cities';
 import { FuelIcon, ListIcon, MapPinIcon, SearchIcon, SpinnerIcon } from '@/components/icons';
 import type { FuelProduct, StationWithStatus } from '@/types/database';
 
@@ -32,6 +34,7 @@ export default function HomePage() {
   const [filter, setFilter] = useState<FuelProduct | null>(null);
   const [query, setQuery] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
+  const [city, setCity] = useState<string | null>(null);
   const { visits, online } = useSiteStats();
 
   useEffect(() => {
@@ -75,6 +78,7 @@ export default function HomePage() {
           .sort((a, b) => a.distanceKm - b.distanceKm)
       : stations;
 
+    if (city) rows = rows.filter((s) => s.city === city);
     if (filter) {
       rows = rows.filter((s) => s.products.some((p) => p.product === filter && p.is_available));
     }
@@ -83,7 +87,7 @@ export default function HomePage() {
       rows = rows.filter((s) => s.name.includes(q) || s.address.includes(q));
     }
     return rows;
-  }, [stations, origin, filter, query]);
+  }, [stations, origin, filter, query, city]);
 
   return (
     <>
@@ -93,7 +97,7 @@ export default function HomePage() {
             <FuelIcon className="h-6 w-6" />
             <h1 className="text-lg font-extrabold">المحطة التقنية</h1>
           </div>
-          <p className="mt-1 text-center text-xs text-white/80">المحطة التقنية في الأنبار</p>
+          <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — جميع مدن المحافظة</p>
 
           <div className="relative mt-4">
             <SearchIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -136,6 +140,40 @@ export default function HomePage() {
             <ProductsDashboard stations={stations} filter={filter} onPick={setFilter} />
           </div>
         )}
+
+        <div className="mb-3">
+          <PromoStrip />
+        </div>
+
+        <div className="no-scrollbar -mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
+          <button
+            type="button"
+            onClick={() => setCity(null)}
+            aria-pressed={city === null}
+            className={`min-h-[38px] shrink-0 rounded-full px-4 text-[13px] font-semibold transition-colors duration-200 ${
+              city === null ? 'bg-brand text-white' : 'bg-white text-brand-700 ring-1 ring-brand-100'
+            }`}
+          >
+            كل الأنبار
+          </button>
+          {CITY_NAMES.map((c) => {
+            const count = stations?.filter((s) => s.city === c).length ?? 0;
+            if (count === 0 && city !== c) return null;
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCity(city === c ? null : c)}
+                aria-pressed={city === c}
+                className={`min-h-[38px] shrink-0 rounded-full px-4 text-[13px] font-semibold transition-colors duration-200 ${
+                  city === c ? 'bg-brand text-white' : 'bg-white text-brand-700 ring-1 ring-brand-100'
+                }`}
+              >
+                {c} ({count})
+              </button>
+            );
+          })}
+        </div>
 
         <div className="grid grid-cols-2 gap-2 rounded-xl bg-brand-50 p-1">
           {(['list', 'map'] as const).map((v) => (
@@ -218,15 +256,12 @@ export default function HomePage() {
           )}
         </div>
 
-        <div className="mt-5">
-          <PromoStrip />
-        </div>
-
         <a href="/login" className="mt-6 block min-h-[44px] pt-3 text-center text-sm text-brand-700">
           هل أنت صاحب محطة؟ سجّل محطتك
         </a>
       </main>
 
+      <InstallPrompt />
       <NewsTicker stations={stations ?? []} />
     </>
   );

@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import { PRODUCT_LABELS, TRAFFIC_LABELS } from '@/lib/products';
 import type { StationWithStatus, TrafficLevel } from '@/types/database';
 
-const RAMADI: [number, number] = [33.4258, 43.3012];
+import { ANBAR_CENTER, ANBAR_ZOOM } from '@/lib/cities';
 
 const PIN_COLOR: Record<'green' | 'yellow' | 'red' | 'none', string> = {
   green: '#16a34a',
@@ -46,7 +46,7 @@ function FitToStations({ stations }: { stations: StationWithStatus[] }) {
     if (stations.length === 0) return;
     map.fitBounds(
       L.latLngBounds(stations.map((s) => [s.lat, s.lng] as [number, number])).pad(0.25),
-      { maxZoom: 15 }
+      { maxZoom: 14 }
     );
   }, [stations, map]);
   return null;
@@ -61,8 +61,8 @@ export default function StationMap({
 }) {
   return (
     <MapContainer
-      center={RAMADI}
-      zoom={13}
+      center={ANBAR_CENTER}
+      zoom={ANBAR_ZOOM}
       scrollWheelZoom
       className="h-[60vh] w-full rounded-2xl"
       style={{ zIndex: 0 }}

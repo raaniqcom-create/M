@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
-import { StationRegisterForm } from '@/components/StationRegisterForm';
 import { ShareButton } from '@/components/ShareButton';
 import { FuelIcon, LogOutIcon, SpinnerIcon } from '@/components/icons';
 import type { FuelProduct, Station, StationProduct, TrafficLevel } from '@/types/database';
@@ -119,8 +118,16 @@ export default function OwnerPage() {
       </header>
 
       <div className="mt-5">
-        {!station && userId && (
-          <StationRegisterForm ownerId={userId} onDone={() => load(userId)} />
+        {!station && (
+          <div className="card p-6 text-center">
+            <h2 className="text-base font-bold">لا توجد محطة مرتبطة بحسابك</h2>
+            <p className="mt-2 text-sm text-slate-500">
+              أكمل تسجيل محطتك لتتمكن من تحديث توفر الوقود.
+            </p>
+            <a href="/login" className="btn-primary mt-4">
+              تسجيل المحطة
+            </a>
+          </div>
         )}
 
         {station?.status === 'pending' && (

@@ -8,12 +8,15 @@ export type FuelProduct =
 
 export type TrafficLevel = 'green' | 'yellow' | 'red';
 export type StationStatus = 'pending' | 'approved' | 'rejected';
+export type StationKind = 'private' | 'government';
 
 export interface Station {
   id: string;
   owner_id: string;
   name: string;
   address: string;
+  city: string;
+  kind: StationKind;
   phone: string;
   lat: number;
   lng: number;
