@@ -1,0 +1,7 @@
+node_modules/
+.next/
+.env.local
+.vapid.json
+scratch_query.json
+out/
+.netlify/

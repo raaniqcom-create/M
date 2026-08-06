@@ -1,0 +1,124 @@
+import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
+import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
+import { MapPinIcon, PhoneIcon } from '@/components/icons';
+import type { FuelProduct, Station, StationProduct, TrafficLevel } from '@/types/database';
+
+// server-side anon client: same RLS rules, but usable during SSR for OG tags
+const db = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+export const revalidate = 60;
+
+async function getStation(id: string) {
+  const { data: station } = await db
+    .from('stations')
+    .select('*')
+    .eq('id', id)
+    .eq('status', 'approved')
+    .maybeSingle<Station>();
+
+  if (!station) return null;
+
+  const [{ data: products }, { data: traffic }] = await Promise.all([
+    db.from('station_products').select('*').eq('station_id', id),
+    db.from('station_traffic_avg').select('majority_level').eq('station_id', id).maybeSingle(),
+  ]);
+
+  const available = ((products ?? []) as StationProduct[])
+    .filter((p) => p.is_available)
+    .map((p) => p.product);
+
+  const level: TrafficLevel | null =
+    station.manual_traffic_level ?? (traffic?.majority_level as TrafficLevel | null) ?? null;
+
+  return { station, available, level };
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const result = await getStation(id);
+  if (!result) return { title: 'المحطة غير موجودة' };
+
+  const { station, available, level } = result;
+  const products = available.length
+    ? available.map((p) => PRODUCT_LABELS[p]).join(' · ')
+    : 'لا يوجد وقود متوفر حالياً';
+  const description = `المتوفر: ${products}${level ? ` — الازدحام: ${TRAFFIC_LABELS[level]}` : ''}`;
+
+  return {
+    title: `${station.name} | المحطة التقنية`,
+    description,
+    openGraph: { title: station.name, description, type: 'website', locale: 'ar_IQ' },
+  };
+}
+
+export default async function StationPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const result = await getStation(id);
+  if (!result) notFound();
+
+  const { station, available, level } = result;
+  const isAvailable = (p: FuelProduct) => available.includes(p);
+
+  return (
+    <main className="mx-auto max-w-md px-4 pb-16 pt-6">
+      <article className="card p-5">
+        <h1 className="text-lg font-extrabold">{station.name}</h1>
+        <p className="mt-1 text-sm text-slate-500">{station.address}</p>
+
+        {level && (
+          <span
+            className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${TRAFFIC_COLORS[level].bg} ${TRAFFIC_COLORS[level].text}`}
+          >
+            <span className={`h-2 w-2 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
+            الازدحام: {TRAFFIC_LABELS[level]}
+          </span>
+        )}
+
+        <h2 className="mt-5 text-sm font-bold">المنتجات</h2>
+        <ul className="mt-2 divide-y divide-slate-100">
+          {PRODUCT_ORDER.map((product) => (
+            <li key={product} className="flex items-center justify-between py-2.5 text-sm">
+              <span>{PRODUCT_LABELS[product]}</span>
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                  isAvailable(product) ? 'bg-brand-100 text-brand' : 'bg-slate-100 text-slate-400'
+                }`}
+              >
+                {isAvailable(product) ? 'متوفر' : 'غير متوفر'}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <a href={`tel:${station.phone}`} className="btn-ghost">
+            <PhoneIcon className="h-4 w-4" />
+            اتصال
+          </a>
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-ghost"
+          >
+            <MapPinIcon className="h-4 w-4" />
+            الطريق
+          </a>
+        </div>
+      </article>
+
+      <a href="/" className="btn-primary mt-4 w-full">
+        عرض كل المحطات
+      </a>
+    </main>
+  );
+}

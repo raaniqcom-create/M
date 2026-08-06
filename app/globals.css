@@ -1,0 +1,75 @@
+@import 'leaflet/dist/leaflet.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    touch-action: manipulation;
+  }
+  /* iOS zooms the page when a font-size < 16px input is focused */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  :focus-visible {
+    outline: 2px solid theme('colors.brand.DEFAULT');
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors duration-200 disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-brand text-white active:bg-brand-600;
+  }
+  .btn-ghost {
+    @apply btn border border-brand-100 bg-white text-brand-700 active:bg-brand-50;
+  }
+  .field {
+    @apply min-h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-slate-700;
+  }
+  .card {
+    @apply rounded-2xl border border-brand-100 bg-white shadow-soft;
+  }
+  /* the filter chips scroll horizontally by design; the bar is just noise */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Leaflet renders its own chrome; align it with the app's look */
+.leaflet-container {
+  font-family: inherit;
+  background: #eef7f0;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 0.9rem;
+}
+.leaflet-popup-content {
+  margin: 0.75rem 0.9rem;
+  direction: rtl;
+}

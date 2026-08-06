@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 160" width="640" height="160" font-family="Segoe UI, Tahoma, sans-serif">
+  <defs>
+    <linearGradient id="g" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#166534"/>
+      <stop offset="1" stop-color="#16a34a"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="160" fill="url(#g)"/>
+  <circle cx="70" cy="80" r="34" fill="#ffffff" opacity="0.14"/>
+  <g transform="translate(52,62) scale(1.5)" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="1" y1="22" x2="13" y2="22"/>
+    <line x1="2" y1="9" x2="12" y2="9"/>
+    <path d="M12 22V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v18"/>
+  </g>
+  <text x="600" y="66" text-anchor="end" fill="#ffffff" font-size="30" font-weight="700">مساحة إعلانية</text>
+  <text x="600" y="100" text-anchor="end" fill="#dcfce7" font-size="20">أعلن عن نشاطك لآلاف السائقين في الأنبار</text>
+  <rect x="440" y="115" width="160" height="30" rx="15" fill="#ffffff"/>
+  <text x="520" y="135" text-anchor="middle" fill="#166534" font-size="16" font-weight="700">تواصل معنا</text>
+</svg>
