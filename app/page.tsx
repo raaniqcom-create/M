@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { distanceKm, loadStations } from '@/lib/stations';
 import { useSiteStats } from '@/lib/useSiteStats';
 import { useFavorites } from '@/lib/favorites';
+import { playAlert, unlockAudio } from '@/lib/alertSound';
+import { SoundToggle } from '@/components/SoundToggle';
 import { isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { StationCard } from '@/components/StationCard';
@@ -39,6 +41,18 @@ export default function HomePage() {
   const { visits, online } = useSiteStats();
   const { toggle: toggleFavorite, isFavorite } = useFavorites();
 
+  // the realtime handler is registered once; read favourites through a ref so
+  // it always sees the current set instead of the one captured on mount
+  const favoriteRef = useRef(isFavorite);
+  favoriteRef.current = isFavorite;
+
+  // browsers block audio until the page has been interacted with
+  useEffect(() => {
+    const unlock = () => unlockAudio();
+    window.addEventListener('pointerdown', unlock, { once: true });
+    return () => window.removeEventListener('pointerdown', unlock);
+  }, []);
+
   useEffect(() => {
     // a dropped connection must surface as a retry prompt, not an endless spinner
     const refresh = () =>
@@ -55,7 +69,25 @@ export default function HomePage() {
     // small (single city), so this beats hand-merging every event type
     const channel = supabase
       .channel('home-updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'station_products' }, refresh)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'station_products' },
+        (payload) => {
+          // Only fuel *arriving* at a starred station is worth a sound. A
+          // product going out of stock, or any change elsewhere, is silent.
+          const row = payload.new as { station_id?: string; is_available?: boolean } | null;
+          const before = payload.old as { is_available?: boolean } | null;
+          if (
+            row?.is_available &&
+            !before?.is_available &&
+            row.station_id &&
+            favoriteRef.current(row.station_id)
+          ) {
+            playAlert();
+          }
+          refresh();
+        }
+      )
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'traffic_votes' }, refresh)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'stations' }, refresh)
       .subscribe();
@@ -121,9 +153,12 @@ export default function HomePage() {
     <>
       <header className="bg-gradient-to-b from-brand-700 to-brand px-4 pb-5 pt-6 text-white">
         <div className="mx-auto max-w-md">
-          <div className="flex items-center justify-center gap-2">
+          <div className="relative flex items-center justify-center gap-2">
             <FuelIcon className="h-6 w-6" />
             <h1 className="text-lg font-extrabold">المحطة التقنية</h1>
+            <div className="absolute left-0">
+              <SoundToggle />
+            </div>
           </div>
           <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — جميع مدن المحافظة</p>
 
