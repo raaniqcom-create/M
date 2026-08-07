@@ -162,9 +162,17 @@ export default function HomePage() {
             </div>
           </div>
           <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — جميع مدن المحافظة</p>
-          <div className="mx-auto mt-2 flex w-fit items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold backdrop-blur-sm">
-            <span aria-hidden className="h-1.5 w-1.5 animate-blink rounded-full bg-white" />
-            <span className="animate-blink">قريباً</span>
+          <div className="mt-2 flex items-center justify-center gap-2">
+            <span className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold backdrop-blur-sm">
+              <span aria-hidden className="h-1.5 w-1.5 animate-blink rounded-full bg-white" />
+              <span className="animate-blink">قريباً</span>
+            </span>
+            <a
+              href="/download"
+              className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11px] font-extrabold text-brand-700"
+            >
+              📱 حمّل التطبيق
+            </a>
           </div>
 
           <div className="mt-4">
@@ -179,8 +187,8 @@ export default function HomePage() {
 
           <div className="mt-4 grid grid-cols-3 gap-2">
             {[
+              { label: 'زائر', value: visits ?? '—' },
               { label: 'محطة مسجلة', value: stations?.length ?? '—' },
-              { label: 'مفتوحة الآن', value: stations ? stations.filter(isOpenNow).length : '—' },
               { label: 'متصل الآن', value: online, live: true },
             ].map((stat) => (
               <div
