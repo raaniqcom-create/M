@@ -25,9 +25,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The lockfile is written by npm 11 (Node 24); npm 10 reads its nested
+      # entries differently and rejects the tree as out of sync.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
 
       - run: npm ci
