@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { FuelIcon } from '@/components/icons';
+import { SoonBadge } from '@/components/SoonBadge';
 
 // A stable redirect to whatever the newest signed build is — no need to touch
 // this page when a new APK ships.
@@ -49,17 +50,14 @@ export default function DownloadPage() {
         <h2 className="text-base font-bold">أندرويد</h2>
       </div>
 
-      <a
-        href={APK_URL}
-        className="btn-primary mt-4 w-full"
-        // the browser must download the file rather than try to render it
-        download
-      >
-        تحميل التطبيق (٤.٤ ميغابايت)
-      </a>
+      <div className="mt-4 flex flex-col items-center gap-2 rounded-xl bg-brand-50 px-4 py-5">
+        <SoonBadge />
+        <p className="text-xs text-brand-900">التطبيق تحت المراجعة الأخيرة قبل النشر</p>
+      </div>
 
-      <ol className="mt-4 space-y-3">
-        <Step n={1}>اضغط زر التحميل أعلاه وانتظر انتهاء التنزيل.</Step>
+      <p className="mt-4 text-xs font-semibold text-slate-500">طريقة التثبيت عند توفره:</p>
+      <ol className="mt-2 space-y-3">
+        <Step n={1}>اضغط زر التحميل الذي سيظهر هنا عند الإطلاق.</Step>
         <Step n={2}>افتح الملف من شريط الإشعارات أو من مجلد التنزيلات.</Step>
         <Step n={3}>
           سيظهر تحذير <span className="font-semibold">«مصدر غير معروف»</span> — اضغط{' '}
@@ -83,7 +81,12 @@ export default function DownloadPage() {
         <h2 className="text-base font-bold">آيفون وآيباد</h2>
       </div>
 
-      <p className="mt-3 text-sm leading-relaxed text-slate-600">
+      <div className="mt-3 flex flex-col items-center gap-2 rounded-xl bg-brand-50 px-4 py-5">
+        <SoonBadge />
+        <p className="text-xs text-brand-900">متاح فور انطلاق المنصة</p>
+      </div>
+
+      <p className="mt-4 text-sm leading-relaxed text-slate-600">
         آبل لا تسمح بتثبيت التطبيقات خارج متجرها، لكن يمكنك إضافة المنصة لشاشتك الرئيسية
         بخطوتين — وستعمل بملء الشاشة تماماً كأي تطبيق.
       </p>
@@ -125,6 +128,17 @@ export default function DownloadPage() {
       <p className="mt-1 text-center text-sm text-slate-500">
         مجاناً — بدون حساب، وبدون إعلانات مزعجة
       </p>
+
+      <section className="card mt-5 border-brand-100 p-5 text-center">
+        <SoonBadge />
+        <p className="mt-3 text-sm font-bold">التطبيق ينطلق قريباً</p>
+        <p className="mt-2 text-xs leading-relaxed text-slate-500">
+          إن كنت صاحب محطة، سجّلها الآن لتظهر للسائقين من أول يوم.
+        </p>
+        <a href="/register" className="btn-primary mt-4 w-full">
+          سجّل محطتك مجاناً
+        </a>
+      </section>
 
       {installed && (
         <p className="mt-5 rounded-xl bg-brand-50 p-3 text-center text-sm font-semibold text-brand">

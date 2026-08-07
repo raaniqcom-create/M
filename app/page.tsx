@@ -9,6 +9,7 @@ import { useSiteStats } from '@/lib/useSiteStats';
 import { useFavorites } from '@/lib/favorites';
 import { playAlert, unlockAudio } from '@/lib/alertSound';
 import { SoundToggle } from '@/components/SoundToggle';
+import { SoonBadge } from '@/components/SoonBadge';
 import { isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { StationCard } from '@/components/StationCard';
@@ -161,12 +162,10 @@ export default function HomePage() {
             </div>
           </div>
           <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — جميع مدن المحافظة</p>
-          <a
-            href="/download"
-            className="mx-auto mt-2 flex w-fit items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold backdrop-blur-sm"
-          >
-            📱 حمّل التطبيق
-          </a>
+          <div className="mx-auto mt-2 flex w-fit items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold backdrop-blur-sm">
+            <span aria-hidden className="h-1.5 w-1.5 animate-blink rounded-full bg-white" />
+            <span className="animate-blink">قريباً</span>
+          </div>
 
           <div className="mt-4">
             <SearchBar
@@ -269,13 +268,34 @@ export default function HomePage() {
               {visible.length === 0 && (
                 <div className="card p-8 text-center">
                   <FuelIcon className="mx-auto h-8 w-8 text-brand-200" />
-                  <p className="mt-3 text-sm font-medium text-slate-600">
-                    {query
-                      ? `لا توجد نتائج لـ «${query}»`
-                      : filters.product
-                        ? `لا توجد محطة يتوفر فيها ${PRODUCT_LABELS[filters.product]} حالياً`
-                        : 'لا توجد محطات متاحة الآن'}
-                  </p>
+                  {/* Before launch the list is empty by design, so say that
+                      plainly and point owners at registration instead of
+                      showing drivers a bare "no results". */}
+                  {!query && countActive(filters) === 0 && stations?.length === 0 ? (
+                    <>
+                      <div className="mt-3 flex justify-center">
+                        <SoonBadge />
+                      </div>
+                      <p className="mt-3 text-sm font-bold text-slate-700">
+                        المنصة تنطلق قريباً
+                      </p>
+                      <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                        نستقبل الآن تسجيل المحطات في جميع مدن الأنبار. سجّل محطتك اليوم
+                        لتظهر للسائقين من أول يوم.
+                      </p>
+                      <a href="/register" className="btn-primary mt-5 w-full">
+                        سجّل محطتك مجاناً
+                      </a>
+                    </>
+                  ) : (
+                    <p className="mt-3 text-sm font-medium text-slate-600">
+                      {query
+                        ? `لا توجد نتائج لـ «${query}»`
+                        : filters.product
+                          ? `لا توجد محطة يتوفر فيها ${PRODUCT_LABELS[filters.product]} حالياً`
+                          : 'لا توجد محطات متاحة الآن'}
+                    </p>
+                  )}
                   {(countActive(filters) > 0 || query) && (
                     <button
                       type="button"

@@ -25,7 +25,9 @@ export const dynamicParams = false;
 
 export async function generateStaticParams() {
   const { data } = await db.from('stations').select('id').eq('status', 'approved');
-  return (data ?? []).map(({ id }) => ({ id }));
+  const params = (data ?? []).map(({ id }) => ({ id }));
+  // a static export must emit at least one path for a dynamic route
+  return params.length ? params : [{ id: 'none' }];
 }
 
 async function getStation(id: string) {

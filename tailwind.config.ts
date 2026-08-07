@@ -43,11 +43,18 @@ export default {
           '0%': { transform: 'scale(0.9)', opacity: '0.7' },
           '100%': { transform: 'scale(1.8)', opacity: '0' },
         },
+        // Fades rather than hard on/off: a blink that never fully disappears
+        // stays readable instead of flickering.
+        blink: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.35' },
+        },
       },
       animation: {
         ticker: 'ticker 32s linear infinite',
         'fade-slide': 'fade-slide 6s ease-in-out infinite',
         'pulse-ring': 'pulse-ring 1.8s ease-out infinite',
+        blink: 'blink 1.4s ease-in-out infinite',
       },
     },
   },

@@ -14,7 +14,8 @@ export async function generateStaticParams() {
     .select('slug')
     .eq('status', 'approved')
     .not('slug', 'is', null);
-  return (data ?? []).map(({ slug }) => ({ slug }));
+  const params = (data ?? []).map(({ slug }) => ({ slug }));
+  return params.length ? params : [{ slug: 'none' }];
 }
 
 // Short handle: /alnakheal1 -> the full station page. Next resolves static
