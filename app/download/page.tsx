@@ -50,14 +50,17 @@ export default function DownloadPage() {
         <h2 className="text-base font-bold">أندرويد</h2>
       </div>
 
-      <div className="mt-4 flex flex-col items-center gap-2 rounded-xl bg-brand-50 px-4 py-5">
-        <SoonBadge />
-        <p className="text-xs text-brand-900">التطبيق تحت المراجعة الأخيرة قبل النشر</p>
-      </div>
+      <a
+        href={APK_URL}
+        className="btn-primary mt-4 w-full"
+        // the browser must download the file rather than try to render it
+        download
+      >
+        تحميل التطبيق (٤.٤ ميغابايت)
+      </a>
 
-      <p className="mt-4 text-xs font-semibold text-slate-500">طريقة التثبيت عند توفره:</p>
-      <ol className="mt-2 space-y-3">
-        <Step n={1}>اضغط زر التحميل الذي سيظهر هنا عند الإطلاق.</Step>
+      <ol className="mt-4 space-y-3">
+        <Step n={1}>اضغط زر التحميل أعلاه وانتظر انتهاء التنزيل.</Step>
         <Step n={2}>افتح الملف من شريط الإشعارات أو من مجلد التنزيلات.</Step>
         <Step n={3}>
           سيظهر تحذير <span className="font-semibold">«مصدر غير معروف»</span> — اضغط{' '}
@@ -81,12 +84,7 @@ export default function DownloadPage() {
         <h2 className="text-base font-bold">آيفون وآيباد</h2>
       </div>
 
-      <div className="mt-3 flex flex-col items-center gap-2 rounded-xl bg-brand-50 px-4 py-5">
-        <SoonBadge />
-        <p className="text-xs text-brand-900">متاح فور انطلاق المنصة</p>
-      </div>
-
-      <p className="mt-4 text-sm leading-relaxed text-slate-600">
+      <p className="mt-3 text-sm leading-relaxed text-slate-600">
         آبل لا تسمح بتثبيت التطبيقات خارج متجرها، لكن يمكنك إضافة المنصة لشاشتك الرئيسية
         بخطوتين — وستعمل بملء الشاشة تماماً كأي تطبيق.
       </p>
@@ -131,9 +129,9 @@ export default function DownloadPage() {
 
       <section className="card mt-5 border-brand-100 p-5 text-center">
         <SoonBadge />
-        <p className="mt-3 text-sm font-bold">التطبيق ينطلق قريباً</p>
+        <p className="mt-3 text-sm font-bold">المنصة تنطلق قريباً</p>
         <p className="mt-2 text-xs leading-relaxed text-slate-500">
-          إن كنت صاحب محطة، سجّلها الآن لتظهر للسائقين من أول يوم.
+          حمّل التطبيق من الآن. وإن كنت صاحب محطة، سجّلها لتظهر للسائقين من أول يوم.
         </p>
         <a href="/register" className="btn-primary mt-4 w-full">
           سجّل محطتك مجاناً

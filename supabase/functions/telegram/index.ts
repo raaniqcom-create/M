@@ -74,7 +74,23 @@ function isOpenNow(s: { is_24h: boolean; opens_at: string; closes_at: string }):
 
 // ---------- Screens ----------
 
+// Flip to '0' at launch to expose the full driver menu.
+const PRE_LAUNCH = (Deno.env.get('PRE_LAUNCH') ?? '1') === '1';
+
 function mainMenu(userId: number) {
+  // Before launch there is nothing for a driver to search — every station list
+  // would come back empty and read as a broken bot. Show the two things that
+  // are genuinely useful now instead.
+  if (PRE_LAUNCH && !isAdmin(userId)) {
+    return {
+      inline_keyboard: [
+        [{ text: '🔔 ثبّت نغمة التنبيه', callback_data: 'tone' }],
+        [{ text: '🏪 سجّل محطتك', url: `${SITE}/register` }],
+        [{ text: '🌐 فتح الموقع', url: SITE }],
+      ],
+    };
+  }
+
   const rows = [
     [{ text: '📍 المحطات القريبة مني', callback_data: 'nearby' }],
     [{ text: '⛽ ابحث حسب نوع الوقود', callback_data: 'products' }],
@@ -88,6 +104,19 @@ function mainMenu(userId: number) {
   }
   return { inline_keyboard: rows };
 }
+
+const PRE_LAUNCH_WELCOME =
+  '<b>المحطة التقنية</b>\nمنصة وقود الأنبار\n\n' +
+  '🚀 <b>ننطلق قريباً</b>\n\n' +
+  'سنعلن لك <b>هنا مباشرة</b> فور انطلاق المنصة — لا حاجة لمتابعة أي شيء.\n\n' +
+  'كل ما عليك الآن:\n' +
+  '① ثبّت نغمة التنبيه من الزر أدناه\n' +
+  '② تأكد أن إشعارات هذه المحادثة <b>غير مكتومة</b>\n\n' +
+  'وقتها سيصلك تنبيه فور توفر الوقود قرب موقعك.\n\n' +
+  '🏪 صاحب محطة؟ سجّلها الآن لتظهر للسائقين من أول يوم.';
+
+const welcomeFor = (userId: number) =>
+  PRE_LAUNCH && !isAdmin(userId) ? PRE_LAUNCH_WELCOME : WELCOME;
 
 // ---------- Favourites ----------
 
@@ -178,18 +207,20 @@ async function showTone(chat: number) {
 
   await send(
     chat,
-    '🔔 <b>كيف تجعل هذه النغمة تنبيه البوت</b>\n\n' +
+    '🔔 <b>خطوتان حتى يصلك التنبيه بصوت مميّز</b>\n\n' +
+      '<b>١. احفظ النغمة</b>\n\n' +
       '<b>📱 أندرويد</b>\n' +
-      '1. اضغط مطولاً على المقطع الصوتي أعلاه\n' +
-      '2. اختر «حفظ للإشعارات» أو <i>Save for Notifications</i>\n' +
-      '3. ارجع لمحادثة البوت واضغط على اسمه في الأعلى\n' +
-      '4. الإشعارات ← الصوت ← اختر «المحطة التقنية»\n\n' +
+      '• اضغط مطولاً على المقطع أعلاه\n' +
+      '• اختر «حفظ للإشعارات» أو <i>Save for Notifications</i>\n\n' +
       '<b>🍎 آيفون</b>\n' +
-      '1. اضغط على المقطع الصوتي ثم زر المشاركة\n' +
-      '2. الإعدادات ← الإشعارات والأصوات ← تحميل صوت\n' +
-      '3. اختر الملف الذي حفظته\n' +
-      '4. ارجع لمحادثة البوت ← اسم البوت ← الإشعارات ← الصوت\n\n' +
-      '💡 بهذا تميّز تنبيهات الوقود عن باقي رسائلك فوراً.',
+      '• اضغط مطولاً على المقطع أعلاه\n' +
+      '• اختر «حفظ للإشعارات» مباشرة — التحديثات الأخيرة من تيليجرام تدعمها\n' +
+      '• إن لم يظهر الخيار: الإعدادات ← الإشعارات والأصوات ← تحميل صوت\n\n' +
+      '<b>٢. فعّلها لهذه المحادثة</b>\n' +
+      '• اضغط على اسم البوت في الأعلى\n' +
+      '• الإشعارات ← الصوت ← اختر «المحطة التقنية»\n\n' +
+      '⚠️ <b>مهم:</b> تأكد أن الإشعارات <b>غير مكتومة</b> لهذه المحادثة، وإلا لن يصلك أي صوت.\n\n' +
+      '💡 بهذا تميّز تنبيه الوقود عن باقي رسائلك من أول ثانية.',
     {
       reply_markup: {
         inline_keyboard: [[{ text: '🏠 القائمة', callback_data: 'menu' }]],
@@ -214,11 +245,67 @@ async function showAdmin(chat: number, userId: number, messageId?: number) {
   const markup = {
     inline_keyboard: [
       [{ text: `📋 مراجعة الطلبات (${pending ?? 0})`, callback_data: 'req' }],
+      [{ text: '👥 من سجّل محطته', callback_data: 'people' }],
       [{ text: '🏠 القائمة', callback_data: 'menu' }],
     ],
   };
   if (messageId) await edit(chat, messageId, text, { reply_markup: markup });
   else await send(chat, text, { reply_markup: markup });
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  pending: '⏳ بانتظار الموافقة',
+  approved: '✅ معتمدة',
+  rejected: '❌ مرفوضة',
+};
+
+/** Who has registered so far — the contact behind each station, not just the
+ *  station name, so the admin can call them directly. */
+async function showPeople(chat: number, userId: number, messageId: number) {
+  if (!isAdmin(userId)) return;
+
+  const { data } = await db
+    .from('stations')
+    .select('name, city, phone, contact_name, status, created_at')
+    .order('created_at', { ascending: false })
+    .limit(30);
+
+  if (!data?.length) {
+    await edit(chat, messageId, '👥 لم يسجّل أحد بعد.', {
+      reply_markup: { inline_keyboard: [[{ text: '⬅️ رجوع', callback_data: 'admin' }]] },
+    });
+    return;
+  }
+
+  const lines = data.map((s, i) => {
+    const when = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Baghdad',
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date(s.created_at));
+    return (
+      `${i + 1}. <b>${s.name}</b> — ${s.city}\n` +
+      `   👤 ${s.contact_name || 'غير محدد'}\n` +
+      `   ☎️ <code>${s.phone}</code>\n` +
+      `   ${STATUS_LABELS[s.status] ?? s.status} · ${when}`
+    );
+  });
+
+  // Telegram caps a message at 4096 chars; trim rather than fail to send
+  let text = `👥 <b>المسجّلون</b> (${data.length})\n\n${lines.join('\n\n')}`;
+  if (text.length > 3900) text = text.slice(0, 3900) + '\n\n… والبقية في لوحة الموقع';
+
+  await edit(chat, messageId, text, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '🔄 تحديث', callback_data: 'people' }],
+        [{ text: '⬅️ رجوع', callback_data: 'admin' }],
+      ],
+    },
+  });
 }
 
 async function showRequests(chat: number, userId: number, messageId: number) {
@@ -547,7 +634,7 @@ Deno.serve(async (req) => {
 
       if (data === 'menu') {
         await answer(cb.id);
-        await edit(chat, messageId, WELCOME, { reply_markup: mainMenu(from) });
+        await edit(chat, messageId, welcomeFor(from), { reply_markup: mainMenu(from) });
       } else if (data === 'nearby') {
         await answer(cb.id);
         await showNearby(chat);
@@ -570,6 +657,9 @@ Deno.serve(async (req) => {
       } else if (data === 'admin') {
         await answer(cb.id);
         await showAdmin(chat, from, messageId);
+      } else if (data === 'people') {
+        await answer(cb.id);
+        await showPeople(chat, from, messageId);
       } else if (data === 'req') {
         await answer(cb.id);
         await showRequests(chat, from, messageId);
@@ -632,7 +722,7 @@ Deno.serve(async (req) => {
 
     const text: string = msg.text ?? '';
     if (text === '⬅️ رجوع' || text.startsWith('/start') || text.startsWith('/menu')) {
-      await send(chat, WELCOME, { reply_markup: mainMenu(from) });
+      await send(chat, welcomeFor(from), { reply_markup: mainMenu(from) });
       await call('sendMessage', {
         chat_id: chat,
         text: '.',
@@ -682,7 +772,7 @@ Deno.serve(async (req) => {
       return new Response('ok');
     }
 
-    await send(chat, WELCOME, { reply_markup: mainMenu(from) });
+    await send(chat, welcomeFor(from), { reply_markup: mainMenu(from) });
     return new Response('ok');
   } catch (err) {
     // never let Telegram retry forever on a bug
