@@ -6,7 +6,16 @@ const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export const revalidate = 300;
+export const dynamicParams = false;
+
+export async function generateStaticParams() {
+  const { data } = await db
+    .from('stations')
+    .select('slug')
+    .eq('status', 'approved')
+    .not('slug', 'is', null);
+  return (data ?? []).map(({ slug }) => ({ slug }));
+}
 
 // Short handle: /alnakheal1 -> the full station page. Next resolves static
 // routes (/login, /admin, …) before this catch-all, so they can never be

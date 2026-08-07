@@ -18,7 +18,15 @@ const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export const revalidate = 60;
+// Static export: every approved station gets a prerendered page with its own
+// share preview. Stations added later are handled by the not-found fallback,
+// which resolves them in the browser until the next build.
+export const dynamicParams = false;
+
+export async function generateStaticParams() {
+  const { data } = await db.from('stations').select('id').eq('status', 'approved');
+  return (data ?? []).map(({ id }) => ({ id }));
+}
 
 async function getStation(id: string) {
   const { data: station } = await db

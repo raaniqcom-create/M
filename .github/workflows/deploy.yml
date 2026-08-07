@@ -1,8 +1,7 @@
 name: Deploy site
 
-# Netlify's free tier meters *its own* build machines. Building here and
-# uploading the finished output keeps deploys working without touching that
-# quota — GitHub Actions minutes are free for public repositories.
+# Static export to GitHub Pages: free, unlimited deploys, and reachable from
+# Iraq. Everything dynamic runs in Supabase, so the site itself is just files.
 on:
   push:
     branches: [main]
@@ -10,23 +9,27 @@ on:
       - '.github/workflows/android.yml'
       - 'twa-manifest.json'
       - 'README.md'
+  # station approvals trigger this so a new station gets its own page
+  repository_dispatch:
+    types: [stations-changed]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 concurrency:
-  group: deploy
+  group: pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    env:
-      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
     steps:
       - uses: actions/checkout@v4
 
-      # The lockfile is written by npm 11 (Node 24); npm 10 reads its nested
-      # entries differently and rejects the tree as out of sync.
+      # the lockfile is written by npm 11, which ships with Node 24
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -34,10 +37,26 @@ jobs:
 
       - run: npm ci
 
-      # pulls the site's environment variables from Netlify, so keys stay in
-      # one place instead of being duplicated as GitHub secrets
-      - name: Build
-        run: npx netlify-cli@latest build
+      - name: Build static site
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ secrets.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
+        run: npm run build
 
-      - name: Upload prebuilt output
-        run: npx netlify-cli@latest deploy --prod --no-build
+      # without this, Pages runs Jekyll and drops every _next/* asset
+      - run: touch out/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

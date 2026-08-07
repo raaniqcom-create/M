@@ -86,9 +86,14 @@ export default function OwnerPage() {
 
     if (next) {
       // fire-and-forget: a failed push must not block the toggle
-      fetch('/api/notify', {
+      // Supabase edge function rather than a Next.js route: the site is served
+      // as static files and has no server of its own.
+      fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/notify`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        },
         body: JSON.stringify({ stationId: station.id, product }),
       }).catch(() => {});
     }
