@@ -1,0 +1,41 @@
+name: Deploy site
+
+# Netlify's free tier meters *its own* build machines. Building here and
+# uploading the finished output keeps deploys working without touching that
+# quota — GitHub Actions minutes are free for public repositories.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '.github/workflows/android.yml'
+      - 'twa-manifest.json'
+      - 'README.md'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      # pulls the site's environment variables from Netlify, so keys stay in
+      # one place instead of being duplicated as GitHub secrets
+      - name: Build
+        run: npx netlify-cli@latest build
+
+      - name: Upload prebuilt output
+        run: npx netlify-cli@latest deploy --prod --no-build
