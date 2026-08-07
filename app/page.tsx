@@ -161,6 +161,12 @@ export default function HomePage() {
             </div>
           </div>
           <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — جميع مدن المحافظة</p>
+          <a
+            href="/download"
+            className="mx-auto mt-2 flex w-fit items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold backdrop-blur-sm"
+          >
+            📱 حمّل التطبيق
+          </a>
 
           <div className="mt-4">
             <SearchBar

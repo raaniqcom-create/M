@@ -16,29 +16,56 @@ export function InstallPrompt() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    // already installed → never nag
+    // running as an installed app (PWA or the APK shell) → never nag
     const standalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as { standalone?: boolean }).standalone === true;
     if (standalone || localStorage.getItem(DISMISSED)) return;
 
-    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    setIsIOS(ios);
+    let active = true;
+    let onPrompt: ((e: Event) => void) | undefined;
 
-    // iOS has no install event — Safari only supports the manual Share flow,
-    // so show instructions there instead of a button that can't work.
-    if (ios) {
-      setShow(true);
-      return;
+    // Someone who installed the Android app may still open the site in Chrome,
+    // where standalone is false. Ask the platform before offering to install
+    // something they already have — and wait for the answer, since arming the
+    // listener first would let the banner flash before the check returns.
+    async function alreadyHasNativeApp(): Promise<boolean> {
+      const query = (
+        navigator as Navigator & { getInstalledRelatedApps?: () => Promise<unknown[]> }
+      ).getInstalledRelatedApps;
+      if (!query) return false;
+      try {
+        return (await query.call(navigator)).length > 0;
+      } catch {
+        return false;
+      }
     }
 
-    const onPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferred(e as BeforeInstallPromptEvent);
-      setShow(true);
+    alreadyHasNativeApp().then((installed) => {
+      if (!active || installed) return;
+
+      const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      setIsIOS(ios);
+
+      // iOS has no install event — Safari only supports the manual Share flow,
+      // so show instructions there instead of a button that can't work.
+      if (ios) {
+        setShow(true);
+        return;
+      }
+
+      onPrompt = (e: Event) => {
+        e.preventDefault();
+        setDeferred(e as BeforeInstallPromptEvent);
+        setShow(true);
+      };
+      window.addEventListener('beforeinstallprompt', onPrompt);
+    });
+
+    return () => {
+      active = false;
+      if (onPrompt) window.removeEventListener('beforeinstallprompt', onPrompt);
     };
-    window.addEventListener('beforeinstallprompt', onPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', onPrompt);
   }, []);
 
   function dismiss() {
@@ -93,6 +120,10 @@ export function InstallPrompt() {
             تثبيت التطبيق
           </button>
         )}
+
+        <a href="/download" className="mt-2 block text-center text-xs font-semibold text-brand">
+          أو حمّل تطبيق أندرويد وشاهد طريقة التثبيت
+        </a>
       </div>
     </div>
   );
