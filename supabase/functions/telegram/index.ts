@@ -30,6 +30,28 @@ const PRODUCT_LABELS: Record<string, string> = {
 };
 const PRODUCTS = Object.keys(PRODUCT_LABELS);
 
+// Anbar districts with a rough centre each. Duplicated from lib/cities.ts
+// because an Edge Function cannot import from the Next app; the list is
+// administrative geography and does not change.
+const CITIES: Record<string, [number, number]> = {
+  'الرمادي': [33.4258, 43.3012],
+  'الفلوجة': [33.3556, 43.7864],
+  'هيت': [33.6383, 42.8258],
+  'حديثة': [34.1372, 42.3789],
+  'عانة': [34.4686, 41.9375],
+  'راوة': [34.4756, 41.9139],
+  'القائم': [34.3689, 41.0906],
+  'الرطبة': [33.0386, 40.2864],
+  'الحبانية': [33.3628, 43.5586],
+  'الخالدية': [33.3789, 43.4881],
+  'عامرية الفلوجة': [33.2264, 43.6786],
+  'الكرمة': [33.4453, 43.7972],
+  'البغدادي': [33.8517, 42.6472],
+  'الحقلانية': [34.0575, 42.3792],
+  'بروانة': [34.1508, 42.3739],
+  'النخيب': [32.0369, 42.2506],
+};
+
 // ---------- Telegram helpers ----------
 
 type Json = Record<string, unknown>;
@@ -244,6 +266,7 @@ async function showAdmin(chat: number, userId: number, messageId?: number) {
 
   const markup = {
     inline_keyboard: [
+      [{ text: '➕ إضافة محطة', callback_data: 'addst' }],
       [{ text: `📋 مراجعة الطلبات (${pending ?? 0})`, callback_data: 'req' }],
       [{ text: '👥 من سجّل محطته', callback_data: 'people' }],
       [{ text: '🏠 القائمة', callback_data: 'menu' }],
@@ -363,6 +386,161 @@ async function decideStation(
   await db.from('stations').update({ status }).eq('id', stationId);
   await answer(queryId, status === 'approved' ? 'تمت الموافقة ✅' : 'تم الرفض ❌');
   await showRequests(chat, userId, messageId);
+}
+
+// ---------- Admin: add a station straight from the chat ----------
+
+// The whole station arrives in one line instead of a question-per-field
+// wizard. A wizard needs somewhere to keep the half-finished answer between
+// two webhook calls, and this function is stateless by design — one line costs
+// the admin a single message and costs us no state at all.
+const ADD_FORMAT = 'الاسم | العنوان | الهاتف | المدينة';
+
+function addStationHelp(): string {
+  return (
+    '➕ <b>إضافة محطة</b>\n\n' +
+    'أرسل بيانات المحطة في <b>سطر واحد</b>، مفصولة بعلامة <code>|</code>:\n\n' +
+    `<code>${ADD_FORMAT}</code>\n\n` +
+    '<b>مثال:</b>\n' +
+    '<code>محطة الرمادي المركزية | شارع 20 قرب الجسر | 07901234567 | الرمادي</code>\n\n' +
+    'المدن المتاحة:\n' +
+    Object.keys(CITIES).join(' · ') +
+    '\n\nتُضاف المحطة <b>معتمدة فوراً</b>، ويُنشأ لصاحبها حساب دخول برقم الهاتف.'
+  );
+}
+
+async function showAddStation(chat: number, userId: number) {
+  if (!isAdmin(userId)) return;
+  await send(chat, addStationHelp(), {
+    reply_markup: { force_reply: true, input_field_placeholder: ADD_FORMAT },
+  });
+}
+
+/** 07XXXXXXXXX / +9647XXXXXXXXX / 9647… all reduce to 7XXXXXXXXX. */
+function phoneCore(raw: string): string {
+  const d = raw.replace(/\D/g, '').replace(/^00/, '');
+  return (d.startsWith('964') ? d.slice(3) : d).replace(/^0+/, '');
+}
+
+/** Creates the owner login if the phone is new, or reuses the existing one so
+ *  a second station for the same owner does not fail on a duplicate email. */
+async function ownerFor(core: string): Promise<{ id: string; password: string | null } | null> {
+  const email = `p${core}@muhta.app`;
+  const password = `muhta${core.slice(-4)}`;
+
+  const { data: created, error } = await db.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+  if (created?.user) return { id: created.user.id, password };
+
+  // already registered — find the id instead of failing the whole insert
+  if (error?.message?.includes('already') || error?.status === 422) {
+    const { data: list } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const found = list?.users?.find((u) => u.email === email);
+    if (found) return { id: found.id, password: null };
+  }
+  console.error('ownerFor', error);
+  return null;
+}
+
+async function addStationFromLine(chat: number, userId: number, line: string) {
+  if (!isAdmin(userId)) return;
+
+  const parts = line.split('|').map((p) => p.trim());
+  if (parts.length < 4) {
+    await send(chat, `❌ الحقول ناقصة. المطلوب أربعة:\n<code>${ADD_FORMAT}</code>`);
+    return;
+  }
+
+  const [name, address, rawPhone, city] = parts;
+  const core = phoneCore(rawPhone);
+
+  if (name.length < 2) return void (await send(chat, '❌ اسم المحطة قصير جداً.'));
+  if (address.length < 3) return void (await send(chat, '❌ العنوان قصير جداً.'));
+  if (!/^7\d{9}$/.test(core)) {
+    await send(chat, '❌ رقم الهاتف غير صحيح. اكتبه هكذا: <code>07901234567</code>');
+    return;
+  }
+  const centre = CITIES[city];
+  if (!centre) {
+    await send(chat, `❌ «${city}» ليست من مدن الأنبار.\n\nالمتاح:\n${Object.keys(CITIES).join(' · ')}`);
+    return;
+  }
+
+  const owner = await ownerFor(core);
+  if (!owner) {
+    await send(chat, '❌ تعذّر إنشاء حساب صاحب المحطة. حاول مجدداً.');
+    return;
+  }
+
+  const { data: station, error } = await db
+    .from('stations')
+    .insert({
+      owner_id: owner.id,
+      name,
+      address,
+      city,
+      phone: `0${core}`,
+      lat: centre[0],
+      lng: centre[1],
+      status: 'approved',
+    })
+    .select('id, name')
+    .single();
+
+  if (error || !station) {
+    console.error('addStation', error);
+    await send(chat, '❌ تعذّر حفظ المحطة. تحقق أن الاسم غير مكرر وحاول مجدداً.');
+    return;
+  }
+
+  await db
+    .from('station_products')
+    .insert(PRODUCTS.map((product) => ({ station_id: station.id, product })));
+
+  const credentials = owner.password
+    ? `🔑 <b>دخول صاحب المحطة</b>\nالمستخدم: <code>0${core}</code>\nكلمة المرور: <code>${owner.password}</code>\nمن ${SITE}/login`
+    : `🔑 هذا الرقم له حساب سابق — يدخل بكلمة مروره المعروفة من ${SITE}/login`;
+
+  await send(
+    chat,
+    `✅ <b>أُضيفت المحطة</b>\n\n` +
+      `<b>${name}</b>\n${city} — ${address}\n☎️ <code>0${core}</code>\n` +
+      `الحالة: معتمدة وظاهرة للسائقين الآن\n\n` +
+      `📍 الموقع مبدئياً على مركز ${city}. صحّح الدبوس من لوحة الموقع.\n\n` +
+      credentials,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '⛽ حدّد المتوفر الآن', callback_data: `r:${station.id}` }],
+          [{ text: '🏛 اجعلها حكومية', callback_data: `gov:${station.id}` }],
+          [{ text: '➕ محطة أخرى', callback_data: 'addst' }],
+          [{ text: '🛡 لوحة الإدارة', callback_data: 'admin' }],
+        ],
+      },
+    }
+  );
+}
+
+// Sent to every admin by /announce, once, when the feature goes live.
+const ANNOUNCEMENT =
+  '🛡 <b>يمكنكم الآن إضافة محطة بشكل مباشر</b>\n\n' +
+  'من «لوحة الإدارة ← ➕ إضافة محطة»، أو بإرسال الأمر <code>/station</code>.\n\n' +
+  'ثم أرسل سطراً واحداً:\n' +
+  `<code>${ADD_FORMAT}</code>\n\n` +
+  '<b>مثال:</b>\n' +
+  '<code>محطة الرمادي المركزية | شارع 20 قرب الجسر | 07901234567 | الرمادي</code>\n\n' +
+  'تُضاف المحطة معتمدة وتظهر للسائقين فوراً، ويُنشأ لصاحبها حساب دخول تلقائياً.';
+
+async function setGovernment(chat: number, userId: number, stationId: string, queryId: string) {
+  if (!isAdmin(userId)) {
+    await answer(queryId, 'غير مصرّح');
+    return;
+  }
+  await db.from('stations').update({ kind: 'government' }).eq('id', stationId);
+  await answer(queryId, 'صارت حكومية 🏛');
 }
 
 const WELCOME =
@@ -585,15 +763,17 @@ async function toggleProduct(
   queryId: string
 ) {
   // never trust the station id in the callback: it comes back from the client
-  const { data: link } = await db
-    .from('telegram_links')
-    .select('station_id')
-    .eq('telegram_id', telegramId)
-    .maybeSingle();
+  if (!isAdmin(telegramId)) {
+    const { data: link } = await db
+      .from('telegram_links')
+      .select('station_id')
+      .eq('telegram_id', telegramId)
+      .maybeSingle();
 
-  if (!link || link.station_id !== stationId) {
-    await answer(queryId, 'غير مصرّح لك بإدارة هذه المحطة');
-    return;
+    if (!link || link.station_id !== stationId) {
+      await answer(queryId, 'غير مصرّح لك بإدارة هذه المحطة');
+      return;
+    }
   }
 
   const { data: row } = await db
@@ -663,6 +843,11 @@ Deno.serve(async (req) => {
       } else if (data === 'req') {
         await answer(cb.id);
         await showRequests(chat, from, messageId);
+      } else if (data === 'addst') {
+        await answer(cb.id);
+        await showAddStation(chat, from);
+      } else if (data.startsWith('gov:')) {
+        await setGovernment(chat, from, data.slice(4), cb.id);
       } else if (data.startsWith('ok:')) {
         await decideStation(chat, messageId, from, data.slice(3), 'approved', cb.id);
       } else if (data.startsWith('no:')) {
@@ -731,6 +916,29 @@ Deno.serve(async (req) => {
         .then((j) => j.ok && call('deleteMessage', { chat_id: chat, message_id: j.result.message_id }))
         .catch(() => {});
       return new Response('ok');
+    }
+
+    // Admins add a station either by tapping the button or by typing the line
+    // straight in. The pipe test has to run before the free-text search below,
+    // or the whole line would be treated as a station name to look up.
+    if (isAdmin(from)) {
+      if (text.startsWith('/addstation') || text.startsWith('/station')) {
+        await showAddStation(chat, from);
+        return new Response('ok');
+      }
+      if (text.startsWith('/announce')) {
+        for (const id of ADMIN_IDS) {
+          await send(Number(id), ANNOUNCEMENT, {
+            reply_markup: { inline_keyboard: [[{ text: '➕ إضافة محطة', callback_data: 'addst' }]] },
+          });
+        }
+        await send(chat, `✅ أُرسل الإعلان إلى ${ADMIN_IDS.size} حساب إدارة.`);
+        return new Response('ok');
+      }
+      if (text.includes('|')) {
+        await addStationFromLine(chat, from, text);
+        return new Response('ok');
+      }
     }
 
     if (text.startsWith('/help')) {
