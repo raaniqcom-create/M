@@ -99,7 +99,32 @@ function isOpenNow(s: { is_24h: boolean; opens_at: string; closes_at: string }):
 // Flip to '0' at launch to expose the full driver menu.
 const PRE_LAUNCH = (Deno.env.get('PRE_LAUNCH') ?? '1') === '1';
 
-function mainMenu(userId: number) {
+/** True once this Telegram account is tied to a station. Drives whether the
+ *  menu offers "manage mine" or "add mine" — offering management to someone
+ *  with no station is a dead end that reads as a broken bot. */
+async function hasStation(telegramId: number): Promise<boolean> {
+  const { data } = await db
+    .from('telegram_links')
+    .select('station_id')
+    .eq('telegram_id', telegramId)
+    .maybeSingle();
+  return Boolean(data);
+}
+
+async function pendingCount(): Promise<number> {
+  const { count } = await db
+    .from('stations')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'pending');
+  return count ?? 0;
+}
+
+async function mainMenu(userId: number) {
+  const owner = await hasStation(userId);
+  const mine = owner
+    ? { text: '🏪 إدارة محطتي', callback_data: 'manage' }
+    : { text: '➕ أضف محطتي', callback_data: 'addst' };
+
   // Before launch there is nothing for a driver to search — every station list
   // would come back empty and read as a broken bot. Show the two things that
   // are genuinely useful now instead.
@@ -107,7 +132,7 @@ function mainMenu(userId: number) {
     return {
       inline_keyboard: [
         [{ text: '🔔 ثبّت نغمة التنبيه', callback_data: 'tone' }],
-        [{ text: '🏪 سجّل محطتك هنا', callback_data: 'addst' }],
+        [mine],
         [{ text: '🌐 فتح الموقع', url: SITE }],
       ],
     };
@@ -118,11 +143,14 @@ function mainMenu(userId: number) {
     [{ text: '⛽ ابحث حسب نوع الوقود', callback_data: 'products' }],
     [{ text: '⭐ محطاتي المفضلة', callback_data: 'favs' }],
     [{ text: '🔔 نغمة التنبيه المخصصة', callback_data: 'tone' }],
-    [{ text: '🏪 إدارة محطتي', callback_data: 'manage' }],
+    [mine],
     [{ text: '🌐 فتح الموقع', url: SITE }],
   ];
   if (isAdmin(userId)) {
-    rows.splice(5, 0, [{ text: '🛡 لوحة الإدارة', callback_data: 'admin' }]);
+    const n = await pendingCount();
+    rows.splice(5, 0, [{ text: `📋 طلبات المحطات (${n})`, callback_data: 'req' }]);
+    rows.splice(6, 0, [{ text: '🏬 المحطات المسجلة', callback_data: 'people' }]);
+    rows.splice(7, 0, [{ text: '🛡 لوحة الإدارة', callback_data: 'admin' }]);
   }
   return { inline_keyboard: rows };
 }
@@ -268,7 +296,7 @@ async function showAdmin(chat: number, userId: number, messageId?: number) {
     inline_keyboard: [
       [{ text: '🏪 تسجيل محطة', callback_data: 'addst' }],
       [{ text: `📋 مراجعة الطلبات (${pending ?? 0})`, callback_data: 'req' }],
-      [{ text: '👥 من سجّل محطته', callback_data: 'people' }],
+      [{ text: '🏬 المحطات المسجلة', callback_data: 'people' }],
       [{ text: '🏠 القائمة', callback_data: 'menu' }],
     ],
   };
@@ -294,7 +322,7 @@ async function showPeople(chat: number, userId: number, messageId: number) {
     .limit(30);
 
   if (!data?.length) {
-    await edit(chat, messageId, '👥 لم يسجّل أحد بعد.', {
+    await edit(chat, messageId, '🏬 لا توجد محطات مسجلة بعد.', {
       reply_markup: { inline_keyboard: [[{ text: '⬅️ رجوع', callback_data: 'admin' }]] },
     });
     return;
@@ -318,7 +346,7 @@ async function showPeople(chat: number, userId: number, messageId: number) {
   });
 
   // Telegram caps a message at 4096 chars; trim rather than fail to send
-  let text = `👥 <b>المسجّلون</b> (${data.length})\n\n${lines.join('\n\n')}`;
+  let text = `🏬 <b>المحطات المسجلة</b> (${data.length})\n\n${lines.join('\n\n')}`;
   if (text.length > 3900) text = text.slice(0, 3900) + '\n\n… والبقية في لوحة الموقع';
 
   await edit(chat, messageId, text, {
@@ -443,8 +471,16 @@ const twoColumn = (items: string[], prefix: string) => {
 async function ask(chat: number, step: string, d: Draft) {
   switch (step) {
     case 'province':
+      // an owner who registered on the site has no link yet, so the menu shows
+      // them "add mine" — give them the way back instead of a second station
       return void (await send(chat, '🏪 <b>تسجيل محطة</b>\n\nاختر المحافظة:', {
-        reply_markup: { inline_keyboard: [...twoColumn(PROVINCES, 'wp:'), CANCEL_ROW] },
+        reply_markup: {
+          inline_keyboard: [
+            ...twoColumn(PROVINCES, 'wp:'),
+            [{ text: '🔗 محطتي مسجّلة — اربط رقمي', callback_data: 'manage' }],
+            CANCEL_ROW,
+          ],
+        },
       }));
 
     case 'city':
@@ -453,9 +489,11 @@ async function ask(chat: number, step: string, d: Draft) {
       }));
 
     case 'address':
-      return void (await send(chat, 'اكتب عنوان المحطة:\n<i>مثال: شارع 20 قرب الجسر الأول</i>', {
-        reply_markup: { inline_keyboard: [CANCEL_ROW] },
-      }));
+      return void (await send(
+        chat,
+        'اكتب عنوان المحطة — <b>المنطقة والشارع</b>:\n<i>مثال: حي التأميم — شارع السيراميك</i>',
+        { reply_markup: { inline_keyboard: [CANCEL_ROW] } }
+      ));
 
     case 'location':
       return void (await send(
@@ -525,7 +563,7 @@ async function startWizard(chat: number, userId: number) {
 async function cancelWizard(chat: number, userId: number) {
   await clearDraft(userId);
   await send(chat, 'أُلغي التسجيل.', { reply_markup: { remove_keyboard: true } });
-  await send(chat, welcomeFor(userId), { reply_markup: mainMenu(userId) });
+  await send(chat, welcomeFor(userId), { reply_markup: await mainMenu(userId) });
 }
 
 /** Every typed message from an admin mid-registration belongs to the open
@@ -635,8 +673,11 @@ async function ownerFor(core: string): Promise<{ id: string; password: string | 
   return null;
 }
 
+// Nothing registered here goes live on its own, not even an admin's own entry:
+// registering and approving are two decisions, and collapsing them meant a
+// station reached drivers before anyone had looked at it. Admins get a
+// one-tap approve button on the result instead.
 async function createStation(chat: number, userId: number, d: Draft) {
-  const approved = isAdmin(userId);
   const { name, address, city, contact } = d as Required<Pick<Draft, 'name' | 'address' | 'city' | 'contact'>>;
   const core = phoneCore(d.phone ?? '');
   const centre = CITIES[city];
@@ -662,7 +703,7 @@ async function createStation(chat: number, userId: number, d: Draft) {
       phone: `0${core}`,
       lat: d.lat ?? centre[0],
       lng: d.lng ?? centre[1],
-      status: approved ? 'approved' : 'pending',
+      status: 'pending',
     })
     .select('id, name')
     .single();
@@ -686,9 +727,9 @@ async function createStation(chat: number, userId: number, d: Draft) {
       `يدخل بها إلى ${SITE}/login — أو يدير محطته من هذا البوت بمشاركة رقمه من «إدارة محطتي».`
     : `🔑 هذا الرقم له حساب سابق على المنصة — يدخل بكلمة مروره المعروفة.`;
 
-  const rows = approved
+  const rows = isAdmin(userId)
     ? [
-        [{ text: '⛽ حدّد المتوفر الآن', callback_data: `r:${station.id}` }],
+        [{ text: '✅ اعتماد المحطة الآن', callback_data: `ok1:${station.id}` }],
         [{ text: '🏛 اجعلها حكومية', callback_data: `gov:${station.id}` }],
         [{ text: '🏪 تسجيل محطة أخرى', callback_data: 'addst' }],
         [{ text: '🛡 لوحة الإدارة', callback_data: 'admin' }],
@@ -699,19 +740,36 @@ async function createStation(chat: number, userId: number, d: Draft) {
     chat,
     `✅ <b>تم تقديم الطلب</b>\n\n` +
       `<b>${name}</b>\n${city} — ${address}\n☎️ <code>0${core}</code>\n` +
-      (approved ? 'المحطة معتمدة وظاهرة للسائقين الآن.' : 'بانتظار موافقة الإدارة — تصلك رسالة هنا فور اعتمادها.') +
-      '\n\n' +
+      '⏳ بانتظار الموافقة — تظهر للسائقين فور اعتمادها.\n\n' +
       (d.lat ? '' : `📍 الموقع على مركز ${city} — أرسل موقع المحطة الآن لتصحيح الدبوس.\n\n`) +
       credentials,
     { reply_markup: { inline_keyboard: rows } }
   );
 
-  // an owner who registered here should not have to prove the number again
-  if (!approved) {
-    await db
-      .from('telegram_links')
-      .upsert({ telegram_id: userId, station_id: station.id, phone: core }, { onConflict: 'telegram_id' });
-  }
+  // whoever registered it should not have to prove the number again later
+  await db
+    .from('telegram_links')
+    .upsert({ telegram_id: userId, station_id: station.id, phone: core }, { onConflict: 'telegram_id' });
+}
+
+/** Approve straight from the result card, without walking the request queue. */
+async function approveOne(chat: number, userId: number, stationId: string, queryId: string) {
+  if (!isAdmin(userId)) return void (await answer(queryId, 'غير مصرّح'));
+  const { data } = await db
+    .from('stations')
+    .update({ status: 'approved' })
+    .eq('id', stationId)
+    .select('name')
+    .single();
+  await answer(queryId, 'تمت الموافقة ✅');
+  await send(chat, `✅ <b>${data?.name ?? 'المحطة'}</b> معتمدة وظاهرة للسائقين الآن.`, {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '⛽ حدّد المتوفر', callback_data: `r:${stationId}` }],
+        [{ text: '🏪 تسجيل محطة أخرى', callback_data: 'addst' }],
+      ],
+    },
+  });
 }
 
 /** An admin sharing a location right after adding a station means "this is
@@ -1049,7 +1107,7 @@ Deno.serve(async (req) => {
 
       if (data === 'menu') {
         await answer(cb.id);
-        await edit(chat, messageId, welcomeFor(from), { reply_markup: mainMenu(from) });
+        await edit(chat, messageId, welcomeFor(from), { reply_markup: await mainMenu(from) });
       } else if (data === 'nearby') {
         await answer(cb.id);
         await showNearby(chat);
@@ -1086,6 +1144,8 @@ Deno.serve(async (req) => {
       } else if (data === 'wx') {
         await answer(cb.id);
         await cancelWizard(chat, from);
+      } else if (data.startsWith('ok1:')) {
+        await approveOne(chat, from, data.slice(4), cb.id);
       } else if (data.startsWith('gov:')) {
         await setGovernment(chat, from, data.slice(4), cb.id);
       } else if (data.startsWith('ok:')) {
@@ -1143,7 +1203,7 @@ Deno.serve(async (req) => {
         // one message per station so each carries its own favourite button
         for (const s of near) await sendStationCard(chat, s);
       }
-      await send(chat, 'اختر ما تريد:', { reply_markup: mainMenu(from) });
+      await send(chat, 'اختر ما تريد:', { reply_markup: await mainMenu(from) });
       return new Response('ok');
     }
 
@@ -1162,7 +1222,7 @@ Deno.serve(async (req) => {
       // leaving the menu abandons a half-finished registration, otherwise the
       // next thing typed would be swallowed by a draft the user forgot about
       await clearDraft(from);
-      await send(chat, welcomeFor(from), { reply_markup: mainMenu(from) });
+      await send(chat, welcomeFor(from), { reply_markup: await mainMenu(from) });
       await call('sendMessage', {
         chat_id: chat,
         text: '.',
@@ -1209,7 +1269,7 @@ Deno.serve(async (req) => {
           '/start — القائمة الرئيسية\n' +
           '/help — هذه الرسالة\n\n' +
           `الموقع: ${SITE}`,
-        { reply_markup: mainMenu(from) }
+        { reply_markup: await mainMenu(from) }
       );
       return new Response('ok');
     }
@@ -1231,17 +1291,17 @@ Deno.serve(async (req) => {
       }));
 
       if (!results.length) {
-        await send(chat, `لا توجد نتائج لـ «${q}».`, { reply_markup: mainMenu(from) });
+        await send(chat, `لا توجد نتائج لـ «${q}».`, { reply_markup: await mainMenu(from) });
         return new Response('ok');
       }
 
       await send(chat, `🔍 نتائج البحث عن «${q}»`);
       for (const s of results) await sendStationCard(chat, s as never);
-      await send(chat, 'اختر ما تريد:', { reply_markup: mainMenu(from) });
+      await send(chat, 'اختر ما تريد:', { reply_markup: await mainMenu(from) });
       return new Response('ok');
     }
 
-    await send(chat, welcomeFor(from), { reply_markup: mainMenu(from) });
+    await send(chat, welcomeFor(from), { reply_markup: await mainMenu(from) });
     return new Response('ok');
   } catch (err) {
     // never let Telegram retry forever on a bug

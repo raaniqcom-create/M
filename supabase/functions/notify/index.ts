@@ -145,7 +145,10 @@ async function notifyAndroidApps(stationId: string, stationName: string, product
   const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
   if (!raw) return;
 
-  const { data: devices } = await db.from('device_tokens').select('token');
+  const { data: devices } = await db
+    .from('device_tokens')
+    .select('token')
+    .eq('platform', 'android');
   if (!devices?.length) return;
 
   const sa = JSON.parse(raw);
@@ -172,6 +175,81 @@ async function notifyAndroidApps(stationId: string, stationName: string, product
       }).then(async (r) => {
         // a token dies when the app is uninstalled — drop it rather than retry forever
         if (r.status === 404) await db.from('device_tokens').delete().eq('token', d.token);
+      })
+    )
+  );
+}
+
+/** iOS talks to APNs directly rather than through Firebase. Routing it through
+ *  FCM would mean adding the Firebase SDK to the Xcode project, a
+ *  GoogleService-Info.plist in CI, and a second vendor between us and the
+ *  device — for a hop Apple does not require. APNs wants an ES256 JWT signed
+ *  with the .p8, which is a dozen lines here. */
+async function apnsToken(keyId: string, teamId: string, pem: string): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const unsigned =
+    b64url(JSON.stringify({ alg: 'ES256', kid: keyId })) +
+    '.' +
+    b64url(JSON.stringify({ iss: teamId, iat: now }));
+
+  const key = await crypto.subtle.importKey(
+    'pkcs8',
+    pemToPkcs8(pem),
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign']
+  );
+  const sig = new Uint8Array(
+    await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      key,
+      new TextEncoder().encode(unsigned)
+    )
+  );
+  return `${unsigned}.${b64url(sig)}`;
+}
+
+async function notifyIosApps(stationId: string, stationName: string, product: string) {
+  const keyId = Deno.env.get('APNS_KEY_ID');
+  const teamId = Deno.env.get('APNS_TEAM_ID');
+  const pem = Deno.env.get('APNS_PRIVATE_KEY');
+  const topic = Deno.env.get('APNS_TOPIC') ?? 'online.muhta.app';
+  if (!keyId || !teamId || !pem) return;
+
+  const { data: devices } = await db
+    .from('device_tokens')
+    .select('token')
+    .eq('platform', 'ios');
+  if (!devices?.length) return;
+
+  const jwt = await apnsToken(keyId, teamId, pem);
+  const body = `${PRODUCT_LABELS[product] ?? product} متوفر الآن`;
+
+  await Promise.allSettled(
+    devices.map((d) =>
+      fetch(`https://api.push.apple.com/3/device/${d.token}`, {
+        method: 'POST',
+        headers: {
+          authorization: `bearer ${jwt}`,
+          'apns-topic': topic,
+          'apns-push-type': 'alert',
+          'apns-priority': '10',
+        },
+        body: JSON.stringify({
+          aps: {
+            alert: { title: stationName, body },
+            // ponytail: default tone. iOS plays a custom sound only if a .caf
+            // ships inside the app bundle, and ours only has the mp3 the web
+            // and Telegram use — convert and bundle it if the tone matters.
+            sound: 'default',
+            'interruption-level': 'time-sensitive',
+          },
+          stationId,
+        }),
+      }).then(async (r) => {
+        // 410 is APNs for "this device is gone" — stop writing to it
+        if (r.status === 410) await db.from('device_tokens').delete().eq('token', d.token);
+        else if (!r.ok) console.error('apns', r.status, await r.text());
       })
     )
   );
@@ -219,12 +297,14 @@ Deno.serve(async (req) => {
 
   // Awaited, not fire-and-forget: the runtime may tear the function down as
   // soon as the response returns, dropping an in-flight request.
-  const [tg, fcm] = await Promise.allSettled([
+  const [tg, fcm, apns] = await Promise.allSettled([
     notifyTelegram(stationId, station.name, product),
     notifyAndroidApps(stationId, station.name, product),
+    notifyIosApps(stationId, station.name, product),
   ]);
   if (tg.status === 'rejected') console.error('telegram', tg.reason);
   if (fcm.status === 'rejected') console.error('fcm', fcm.reason);
+  if (apns.status === 'rejected') console.error('apns', apns.reason);
 
   const { data: subs } = await db
     .from('push_subscriptions')
