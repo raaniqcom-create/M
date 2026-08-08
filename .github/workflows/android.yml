@@ -29,6 +29,22 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      # Capacitor generates the cordova plugin scaffolding, and its own
+      # .gitignore keeps it out of the repo — without a sync the Gradle build
+      # fails on a missing script. webDir only needs to exist: the shell loads
+      # the live URL, not bundled assets.
+      - name: Sync native project
+        run: |
+          mkdir -p out
+          npx cap sync android
+
       - name: Restore signing key
         run: echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > android/muhta.keystore
 
