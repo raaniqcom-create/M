@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<!-- The CI has no certificate of its own; the App Store Connect API key
+	     lets Xcode mint and fetch what it needs at archive time. -->
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>teamID</key>
+	<string>$(APPLE_TEAM_ID)</string>
+	<key>destination</key>
+	<string>export</string>
+	<key>uploadSymbols</key>
+	<true/>
+	<!-- We upload with altool in a separate, retryable step rather than letting
+	     the export do it, so a flaky upload does not cost a whole rebuild. -->
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>

@@ -13,5 +13,12 @@ android/local.properties
 android/muhta.keystore
 assets/
 google-services.json
+GoogleService-Info.plist
 *firebase-adminsdk*.json
+ios/App/build/
+ios/App/App/public/
+ios/DerivedData/
+*.mobileprovision
+*.p12
+*.p8
 store/*.png

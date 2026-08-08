@@ -1,0 +1,123 @@
+name: Build iOS
+
+# A WKWebView shell around muhta.online, same idea as the Android build.
+# Apple requires macOS to compile and sign, and GitHub's macOS runners are free
+# for public repositories — so no Mac is needed anywhere in this project.
+#
+# Signing uses an App Store Connect API key rather than a checked-in
+# certificate: -allowProvisioningUpdates lets Xcode create the distribution
+# certificate and provisioning profile on the runner, so there is no .p12 to
+# store, rotate, or leak.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'capacitor.config.json'
+      - 'ios/**'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'CFBundleVersion — must be higher than the last upload'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      # webDir only has to exist: the shell loads the live URL, not bundled
+      # assets. Capacitor 8 resolves plugins through SPM, so there is no
+      # CocoaPods step here.
+      - name: Sync native project
+        run: |
+          mkdir -p out
+          npx cap sync ios
+
+      # Every upload needs a build number higher than the last one App Store
+      # Connect saw. The run number is monotonic and needs no bookkeeping.
+      - name: Set build number
+        run: |
+          n="${{ github.event.inputs.build_number || github.run_number }}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $n" ios/App/App/Info.plist 2>/dev/null || true
+          cd ios/App
+          xcrun agvtool new-version -all "$n"
+          echo "BUILD_NUMBER=$n" >> "$GITHUB_ENV"
+
+      - name: Install App Store Connect API key
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          KEY_B64: ${{ secrets.APPSTORE_PRIVATE_KEY_B64 }}
+        run: |
+          if [ -z "$KEY_ID" ] || [ -z "$KEY_B64" ]; then
+            echo "::error::APPSTORE_KEY_ID / APPSTORE_PRIVATE_KEY_B64 are not set"; exit 1
+          fi
+          mkdir -p ~/.appstoreconnect/private_keys ~/private_keys
+          echo "$KEY_B64" | base64 -d > ~/private_keys/AuthKey_$KEY_ID.p8
+          cp ~/private_keys/AuthKey_$KEY_ID.p8 ~/.appstoreconnect/private_keys/
+          # a truncated secret produces a confusing signing failure much later
+          head -1 ~/private_keys/AuthKey_$KEY_ID.p8 | grep -q "BEGIN PRIVATE KEY" \
+            || { echo "::error::the decoded key is not a PEM private key"; exit 1; }
+
+      - name: Archive
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_$KEY_ID.p8 \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID" \
+            archive
+
+      - name: Export IPA
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          sed "s|\$(APPLE_TEAM_ID)|$TEAM_ID|" ios/ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_$KEY_ID.p8 \
+            -authenticationKeyID "$KEY_ID" \
+            -authenticationKeyIssuerID "$ISSUER_ID"
+          ipa=$(find "$RUNNER_TEMP/export" -name '*.ipa' | head -1)
+          [ -n "$ipa" ] || { echo "::error::no IPA produced"; ls -R "$RUNNER_TEMP/export"; exit 1; }
+          cp "$ipa" "$RUNNER_TEMP/muhta.ipa"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: muhta-ios-${{ env.BUILD_NUMBER }}
+          path: ${{ runner.temp }}/muhta.ipa
+
+      - name: Upload to TestFlight
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          xcrun altool --validate-app -f "$RUNNER_TEMP/muhta.ipa" -t ios \
+            --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
+          xcrun altool --upload-app -f "$RUNNER_TEMP/muhta.ipa" -t ios \
+            --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
