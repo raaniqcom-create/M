@@ -238,10 +238,9 @@ async function notifyIosApps(stationId: string, stationName: string, product: st
         body: JSON.stringify({
           aps: {
             alert: { title: stationName, body },
-            // ponytail: default tone. iOS plays a custom sound only if a .caf
-            // ships inside the app bundle, and ours only has the mp3 the web
-            // and Telegram use — convert and bundle it if the tone matters.
-            sound: 'default',
+            // ships in the app bundle as ios/App/App/alert.caf; iOS falls back
+            // to the default tone if it is ever missing
+            sound: 'alert.caf',
             'interruption-level': 'time-sensitive',
           },
           stationId,
