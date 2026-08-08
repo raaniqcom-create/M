@@ -13,6 +13,7 @@ import {
 import { ShareButton } from '@/components/ShareButton';
 import { StationLinkCard } from '@/components/StationLinkCard';
 import { StationPoster } from '@/components/StationPoster';
+import { AvailabilityPoster } from '@/components/AvailabilityPoster';
 import { ProductControl } from '@/components/ProductControl';
 import { WorkingHours } from '@/components/WorkingHours';
 import { OwnerReminders } from '@/components/OwnerReminders';
@@ -259,6 +260,13 @@ export default function OwnerPage() {
                 })}
               </div>
             </section>
+
+            {/* sits after the toggles so it reflects what was just switched on */}
+            <AvailabilityPoster
+              name={station.name}
+              slug={station.slug}
+              products={products.filter((p) => p.is_available).map((p) => p.product)}
+            />
 
             <ShareButton
               stationId={station.id}
