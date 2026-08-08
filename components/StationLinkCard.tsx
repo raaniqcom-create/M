@@ -114,7 +114,7 @@ export function StationLinkCard({
           onChange={(e) => setDraft(e.target.value)}
           onBlur={saveSlug}
           aria-label="اسم الرابط"
-          className="min-w-0 flex-1 border-0 bg-transparent py-1 text-sm font-bold text-brand-900 focus:outline-none"
+          className="min-w-0 flex-1 border-0 bg-transparent py-1 text-base font-bold text-brand-900 focus:outline-none"
           placeholder="alnakheal1"
           maxLength={30}
         />

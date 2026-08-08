@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { PRODUCT_LABELS, PRODUCT_ORDER } from '@/lib/products';
 import { KIND_LABELS, KINDS } from '@/lib/stationMeta';
 import { CITY_NAMES } from '@/lib/cities';
@@ -70,6 +70,17 @@ export function SearchBar({
   cityCounts: Map<string, number>;
 }) {
   const [open, setOpen] = useState(false);
+  const box = useRef<HTMLInputElement>(null);
+
+  /** The keyboard covers the lower half of the screen, and the results live
+   *  below the field — so on focus, pull the field to the top of the viewport
+   *  and give the results the space that is left. The delay lets the keyboard
+   *  finish animating, otherwise iOS scrolls against a viewport that is about
+   *  to change height. */
+  function reveal() {
+    setTimeout(() => box.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350);
+  }
+
   const active = countActive(filters);
   const set = (patch: Partial<Filters>) => onFiltersChange({ ...filters, ...patch });
 
@@ -90,12 +101,16 @@ export function SearchBar({
       <div className="relative">
         <SearchIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <input
+          ref={box}
           type="search"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
+          onFocus={reveal}
           placeholder="ابحث باسم المحطة أو المنطقة"
           aria-label="بحث عن محطة"
-          className="min-h-[48px] w-full rounded-xl border-0 bg-white pl-14 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-white"
+          /* text-base is load-bearing: iOS zooms the whole page in when a font
+             smaller than 16px takes focus, and never zooms back out. */
+          className="min-h-[48px] w-full rounded-xl border-0 bg-white pl-14 pr-10 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-white"
         />
         <button
           type="button"
