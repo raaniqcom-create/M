@@ -82,10 +82,18 @@ jobs:
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           "$apksigner" verify --print-certs muhta.apk
 
+          # Pull the 64-hex digest by shape, not by field position: cutting on
+          # ':' picked up the label text and failed a perfectly valid APK.
           apk_fp=$("$apksigner" verify --print-certs muhta.apk \
-            | grep -i 'SHA-256 digest' | head -1 | tr -d ' ' | cut -d: -f2 | tr 'a-f' 'A-F')
+            | grep -i 'SHA-256 digest' | head -1 \
+            | grep -oiE '[0-9a-f]{64}' | tr 'a-f' 'A-F')
           site_fp=$(tr -d ' ":\n' < public/.well-known/assetlinks.json \
-            | grep -oE '[0-9A-F]{64}' | head -1)
+            | grep -oiE '[0-9a-f]{64}' | head -1 | tr 'a-f' 'A-F')
+
+          if [ -z "$apk_fp" ] || [ -z "$site_fp" ]; then
+            echo "تعذّر استخراج البصمة — الفحص نفسه معطوب"
+            exit 1
+          fi
 
           echo "APK        : $apk_fp"
           echo "assetlinks : $site_fp"
