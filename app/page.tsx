@@ -160,6 +160,16 @@ export default function HomePage() {
             <div className="absolute left-0">
               <SoundToggle />
             </div>
+            {/* Temporary: inside the app and the installed PWA there is no
+                address bar, so the tone test is unreachable without a link. */}
+            <a
+              href="/test-push/"
+              aria-label="تجربة النغمة"
+              title="تجربة النغمة"
+              className="absolute right-0 flex h-9 items-center gap-1 rounded-lg bg-white/15 px-2 text-[11px] font-bold backdrop-blur-sm"
+            >
+              🔔 تجربة
+            </a>
           </div>
           <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — جميع مدن المحافظة</p>
           <div className="mt-2 flex items-center justify-center gap-2">
