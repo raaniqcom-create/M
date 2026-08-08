@@ -12,3 +12,5 @@ android/.gradle/
 android/local.properties
 android/muhta.keystore
 assets/
+google-services.json
+*firebase-adminsdk*.json

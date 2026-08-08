@@ -38,10 +38,60 @@ export default function TestPushPage() {
     };
 
     try {
+      const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } })
+        .Capacitor;
+
+      // Inside the Android app there is no Push API at all — it speaks to
+      // Firebase instead, so the whole web-push path would fail misleadingly.
+      if (cap?.isNativePlatform?.()) {
+        push('البيئة', 'ok', 'تطبيق أندرويد — إشعارات Firebase');
+
+        const { PushNotifications } = await import('@capacitor/push-notifications');
+        let perm = await PushNotifications.checkPermissions();
+        if (perm.receive !== 'granted') perm = await PushNotifications.requestPermissions();
+        if (perm.receive !== 'granted') {
+          push('إذن الإشعارات', 'fail', `الحالة: ${perm.receive}`);
+          setBusy(false);
+          return;
+        }
+        push('إذن الإشعارات', 'ok');
+
+        const token = await new Promise<string | null>((resolve) => {
+          const timer = setTimeout(() => resolve(null), 15000);
+          PushNotifications.addListener('registration', (t) => {
+            clearTimeout(timer);
+            resolve(t.value);
+          });
+          PushNotifications.addListener('registrationError', () => {
+            clearTimeout(timer);
+            resolve(null);
+          });
+          PushNotifications.register();
+        });
+
+        if (!token) {
+          push('تسجيل الجهاز', 'fail', 'لم يصدر رمز الجهاز — تحقق من الاتصال');
+          setBusy(false);
+          return;
+        }
+        push('تسجيل الجهاز', 'ok', token.slice(0, 22) + '…');
+
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/test-push`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: ANON },
+          body: JSON.stringify({ deviceToken: token }),
+        });
+        const o = await r.json();
+        if (r.ok) push('إرسال الإشعار', 'ok', 'يجب أن يصلك الآن');
+        else push('إرسال الإشعار', 'fail', String(o.error).slice(0, 140));
+        setBusy(false);
+        return;
+      }
+
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         // The single most common reason a "notification" test does nothing:
         // the runtime has no push support at all.
-        push('دعم الإشعارات', 'fail', 'هذا المتصفح أو الغلاف لا يدعم إشعارات الويب');
+        push('دعم الإشعارات', 'fail', 'هذا المتصفح لا يدعم إشعارات الويب');
         setBusy(false);
         return;
       }

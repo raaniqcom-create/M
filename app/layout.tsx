@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Tajawal } from 'next/font/google';
 import './globals.css';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
+import { NativePush } from '@/components/NativePush';
 
 const tajawal = Tajawal({
   subsets: ['arabic', 'latin'],
@@ -59,6 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ar" dir="rtl" className={tajawal.variable}>
       <body className="min-h-screen bg-gray-50 font-sans text-gray-900 antialiased">
         <ServiceWorkerRegister />
+        <NativePush />
         {children}
       </body>
     </html>
