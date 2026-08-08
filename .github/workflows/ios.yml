@@ -26,9 +26,24 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+
+      # App Store Connect rejects anything built with an older SDK, and the
+      # image's default Xcode is not always its newest. Pick the highest
+      # installed rather than pinning a version that ages out of the image.
+      - name: Select newest Xcode
+        run: |
+          newest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "using $newest"
+          sudo xcode-select -s "$newest/Contents/Developer"
+          xcodebuild -version
+          sdk=$(xcodebuild -showsdks | grep -oE 'iphoneos[0-9.]+' | sort -V | tail -1)
+          echo "sdk: $sdk"
+          case "$sdk" in
+            iphoneos1*|iphoneos2[0-5]*) echo "::error::$sdk is older than iOS 26 — App Store Connect will reject the upload"; exit 1 ;;
+          esac
 
       - uses: actions/setup-node@v4
         with:
