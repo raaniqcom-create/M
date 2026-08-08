@@ -113,12 +113,6 @@ export default function HomePage() {
           .sort((a, b) => a.distanceKm - b.distanceKm)
       : stations;
 
-    // A station with no stock and no announced arrival has nothing to offer a
-    // driver right now — showing it only wastes a tap.
-    rows = rows.filter((s) =>
-      s.products.some((p) => (p.is_available && isOpenNow(s)) || p.expected_at)
-    );
-
     if (filters.openOnly) rows = rows.filter(isOpenNow);
     if (filters.city) rows = rows.filter((s) => s.city === filters.city);
     if (filters.kind) rows = rows.filter((s) => s.kind === filters.kind);
@@ -138,9 +132,17 @@ export default function HomePage() {
     const q = query.trim();
     if (q) rows = rows.filter((s) => s.name.includes(q) || s.address.includes(q) || s.city.includes(q));
 
-    // pinned stations first, otherwise keep the order chosen above
+    // A station with nothing in stock used to be hidden outright. That reads as
+    // an empty app whenever owners haven't updated yet, and it hides the one
+    // thing we do know — that the station exists and where it is. Sink them
+    // instead: pinned first, then anything a driver can act on now.
+    const actionable = (s: StationWithStatus) =>
+      s.products.some((p) => (p.is_available && isOpenNow(s)) || p.expected_at);
+
     return [...rows].sort(
-      (a, b) => Number(isFavorite(b.id)) - Number(isFavorite(a.id))
+      (a, b) =>
+        Number(isFavorite(b.id)) - Number(isFavorite(a.id)) ||
+        Number(actionable(b)) - Number(actionable(a))
     );
   }, [stations, origin, filters, query, isFavorite]);
 

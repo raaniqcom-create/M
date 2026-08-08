@@ -113,6 +113,17 @@ export function StationCard({
         })}
       </ul>
 
+      {/* Say plainly that nobody has reported yet, rather than showing a card
+          with a blank gap where the fuel chips belong. */}
+      {!PRODUCT_ORDER.some((p) => {
+        const row = byProduct.get(p);
+        return row && ((row.is_available && open) || row.expected_at);
+      }) && (
+        <p className="mt-3 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-medium text-slate-500">
+          لم تُحدَّث حالة الوقود بعد
+        </p>
+      )}
+
       {!open && (
         <p className="mt-2 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-600">
           المحطة مغلقة الآن · أوقات العمل {hoursLabel(station)}
