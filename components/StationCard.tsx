@@ -9,6 +9,7 @@ import { hoursLabel, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
 import type { StationWithStatus } from '@/types/database';
 import { KIND_LABELS, KIND_STYLES } from '@/lib/stationMeta';
 import { BellButton } from './BellButton';
+import { RouteButton } from './RouteButton';
 import { StarIcon } from './icons';
 import { TrafficVote } from './TrafficVote';
 import { MapPinIcon, PhoneIcon } from './icons';
@@ -150,15 +151,7 @@ export function StationCard({
           <PhoneIcon className="h-4 w-4" />
           اتصال
         </a>
-        <a
-          href={`https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-ghost"
-        >
-          <MapPinIcon className="h-4 w-4" />
-          الطريق
-        </a>
+        <RouteButton lat={station.lat} lng={station.lng} />
       </div>
     </article>
   );

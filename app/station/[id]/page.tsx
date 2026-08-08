@@ -10,6 +10,7 @@ import {
 } from '@/lib/products';
 import { hoursLabel, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
 import { MapPinIcon, PhoneIcon } from '@/components/icons';
+import { RouteButton } from '@/components/RouteButton';
 import type { Station, StationProduct, TrafficLevel } from '@/types/database';
 
 // server-side anon client: same RLS rules, but usable during SSR for OG tags
@@ -143,15 +144,7 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
             <PhoneIcon className="h-4 w-4" />
             اتصال
           </a>
-          <a
-            href={`https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-ghost"
-          >
-            <MapPinIcon className="h-4 w-4" />
-            الطريق
-          </a>
+          <RouteButton lat={station.lat} lng={station.lng} />
         </div>
       </article>
 
