@@ -10,6 +10,7 @@ import { useFavorites } from '@/lib/favorites';
 import { useNativeApp } from '@/lib/useNativeApp';
 import { playAlert, unlockAudio } from '@/lib/alertSound';
 import { SoundToggle } from '@/components/SoundToggle';
+import { SideMenu } from '@/components/SideMenu';
 import { SoonBadge } from '@/components/SoonBadge';
 import { isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS } from '@/lib/products';
@@ -161,6 +162,9 @@ export default function HomePage() {
           <div className="relative flex items-center justify-center gap-2">
             <FuelIcon className="h-6 w-6" />
             <h1 className="text-lg font-extrabold">المحطة التقنية</h1>
+            <div className="absolute right-0">
+              <SideMenu onAvailableOnly={() => setFilters({ ...EMPTY_FILTERS, availableOnly: true })} />
+            </div>
             <div className="absolute left-0">
               <SoundToggle />
             </div>

@@ -3,9 +3,24 @@
 // In-app alert tone. Web push cannot carry a custom sound — that is a platform
 // limitation, not a gap here — so this covers the case the platform does allow:
 // the app is open and something the user cares about just changed.
-const SRC = '/sounds/alert-1.mp3';
 const MUTE_KEY = 'alert-muted';
+const TONE_KEY = 'alert-tone';
 const MIN_GAP_MS = 15_000;
+
+export const TONES = ['1', '2'] as const;
+export type Tone = (typeof TONES)[number];
+
+export function getTone(): Tone {
+  const v = typeof localStorage !== 'undefined' ? localStorage.getItem(TONE_KEY) : null;
+  return v === '2' ? '2' : '1';
+}
+
+/** Swapping the tone drops the cached element so the next play picks up the
+ *  new file instead of the one loaded at startup. */
+export function setTone(tone: Tone): void {
+  localStorage.setItem(TONE_KEY, tone);
+  audio = null;
+}
 
 let audio: HTMLAudioElement | null = null;
 let unlocked = false;
@@ -21,7 +36,7 @@ export function setMuted(muted: boolean): void {
 
 function element(): HTMLAudioElement {
   if (!audio) {
-    audio = new Audio(SRC);
+    audio = new Audio(`/sounds/alert-${getTone()}.mp3`);
     audio.preload = 'auto';
   }
   return audio;
@@ -44,6 +59,12 @@ export function unlockAudio(): void {
     .catch(() => {
       el.muted = wasMuted;
     });
+}
+
+/** Plays the tone regardless of mute or the rate limit — for the settings
+ *  screen, where the whole point of the tap is to hear it. */
+export function previewTone(tone: Tone): void {
+  new Audio(`/sounds/alert-${tone}.mp3`).play().catch(() => {});
 }
 
 export function playAlert(): void {
