@@ -45,6 +45,14 @@ jobs:
           mkdir -p out
           npx cap sync android
 
+      # Firebase config is not in the repo (public), so restore it before the
+      # Gradle plugin looks for it — without this the app builds fine but never
+      # receives a device token.
+      - name: Restore Firebase config
+        run: |
+          echo "${{ secrets.GOOGLE_SERVICES_JSON_B64 }}" | base64 -d > android/app/google-services.json
+          python3 -c "import json;d=json.load(open('android/app/google-services.json'));print('firebase project:',d['project_info']['project_id'])"
+
       - name: Restore signing key
         run: echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > android/muhta.keystore
 
