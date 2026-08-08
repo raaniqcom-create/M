@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { distanceKm, loadStations } from '@/lib/stations';
 import { useSiteStats } from '@/lib/useSiteStats';
 import { useFavorites } from '@/lib/favorites';
+import { useNativeApp } from '@/lib/useNativeApp';
 import { playAlert, unlockAudio } from '@/lib/alertSound';
 import { SoundToggle } from '@/components/SoundToggle';
 import { SoonBadge } from '@/components/SoonBadge';
@@ -41,6 +42,7 @@ export default function HomePage() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const { visits, online } = useSiteStats();
   const { toggle: toggleFavorite, isFavorite } = useFavorites();
+  const native = useNativeApp();
 
   // the realtime handler is registered once; read favourites through a ref so
   // it always sees the current set instead of the one captured on mount
@@ -164,18 +166,23 @@ export default function HomePage() {
             </div>
           </div>
           <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — جميع مدن المحافظة</p>
-          <div className="mt-2 flex items-center justify-center gap-2">
-            <span className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold backdrop-blur-sm">
-              <span aria-hidden className="h-1.5 w-1.5 animate-blink rounded-full bg-white" />
-              <span className="animate-blink">قريباً</span>
-            </span>
-            <a
-              href="/download"
-              className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11px] font-extrabold text-brand-700"
-            >
-              📱 حمّل التطبيق
-            </a>
-          </div>
+          {/* Both of these speak to someone browsing the site. Inside the app
+              they are dead weight: the download already happened, and the
+              "coming soon" badge contradicts the app in their hand. */}
+          {!native && (
+            <div className="mt-2 flex items-center justify-center gap-2">
+              <span className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold backdrop-blur-sm">
+                <span aria-hidden className="h-1.5 w-1.5 animate-blink rounded-full bg-white" />
+                <span className="animate-blink">قريباً</span>
+              </span>
+              <a
+                href="/download"
+                className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11px] font-extrabold text-brand-700"
+              >
+                📱 حمّل التطبيق
+              </a>
+            </div>
+          )}
 
           <div className="mt-4">
             <SearchBar
@@ -320,10 +327,11 @@ export default function HomePage() {
                   )}
                 </div>
               )}
-              {visible.map((station) => (
+              {visible.map((station, i) => (
                 <StationCard
                   key={station.id}
                   station={station}
+                  tinted={i % 2 === 1}
                   isFavorite={isFavorite(station.id)}
                   onToggleFavorite={() => toggleFavorite(station.id)}
                 />

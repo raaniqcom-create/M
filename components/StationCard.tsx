@@ -17,10 +17,14 @@ export function StationCard({
   station,
   isFavorite,
   onToggleFavorite,
+  tinted = false,
 }: {
   station: StationWithStatus;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
+  /** Every other card sits on a faint green wash. White-on-white cards in a
+   *  scrolling list read as one long block; the tint gives the eye an edge. */
+  tinted?: boolean;
 }) {
   const byProduct = new Map(station.products.map((p) => [p.product, p]));
   const open = isOpenNow(station);
@@ -28,7 +32,7 @@ export function StationCard({
   const level = station.manual_traffic_level ?? station.traffic?.majority_level ?? null;
 
   return (
-    <article className="card p-4">
+    <article className={`card p-4 ${tinted ? 'border-brand-100 bg-brand-50/60' : ''}`}>
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">

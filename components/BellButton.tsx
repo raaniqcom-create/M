@@ -2,16 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import { subscribeToStation, unsubscribeFromStation, isSubscribed } from '@/lib/push';
+import { useNativeApp } from '@/lib/useNativeApp';
 import { BellIcon, BellRingIcon, SpinnerIcon } from './icons';
 
 type State = 'idle' | 'loading' | 'on' | 'denied';
 
 export function BellButton({ stationId }: { stationId: string }) {
   const [state, setState] = useState<State>('idle');
+  const native = useNativeApp();
 
   useEffect(() => {
     isSubscribed(stationId).then((on) => on && setState('on'));
   }, [stationId]);
+
+  // A WebView has no Push API, so this button can only ever fail there and
+  // report "التنبيهات مرفوضة" — which reads as a broken app to someone who
+  // already granted the system prompt. The shells register with APNs/FCM at
+  // launch instead, so the alert still arrives; the button just has no job.
+  if (native) return null;
 
   async function handleClick() {
     if (state === 'loading') return;
