@@ -7,3 +7,8 @@ out/
 .netlify/
 scratch_*
 out/
+android/app/build/
+android/.gradle/
+android/local.properties
+android/muhta.keystore
+assets/

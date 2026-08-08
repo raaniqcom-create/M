@@ -1,13 +1,17 @@
 name: Build APK
 
-# The APK is a Trusted Web Activity: a thin Chrome-backed shell around
-# muhta.online. Site changes reach users immediately with no rebuild — only the
-# icon, name or shell config below need one.
+# A Capacitor WebView shell around muhta.online.
+#
+# Replaced the Trusted Web Activity build: a TWA renders through Chrome, so on
+# a phone whose browser doesn't support it Android asks the user to pick a
+# browser — which is not an app experience. A WebView never does that.
+# Site updates still reach users instantly; the shell only loads the URL.
 on:
   push:
     branches: [main]
     paths:
-      - 'twa-manifest.json'
+      - 'capacitor.config.json'
+      - 'android/**'
       - '.github/workflows/android.yml'
   workflow_dispatch:
 
@@ -23,91 +27,44 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+          java-version: '21'
 
       - name: Restore signing key
-        run: echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > android.keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > android/muhta.keystore
 
-      # Point bubblewrap at the runner's preinstalled SDKs, otherwise it stops
-      # to ask permission to download its own copies.
-      # Bubblewrap accepts an SDK root only if it contains `tools/` or `bin/`
-      # (AndroidSdkTools.validatePath). Runners ship the modern layout, where
-      # those binaries live under cmdline-tools/latest/bin, so link the name
-      # bubblewrap looks for at the directory that actually holds them.
-      - name: Configure bubblewrap
-        run: |
-          sudo ln -sfn "$ANDROID_HOME/cmdline-tools/latest/bin" "$ANDROID_HOME/bin"
-          ls -l "$ANDROID_HOME/bin/" | head -5
-
-          mkdir -p ~/.bubblewrap
-          printf '{"jdkPath":"%s","androidSdkPath":"%s"}\n' "$JAVA_HOME" "$ANDROID_HOME" \
-            > ~/.bubblewrap/config.json
-          cat ~/.bubblewrap/config.json
-
-      # Bubblewrap regenerates the whole Android project from twa-manifest.json,
-      # so none of it is committed.
-      - name: Build signed APK
+      - name: Build signed release APK
+        working-directory: android
         env:
-          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
-          npx --yes @bubblewrap/cli@latest update --skipVersionUpgrade
-          npx --yes @bubblewrap/cli@latest build --skipPwaValidation
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=$PWD/muhta.keystore \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias=muhta \
+            -Pandroid.injected.signing.key.password="$KEYSTORE_PASSWORD"
 
-      # Bubblewrap emits an unsigned APK alongside the signed one. Android
-      # refuses to install unsigned packages, so name the signed file exactly
-      # rather than globbing — a wildcard silently picks the wrong one.
-      - name: Locate signed APK
+      - name: Locate and verify the signed APK
         id: apk
         run: |
-          signed=$(find . -name 'app-release-signed.apk' | head -1)
+          signed=$(find android/app/build/outputs/apk/release -name '*.apk' | head -1)
           if [ -z "$signed" ]; then
-            echo "signed APK not produced — refusing to publish"
-            find . -name '*.apk'
-            exit 1
+            echo "no APK produced"; find android -name '*.apk'; exit 1
           fi
           cp "$signed" muhta.apk
-          echo "path=muhta.apk" >> "$GITHUB_OUTPUT"
-          echo "stamp=$(date -u +%Y%m%d-%H%M)" >> "$GITHUB_OUTPUT"
 
-      # A wildcard in the command position expands to every build-tools version
-      # and turns the extra paths into arguments, so resolve one path first.
-      # Without this the check "passes" while verifying nothing.
-      - name: Verify signature matches assetlinks
-        run: |
+          # Android refuses to install an unsigned package, so prove it is
+          # signed here rather than discovering it on a user's phone.
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           "$apksigner" verify --print-certs muhta.apk
 
-          # Pull the 64-hex digest by shape, not by field position: cutting on
-          # ':' picked up the label text and failed a perfectly valid APK.
-          apk_fp=$("$apksigner" verify --print-certs muhta.apk \
-            | grep -i 'SHA-256 digest' | head -1 \
-            | grep -oiE '[0-9a-f]{64}' | tr 'a-f' 'A-F')
-          site_fp=$(tr -d ' ":\n' < public/.well-known/assetlinks.json \
-            | grep -oiE '[0-9a-f]{64}' | head -1 | tr 'a-f' 'A-F')
-
-          if [ -z "$apk_fp" ] || [ -z "$site_fp" ]; then
-            echo "تعذّر استخراج البصمة — الفحص نفسه معطوب"
-            exit 1
-          fi
-
-          echo "APK        : $apk_fp"
-          echo "assetlinks : $site_fp"
-          if [ "$apk_fp" != "$site_fp" ]; then
-            echo "المطابقة فشلت — سيظهر شريط العنوان داخل التطبيق"
-            exit 1
-          fi
+          echo "stamp=$(date -u +%Y%m%d-%H%M)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
           name: muhta-apk-${{ steps.apk.outputs.stamp }}
-          path: ${{ steps.apk.outputs.path }}
+          path: muhta.apk
 
-      # A release gives a stable public link to share on WhatsApp/Telegram.
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
@@ -116,8 +73,10 @@ jobs:
           body: |
             تطبيق المحطة التقنية لأندرويد.
 
-            حمّل الملف أدناه وثبّته. عند ظهور تحذير «مصدر غير معروف» اسمح بالتثبيت — هذا طبيعي لأي تطبيق خارج المتجر.
+            احذف أي نسخة سابقة ثم ثبّت هذه، لأن أندرويد يحتفظ بشاشة البدء القديمة.
+
+            عند ظهور تحذير «مصدر غير معروف» اسمح بالتثبيت — طبيعي لأي تطبيق خارج المتجر.
 
             الموقع: https://muhta.online
-          files: ${{ steps.apk.outputs.path }}
+          files: muhta.apk
           fail_on_unmatched_files: true
