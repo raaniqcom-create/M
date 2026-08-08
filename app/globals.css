@@ -10,6 +10,12 @@
   }
   body {
     touch-action: manipulation;
+    /* viewport-fit=cover starts every page at the physical top and bottom of
+       the screen, so without these the first line hides under the Dynamic
+       Island and the last one under the home indicator. Pages that want to
+       paint behind the status bar opt out with .safe-top. */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
   }
   /* iOS zooms the page when a font-size < 16px input is focused */
   input,
@@ -21,6 +27,14 @@
     outline: 2px solid theme('colors.brand.DEFAULT');
     outline-offset: 2px;
   }
+}
+
+/* Cancels the body's top inset so the green bleeds up behind the status bar,
+   then puts the same inset back as padding so the title clears the notch. A
+   plain spacer would leave a grey strip above the header instead. */
+.safe-top {
+  margin-top: calc(-1 * env(safe-area-inset-top));
+  padding-top: calc(env(safe-area-inset-top) + 1.5rem);
 }
 
 @media (prefers-reduced-motion: reduce) {

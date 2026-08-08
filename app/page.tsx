@@ -154,7 +154,7 @@ export default function HomePage() {
 
   return (
     <>
-      <header className="bg-gradient-to-b from-brand-700 to-brand px-4 pb-5 pt-6 text-white">
+      <header className="safe-top bg-gradient-to-b from-brand-700 to-brand px-4 pb-5 text-white">
         <div className="mx-auto max-w-md">
           <div className="relative flex items-center justify-center gap-2">
             <FuelIcon className="h-6 w-6" />

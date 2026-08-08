@@ -16,11 +16,17 @@ export function InstallPrompt() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    // running as an installed app (PWA or the APK shell) → never nag
+    // running as an installed app (PWA or the APK shell) → never nag.
+    // The native shell is a plain WebView, so display-mode is *not* standalone
+    // there — ask Capacitor directly or the banner offers to install an app
+    // the user is already looking at.
+    const native = (
+      window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }
+    ).Capacitor?.isNativePlatform?.();
     const standalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as { standalone?: boolean }).standalone === true;
-    if (standalone || localStorage.getItem(DISMISSED)) return;
+    if (native || standalone || localStorage.getItem(DISMISSED)) return;
 
     let active = true;
     let onPrompt: ((e: Event) => void) | undefined;

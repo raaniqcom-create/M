@@ -53,6 +53,10 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   themeColor: '#16a34a',
+  // Lets the green header run edge to edge behind the status bar instead of
+  // leaving a white strip; the safe-area padding below keeps the title clear
+  // of the notch. Required for env(safe-area-inset-*) to report anything.
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
