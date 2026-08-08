@@ -17,6 +17,19 @@ export function NativePush() {
 
       const { PushNotifications } = await import('@capacitor/push-notifications');
 
+      // Android takes the sound from the channel, not from each message, and a
+      // channel's sound is fixed once created — so this must exist before the
+      // first notification arrives or the device is stuck on the default tone.
+      await PushNotifications.createChannel({
+        id: 'muhta_alerts',
+        name: 'تنبيهات الوقود',
+        description: 'إشعار فور توفر الوقود في محطاتك',
+        importance: 5,
+        visibility: 1,
+        sound: 'alert',
+        vibration: true,
+      }).catch(() => {});
+
       // Android 13+ needs the runtime prompt; older versions grant implicitly
       let status = await PushNotifications.checkPermissions();
       if (status.receive === 'prompt' || status.receive === 'prompt-with-rationale') {

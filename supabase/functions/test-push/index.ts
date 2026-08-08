@@ -95,7 +95,12 @@ async function sendToDevice(token: string, title: string, body: string) {
         message: {
           token,
           notification: { title, body },
-          android: { priority: 'HIGH', notification: { sound: 'default' } },
+          android: {
+            priority: 'HIGH',
+            // the channel carries the custom tone; naming it here is what
+            // routes the notification through it
+            notification: { channel_id: 'muhta_alerts', sound: 'alert' },
+          },
         },
       }),
     }
