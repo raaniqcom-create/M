@@ -55,7 +55,18 @@ async function sendSms(msisdn: string, code: string) {
     }),
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`otpiq ${res.status} ${JSON.stringify(body)}`);
+  if (!res.ok) {
+    console.error('otpiq', res.status, body);
+    // An empty balance is an operations problem, not the caller's — say so
+    // plainly instead of telling them to try again at something that cannot work.
+    const out_of_credit =
+      body?.canCover === false || String(body?.message ?? '').toLowerCase().includes('credit');
+    throw Object.assign(new Error('otpiq'), {
+      userMessage: out_of_credit
+        ? 'خدمة الرسائل بلا رصيد حالياً. تواصل معنا عبر البوت.'
+        : 'تعذّر إرسال الرمز. حاول بعد قليل.',
+    });
+  }
   return body;
 }
 
@@ -148,6 +159,7 @@ Deno.serve(async (req) => {
     return json({ error: 'unknown action' }, 400);
   } catch (err) {
     console.error('otp', err);
-    return json({ error: 'تعذّر إرسال الرمز. حاول مجدداً.' }, 500);
+    const msg = (err as { userMessage?: string })?.userMessage;
+    return json({ error: msg ?? 'تعذّر إتمام الطلب. حاول مجدداً.' }, msg ? 503 : 500);
   }
 });
