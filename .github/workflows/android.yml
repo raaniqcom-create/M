@@ -62,7 +62,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon \
+          ./gradlew assembleRelease bundleRelease --no-daemon \
             -Pandroid.injected.signing.store.file=$PWD/muhta.keystore \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias=muhta \
@@ -77,6 +77,11 @@ jobs:
           fi
           cp "$signed" muhta.apk
 
+          # Google Play accepts only the bundle format for new apps
+          bundle=$(find android/app/build/outputs/bundle/release -name '*.aab' | head -1)
+          if [ -z "$bundle" ]; then echo "no AAB produced"; find android -name "*.aab"; exit 1; fi
+          cp "$bundle" muhta.aab
+
           # Android refuses to install an unsigned package, so prove it is
           # signed here rather than discovering it on a user's phone.
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
@@ -86,8 +91,10 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: muhta-apk-${{ steps.apk.outputs.stamp }}
-          path: muhta.apk
+          name: muhta-${{ steps.apk.outputs.stamp }}
+          path: |
+            muhta.apk
+            muhta.aab
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -102,5 +109,7 @@ jobs:
             عند ظهور تحذير «مصدر غير معروف» اسمح بالتثبيت — طبيعي لأي تطبيق خارج المتجر.
 
             الموقع: https://muhta.online
-          files: muhta.apk
+          files: |
+            muhta.apk
+            muhta.aab
           fail_on_unmatched_files: true

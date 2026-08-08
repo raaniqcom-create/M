@@ -14,3 +14,4 @@ android/muhta.keystore
 assets/
 google-services.json
 *firebase-adminsdk*.json
+store/*.png
