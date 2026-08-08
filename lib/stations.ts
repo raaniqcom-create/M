@@ -23,7 +23,7 @@ export function distanceKm(
 
 export async function loadStations(): Promise<StationWithStatus[]> {
   const [stationsRes, productsRes, trafficRes] = await Promise.all([
-    supabase.from('stations').select('*').eq('status', 'approved').order('name'),
+    supabase.from('stations').select('*').eq('status', 'approved').eq('is_demo', false).order('name'),
     supabase.from('station_products').select('*'),
     supabase.from('station_traffic_avg').select('*'),
   ]);

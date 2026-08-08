@@ -24,7 +24,11 @@ const db = createClient(
 export const dynamicParams = false;
 
 export async function generateStaticParams() {
-  const { data } = await db.from('stations').select('id').eq('status', 'approved');
+  const { data } = await db
+    .from('stations')
+    .select('id')
+    .eq('status', 'approved')
+    .eq('is_demo', false);
   const params = (data ?? []).map(({ id }) => ({ id }));
   // a static export must emit at least one path for a dynamic route
   return params.length ? params : [{ id: 'none' }];

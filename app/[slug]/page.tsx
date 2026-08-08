@@ -13,6 +13,7 @@ export async function generateStaticParams() {
     .from('stations')
     .select('slug')
     .eq('status', 'approved')
+    .eq('is_demo', false)
     .not('slug', 'is', null);
   const params = (data ?? []).map(({ slug }) => ({ slug }));
   return params.length ? params : [{ slug: 'none' }];
