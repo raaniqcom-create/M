@@ -20,11 +20,20 @@ export default function TestPushPage() {
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as { standalone?: boolean }).standalone === true;
     const ios = /iphone|ipad|ipod/i.test(ua);
+
+    // Whether the native bridge is reachable decides everything else, so show
+    // it up front instead of only after a failed run.
+    const cap = (
+      window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }
+    ).Capacitor;
+    const native = cap?.isNativePlatform?.() === true;
+
     setEnv(
       [
         ios ? 'آيفون' : /android/i.test(ua) ? 'أندرويد' : 'حاسوب',
-        standalone ? 'مثبّت على الشاشة' : 'في المتصفح',
-        'PushManager' in window ? 'يدعم الإشعارات' : 'لا يدعم الإشعارات',
+        native ? '🔗 داخل التطبيق' : standalone ? 'مثبّت على الشاشة' : 'في المتصفح',
+        cap ? 'الجسر موجود' : 'لا جسر',
+        'PushManager' in window ? 'يدعم إشعارات الويب' : 'لا يدعم إشعارات الويب',
       ].join(' · ')
     );
   }, []);
