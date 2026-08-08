@@ -12,6 +12,7 @@ import {
 } from '@/lib/products';
 import { ShareButton } from '@/components/ShareButton';
 import { StationLinkCard } from '@/components/StationLinkCard';
+import { StationPoster } from '@/components/StationPoster';
 import { ProductControl } from '@/components/ProductControl';
 import { WorkingHours } from '@/components/WorkingHours';
 import { OwnerReminders } from '@/components/OwnerReminders';
@@ -208,6 +209,9 @@ export default function OwnerPage() {
               slug={station.slug}
               onSlugChange={(slug) => setStation({ ...station, slug })}
             />
+
+            {/* keyed on the slug so the poster redraws when the link changes */}
+            <StationPoster key={station.slug ?? 'none'} name={station.name} slug={station.slug} />
 
             <section className="card p-5">
               <h3 className="text-sm font-bold">توفر المنتجات</h3>
