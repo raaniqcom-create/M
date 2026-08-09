@@ -10,6 +10,7 @@ import {
   TONES,
   type Tone,
 } from '@/lib/alertSound';
+import { useSession } from '@/lib/useSession';
 
 /** The drawer holds everything that isn't the driver's main job: signing in as
  *  an owner, sound settings, help. Keeping them out of the header leaves the
@@ -21,6 +22,7 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
   // The picker stays folded away: opening a menu should never make a phone
   // make a noise, and the tone is chosen once and then forgotten about.
   const [picking, setPicking] = useState(false);
+  const { signedIn, role } = useSession();
 
   useEffect(() => {
     setToneState(getTone());
@@ -79,12 +81,22 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
             </div>
 
             <nav className="flex flex-col p-3 text-sm">
-              <Item
-                href="/login"
-                icon="🏪"
-                title="الدخول إلى محطتي"
-                note="لأصحاب المحطات — تحديث التوفر"
-              />
+              {/* Offering "sign in" to someone already signed in is the most
+                  common way an app makes a returning user feel lost. */}
+              {signedIn ? (
+                role === 'admin' ? (
+                  <Item href="/admin" icon="🛡" title="لوحة الإدارة" note="المحطات والطلبات والشكاوى" />
+                ) : (
+                  <Item href="/owner" icon="🏪" title="لوحة محطتي" note="تحديث التوفر والمنشورات" />
+                )
+              ) : (
+                <Item
+                  href="/login"
+                  icon="🏪"
+                  title="الدخول إلى محطتي"
+                  note="لأصحاب المحطات — تحديث التوفر"
+                />
+              )}
 
               <button
                 type="button"
@@ -101,7 +113,9 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                 </span>
               </button>
 
-              <Item href="/register" icon="➕" title="سجّل محطتك" note="مجاناً، بضع خطوات" />
+              {!signedIn && (
+                <Item href="/register" icon="➕" title="سجّل محطتك" note="مجاناً، بضع خطوات" />
+              )}
 
               <p className="mt-4 px-3 pb-1 text-[11px] font-bold text-slate-400">إعدادات التطبيق</p>
 

@@ -9,6 +9,14 @@ export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   {
+    auth: {
+      // Stated rather than left to defaults: the shells are WebViews, and a
+      // session that silently fails to persist means the owner signs in again
+      // every single time they open the app.
+      persistSession: true,
+      autoRefreshToken: true,
+      storageKey: 'muhta-auth',
+    },
     global: {
       fetch: (input, init) =>
         fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS) }),

@@ -8,6 +8,7 @@ import { distanceKm, loadStations } from '@/lib/stations';
 import { useSiteStats } from '@/lib/useSiteStats';
 import { useFavorites } from '@/lib/favorites';
 import { useNativeApp } from '@/lib/useNativeApp';
+import { useSession } from '@/lib/useSession';
 import { playAlert, unlockAudio } from '@/lib/alertSound';
 import { SoundToggle } from '@/components/SoundToggle';
 import { SideMenu } from '@/components/SideMenu';
@@ -44,6 +45,7 @@ export default function HomePage() {
   const { visits, online } = useSiteStats();
   const { toggle: toggleFavorite, isFavorite } = useFavorites();
   const native = useNativeApp();
+  const { signedIn, role } = useSession();
 
   // the realtime handler is registered once; read favourites through a ref so
   // it always sees the current set instead of the one captured on mount
@@ -173,7 +175,17 @@ export default function HomePage() {
           {/* Both of these speak to someone browsing the site. Inside the app
               they are dead weight: the download already happened, and the
               "coming soon" badge contradicts the app in their hand. */}
-          {!native && (
+          {/* A signed-in admin or owner should reach their panel from the first
+              screen, not by hunting through a drawer. */}
+          {signedIn && (
+            <a
+              href={role === 'admin' ? '/admin' : '/owner'}
+              className="mt-2 flex items-center justify-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-extrabold text-brand-700"
+            >
+              {role === 'admin' ? '🛡 فتح لوحة الإدارة' : '🏪 فتح لوحة محطتي'}
+            </a>
+          )}
+          {!native && !signedIn && (
             <div className="mt-2 flex items-center justify-center gap-2">
               <span className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold backdrop-blur-sm">
                 <span aria-hidden className="h-1.5 w-1.5 animate-blink rounded-full bg-white" />

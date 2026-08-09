@@ -53,7 +53,7 @@ export function StationRegisterForm() {
       setBusy(false);
       setError(
         signUpError?.message.includes('already')
-          ? 'هذا الرقم مسجّل مسبقاً. استخدم «تسجيل الدخول» بدل إنشاء حساب جديد.'
+          ? 'ALREADY'
           : 'تعذّر إنشاء الحساب. تأكد أن كلمة المرور ٦ أحرف على الأقل وحاول مجدداً.'
       );
       return;
@@ -242,7 +242,23 @@ export function StationRegisterForm() {
         لا تتم مشاركة أي من بياناتك خارج النظام. رقم الدخول وكلمة المرور لا يظهران لأحد.
       </p>
 
-      {error && (
+      {error === 'ALREADY' && (
+        <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+          <p className="font-bold">هذه المحطة مسجّلة بالفعل بهذا الرقم.</p>
+          <p className="mt-1 text-xs leading-relaxed">
+            أضافتها الإدارة نيابةً عنك على الأرجح. لا تحتاج إعادة إدخال البيانات — تحقّق من
+            رقمك برسالة واستلم محطتك بكلمة مرور جديدة.
+          </p>
+          <a href="/reset" className="btn-primary mt-3 w-full">
+            استلام محطتي بالتحقّق من الرقم
+          </a>
+          <a href="/login" className="mt-2 block text-center text-xs font-bold underline">
+            أو سجّل الدخول إن كنت تعرف كلمة المرور
+          </a>
+        </div>
+      )}
+
+      {error && error !== 'ALREADY' && (
         <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-traffic-red">
           {error}
         </p>
