@@ -47,6 +47,7 @@ export interface StationTrafficAvg {
   red_votes: number;
   total_votes: number;
   majority_level: TrafficLevel | null;
+  last_vote_at: string | null;
 }
 
 // what the home page actually renders per card

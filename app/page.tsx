@@ -17,6 +17,7 @@ import { isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { StationCard } from '@/components/StationCard';
 import { PromoStrip } from '@/components/PromoStrip';
+import { TripAsk } from '@/components/TripAsk';
 import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
 import { InstallPrompt } from '@/components/InstallPrompt';
@@ -234,6 +235,7 @@ export default function HomePage() {
       </header>
 
       <main className="mx-auto max-w-md px-4 pb-24 pt-4">
+        <TripAsk />
         {stations && (
           <div className="mb-4">
             <ProductsDashboard

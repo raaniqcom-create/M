@@ -21,7 +21,17 @@ const LINKS: Record<App, { label: string; url: (lat: number, lng: number) => str
   },
 };
 
-export function RouteButton({ lat, lng }: { lat: number; lng: number }) {
+export function RouteButton({
+  lat,
+  lng,
+  stationId,
+  stationName,
+}: {
+  lat: number;
+  lng: number;
+  stationId?: string;
+  stationName?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [first, setFirst] = useState<App>('waze');
   const box = useRef<HTMLDivElement>(null);
@@ -60,6 +70,14 @@ export function RouteButton({ lat, lng }: { lat: number; lng: number }) {
               rel="noopener noreferrer"
               onClick={() => {
                 localStorage.setItem(LAST, app);
+                // Remember the trip. Twenty minutes from now this driver is
+                // the only person on earth who knows what the queue was like.
+                if (stationId) {
+                  localStorage.setItem(
+                    'trip',
+                    JSON.stringify({ id: stationId, name: stationName ?? '', at: Date.now() })
+                  );
+                }
                 setOpen(false);
               }}
               className="block px-3 py-2.5 text-center text-sm font-semibold text-slate-700 active:bg-slate-50"

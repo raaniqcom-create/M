@@ -6,6 +6,7 @@ import {
   expectedLabel,
 } from '@/lib/products';
 import { hoursLabel, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
+import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
 import { KIND_LABELS, KIND_STYLES } from '@/lib/stationMeta';
 import { BellButton } from './BellButton';
@@ -61,7 +62,9 @@ export function StationCard({
               >
                 <span className={`h-2 w-2 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
                 {TRAFFIC_LABELS[level]}
-                {station.manual_traffic_level && ' · من المحطة'}
+                {station.manual_traffic_level
+                  ? ' · من المحطة'
+                  : agoLabel(station.traffic?.last_vote_at) && ` · ${agoLabel(station.traffic?.last_vote_at)}`}
               </span>
             )}
             {station.distanceKm !== undefined && (
@@ -151,7 +154,7 @@ export function StationCard({
           <PhoneIcon className="h-4 w-4" />
           اتصال
         </a>
-        <RouteButton lat={station.lat} lng={station.lng} />
+        <RouteButton lat={station.lat} lng={station.lng} stationId={station.id} stationName={station.name} />
       </div>
     </article>
   );

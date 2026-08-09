@@ -145,7 +145,7 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
             <PhoneIcon className="h-4 w-4" />
             اتصال
           </a>
-          <RouteButton lat={station.lat} lng={station.lng} />
+          <RouteButton lat={station.lat} lng={station.lng} stationId={station.id} stationName={station.name} />
         </div>
 
         <ComplaintButton stationId={station.id} />

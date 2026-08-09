@@ -215,28 +215,10 @@ export default function OwnerPage() {
             <StationPoster key={station.slug ?? 'none'} name={station.name} slug={station.slug} />
 
             <section className="card p-5">
-              <h3 className="text-sm font-bold">توفر المنتجات</h3>
-              <p className="mt-1 text-xs text-slate-400">
-                عند تفعيل منتج يصل تنبيه فوري لمتابعي محطتك
-              </p>
-              <ul className="mt-2 divide-y divide-slate-100">
-                {PRODUCT_ORDER.map((product) => (
-                  <ProductControl
-                    key={product}
-                    product={product}
-                    row={products.find((p) => p.product === product)}
-                    saving={savingProduct === product}
-                    onSetAvailable={(next) => setAvailable(product, next)}
-                    onSetExpected={(date, period) => setExpected(product, date, period)}
-                  />
-                ))}
-              </ul>
-            </section>
-
-            <section className="card p-5">
               <h3 className="text-sm font-bold">حالة الازدحام</h3>
               <p className="mt-1 text-xs text-slate-400">
-                تحديدك يظهر للمستخدمين بدل متوسط تصويتهم. اضغط مرة أخرى للإلغاء.
+                أنت الوحيد الذي يرى ساحتك. تحديدك يظهر للسائقين بدل تصويتهم، ويبقى حتى تغيّره —
+                وتصويت السائقين يسقط بعد ٣٠ دقيقة. اضغط مرة أخرى للإلغاء.
               </p>
               <div className="mt-3 grid grid-cols-3 gap-2">
                 {LEVELS.map((level) => {
@@ -260,6 +242,25 @@ export default function OwnerPage() {
                 })}
               </div>
             </section>
+            <section className="card p-5">
+              <h3 className="text-sm font-bold">توفر المنتجات</h3>
+              <p className="mt-1 text-xs text-slate-400">
+                عند تفعيل منتج يصل تنبيه فوري لمتابعي محطتك
+              </p>
+              <ul className="mt-2 divide-y divide-slate-100">
+                {PRODUCT_ORDER.map((product) => (
+                  <ProductControl
+                    key={product}
+                    product={product}
+                    row={products.find((p) => p.product === product)}
+                    saving={savingProduct === product}
+                    onSetAvailable={(next) => setAvailable(product, next)}
+                    onSetExpected={(date, period) => setExpected(product, date, period)}
+                  />
+                ))}
+              </ul>
+            </section>
+
 
             {/* sits after the toggles so it reflects what was just switched on */}
             <AvailabilityPoster
