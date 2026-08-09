@@ -98,6 +98,13 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                 />
               )}
 
+              <Item
+                href="/subscribe"
+                icon="🔔"
+                title="اشترك بالعروض"
+                note="للسائقين — يصلك توفر الوقود برسالة"
+              />
+
               <button
                 type="button"
                 onClick={() => {

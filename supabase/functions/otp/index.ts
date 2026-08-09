@@ -84,15 +84,21 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
   try {
-    const { action, phone, code, password, purpose } = await req.json();
+    const { action, phone, code, password, purpose, city } = await req.json();
     const c = core(phone);
     if (!/^7\d{9}$/.test(c)) return json({ error: 'رقم الهاتف غير صحيح' }, 400);
 
     if (action === 'send') {
+      // A citizen subscribing to offers has no account and needs none; the
+      // code exists only to prove the number is theirs, so neither the
+      // "must exist" nor the "must not exist" check applies.
+      const subscribing = purpose === 'subscribe';
       const forReset = purpose === 'reset';
-      const exists = Boolean(await accountId(c));
-      if (forReset && !exists) return json({ error: 'لا يوجد حساب بهذا الرقم' }, 404);
-      if (!forReset && exists) return json({ error: 'هذا الرقم مسجّل مسبقاً' }, 409);
+      if (!subscribing) {
+        const exists = Boolean(await accountId(c));
+        if (forReset && !exists) return json({ error: 'لا يوجد حساب بهذا الرقم' }, 404);
+        if (!forReset && exists) return json({ error: 'هذا الرقم مسجّل مسبقاً' }, 409);
+      }
 
       // One code a minute, ten an hour. Without this the endpoint is a free
       // SMS cannon pointed at any Iraqi number, billed to us.
@@ -116,7 +122,7 @@ Deno.serve(async (req) => {
         {
           phone: c,
           code_hash: await digest(c, value),
-          purpose: forReset ? 'reset' : 'register',
+          purpose: subscribing ? 'subscribe' : forReset ? 'reset' : 'register',
           expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
           attempts: 0,
           sent_at: new Date().toISOString(),
@@ -142,6 +148,13 @@ Deno.serve(async (req) => {
       if ((await digest(c, String(code ?? ''))) !== row.code_hash) {
         await db.from('otp_codes').update({ attempts: row.attempts + 1 }).eq('phone', c);
         return json({ error: 'الرمز غير صحيح' }, 400);
+      }
+
+      if (row.purpose === 'subscribe') {
+        await db.from('subscribers').upsert(
+          { phone: c, city: typeof city === 'string' ? city : null, unsubscribed_at: null },
+          { onConflict: 'phone' }
+        );
       }
 
       if (row.purpose === 'reset') {
