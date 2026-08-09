@@ -115,9 +115,14 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-traffic-red">
-              {error}
-            </p>
+            <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-traffic-red">
+              <p>{error}</p>
+              {/* The moment a password is refused is the moment recovery is
+                  wanted; making them hunt for it in the menu is the wrong ask. */}
+              <a href="/reset" className="mt-2 inline-block font-bold underline">
+                نسيت كلمة المرور؟ استعدها برسالة
+              </a>
+            </div>
           )}
 
           <button type="submit" disabled={busy} className="btn-primary w-full">

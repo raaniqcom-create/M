@@ -70,9 +70,14 @@ async function sendSms(msisdn: string, code: string) {
   return body;
 }
 
-async function ownerExists(c: string): Promise<boolean> {
-  const { data } = await db.from('stations').select('id').eq('phone', `0${c}`).maybeSingle();
-  return Boolean(data);
+/** The login account, not the station, is what both flows must agree on.
+ *  Checking `stations` for recovery while signup checked accounts produced the
+ *  contradiction that an admin's number was "already registered" and "not
+ *  registered" at the same time — an account can exist without a station. */
+async function accountId(c: string): Promise<string | null> {
+  const email = `p${c}@muhta.app`;
+  const { data } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  return data?.users?.find((u) => u.email === email)?.id ?? null;
 }
 
 Deno.serve(async (req) => {
@@ -85,8 +90,8 @@ Deno.serve(async (req) => {
 
     if (action === 'send') {
       const forReset = purpose === 'reset';
-      const exists = await ownerExists(c);
-      if (forReset && !exists) return json({ error: 'لا توجد محطة مسجّلة بهذا الرقم' }, 404);
+      const exists = Boolean(await accountId(c));
+      if (forReset && !exists) return json({ error: 'لا يوجد حساب بهذا الرقم' }, 404);
       if (!forReset && exists) return json({ error: 'هذا الرقم مسجّل مسبقاً' }, 409);
 
       // One code a minute, ten an hour. Without this the endpoint is a free
@@ -143,11 +148,9 @@ Deno.serve(async (req) => {
         if (typeof password !== 'string' || password.length < 6)
           return json({ error: 'كلمة المرور ٦ أحرف على الأقل' }, 400);
 
-        const email = `p${c}@muhta.app`;
-        const { data: list } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
-        const user = list?.users?.find((u) => u.email === email);
-        if (!user) return json({ error: 'لا يوجد حساب بهذا الرقم' }, 404);
-        const { error } = await db.auth.admin.updateUserById(user.id, { password });
+        const id = await accountId(c);
+        if (!id) return json({ error: 'لا يوجد حساب بهذا الرقم' }, 404);
+        const { error } = await db.auth.admin.updateUserById(id, { password });
         if (error) return json({ error: 'تعذّر تغيير كلمة المرور' }, 500);
       }
 
