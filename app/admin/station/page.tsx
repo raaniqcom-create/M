@@ -47,6 +47,8 @@ function Panel() {
   const [products, setProducts] = useState<StationProduct[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [newPhone, setNewPhone] = useState('');
+  const [phoneNote, setPhoneNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -121,6 +123,33 @@ function Panel() {
     setBusy(null);
   }
 
+  /** Hands the station to its real owner's number. Approval happens after you
+   *  have spoken to them, so this is deliberately a separate, explicit act. */
+  async function movePhone() {
+    if (!station) return;
+    setBusy('phone');
+    setPhoneNote(null);
+    const { data: sess } = await supabase.auth.getSession();
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/station-phone`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sess.session?.access_token ?? ''}`,
+      },
+      body: JSON.stringify({ stationId: station.id, phone: newPhone }),
+    });
+    const out = await res.json().catch(() => ({}));
+    setBusy(null);
+    if (!res.ok) return setPhoneNote(out.error ?? 'تعذّر التغيير');
+    setPhoneNote(
+      out.password
+        ? `تم. الدخول: ${out.phone} · كلمة المرور: ${out.password}`
+        : `تم. الرقم ${out.phone} له حساب سابق، يدخل بكلمة مروره المعروفة.`
+    );
+    setNewPhone('');
+    await load();
+  }
+
   async function resolve(cid: string) {
     await supabase
       .from('complaints')
@@ -187,6 +216,37 @@ function Panel() {
             معاينة كما يراها السائق
           </a>
         </div>
+      </section>
+
+      <section className="card p-5">
+        <h2 className="text-sm font-bold">رقم المحطة الأساسي</h2>
+        <p className="mt-1 text-xs text-slate-400">
+          هذا الرقم يظهر للسائقين وهو اسم دخول صاحب المحطة معاً. تغييره ينقل ملكية اللوحة
+          إلى الرقم الجديد.
+        </p>
+        <p className="mt-2 text-xs font-bold text-slate-600" dir="ltr">{station.phone}</p>
+        <input
+          type="tel"
+          inputMode="numeric"
+          dir="ltr"
+          value={newPhone}
+          onChange={(e) => setNewPhone(e.target.value)}
+          placeholder="07XXXXXXXXX"
+          className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base"
+        />
+        <button
+          type="button"
+          disabled={busy === 'phone' || newPhone.replace(/\D/g, '').length < 10}
+          onClick={movePhone}
+          className="btn-ghost mt-2 w-full"
+        >
+          نقل المحطة إلى هذا الرقم
+        </button>
+        {phoneNote && (
+          <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+            {phoneNote}
+          </p>
+        )}
       </section>
 
       <section className="card p-5">
