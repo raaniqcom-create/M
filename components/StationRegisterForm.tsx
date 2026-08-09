@@ -21,6 +21,10 @@ export function StationRegisterForm() {
   const [publicPhone, setPublicPhone] = useState('');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // the row we already hold for this number, shown so the owner recognises it
+  const [existing, setExisting] = useState<
+    { name: string; city: string; address: string; phone: string } | null
+  >(null);
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -51,6 +55,16 @@ export function StationRegisterForm() {
 
     if (signUpError || !auth.user) {
       setBusy(false);
+      if (signUpError?.message.includes('already')) {
+        // public read: an approved station's name and address are already
+        // visible to every driver, so nothing new is disclosed here
+        const { data: row } = await supabase
+          .from('stations')
+          .select('name, city, address, phone')
+          .eq('phone', displayPhone(loginPhone))
+          .maybeSingle();
+        setExisting(row ?? null);
+      }
       setError(
         signUpError?.message.includes('already')
           ? 'ALREADY'
@@ -83,6 +97,17 @@ export function StationRegisterForm() {
     await supabase
       .from('station_products')
       .insert(PRODUCT_ORDER.map((product) => ({ station_id: station.id, product })));
+
+    // The admin has to know a station is waiting; without this the request sits
+    // in a queue nobody is watching.
+    fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/admin-alert`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      },
+      body: JSON.stringify({ event: 'registration', stationId: station.id }),
+    }).catch(() => {});
 
     router.push('/owner');
   }
@@ -245,9 +270,16 @@ export function StationRegisterForm() {
       {error === 'ALREADY' && (
         <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
           <p className="font-bold">هذه المحطة مسجّلة بالفعل بهذا الرقم.</p>
-          <p className="mt-1 text-xs leading-relaxed">
-            أضافتها الإدارة نيابةً عنك على الأرجح. لا تحتاج إعادة إدخال البيانات — تحقّق من
-            رقمك برسالة واستلم محطتك بكلمة مرور جديدة.
+          {existing && (
+            <div className="mt-2 rounded-lg bg-white/70 p-2.5 text-xs leading-relaxed text-slate-700">
+              <p className="font-bold">{existing.name}</p>
+              <p>{existing.city} — {existing.address}</p>
+              <p className="mt-1" dir="ltr">{existing.phone}</p>
+            </div>
+          )}
+          <p className="mt-2 text-xs leading-relaxed">
+            أُضيفت بالبيانات أعلاه نيابةً عنك. تحقّق من رقمك برسالة لتستلمها،
+            <b> ولك بعدها تعديل كل بياناتها</b> — الاسم والعنوان والموقع وأوقات العمل.
           </p>
           <a href="/reset" className="btn-primary mt-3 w-full">
             استلام محطتي بالتحقّق من الرقم

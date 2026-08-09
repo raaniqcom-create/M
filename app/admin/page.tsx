@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { CheckIcon, LogOutIcon, MapPinIcon, SpinnerIcon, XIcon } from '@/components/icons';
 import { AdminStationForm } from '@/components/AdminStationForm';
+import { BroadcastPanel } from '@/components/BroadcastPanel';
 import { KIND_LABELS, KIND_STYLES, KINDS } from '@/lib/stationMeta';
 import type { Station, StationKind } from '@/types/database';
 
@@ -21,7 +22,7 @@ export default function AdminPage() {
   const router = useRouter();
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [adminId, setAdminId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'add' | 'requests' | 'ads'>('add');
+  const [tab, setTab] = useState<'add' | 'requests' | 'ads' | 'offers'>('add');
   const [pending, setPending] = useState<Station[]>([]);
   const [approved, setApproved] = useState<Station[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
@@ -165,6 +166,7 @@ export default function AdminPage() {
           ['add', 'إضافة محطة'],
           ['requests', `الطلبات (${pending.length})`],
           ['ads', 'الإعلانات'],
+          ['offers', 'العروض'],
         ] as const).map(([t, label]) => (
           <button
             key={t}
@@ -298,6 +300,8 @@ export default function AdminPage() {
           ))}
         </div>
       )}
+
+      {tab === 'offers' && <BroadcastPanel />}
 
       {tab === 'ads' && (
         <div className="mt-4 space-y-4">
