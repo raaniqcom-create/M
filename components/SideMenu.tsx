@@ -18,6 +18,9 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
   const [open, setOpen] = useState(false);
   const [tone, setToneState] = useState<Tone>('1');
   const [muted, setMutedState] = useState(false);
+  // The picker stays folded away: opening a menu should never make a phone
+  // make a noise, and the tone is chosen once and then forgotten about.
+  const [picking, setPicking] = useState(false);
 
   useEffect(() => {
     setToneState(getTone());
@@ -35,14 +38,14 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
   function chooseTone(t: Tone) {
     setTone(t);
     setToneState(t);
-    previewTone(t); // hear it immediately, that is the whole point of choosing
+    previewTone(t); // only ever on a deliberate tap, never on open
+    setPicking(false);
   }
 
   function toggleMute() {
     const next = !muted;
     setMuted(next);
     setMutedState(next);
-    if (!next) previewTone(getTone());
   }
 
   return (
@@ -104,25 +107,41 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
               <p className="mt-4 px-3 pb-1 text-[11px] font-bold text-slate-400">إعدادات التطبيق</p>
 
               <div className="rounded-xl border border-slate-200 p-3">
-                <p className="text-xs font-bold text-slate-700">نغمة التنبيه</p>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  {TONES.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => chooseTone(t)}
-                      aria-pressed={tone === t}
-                      className={`rounded-lg border px-2 py-2 text-xs font-bold transition-colors duration-200 ${
-                        tone === t
-                          ? 'border-brand bg-brand-100 text-brand'
-                          : 'border-slate-200 text-slate-600'
-                      }`}
-                    >
-                      النغمة {t === '1' ? '١' : '٢'}
-                    </button>
-                  ))}
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-700">
+                    نغمة التنبيه · <span className="text-slate-500">النغمة {tone === '1' ? '١' : '٢'}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setPicking((v) => !v)}
+                    className="text-[11px] font-bold text-brand-700"
+                  >
+                    {picking ? 'إخفاء' : 'تغيير'}
+                  </button>
                 </div>
-                <p className="mt-2 text-[11px] text-slate-400">تُشغَّل عند اختيارها لتسمعها.</p>
+
+                {picking && (
+                  <>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {TONES.map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => chooseTone(t)}
+                          aria-pressed={tone === t}
+                          className={`rounded-lg border px-2 py-2 text-xs font-bold transition-colors duration-200 ${
+                            tone === t
+                              ? 'border-brand bg-brand-100 text-brand'
+                              : 'border-slate-200 text-slate-600'
+                          }`}
+                        >
+                          النغمة {t === '1' ? '١' : '٢'}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[11px] text-slate-400">تُشغَّل عند الضغط لتسمعها قبل الاعتماد.</p>
+                  </>
+                )}
 
                 <button
                   type="button"

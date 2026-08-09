@@ -11,6 +11,7 @@ import {
 import { hoursLabel, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
 import { MapPinIcon, PhoneIcon } from '@/components/icons';
 import { RouteButton } from '@/components/RouteButton';
+import { ComplaintButton } from '@/components/ComplaintButton';
 import type { Station, StationProduct, TrafficLevel } from '@/types/database';
 
 // server-side anon client: same RLS rules, but usable during SSR for OG tags
@@ -146,6 +147,8 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
           </a>
           <RouteButton lat={station.lat} lng={station.lng} />
         </div>
+
+        <ComplaintButton stationId={station.id} />
       </article>
 
       <a href="/" className="btn-primary mt-4 w-full">

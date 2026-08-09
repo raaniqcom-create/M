@@ -1,0 +1,275 @@
+'use client';
+
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { PRODUCT_LABELS, PRODUCT_ORDER } from '@/lib/products';
+import { StationLinkCard } from '@/components/StationLinkCard';
+import { StationPoster } from '@/components/StationPoster';
+import { AvailabilityPoster } from '@/components/AvailabilityPoster';
+import { SpinnerIcon } from '@/components/icons';
+import type { FuelProduct, Station, StationProduct, StationStatus } from '@/types/database';
+
+type Complaint = {
+  id: string;
+  reason: string;
+  note: string | null;
+  created_at: string;
+  resolved_at: string | null;
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: '⏳ بانتظار الموافقة',
+  approved: '✅ معتمدة وظاهرة',
+  rejected: '❌ مرفوضة',
+  suspended: '⛔ موقوفة',
+};
+
+// A single static route reading ?id=, not /admin/station/[id]. The site is a
+// static export, so a dynamic segment would need every station prerendered —
+// and a station registered after the last build would 404 for the admin.
+export default function AdminStationPage() {
+  return (
+    <Suspense fallback={<Center><SpinnerIcon className="h-6 w-6 text-brand" /></Center>}>
+      <Panel />
+    </Suspense>
+  );
+}
+
+function Center({ children }: { children: React.ReactNode }) {
+  return <main className="flex min-h-dvh items-center justify-center">{children}</main>;
+}
+
+function Panel() {
+  const id = useSearchParams().get('id');
+  const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [station, setStation] = useState<Station | null>(null);
+  const [products, setProducts] = useState<StationProduct[]>([]);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    const [s, p, c] = await Promise.all([
+      supabase.from('stations').select('*').eq('id', id).maybeSingle(),
+      supabase.from('station_products').select('*').eq('station_id', id),
+      supabase
+        .from('complaints')
+        .select('id, reason, note, created_at, resolved_at')
+        .eq('station_id', id)
+        .order('created_at', { ascending: false }),
+    ]);
+    setStation((s.data as Station) ?? null);
+    setProducts((p.data as StationProduct[]) ?? []);
+    setComplaints((c.data as Complaint[]) ?? []);
+  }, [id]);
+
+  useEffect(() => {
+    (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) return setAllowed(false);
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', auth.user.id)
+        .maybeSingle();
+      if (profile?.role !== 'admin') return setAllowed(false);
+      setAllowed(true);
+      await load();
+    })();
+  }, [load]);
+
+  async function setAvailable(product: FuelProduct, next: boolean) {
+    if (!station) return;
+    setBusy(product);
+    setProducts((prev) =>
+      prev.map((p) => (p.product === product ? { ...p, is_available: next } : p))
+    );
+    const { error } = await supabase
+      .from('station_products')
+      .update({ is_available: next, updated_at: new Date().toISOString() })
+      .eq('station_id', station.id)
+      .eq('product', product);
+
+    if (error) {
+      // never let the switch claim something the database refused
+      setProducts((prev) =>
+        prev.map((p) => (p.product === product ? { ...p, is_available: !next } : p))
+      );
+      setBusy(null);
+      return;
+    }
+
+    if (next) {
+      fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/notify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        },
+        body: JSON.stringify({ stationId: station.id, product }),
+      }).catch(() => {});
+    }
+    setBusy(null);
+  }
+
+  async function setStatus(status: StationStatus) {
+    if (!station) return;
+    setBusy('status');
+    await supabase.from('stations').update({ status }).eq('id', station.id);
+    setStation({ ...station, status });
+    setBusy(null);
+  }
+
+  async function resolve(cid: string) {
+    await supabase
+      .from('complaints')
+      .update({ resolved_at: new Date().toISOString() })
+      .eq('id', cid);
+    await load();
+  }
+
+  if (allowed === null) return <Center><SpinnerIcon className="h-6 w-6 text-brand" /></Center>;
+  if (!allowed)
+    return (
+      <Center>
+        <div className="px-6 text-center">
+          <p className="text-sm font-medium text-slate-600">هذه الصفحة للإدارة فقط.</p>
+          <a href="/login" className="btn-primary mt-4 px-6">تسجيل الدخول</a>
+        </div>
+      </Center>
+    );
+  if (!station)
+    return (
+      <Center>
+        <div className="px-6 text-center">
+          <p className="text-sm font-medium text-slate-600">المحطة غير موجودة.</p>
+          <a href="/admin" className="btn-ghost mt-4 px-6">رجوع للوحة</a>
+        </div>
+      </Center>
+    );
+
+  const open = complaints.filter((c) => !c.resolved_at);
+
+  return (
+    <main className="mx-auto max-w-md space-y-4 px-4 pb-16 pt-6">
+      <header>
+        <a href="/admin" className="text-xs font-bold text-brand-700">← لوحة الإدارة</a>
+        <h1 className="mt-1 text-lg font-extrabold">{station.name}</h1>
+        <p className="text-sm text-slate-500">{station.city} — {station.address}</p>
+        <p className="mt-1 text-xs font-bold text-slate-600">
+          {STATUS_LABEL[station.status] ?? station.status} · ☎️ {station.phone}
+        </p>
+      </header>
+
+      <section className="card p-5">
+        <h2 className="text-sm font-bold">حالة المحطة</h2>
+        <p className="mt-1 text-xs text-slate-400">
+          الإيقاف يخفيها عن السائقين فوراً دون حذف بياناتها — للمحطة التي لا تحدّث حالتها.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {station.status !== 'approved' && (
+            <button type="button" disabled={busy === 'status'} onClick={() => setStatus('approved')} className="btn-primary">
+              تفعيل
+            </button>
+          )}
+          {station.status !== 'suspended' && (
+            <button
+              type="button"
+              disabled={busy === 'status'}
+              onClick={() => setStatus('suspended' as StationStatus)}
+              className="btn-ghost text-traffic-red"
+            >
+              إيقاف المحطة
+            </button>
+          )}
+          <a href={`/station/${station.id}`} className="btn-ghost col-span-2">
+            معاينة كما يراها السائق
+          </a>
+        </div>
+      </section>
+
+      <section className="card p-5">
+        <h2 className="text-sm font-bold">توفر الوقود</h2>
+        <p className="mt-1 text-xs text-slate-400">تفعيل منتج يرسل تنبيهاً فورياً للمتابعين.</p>
+        <ul className="mt-2 divide-y divide-slate-100">
+          {PRODUCT_ORDER.map((product) => {
+            const row = products.find((p) => p.product === product);
+            const on = Boolean(row?.is_available);
+            return (
+              <li key={product} className="flex items-center justify-between py-2.5">
+                <span className="text-sm font-semibold text-slate-700">{PRODUCT_LABELS[product]}</span>
+                <button
+                  type="button"
+                  disabled={!row || busy === product}
+                  aria-pressed={on}
+                  onClick={() => setAvailable(product, !on)}
+                  className={`h-7 w-12 rounded-full p-0.5 transition-colors duration-200 ${
+                    on ? 'bg-brand' : 'bg-slate-300'
+                  } disabled:opacity-40`}
+                >
+                  <span
+                    className={`block h-6 w-6 rounded-full bg-white transition-transform duration-200 ${
+                      on ? '-translate-x-5' : ''
+                    }`}
+                  />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <section className="card p-5">
+        <h2 className="text-sm font-bold">الشكاوى {open.length > 0 && `(${open.length})`}</h2>
+        {complaints.length === 0 ? (
+          <p className="mt-2 text-xs text-slate-400">لا توجد شكاوى على هذه المحطة.</p>
+        ) : (
+          <ul className="mt-2 divide-y divide-slate-100">
+            {complaints.map((c) => (
+              <li key={c.id} className="py-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className={`text-sm font-semibold ${c.resolved_at ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                      {c.reason}
+                    </p>
+                    {c.note && <p className="mt-0.5 text-xs text-slate-500">{c.note}</p>}
+                    <p className="mt-0.5 text-[11px] text-slate-400">
+                      {new Intl.DateTimeFormat('ar-IQ', {
+                        timeZone: 'Asia/Baghdad',
+                        day: '2-digit',
+                        month: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      }).format(new Date(c.created_at))}
+                    </p>
+                  </div>
+                  {!c.resolved_at && (
+                    <button type="button" onClick={() => resolve(c.id)} className="shrink-0 text-xs font-bold text-brand-700">
+                      تمّت المعالجة
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <StationLinkCard
+        stationId={station.id}
+        name={station.name}
+        slug={station.slug}
+        onSlugChange={(slug) => setStation({ ...station, slug })}
+      />
+
+      <StationPoster key={station.slug ?? 'none'} name={station.name} slug={station.slug} />
+
+      <AvailabilityPoster
+        name={station.name}
+        slug={station.slug}
+        products={products.filter((p) => p.is_available).map((p) => p.product)}
+      />
+    </main>
+  );
+}

@@ -29,7 +29,7 @@ export default function AdminPage() {
   const load = useCallback(async () => {
     const [{ data: st }, { data: ap }, { data: ad }] = await Promise.all([
       supabase.from('stations').select('*').eq('status', 'pending').order('created_at'),
-      supabase.from('stations').select('*').eq('status', 'approved').order('city'),
+      supabase.from('stations').select('*').in('status', ['approved', 'suspended']).order('city'),
       supabase.from('ads').select('*').order('created_at', { ascending: false }),
     ]);
     setPending(st ?? []);
@@ -191,10 +191,19 @@ export default function AdminPage() {
             <ul className="mt-3 space-y-3">
               {approved.map((s) => (
                 <li key={s.id} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
-                  <p className="text-sm font-bold">{s.name}</p>
-                  <p className="text-xs text-slate-500">
-                    {s.city} — {s.address}
-                  </p>
+                  {/* the name is the way in: everything per-station lives on
+                      its own page rather than swelling this list */}
+                  <a href={`/admin/station/?id=${s.id}`} className="block">
+                    <p className="text-sm font-bold text-brand-700 underline">{s.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {s.city} — {s.address}
+                    </p>
+                  </a>
+                  {s.status === 'suspended' && (
+                    <p className="mt-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-bold text-traffic-red">
+                      ⛔ موقوفة — لا تظهر للسائقين
+                    </p>
+                  )}
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {KINDS.map((k) => (
                       <button

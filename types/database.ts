@@ -8,7 +8,7 @@ export type FuelProduct =
   | 'white_oil';
 
 export type TrafficLevel = 'green' | 'yellow' | 'red';
-export type StationStatus = 'pending' | 'approved' | 'rejected';
+export type StationStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 export type StationKind = 'private' | 'government';
 
 export interface Station {
