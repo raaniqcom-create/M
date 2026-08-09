@@ -212,9 +212,20 @@ function Panel() {
               إيقاف المحطة
             </button>
           )}
-          <a href={`/station/${station.id}`} className="btn-ghost col-span-2">
-            معاينة كما يراها السائق
-          </a>
+          {/* The slug page is the one drivers actually reach. The /station/<id>
+              route is only prerendered for approved, non-demo stations, so
+              linking to it blindly hands the admin a 404. */}
+          {station.slug && station.status === 'approved' ? (
+            <a href={`/${station.slug}`} className="btn-ghost col-span-2">
+              معاينة كما يراها السائق
+            </a>
+          ) : (
+            <p className="col-span-2 rounded-xl bg-slate-50 px-3 py-2.5 text-center text-xs text-slate-500">
+              {station.status !== 'approved'
+                ? 'لا معاينة قبل الاعتماد — المحطة غير منشورة بعد.'
+                : 'اضبط رابطاً مختصراً في الأسفل لتظهر صفحتها العامة.'}
+            </p>
+          )}
         </div>
       </section>
 
