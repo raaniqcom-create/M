@@ -356,9 +356,24 @@ export default function HomePage() {
           )}
         </div>
 
-        <a href="/login" className="mt-6 block min-h-[44px] pt-3 text-center text-sm text-brand-700">
-          هل أنت صاحب محطة؟ سجّل محطتك
-        </a>
+        {/* The only line saying registration is open used to live inside the
+            empty state, so it vanished the moment the first station appeared —
+            exactly when owners started looking. */}
+        {!signedIn && (
+          <section className="mt-6 rounded-2xl border border-brand-100 bg-brand-50 p-4 text-center">
+            <p className="text-sm font-bold text-brand-900">محطتك غير مسجّلة؟</p>
+            <p className="mt-1 text-xs leading-relaxed text-brand-800">
+              أضفها مجاناً وتظهر لآلاف السائقين في الأنبار — بلا رسوم ولا عمولة.
+              التسجيل مفتوح الآن لجميع مدن المحافظة.
+            </p>
+            <a href="/register" className="btn-primary mt-3 w-full">
+              سجّل محطتك مجاناً
+            </a>
+            <a href="/login" className="mt-2 block min-h-[44px] pt-2 text-xs font-semibold text-brand-700">
+              لديك حساب؟ سجّل الدخول
+            </a>
+          </section>
+        )}
       </main>
 
       <InstallPrompt />
