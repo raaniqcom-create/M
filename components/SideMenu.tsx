@@ -72,8 +72,8 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
             className="flex-1 bg-black/40"
           />
 
-          <aside className="flex h-full w-[82%] max-w-xs flex-col overflow-y-auto bg-white shadow-xl">
-            <div className="safe-top bg-gradient-to-b from-brand-700 to-brand px-4 pb-4 text-white">
+          <aside className="flex h-full w-[82%] max-w-xs flex-col overflow-y-auto bg-white pb-[env(safe-area-inset-bottom)] shadow-xl">
+            <div className="bg-gradient-to-b from-brand-700 to-brand px-4 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] text-white">
               <p className="text-base font-extrabold">المحطة التقنية</p>
               <p className="mt-0.5 text-xs text-white/80">منصة وقود الأنبار</p>
             </div>
@@ -102,7 +102,6 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
               </button>
 
               <Item href="/register" icon="➕" title="سجّل محطتك" note="مجاناً، بضع خطوات" />
-              <Item href="/reset" icon="🔑" title="نسيت كلمة المرور" note="استعادة الدخول لمحطتك" />
 
               <p className="mt-4 px-3 pb-1 text-[11px] font-bold text-slate-400">إعدادات التطبيق</p>
 

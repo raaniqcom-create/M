@@ -6,7 +6,16 @@ import { SpinnerIcon } from './icons';
 import type { FuelProduct } from '@/types/database';
 
 const SITE = 'muhta.online';
-const SIZE = 1080;
+const SIZE = 1080; // width; the height grows with the product list
+
+/** A square canvas forced six products into a cramped stack. The poster grows
+ *  downward instead — a taller image still posts fine everywhere, whereas
+ *  shrinking the type until it fits defeats the point of the poster. */
+function heightFor(count: number): number {
+  // 940 covers the fixed furniture — badge, station name, timestamp, logo,
+  // link pill, footer — and each product adds one line of 96.
+  return Math.max(SIZE, 940 + count * 96);
+}
 
 function fitFont(
   ctx: CanvasRenderingContext2D,
@@ -47,18 +56,21 @@ export function AvailabilityPoster({
 
     await document.fonts.ready;
 
-    const g = c.createLinearGradient(0, 0, SIZE, SIZE);
+    const H = heightFor(products.length);
+    canvas.height = H;
+
+    const g = c.createLinearGradient(0, 0, SIZE, H);
     g.addColorStop(0, '#166534');
     g.addColorStop(0.6, '#15803d');
     g.addColorStop(1, '#22c55e');
     c.fillStyle = g;
-    c.fillRect(0, 0, SIZE, SIZE);
+    c.fillRect(0, 0, SIZE, H);
 
     const glow = c.createRadialGradient(SIZE / 2, 250, 0, SIZE / 2, 250, 700);
     glow.addColorStop(0, 'rgba(255,255,255,0.16)');
     glow.addColorStop(1, 'rgba(255,255,255,0)');
     c.fillStyle = glow;
-    c.fillRect(0, 0, SIZE, SIZE);
+    c.fillRect(0, 0, SIZE, H);
 
     c.direction = 'rtl';
     c.textAlign = 'center';
@@ -81,16 +93,16 @@ export function AvailabilityPoster({
       c.fillText(labels[0], SIZE / 2, 320);
     } else {
       const start = 268;
-      const step = labels.length > 3 ? 78 : 92;
-      labels.slice(0, 5).forEach((label, i) => {
-        const s = fitFont(c, label, SIZE - 200, labels.length > 3 ? 58 : 70);
+      const step = 96;
+      labels.forEach((label, i) => {
+        const s = fitFont(c, label, SIZE - 200, 72);
         c.fillStyle = '#ffffff';
         c.font = `800 ${s}px Tajawal`;
         c.fillText(label, SIZE / 2, start + i * step);
       });
     }
 
-    const afterList = labels.length === 1 ? 400 : 268 + Math.min(labels.length, 5) * 92;
+    const afterList = labels.length === 1 ? 400 : 268 + labels.length * 96;
 
     c.fillStyle = 'rgba(255,255,255,0.85)';
     c.font = '500 36px Tajawal';
@@ -127,7 +139,7 @@ export function AvailabilityPoster({
       const w = logo.width * s;
       const h = logo.height * s;
       const x = (SIZE - w) / 2;
-      const y = afterList + 250;
+      const y = afterList + 230;
       const pad = 12;
 
       c.save();
@@ -150,7 +162,7 @@ export function AvailabilityPoster({
 
     const pillW = 720;
     const pillH = 92;
-    const pillY = 890;
+    const pillY = H - 190;
     c.fillStyle = '#ffffff';
     c.beginPath();
     c.roundRect((SIZE - pillW) / 2, pillY, pillW, pillH, 46);
@@ -165,7 +177,7 @@ export function AvailabilityPoster({
     c.direction = 'rtl';
     c.fillStyle = 'rgba(255,255,255,0.7)';
     c.font = '400 27px Tajawal';
-    c.fillText('تابع توفر الوقود لدينا على المحطة التقنية', SIZE / 2, 1025);
+    c.fillText('تابع توفر الوقود لدينا على المحطة التقنية', SIZE / 2, H - 55);
 
     setReady(true);
   }, [name, link, products]);
