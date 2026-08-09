@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { CheckIcon, LogOutIcon, MapPinIcon, SpinnerIcon, XIcon } from '@/components/icons';
 import { AdminStationForm } from '@/components/AdminStationForm';
 import { BroadcastPanel } from '@/components/BroadcastPanel';
+import { findSimilar } from '@/lib/similar';
 import { KIND_LABELS, KIND_STYLES, KINDS } from '@/lib/stationMeta';
 import type { Station, StationKind } from '@/types/database';
 
@@ -96,6 +97,30 @@ export default function AdminPage() {
     setApproved((prev) => prev.filter((s) => !ids.includes(s.id)));
     await supabase.from('stations').delete().in('id', ids);
     load();
+  }
+
+  /** The applicant is the real owner of a station we already hold. Move that
+   *  station onto their number and drop the duplicate request — the record,
+   *  its products and its published link all survive. */
+  async function takeover(existingId: string, request: Station) {
+    if (!confirm(`نقل «${request.name}» القائمة إلى الرقم ${request.phone}؟`)) return;
+    const { data: sess } = await supabase.auth.getSession();
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/station-phone`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sess.session?.access_token ?? ''}`,
+      },
+      body: JSON.stringify({ stationId: existingId, phone: request.phone }),
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(out.error ?? 'تعذّر النقل');
+      return;
+    }
+    await supabase.from('stations').delete().eq('id', request.id);
+    alert(out.password ? `تم. كلمة المرور: ${out.password}` : 'تم النقل.');
+    await load();
   }
 
   async function setKind(id: string, kind: StationKind) {
@@ -278,6 +303,30 @@ export default function AdminPage() {
                 <MapPinIcon className="h-4 w-4" />
                 عرض الموقع على الخريطة
               </a>
+              {/* Advisory only. Two stations in one city really can share a
+                  word in their name, so the match is surfaced for a human who
+                  has spoken to the applicant — never acted on automatically. */}
+              {findSimilar(s, approved).map((m) => (
+                <div key={m.id} className="mt-2 rounded-xl bg-amber-50 p-3">
+                  <p className="text-xs font-bold text-amber-900">
+                    يشبه محطة قائمة: {m.name}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-amber-800">
+                    {m.city} — {m.address} · <span dir="ltr">{m.phone}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => takeover(m.id, s)}
+                    className="btn-ghost mt-2 w-full text-xs"
+                  >
+                    نقل «{m.name}» إلى هذا الشخص وحذف الطلب
+                  </button>
+                  <p className="mt-1 text-[11px] leading-relaxed text-amber-700">
+                    تبقى المحطة ومنتجاتها ورابطها المنشور كما هي، ويتغيّر مالكها ورقمها فقط.
+                  </p>
+                </div>
+              ))}
+
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -285,7 +334,7 @@ export default function AdminPage() {
                   className="btn bg-brand text-white"
                 >
                   <CheckIcon className="h-4 w-4" />
-                  موافقة
+                  اعتماد كمحطة جديدة
                 </button>
                 <button
                   type="button"
