@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { isMuted, setMuted, playAlert } from '@/lib/alertSound';
+import { isMuted, setMuted } from '@/lib/alertSound';
 
 export function SoundToggle() {
   const [muted, setMutedState] = useState(false);
@@ -12,8 +12,8 @@ export function SoundToggle() {
     const next = !muted;
     setMuted(next);
     setMutedState(next);
-    // unmuting plays the tone once so the user hears what they just enabled
-    if (!next) playAlert();
+    // deliberately silent: the only tap that should make a sound is choosing
+    // a tone in the settings drawer
   }
 
   return (

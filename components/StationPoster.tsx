@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SpinnerIcon } from './icons';
+import { savePoster } from '@/lib/savePoster';
 
 const SITE = 'muhta.online';
 const SIZE = 1080; // square works on every platform without cropping
@@ -147,36 +148,9 @@ export function StationPoster({ name, slug }: { name: string; slug: string | nul
     draw();
   }, [draw]);
 
-  function download() {
+  async function save() {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${slug || 'muhta'}-poster.png`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    }, 'image/png');
-  }
-
-  async function share() {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'));
-    if (!blob) return;
-    const file = new File([blob], `${slug || 'muhta'}.png`, { type: 'image/png' });
-
-    // navigator.share is the one path that reaches WhatsApp and Instagram
-    // directly from a phone; the download is the fallback everywhere else.
-    if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], text: `تابعونا على المحطة التقنية — ${link}` }).catch(() => {});
-    } else {
-      download();
-    }
+    if (canvas) await savePoster(canvas, `${slug || 'muhta'}-poster.png`, `تابعونا على المحطة التقنية — ${link}`);
   }
 
   return (
@@ -196,15 +170,12 @@ export function StationPoster({ name, slug }: { name: string; slug: string | nul
         />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <button type="button" onClick={share} disabled={!ready} className="btn-primary">
-          {!ready && <SpinnerIcon className="h-4 w-4" />}
-          مشاركة
-        </button>
-        <button type="button" onClick={download} disabled={!ready} className="btn-ghost">
-          تحميل الصورة
-        </button>
-      </div>
+      {/* One button: on a phone the share sheet already offers "Save Image",
+          and two buttons doing the same thing only invite the wrong tap. */}
+      <button type="button" onClick={save} disabled={!ready} className="btn-primary mt-4 w-full">
+        {!ready && <SpinnerIcon className="h-4 w-4" />}
+        مشاركة أو حفظ الصورة
+      </button>
     </section>
   );
 }

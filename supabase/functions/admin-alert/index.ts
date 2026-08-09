@@ -150,7 +150,9 @@ async function telegramAdmins(text: string) {
     ids.map((chat_id) =>
       fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // charset stated outright: Arabic arriving as ????? is what happens
+        // when something downstream guesses latin-1
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({ chat_id, text, parse_mode: 'HTML' }),
       })
     )

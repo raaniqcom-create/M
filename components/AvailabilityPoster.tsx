@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { SpinnerIcon } from './icons';
+import { savePoster } from '@/lib/savePoster';
 import type { FuelProduct } from '@/types/database';
 
 const SITE = 'muhta.online';
@@ -187,33 +188,9 @@ export function AvailabilityPoster({
     draw();
   }, [draw]);
 
-  function download() {
-    canvasRef.current?.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${slug || 'muhta'}-available.png`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    }, 'image/png');
-  }
-
-  async function share() {
+  async function save() {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'));
-    if (!blob) return;
-    const file = new File([blob], `${slug || 'muhta'}.png`, { type: 'image/png' });
-    if (navigator.canShare?.({ files: [file] })) {
-      await navigator
-        .share({ files: [file], text: `متوفر الآن لدينا — ${link}` })
-        .catch(() => {});
-    } else {
-      download();
-    }
+    if (canvas) await savePoster(canvas, `${slug || 'muhta'}-available.png`, `متوفر الآن لدينا — ${link}`);
   }
 
   if (products.length === 0) {
@@ -245,15 +222,12 @@ export function AvailabilityPoster({
         />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <button type="button" onClick={share} disabled={!ready} className="btn-primary">
-          {!ready && <SpinnerIcon className="h-4 w-4" />}
-          مشاركة
-        </button>
-        <button type="button" onClick={download} disabled={!ready} className="btn-ghost">
-          تحميل الصورة
-        </button>
-      </div>
+      {/* One button: on a phone the share sheet already offers "Save Image",
+          and two buttons doing the same thing only invite the wrong tap. */}
+      <button type="button" onClick={save} disabled={!ready} className="btn-primary mt-4 w-full">
+        {!ready && <SpinnerIcon className="h-4 w-4" />}
+        مشاركة أو حفظ الصورة
+      </button>
     </section>
   );
 }
