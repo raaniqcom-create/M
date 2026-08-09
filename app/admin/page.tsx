@@ -55,6 +55,16 @@ export default function AdminPage() {
         return;
       }
       setAllowed(true);
+      // Tie this phone to the admin feed so complaints and new registrations
+      // reach it. The token is written by NativePush, which runs before login
+      // and therefore cannot know who is holding the device.
+      const deviceToken = localStorage.getItem('device-token');
+      if (deviceToken) {
+        await supabase
+          .from('device_tokens')
+          .update({ is_admin: true })
+          .eq('token', deviceToken);
+      }
       setAdminId(data.user.id);
       load();
     })();

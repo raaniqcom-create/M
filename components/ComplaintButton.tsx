@@ -30,6 +30,16 @@ export function ComplaintButton({ stationId }: { stationId: string }) {
       reason,
       note: note.trim() || null,
     });
+    // fire-and-forget: a failed alert must not make the driver think their
+    // report was lost. The row is already saved either way.
+    fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/admin-alert`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      },
+      body: JSON.stringify({ event: 'complaint', stationId, reason }),
+    }).catch(() => {});
     setBusy(false);
     setSent(true);
   }

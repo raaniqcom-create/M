@@ -53,6 +53,13 @@ export function NativePush() {
         await supabase
           .from('device_tokens')
           .upsert({ token: token.value, platform }, { onConflict: 'token' });
+        // the admin screen claims this row later; it has no other way to know
+        // which of the many device tokens belongs to the phone in your hand
+        try {
+          localStorage.setItem('device-token', token.value);
+        } catch {
+          /* private mode — the admin flag is a convenience, not a requirement */
+        }
       });
 
       await PushNotifications.addListener('registrationError', (err) => {
