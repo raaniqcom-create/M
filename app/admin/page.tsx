@@ -7,6 +7,7 @@ import { CheckIcon, LogOutIcon, MapPinIcon, SpinnerIcon, XIcon } from '@/compone
 import { AdminStationForm } from '@/components/AdminStationForm';
 import { BroadcastPanel } from '@/components/BroadcastPanel';
 import { findSimilar } from '@/lib/similar';
+import { rebuildSite } from '@/lib/rebuild';
 import { KIND_LABELS, KIND_STYLES, KINDS } from '@/lib/stationMeta';
 import type { Station, StationKind } from '@/types/database';
 
@@ -75,6 +76,7 @@ export default function AdminPage() {
   async function decide(id: string, status: 'approved' | 'rejected') {
     setPending((prev) => prev.filter((s) => s.id !== id));
     await supabase.from('stations').update({ status }).eq('id', id);
+    if (status === 'approved') await rebuildSite();
     load();
   }
 

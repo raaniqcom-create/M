@@ -8,6 +8,7 @@ import { StationLinkCard } from '@/components/StationLinkCard';
 import { StationPoster } from '@/components/StationPoster';
 import { AvailabilityPoster } from '@/components/AvailabilityPoster';
 import { SpinnerIcon } from '@/components/icons';
+import { rebuildSite } from '@/lib/rebuild';
 import type { FuelProduct, Station, StationProduct, StationStatus } from '@/types/database';
 
 type Complaint = {
@@ -119,6 +120,8 @@ function Panel() {
     if (!station) return;
     setBusy('status');
     await supabase.from('stations').update({ status }).eq('id', station.id);
+    // a newly approved station has no page until the site is rebuilt
+    if (status === 'approved') await rebuildSite();
     setStation({ ...station, status });
     setBusy(null);
   }
