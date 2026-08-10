@@ -38,3 +38,10 @@ export function useSession(): Session {
 
   return session;
 }
+
+/** Where a signed-in person should land. An owner opening the app wants the
+ *  panel they work in, not the list they already know; ?view=driver is the
+ *  explicit way out, so the redirect never traps them. */
+export function homeFor(role: Session['role']): string | null {
+  return role === 'admin' ? '/admin' : role === 'owner' ? '/owner' : null;
+}

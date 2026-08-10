@@ -8,7 +8,7 @@ import { distanceKm, loadStations } from '@/lib/stations';
 import { useSiteStats } from '@/lib/useSiteStats';
 import { useFavorites } from '@/lib/favorites';
 import { useNativeApp } from '@/lib/useNativeApp';
-import { useSession } from '@/lib/useSession';
+import { homeFor, useSession } from '@/lib/useSession';
 import { playAlert, unlockAudio } from '@/lib/alertSound';
 import { SoundToggle } from '@/components/SoundToggle';
 import { SideMenu } from '@/components/SideMenu';
@@ -47,6 +47,16 @@ export default function HomePage() {
   const { toggle: toggleFavorite, isFavorite } = useFavorites();
   const native = useNativeApp();
   const { signedIn, role } = useSession();
+
+  // Send an owner or admin to their panel on open. Only once, and never when
+  // they asked for the driver view — a redirect they cannot escape is worse
+  // than the wrong landing page.
+  useEffect(() => {
+    if (!signedIn) return;
+    if (new URLSearchParams(window.location.search).has('view')) return;
+    const target = homeFor(role);
+    if (target) router.replace(target);
+  }, [signedIn, role, router]);
 
   // the realtime handler is registered once; read favourites through a ref so
   // it always sees the current set instead of the one captured on mount
@@ -183,7 +193,7 @@ export default function HomePage() {
               href={role === 'admin' ? '/admin' : '/owner'}
               className="mt-2 flex items-center justify-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-extrabold text-brand-700"
             >
-              {role === 'admin' ? '🛡 فتح لوحة الإدارة' : '🏪 فتح لوحة محطتي'}
+              {role === 'admin' ? '🛡 فتح لوحة الإدارة' : '🏪 العودة إلى لوحة محطتي'}
             </a>
           )}
           {!native && !signedIn && (
