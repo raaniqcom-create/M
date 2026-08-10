@@ -92,7 +92,9 @@ Deno.serve(async (req) => {
       // A citizen subscribing to offers has no account and needs none; the
       // code exists only to prove the number is theirs, so neither the
       // "must exist" nor the "must not exist" check applies.
-      const subscribing = purpose === 'subscribe';
+      // Stopping the messages proves the number the same way starting them
+      // does — otherwise anyone could unsubscribe anyone.
+      const subscribing = purpose === 'subscribe' || purpose === 'unsubscribe';
       const forReset = purpose === 'reset';
       if (!subscribing) {
         const exists = Boolean(await accountId(c));
@@ -122,7 +124,14 @@ Deno.serve(async (req) => {
         {
           phone: c,
           code_hash: await digest(c, value),
-          purpose: subscribing ? 'subscribe' : forReset ? 'reset' : 'register',
+          purpose:
+            purpose === 'unsubscribe'
+              ? 'unsubscribe'
+              : subscribing
+                ? 'subscribe'
+                : forReset
+                  ? 'reset'
+                  : 'register',
           expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
           attempts: 0,
           sent_at: new Date().toISOString(),
@@ -155,6 +164,13 @@ Deno.serve(async (req) => {
           { phone: c, city: typeof city === 'string' ? city : null, unsubscribed_at: null },
           { onConflict: 'phone' }
         );
+      }
+
+      if (row.purpose === 'unsubscribe') {
+        await db
+          .from('subscribers')
+          .update({ unsubscribed_at: new Date().toISOString() })
+          .eq('phone', c);
       }
 
       if (row.purpose === 'reset') {

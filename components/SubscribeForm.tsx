@@ -23,6 +23,9 @@ async function call(body: Record<string, unknown>) {
  *  for, and the first thing that number would do is report us as spam. */
 export function SubscribeForm() {
   const [step, setStep] = useState<'form' | 'code' | 'done'>('form');
+  // Whether this run enrols the number or stops the messages — same code,
+  // same proof of ownership, opposite outcome.
+  const [mode, setMode] = useState<'subscribe' | 'unsubscribe'>('subscribe');
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState<string>('');
   const [code, setCode] = useState('');
@@ -43,7 +46,7 @@ export function SubscribeForm() {
 
   const send = () =>
     run(async () => {
-      await call({ action: 'send', phone, purpose: 'subscribe' });
+      await call({ action: 'send', phone, purpose: mode });
       setStep('code');
     });
 
@@ -57,10 +60,13 @@ export function SubscribeForm() {
     return (
       <section className="card p-5 text-center">
         <p className="text-2xl">✅</p>
-        <p className="mt-2 text-sm font-bold">تم تسجيلك</p>
+        <p className="mt-2 text-sm font-bold">
+          {mode === 'unsubscribe' ? 'تم إيقاف الرسائل' : 'تم تسجيلك'}
+        </p>
         <p className="mt-1 text-xs leading-relaxed text-slate-500">
-          سيصلك خبر توفر الوقود والعروض{city ? ` في ${city}` : ''} على رقمك.
-          لن يُشارك رقمك مع أي جهة.
+          {mode === 'unsubscribe'
+            ? 'لن تصلك رسائل بعد الآن. يمكنك الاشتراك مجدداً في أي وقت.'
+            : `سيصلك خبر توفر الوقود والعروض${city ? ` في ${city}` : ''} على رقمك. لا نبيع رقمك ولا نشاركه لأغراض تسويقية خارجية.`}
         </p>
         <a href="/" className="btn-primary mt-4 w-full">
           تصفّح المحطات
@@ -89,7 +95,7 @@ export function SubscribeForm() {
             />
           </div>
 
-          <div>
+          <div className={mode === 'unsubscribe' ? 'hidden' : undefined}>
             <label htmlFor="c" className="block text-sm font-semibold">
               مدينتك <span className="font-normal text-slate-400">(اختياري)</span>
             </label>
@@ -120,6 +126,16 @@ export function SubscribeForm() {
             {busy && <SpinnerIcon className="h-4 w-4" />}
             أرسل رمز التحقّق
           </button>
+
+          {/* Leaving has to be as easy as joining, and reachable without an
+              account — the number itself is the only thing we hold. */}
+          <button
+            type="button"
+            onClick={() => setMode((m) => (m === 'subscribe' ? 'unsubscribe' : 'subscribe'))}
+            className="w-full py-1 text-xs font-semibold text-slate-500 underline"
+          >
+            {mode === 'subscribe' ? 'إيقاف الرسائل عن رقمي' : 'أريد الاشتراك بدل الإيقاف'}
+          </button>
         </>
       ) : (
         <>
@@ -144,7 +160,7 @@ export function SubscribeForm() {
             className="btn-primary w-full"
           >
             {busy && <SpinnerIcon className="h-4 w-4" />}
-            تأكيد الاشتراك
+            {mode === 'unsubscribe' ? 'تأكيد إيقاف الرسائل' : 'تأكيد الاشتراك'}
           </button>
           <button
             type="button"

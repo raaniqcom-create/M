@@ -20,7 +20,8 @@ export default function SubscribePage() {
       <SubscribeForm />
 
       <p className="mt-4 px-2 text-center text-xs leading-relaxed text-slate-400">
-        رقمك لا يُنشر ولا يُشارك مع أي جهة، ويُستخدم لإرسال ما اشتركت به وحده.
+        رقمك لا يُنشر ولا يُباع، ويُستخدم لإرسال ما اشتركت به وحده — عبر مزوّد الرسائل
+        فقط. يمكنك إيقاف الرسائل متى شئت.
       </p>
 
       <a href="/" className="btn-ghost mt-4 w-full">

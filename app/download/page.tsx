@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { FuelIcon } from '@/components/icons';
 import { SoonBadge } from '@/components/SoonBadge';
+import { useNativeApp } from '@/lib/useNativeApp';
 
 // A stable redirect to whatever the newest signed build is — no need to touch
 // this page when a new APK ships.
@@ -34,6 +36,15 @@ function Step({ n, children }: { n: number; children: React.ReactNode }) {
 export default function DownloadPage() {
   const [platform, setPlatform] = useState<Platform>('other');
   const [installed, setInstalled] = useState(false);
+  const native = useNativeApp();
+  const router = useRouter();
+
+  // Inside a shell this page is worse than useless: it offers an APK, names
+  // the other platform, and tells iPhone users the real experience is the
+  // website in Safari — the whole argument against the app they are holding.
+  useEffect(() => {
+    if (native) router.replace('/');
+  }, [native, router]);
 
   useEffect(() => {
     setPlatform(detect());
@@ -114,6 +125,8 @@ export default function DownloadPage() {
       </p>
     </section>
   );
+
+  if (native) return null;
 
   return (
     <main className="mx-auto max-w-md px-4 pb-16 pt-8">

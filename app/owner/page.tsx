@@ -17,6 +17,7 @@ import { AvailabilityPoster } from '@/components/AvailabilityPoster';
 import { ProductControl } from '@/components/ProductControl';
 import { WorkingHours } from '@/components/WorkingHours';
 import { OwnerReminders } from '@/components/OwnerReminders';
+import { DeleteAccount } from '@/components/DeleteAccount';
 import type { ExpectedPeriod } from '@/lib/hours';
 import { FuelIcon, LogOutIcon, SpinnerIcon } from '@/components/icons';
 import type { FuelProduct, Station, StationProduct, TrafficLevel } from '@/types/database';
@@ -414,6 +415,7 @@ export default function OwnerPage() {
                   </p>
                 </section>
             <OwnerReminders stationId={station.id} />
+            <DeleteAccount phone={station.phone} />
               </>
             )}
 

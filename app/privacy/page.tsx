@@ -66,14 +66,36 @@ export default function PrivacyPage() {
           المعرّف هويتك، ويُحذف تلقائياً عند إلغاء التثبيت أو إيقاف الإشعارات.
         </p>
         <p className="text-sm leading-relaxed text-slate-700">
-          نستخدم خدمة Firebase Cloud Messaging من Google لتوصيل الإشعارات لتطبيق أندرويد.
+          نستخدم Firebase Cloud Messaging من Google لتطبيق أندرويد، وخدمة APNs من Apple
+          لتطبيق آيفون.
+        </p>
+      </section>
+
+      <section className="mt-8 space-y-3">
+        <h2 className="text-lg font-bold">الاشتراك بالعروض برسالة نصية</h2>
+        <p className="text-sm leading-relaxed text-slate-700">
+          إن اشتركت من صفحة «اشترك بالعروض»، نحفظ رقم هاتفك ومدينتك — لا أكثر — ونستخدمهما
+          لإرسال رسائل عن توفر الوقود والعروض في مدينتك. الاشتراك اختياري تماماً، وتصفّح
+          المنصة لا يتطلبه.
+        </p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          لإيقاف الرسائل في أي وقت: افتح صفحة الاشتراك واضغط <b>إيقاف الرسائل</b>، أو
+          راسلنا على{' '}
+          <a className="font-bold text-brand" href="mailto:iq.raan.app@gmail.com">
+            iq.raan.app@gmail.com
+          </a>
+          .
+        </p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          نستعين بمزوّد الرسائل <b>OTPIQ</b> لإيصال رموز التحقق والرسائل، فيصله رقم هاتفك
+          لهذا الغرض وحده. وتُخزَّن بياناتنا لدى <b>Supabase</b>.
         </p>
       </section>
 
       <section className="mt-8 space-y-3">
         <h2 className="text-lg font-bold">ما لا نفعله</h2>
         <ul className="list-inside list-disc space-y-2 text-sm leading-relaxed text-slate-700">
-          <li>لا نبيع بياناتك ولا نشاركها مع أي جهة تجارية</li>
+          <li>لا نبيع بياناتك ولا نشاركها لأغراض تسويقية خارجية</li>
           <li>لا نتتبع تحركاتك ولا نحفظ سجل تنقلك</li>
           <li>لا نستخدم إعلانات تتبّعية</li>
           <li>لا نجمع جهات الاتصال ولا الصور ولا الملفات</li>
@@ -83,9 +105,18 @@ export default function PrivacyPage() {
       <section className="mt-8 space-y-3">
         <h2 className="text-lg font-bold">حذف بياناتك</h2>
         <p className="text-sm leading-relaxed text-slate-700">
-          صاحب المحطة يمكنه طلب حذف محطته وحسابه بالكامل عبر رسالة إلى بوت المنصة على
-          تيليجرام <b>@muhtaonlinebot</b> أو من صفحة التواصل. يُنفَّذ الحذف خلال ٤٨ ساعة
-          ولا يُبقي أي أثر.
+          صاحب المحطة يحذف حسابه ومحطته بنفسه من داخل التطبيق: لوحة المحطة ←{' '}
+          <b>بيانات الحساب</b> ← <b>حذف حسابي ومحطتي</b>. الحذف فوري ونهائي، ويشمل
+          المحطة ومنتجاتها وتقييمات الازدحام والشكاوى واشتراكات الإشعارات وحساب الدخول
+          نفسه.
+        </p>
+        <p className="text-sm leading-relaxed text-slate-700">
+          وإن تعذّر الدخول إلى الحساب، يمكن طلب الحذف عبر بوت المنصة على تيليجرام{' '}
+          <b>@muhtaonlinebot</b> أو بمراسلتنا على{' '}
+          <a className="font-bold text-brand" href="mailto:iq.raan.app@gmail.com">
+            iq.raan.app@gmail.com
+          </a>{' '}
+          ويُنفَّذ خلال ٤٨ ساعة.
         </p>
       </section>
 
