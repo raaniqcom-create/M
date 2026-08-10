@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import {
@@ -118,6 +118,23 @@ export default function OwnerPage() {
       .update({ expected_at, expected_period })
       .eq('station_id', station.id)
       .eq('product', product);
+  }
+
+  /** Confirms the list as it stands and stamps the moment. An owner who
+   *  changed nothing today still needs a way to say "this is still true" —
+   *  otherwise the poster carries a date that makes fresh stock look stale. */
+  const posterRef = useRef<HTMLDivElement>(null);
+  const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
+
+  async function confirmAvailability() {
+    if (!station) return;
+    const now = new Date().toISOString();
+    await supabase
+      .from('station_products')
+      .update({ updated_at: now })
+      .eq('station_id', station.id);
+    setConfirmedAt(now);
+    posterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   async function toggleTempClose() {
@@ -296,12 +313,39 @@ export default function OwnerPage() {
                 ))}
               </ul>
             </section>
-            {/* sits after the toggles so it reflects what was just switched on */}
+            {/* One deliberate act at the end, not a poster that jumps on every
+                toggle while the owner is still working through six products. */}
+            <section className="card p-5">
+              <h3 className="text-sm font-bold">تأكيد ونشر التوفّر</h3>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                بعد ضبط المنتجات أعلاه، أكّد القائمة ليُختم الوقت ويجهز المنشور للنشر.
+              </p>
+              <button type="button" onClick={confirmAvailability} className="btn-primary mt-3 w-full">
+                ✅ تأكيد ونشر التوفّر
+              </button>
+              {confirmedAt && (
+                <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-xs font-bold text-brand-700">
+                  تم التأكيد{' '}
+                  {new Intl.DateTimeFormat('ar-IQ', {
+                    timeZone: 'Asia/Baghdad',
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true,
+                  }).format(new Date(confirmedAt))}{' '}
+                  — المنشور جاهز في الأسفل.
+                </p>
+              )}
+            </section>
+
+            <div ref={posterRef}>
             <AvailabilityPoster
               name={station.name}
               slug={station.slug}
               products={products.filter((p) => p.is_available).map((p) => p.product)}
             />
+            </div>
             <ShareButton
               stationId={station.id}
               name={station.name}
