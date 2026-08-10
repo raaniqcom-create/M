@@ -60,18 +60,39 @@ ws.onmessage = (m) => {
 
 await send('Page.enable');
 
+let clipped = false;
+
 for (const file of files) {
   const url = pathToFileURL(resolve(file)).href;
   await send('Page.navigate', { url });
   await sleep(3500); // the webfont has to land before layout is final
+
+  // Sheets are fixed-height with overflow hidden, so a page that is too full
+  // prints silently truncated — the PDF looks right and the last paragraph is
+  // simply gone. Measure it rather than trust the page count.
+  const { result } = await send('Runtime.evaluate', {
+    expression: `JSON.stringify([...document.querySelectorAll('.sheet')]
+      .map((s, i) => ({ page: i + 1, over: s.scrollHeight - s.clientHeight }))
+      .filter((x) => x.over > 0))`,
+    returnByValue: true,
+  });
+  const over = JSON.parse(result.value);
+
   const { data } = await send('Page.printToPDF', {
     printBackground: true,
     preferCSSPageSize: true,
   });
   const out = file.replace(/\.html$/, '.pdf');
   writeFileSync(out, Buffer.from(data, 'base64'));
-  console.log(out);
+
+  if (over.length) {
+    clipped = true;
+    console.log(`${out}  ✗ CLIPPED ${over.map((o) => `p${o.page}:${o.over}px`).join(' ')}`);
+  } else {
+    console.log(`${out}  ✓ fits`);
+  }
 }
 
 ws.close();
 chrome.kill();
+if (clipped) process.exitCode = 1;
