@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { CheckIcon, LogOutIcon, MapPinIcon, SpinnerIcon, XIcon } from '@/components/icons';
 import { AdminStationForm } from '@/components/AdminStationForm';
 import { BroadcastPanel } from '@/components/BroadcastPanel';
+import { ReviewsPanel } from '@/components/ReviewsPanel';
 import { findSimilar } from '@/lib/similar';
 import { rebuildSite } from '@/lib/rebuild';
 import { KIND_LABELS, KIND_STYLES, KINDS } from '@/lib/stationMeta';
@@ -24,7 +25,7 @@ export default function AdminPage() {
   const router = useRouter();
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [adminId, setAdminId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'add' | 'requests' | 'ads' | 'offers'>('add');
+  const [tab, setTab] = useState<'add' | 'requests' | 'ads' | 'offers' | 'reviews'>('add');
   const [pending, setPending] = useState<Station[]>([]);
   const [approved, setApproved] = useState<Station[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
@@ -194,6 +195,7 @@ export default function AdminPage() {
           ['requests', `الطلبات (${pending.length})`],
           ['ads', 'الإعلانات'],
           ['offers', 'العروض'],
+          ['reviews', 'التقييمات'],
         ] as const).map(([t, label]) => (
           <button
             key={t}
@@ -353,6 +355,7 @@ export default function AdminPage() {
       )}
 
       {tab === 'offers' && <BroadcastPanel />}
+      {tab === 'reviews' && <ReviewsPanel />}
 
       {tab === 'ads' && (
         <div className="mt-4 space-y-4">

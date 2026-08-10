@@ -22,7 +22,14 @@ export default function NotFound() {
     }
 
     (async () => {
-      const query = supabase.from('stations').select('id').eq('status', 'approved');
+      // is_demo rows are excluded from the build and from the public list, so
+      // they have no page and never will — "being prepared" would be a lie the
+      // visitor keeps refreshing.
+      const query = supabase
+        .from('stations')
+        .select('id')
+        .eq('status', 'approved')
+        .eq('is_demo', false);
       const { data } = stationId
         ? await query.eq('id', stationId).maybeSingle()
         : await query.ilike('slug', slug!).maybeSingle();
