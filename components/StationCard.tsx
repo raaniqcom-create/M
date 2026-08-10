@@ -12,7 +12,6 @@ import { KIND_LABELS, KIND_STYLES } from '@/lib/stationMeta';
 import { BellButton } from './BellButton';
 import { RouteButton } from './RouteButton';
 import { StarIcon } from './icons';
-import { TrafficVote } from './TrafficVote';
 import { MapPinIcon, PhoneIcon } from './icons';
 
 export function StationCard({
@@ -145,9 +144,6 @@ export function StationCard({
           .join('، ') || 'لا شيء'}
       </p>
 
-      <div className="mt-3 border-t border-slate-100 pt-3">
-        <TrafficVote stationId={station.id} traffic={station.traffic} />
-      </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         <a href={`tel:${station.phone}`} className="btn-ghost">

@@ -115,15 +115,19 @@ export function AvailabilityPoster({
     c.fillText(name, SIZE / 2, afterList + 135);
 
     // Baghdad time, so the post carries its own freshness
-    const now = new Intl.DateTimeFormat('ar-IQ', {
+    // Hour alone is ambiguous on a poster that stays on a page for days —
+    // the date is what tells a reader whether this is today's news.
+    const stamp = new Intl.DateTimeFormat('ar-IQ', {
       timeZone: 'Asia/Baghdad',
+      day: '2-digit',
+      month: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
       hour12: true,
     }).format(new Date());
     c.fillStyle = 'rgba(255,255,255,0.75)';
     c.font = '400 30px Tajawal';
-    c.fillText(`التحديث الساعة ${now}`, SIZE / 2, afterList + 190);
+    c.fillText(`تأكيد التوفر ${stamp}`, SIZE / 2, afterList + 190);
 
     // The gap between the update time and the link read as unfinished, and it
     // is the natural place for the mark that ties the post to the platform.
