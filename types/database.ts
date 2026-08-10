@@ -18,6 +18,7 @@ export interface Station {
   address: string;
   city: string;
   kind: StationKind;
+  contact_name: string;
   phone: string;
   lat: number;
   lng: number;
@@ -26,6 +27,7 @@ export interface Station {
   opens_at: string;
   closes_at: string;
   is_24h: boolean;
+  temp_closed: boolean;
   manual_traffic_level: TrafficLevel | null;
   manual_traffic_set_at: string | null;
   created_at: string;

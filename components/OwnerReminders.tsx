@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { isSubscribed, subscribeToStation, unsubscribeFromStation } from '@/lib/push';
+import { useNativeApp } from '@/lib/useNativeApp';
 import { BellIcon, BellRingIcon, SpinnerIcon } from './icons';
 
 type State = 'idle' | 'loading' | 'on' | 'denied';
@@ -10,6 +11,7 @@ type State = 'idle' | 'loading' | 'on' | 'denied';
 // is the only one that lands while they're on the forecourt.
 export function OwnerReminders({ stationId }: { stationId: string }) {
   const [state, setState] = useState<State>('idle');
+  const native = useNativeApp();
 
   useEffect(() => {
     isSubscribed(stationId, 'owner').then((on) => on && setState('on'));
@@ -26,6 +28,22 @@ export function OwnerReminders({ stationId }: { stationId: string }) {
     }
     const ok = await subscribeToStation(stationId, 'owner');
     setState(ok ? 'on' : 'denied');
+  }
+
+  // Inside the shells the OS asked at launch and the device is already
+  // registered with APNs/FCM. Offering a browser toggle here can only fail —
+  // a WebView has no Push API — and it told the owner to fix their "browser
+  // settings" while they were standing in the app.
+  if (native) {
+    return (
+      <section className="card p-5">
+        <h3 className="text-sm font-bold">تذكير تحديث الحالة</h3>
+        <p className="mt-1 text-xs leading-relaxed text-slate-500">
+          مُفعّل عبر إشعارات التطبيق. يصلك تنبيه كل ٣٠ دقيقة أثناء ساعات عملك لتحديث التوفر.
+          لإيقافه، أوقف إشعارات التطبيق من إعدادات هاتفك.
+        </p>
+      </section>
+    );
   }
 
   return (

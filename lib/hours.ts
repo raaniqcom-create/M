@@ -37,7 +37,12 @@ export function isOpenNow(station: {
   is_24h: boolean;
   opens_at: string;
   closes_at: string;
+  temp_closed?: boolean;
 }): boolean {
+  // An owner who shut for an incident or maintenance overrides the timetable:
+  // sending drivers to a closed forecourt because the clock says "open" is
+  // exactly the wasted trip this platform exists to prevent.
+  if (station.temp_closed) return false;
   if (station.is_24h) return true;
 
   const now = baghdadMinutesNow();

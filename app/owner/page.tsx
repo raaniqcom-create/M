@@ -30,6 +30,7 @@ export default function OwnerPage() {
   const [products, setProducts] = useState<StationProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingProduct, setSavingProduct] = useState<FuelProduct | null>(null);
+  const [view, setView] = useState<'main' | 'info' | 'data'>('main');
 
   const load = useCallback(async (uid: string) => {
     // maybeSingle() errors outright when an owner holds more than one station,
@@ -119,6 +120,13 @@ export default function OwnerPage() {
       .eq('product', product);
   }
 
+  async function toggleTempClose() {
+    if (!station) return;
+    const next = !station.temp_closed;
+    setStation({ ...station, temp_closed: next });
+    await supabase.from('stations').update({ temp_closed: next }).eq('id', station.id);
+  }
+
   async function setTraffic(level: TrafficLevel) {
     if (!station) return;
     const next = station.manual_traffic_level === level ? null : level;
@@ -195,25 +203,48 @@ export default function OwnerPage() {
               <p className="mt-0.5 text-sm text-slate-500">
                 {station.city} — {station.address}
               </p>
+              {station.temp_closed && (
+                <p className="mt-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-traffic-red">
+                  ⛔ مغلقة مؤقتاً — لا تظهر كمفتوحة للسائقين
+                </p>
+              )}
+              {/* Closing for an incident beats the timetable: a driver sent to
+                  a shut forecourt is the wasted trip this platform prevents. */}
+              <button
+                type="button"
+                onClick={toggleTempClose}
+                className={`mt-3 w-full rounded-xl border py-2.5 text-sm font-bold ${
+                  station.temp_closed
+                    ? 'border-brand bg-brand-50 text-brand'
+                    : 'border-slate-200 text-slate-600'
+                }`}
+              >
+                {station.temp_closed ? 'إعادة الفتح الآن' : '⛔ إغلاق مؤقت (حادث أو صيانة)'}
+              </button>
             </section>
 
-            <WorkingHours
-              station={station}
-              onChange={(patch) => setStation({ ...station, ...patch })}
-            />
+            <nav className="grid grid-cols-3 gap-1 rounded-xl bg-brand-50 p-1">
+              {([
+                ['main', 'اللوحة'],
+                ['info', 'معلومات المحطة'],
+                ['data', 'بيانات الحساب'],
+              ] as const).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setView(k)}
+                  aria-pressed={view === k}
+                  className={`min-h-[40px] rounded-lg text-xs font-bold transition-colors duration-200 ${
+                    view === k ? 'bg-white text-brand shadow-soft' : 'text-brand-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
 
-            <OwnerReminders stationId={station.id} />
-
-            <StationLinkCard
-              stationId={station.id}
-              name={station.name}
-              slug={station.slug}
-              onSlugChange={(slug) => setStation({ ...station, slug })}
-            />
-
-            {/* keyed on the slug so the poster redraws when the link changes */}
-            <StationPoster key={station.slug ?? 'none'} name={station.name} slug={station.slug} />
-
+            {view === 'main' && (
+              <>
             <section className="card p-5">
               <h3 className="text-sm font-bold">حالة الازدحام</h3>
               <p className="mt-1 text-xs text-slate-400">
@@ -260,21 +291,91 @@ export default function OwnerPage() {
                 ))}
               </ul>
             </section>
-
-
             {/* sits after the toggles so it reflects what was just switched on */}
             <AvailabilityPoster
               name={station.name}
               slug={station.slug}
               products={products.filter((p) => p.is_available).map((p) => p.product)}
             />
-
             <ShareButton
               stationId={station.id}
               name={station.name}
               available={products.filter((p) => p.is_available).map((p) => p.product)}
               traffic={station.manual_traffic_level}
             />
+              </>
+            )}
+
+            {view === 'info' && (
+              <>
+            <WorkingHours
+              station={station}
+              onChange={(patch) => setStation({ ...station, ...patch })}
+            />
+            <StationLinkCard
+              stationId={station.id}
+              name={station.name}
+              slug={station.slug}
+              onSlugChange={(slug) => setStation({ ...station, slug })}
+            />
+            <StationPoster key={station.slug ?? 'none'} name={station.name} slug={station.slug} />
+              </>
+            )}
+
+            {view === 'data' && (
+              <>
+                <section className="card p-5">
+                  <h3 className="text-sm font-bold">بيانات الحساب</h3>
+                  <dl className="mt-3 space-y-2 text-sm">
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">اسم المستخدم</dt>
+                      <dd className="font-bold" dir="ltr">{station.phone}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">هاتف المحطة</dt>
+                      <dd className="font-bold" dir="ltr">{station.phone}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">الشخص المسؤول</dt>
+                      <dd className="font-bold">{station.contact_name || 'غير محدد'}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">المدينة</dt>
+                      <dd className="font-bold">{station.city}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-500">العنوان</dt>
+                      <dd className="max-w-[60%] text-left font-bold">{station.address}</dd>
+                    </div>
+                  </dl>
+                  {/* The name, phone and location are what drivers navigate
+                      by, so they change through the admin after a check —
+                      not silently from the phone in someone's pocket. */}
+                  <a
+                    href="https://t.me/muhtaonlinebot"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-ghost mt-4 w-full"
+                  >
+                    طلب تعديل بيانات المحطة
+                  </a>
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+                    تعديل الاسم أو الرقم أو الموقع يمرّ بالإدارة للتحقق، حتى لا تتغيّر بيانات
+                    محطة يعتمد عليها السائقون دون مراجعة.
+                  </p>
+                </section>
+            <OwnerReminders stationId={station.id} />
+              </>
+            )}
+
+
+
+
+            {/* keyed on the slug so the poster redraws when the link changes */}
+
+
+
+
           </div>
         )}
       </div>
