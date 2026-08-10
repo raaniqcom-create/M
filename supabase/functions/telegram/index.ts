@@ -799,6 +799,18 @@ async function pinLastStation(chat: number, lat: number, lng: number): Promise<b
   return true;
 }
 
+// Sent by /announceall to everyone who has ever opened the bot.
+const PUBLIC_ANNOUNCEMENT = [
+  '⛽ <b>المحطة التقنية — التسجيل مفتوح</b>',
+  '',
+  'نستقبل الآن تسجيل محطات الوقود في جميع مدن الأنبار، <b>مجاناً بلا رسوم ولا عمولة</b>.',
+  '',
+  'محطتك تظهر للسائقين مع ما يتوفر لديك من وقود، ويصلهم تنبيه فور وصول أي منتج.',
+  '',
+  '🏪 صاحب محطة؟ سجّلها من الزر أدناه.',
+  `🚗 سائق؟ افتح ${SITE} لترى أقرب محطة فيها وقود الآن.`,
+].join(String.fromCharCode(10));
+
 // Sent to every admin by /announce, once, when the feature goes live.
 const ANNOUNCEMENT =
   '🛡 <b>يمكنكم الآن تسجيل محطة من البوت مباشرة</b>\n\n' +
@@ -1098,6 +1110,18 @@ Deno.serve(async (req) => {
   const update = await req.json();
 
   try {
+    // Remember whoever touched the bot. Without this there is no audience to
+    // announce anything to — the chat ids exist only in the update we are
+    // holding right now, and then they are gone.
+    const who = update.message?.from ?? update.callback_query?.from;
+    const where = update.message?.chat?.id ?? update.callback_query?.message?.chat?.id;
+    if (who?.id && where) {
+      db.from('telegram_users')
+        .upsert({ telegram_id: who.id, chat_id: where }, { onConflict: 'telegram_id' })
+        .then(() => {})
+        .catch(() => {});
+    }
+
     const cb = update.callback_query;
     if (cb) {
       const chat = cb.message.chat.id;
@@ -1251,6 +1275,27 @@ Deno.serve(async (req) => {
         await startWizard(chat, from);
         return new Response('ok');
       }
+      if (text.startsWith('/announceall')) {
+        const { data: all } = await db.from('telegram_users').select('chat_id');
+        const rows = all ?? [];
+        if (!rows.length) {
+          await send(chat, 'لا يوجد مستخدمون مسجّلون بعد. يُسجَّل كل من يفتح البوت من الآن.');
+          return new Response('ok');
+        }
+        await send(chat, `⏳ جارٍ الإرسال إلى ${rows.length} مستخدماً…`);
+        let ok = 0;
+        for (const r of rows) {
+          const res = await send(Number(r.chat_id), PUBLIC_ANNOUNCEMENT, {
+            reply_markup: { inline_keyboard: [[{ text: '🏪 سجّل محطتك', callback_data: 'addst' }]] },
+            disable_web_page_preview: true,
+          });
+          if (res.ok) ok++;
+          // a user who blocked the bot must not stall the rest
+        }
+        await send(chat, `✅ وصلت إلى ${ok} من ${rows.length}.`);
+        return new Response('ok');
+      }
+
       if (text.startsWith('/announce')) {
         for (const id of ADMIN_IDS) {
           await send(Number(id), ANNOUNCEMENT, {
