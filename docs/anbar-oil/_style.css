@@ -1,0 +1,143 @@
+/* A4 sheets for the Anbar oil-department submission.
+   Colours and shadows are the app's own tokens (tailwind.config.ts) and the
+   type is Tajawal, so the paper on the desk and the screen in the pocket read
+   as one thing. Rendered through headless Chrome — Arabic shaping and Tajawal
+   only come out right in a real browser engine, which is why no PDF library
+   is involved. */
+
+@page { size: A4; margin: 0; }
+
+:root {
+  --brand-50:  #f0fdf4;
+  --brand-100: #dcfce7;
+  --brand-200: #bbf7d0;
+  --brand:     #16a34a;
+  --brand-600: #15803d;
+  --brand-700: #166534;
+  --brand-900: #14532d;
+  --ink:       #1a2b22;
+  --muted:     #5b6b62;
+  --line:      #d7e3dc;
+  --soft: 0 1px 2px rgba(20,83,45,.05), 0 4px 14px rgba(20,83,45,.07);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+body {
+  margin: 0;
+  font-family: 'Tajawal', system-ui, sans-serif;
+  font-size: 11.5pt;
+  line-height: 1.85;
+  color: var(--ink);
+  direction: rtl;
+  background: #fff;
+}
+
+.sheet {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 0 0 14mm;
+  margin: 0 auto;
+  page-break-after: always;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.sheet:last-child { page-break-after: auto; }
+
+.body { padding: 0 16mm; flex: 1; }
+
+/* ── letterhead: the app's own green header, same gradient as the home screen ── */
+header.head {
+  background: linear-gradient(135deg, var(--brand-900) 0%, var(--brand-600) 55%, var(--brand) 100%);
+  color: #fff;
+  padding: 9mm 16mm 8mm;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+header.head img {
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  background: #fff;
+  padding: 3px;
+}
+.brand-name { font-size: 19pt; font-weight: 800; line-height: 1.15; letter-spacing: -.2px; }
+.brand-sub  { font-size: 9.5pt; color: var(--brand-100); margin-top: 2px; }
+.head-left {
+  margin-inline-start: auto; text-align: left; direction: ltr;
+  font-size: 9pt; color: var(--brand-100); line-height: 1.7;
+}
+
+h1 { font-size: 14.5pt; font-weight: 800; color: var(--brand-900); margin: 16px 0 4px; }
+h2 {
+  font-size: 12pt; font-weight: 800; color: var(--brand-700);
+  margin: 18px 0 7px; page-break-after: avoid;
+  padding-inline-start: 11px; border-inline-start: 4px solid var(--brand-200);
+}
+p { margin: 0 0 9px; text-align: justify; }
+ul, ol { margin: 0 0 10px; padding-inline-start: 20px; }
+li { margin-bottom: 5px; }
+strong { font-weight: 700; color: var(--brand-900); }
+
+.meta {
+  display: flex; justify-content: space-between;
+  font-size: 9.5pt; color: var(--muted);
+  margin-top: 10px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.subject {
+  margin: 14px 0 13px; padding: 10px 14px;
+  background: var(--brand-50);
+  border-inline-start: 4px solid var(--brand);
+  border-radius: 10px;
+  font-weight: 700; font-size: 12pt; color: var(--brand-900);
+}
+
+table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 9px 0 13px; font-size: 10.5pt;
+        border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+th, td { border-bottom: 1px solid var(--line); padding: 7px 10px; text-align: right; vertical-align: top; }
+tr:last-child th, tr:last-child td { border-bottom: 0; }
+th { background: var(--brand-50); font-weight: 700; color: var(--brand-900); }
+
+.box {
+  border: 1px solid var(--brand-100); border-radius: 14px;
+  padding: 12px 14px; margin: 11px 0;
+  background: #fbfdfc; box-shadow: var(--soft);
+}
+.box p:last-child { margin-bottom: 0; }
+
+.sign { margin-top: 26px; page-break-inside: avoid; }
+.sign .name { font-weight: 800; font-size: 12.5pt; color: var(--brand-900); }
+.sign .role { font-size: 10pt; color: var(--muted); }
+.sign .line { margin-top: 26px; border-top: 1px dotted #9db3a8; width: 62mm; padding-top: 4px; font-size: 9pt; color: #7a8b81; }
+
+footer.foot {
+  margin: 0 16mm; padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 9pt; color: var(--muted);
+  display: flex; justify-content: space-between;
+}
+.ltr { direction: ltr; display: inline-block; }
+
+/* numbered steps, same pill the app uses for counters */
+.steps { counter-reset: s; list-style: none; padding: 0; }
+.steps li { counter-increment: s; position: relative; padding-inline-start: 31px; margin-bottom: 9px; }
+.steps li::before {
+  content: counter(s);
+  position: absolute; inset-inline-start: 0; top: 3px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--brand); color: #fff;
+  font-size: 9.5pt; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* fuel chips, lifted straight off the station card */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.chip {
+  background: var(--brand-50); color: var(--brand-700);
+  border: 1px solid var(--brand-100); border-radius: 999px;
+  padding: 3px 12px; font-size: 10pt; font-weight: 700;
+}
