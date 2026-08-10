@@ -52,9 +52,28 @@ export interface StationTrafficAvg {
   last_vote_at: string | null;
 }
 
+/** Congestion for one pump line. Kept separate from the whole-station average
+ *  because that average hides the case the driver cares about: a queue for
+ *  premium while the regular pump is free. */
+export interface ProductTraffic {
+  station_id: string;
+  product: FuelProduct;
+  total_votes: number;
+  last_vote_at: string | null;
+  majority_level: TrafficLevel | null;
+}
+
+/** The three lanes a station actually queues at. */
+export const TRAFFIC_PRODUCTS: FuelProduct[] = [
+  'gasoline_premium',
+  'gasoline_regular',
+  'kerosene',
+];
+
 // what the home page actually renders per card
 export interface StationWithStatus extends Station {
   products: StationProduct[];
   traffic: StationTrafficAvg | null;
+  productTraffic: ProductTraffic[];
   distanceKm?: number; // only set once the user grants location
 }

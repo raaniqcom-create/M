@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type {
+  ProductTraffic,
   Station,
   StationProduct,
   StationTrafficAvg,
@@ -22,15 +23,16 @@ export function distanceKm(
 }
 
 export async function loadStations(): Promise<StationWithStatus[]> {
-  const [stationsRes, productsRes, trafficRes] = await Promise.all([
+  const [stationsRes, productsRes, trafficRes, laneRes] = await Promise.all([
     supabase.from('stations').select('*').eq('status', 'approved').eq('is_demo', false).order('name'),
     supabase.from('station_products').select('*'),
     supabase.from('station_traffic_avg').select('*'),
+    supabase.from('station_product_traffic').select('*'),
   ]);
 
   // supabase-js resolves with an error object instead of rejecting — without
   // this, a dropped connection is indistinguishable from an empty database
-  const failure = stationsRes.error ?? productsRes.error ?? trafficRes.error;
+  const failure = stationsRes.error ?? productsRes.error ?? trafficRes.error ?? laneRes.error;
   if (failure) throw failure;
 
   const { data: stations } = stationsRes;
@@ -49,5 +51,6 @@ export async function loadStations(): Promise<StationWithStatus[]> {
     ...s,
     products: productsByStation.get(s.id) ?? [],
     traffic: trafficByStation.get(s.id) ?? null,
+    productTraffic: ((laneRes.data ?? []) as ProductTraffic[]).filter((t) => t.station_id === s.id),
   }));
 }

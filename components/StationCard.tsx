@@ -104,10 +104,22 @@ export function StationCard({
           return (
             <li
               key={product}
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                 inStock ? 'bg-brand-100 text-brand' : 'bg-amber-50 text-amber-700'
               }`}
             >
+              {/* The queue belongs to the pump, not the forecourt: premium can
+                  be backed up while regular is free, and one colour for the
+                  whole station sends a driver away from a free pump. */}
+              {(() => {
+                const lane = station.productTraffic?.find((t) => t.product === product);
+                return lane?.majority_level ? (
+                  <span
+                    title={`الازدحام: ${TRAFFIC_LABELS[lane.majority_level]}`}
+                    className={`h-2 w-2 shrink-0 rounded-full ${TRAFFIC_COLORS[lane.majority_level].dot}`}
+                  />
+                ) : null;
+              })()}
               {PRODUCT_LABELS[product]}
               {!inStock && expected && (
                 <span className="mr-1 font-bold">

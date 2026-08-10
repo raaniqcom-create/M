@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
-import type { TrafficLevel } from '@/types/database';
+import { PRODUCT_LABELS, TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
+import { TRAFFIC_PRODUCTS } from '@/types/database';
+import type { FuelProduct, TrafficLevel } from '@/types/database';
 
 const LEVELS: TrafficLevel[] = ['green', 'yellow', 'red'];
 const KEY = 'trip';
@@ -15,6 +16,7 @@ const MAX_MS = 3 * 60 * 60_000; // after this they no longer remember
  *  where nobody could answer it honestly — hence two votes in two days. */
 export function TripAsk() {
   const [trip, setTrip] = useState<{ id: string; name: string } | null>(null);
+  const [product, setProduct] = useState<FuelProduct | null>(null);
   const [done, setDone] = useState(false);
 
   useEffect(() => {
@@ -32,10 +34,12 @@ export function TripAsk() {
   }, []);
 
   async function answer(level: TrafficLevel) {
-    if (!trip) return;
+    if (!trip || !product) return;
     localStorage.removeItem(KEY);
     setDone(true);
-    await supabase.from('traffic_votes').insert({ station_id: trip.id, level });
+    // the pump, not the forecourt: a vote without it cannot be shown on the
+    // chip the next driver is actually looking at
+    await supabase.from('traffic_votes').insert({ station_id: trip.id, level, product });
   }
 
   function dismiss() {
@@ -63,8 +67,26 @@ export function TripAsk() {
           ✕
         </button>
       </div>
-      <p className="mt-0.5 text-xs text-slate-500">ضغطة واحدة تفيد بقية السائقين.</p>
-      <div className="mt-3 grid grid-cols-3 gap-2">
+      <p className="mt-0.5 text-xs text-slate-500">
+        {product ? `طابور ${PRODUCT_LABELS[product]}` : 'أي منتج عبّأت؟'}
+      </p>
+
+      {!product && (
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {TRAFFIC_PRODUCTS.map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setProduct(p)}
+              className="min-h-[44px] rounded-xl border border-slate-200 text-xs font-semibold text-slate-700"
+            >
+              {PRODUCT_LABELS[p]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className={`mt-3 grid grid-cols-3 gap-2 ${product ? '' : 'hidden'}`}>
         {LEVELS.map((l) => (
           <button
             key={l}
