@@ -262,14 +262,20 @@ async function mainMenu(to: string, body = WELCOME) {
       : { id: 'addst', title: '➕ أضف محطتي', description: 'لأصحاب المحطات — مجاناً' }
   );
   rows.push({ id: 'site', title: '🌐 فتح الموقع', description: 'الخريطة والتفاصيل' });
+  rows.push({ id: 'city', title: '📌 غيّر مدينتي', description: 'لترتيب المحطات حسب مدينتك' });
   return sendList(to, body, 'القائمة', rows);
 }
 
 async function screenAll(to: string, page = 0) {
-  const [list, avail] = await Promise.all([stations(), availability()]);
+  const [list, avail, me] = await Promise.all([stations(), availability(), userRow(to)]);
   if (!list.length) return sendText(to, 'لا توجد محطات معتمدة حالياً.');
 
-  const rows = list.map((s) => ({
+  // A driver in Hit does not want Ramadi at the top of his list.
+  const ordered = me?.city
+    ? [...list].sort((a, b) => Number(b.city === me.city) - Number(a.city === me.city))
+    : list;
+
+  const rows = ordered.map((s) => ({
     id: `s:${s.id}`,
     title: s.name,
     description: `${s.city} · ${fuels(avail.get(s.id)) ?? 'لا يوجد وقود الآن'}`,
@@ -452,6 +458,79 @@ async function toggleProduct(to: string, stationId: string, product: string) {
   return screenOwner(to);
 }
 
+// ── onboarding ─────────────────────────────────────────────────────────────
+
+async function userRow(waId: string): Promise<WaUser | null> {
+  const { data } = await db
+    .from('whatsapp_users')
+    .select('wa_id, name, city, onboarded_at')
+    .eq('wa_id', waId)
+    .maybeSingle();
+  return (data as WaUser) ?? null;
+}
+
+/** First contact. Says who we are, what the app adds that WhatsApp cannot —
+ *  alerts — and then asks the one question that decides whether the rest of
+ *  the conversation is useful to this person at all: which city. */
+async function welcome(to: string, name: string | null) {
+  const hi = name ? `أهلاً ${name} 👋` : 'أهلاً وسهلاً 👋';
+  await sendText(
+    to,
+    [
+      `${hi}`,
+      '',
+      '⛽ *المحطة التقنية* — منصة وقود الأنبار.',
+      '',
+      'نعرض لك أي محطة فيها وقود *الآن*، وأي نوع، وأقربها إليك — والمعلومة من صاحب المحطة نفسه.',
+      '',
+      'تقدر تسألني بالكتابة أو *بالرسالة الصوتية*:',
+      '«اكو بنزين؟» · «وين أقرب محطة؟» · «اكو كاز؟»',
+      '',
+      `📲 وللتنبيه *فور* وصول الوقود إلى محطتك المفضلة، ثبّت التطبيق من ${SITE} — الإشعار يصلك هناك مجاناً وفوراً.`,
+    ].join(String.fromCharCode(10))
+  );
+  return askCity(to, 0);
+}
+
+function askCity(to: string, page: number) {
+  const rows: Row[] = ANBAR_CITIES.map((c) => ({ id: `c:${c}`, title: c }));
+  rows.push({ id: `c:${OUTSIDE}`, title: OUTSIDE, description: 'خارج محافظة الأنبار' });
+  return sendList(
+    to,
+    '📍 من أي مدينة أنت؟' + String.fromCharCode(10) + 'نرتّب لك محطاتها أولاً.',
+    'اختر مدينتك',
+    paginate(rows, page, 'pcity')
+  );
+}
+
+async function setCity(to: string, city: string) {
+  await db.from('whatsapp_users').update({ city }).eq('wa_id', to);
+
+  if (city === OUTSIDE) {
+    await sendText(
+      to,
+      [
+        'شكراً لك 🙏',
+        '',
+        'المنصة تغطي *محافظة الأنبار* حالياً، ونتوسّع تدريجياً.',
+        'تقدر تتصفّح المحطات الموجودة، ولو صار عندك محطة في مدينتك سجّلها مجاناً.',
+      ].join(String.fromCharCode(10))
+    );
+    return mainMenu(to, 'تفضّل:');
+  }
+
+  const list = await stations();
+  const here = list.filter((s) => s.city === city).length;
+  await sendText(
+    to,
+    here
+      ? `تمام ✅ سجّلت مدينتك: *${city}* — عندنا ${here} محطة فيها، وراح تظهر لك أولاً.`
+      : `تمام ✅ سجّلت مدينتك: *${city}*.
+ما عدنا محطات مسجّلة فيها بعد — التسجيل مفتوح مجاناً لأصحاب المحطات، وتقدر تتصفّح باقي المحافظة الآن.`
+  );
+  return mainMenu(to, 'تفضّل:');
+}
+
 // ── voice ──────────────────────────────────────────────────────────────────
 
 /** Groq hosts Whisper large-v3, which handles Iraqi dialect far better than
@@ -563,7 +642,19 @@ async function route(from: string, text: string) {
   return screenAll(from);
 }
 
-async function handle(from: string, message: Record<string, any>) {
+async function handle(from: string, message: Record<string, any>, name: string | null) {
+  const me = await userRow(from);
+
+  // First contact — greet, explain, and ask the city once. Everything else
+  // waits: a menu shown to someone who does not know what this is gets closed.
+  if (!me?.onboarded_at) {
+    await db
+      .from('whatsapp_users')
+      .update({ onboarded_at: new Date().toISOString() })
+      .eq('wa_id', from);
+    return welcome(from, name ?? me?.name ?? null);
+  }
+
   const type = message.type;
 
   if (type === 'location') {
@@ -578,7 +669,6 @@ async function handle(from: string, message: Record<string, any>) {
       await sendText(from, '🎤 لم أتمكّن من فهم الرسالة الصوتية. جرّب مرة أخرى أو اختر من القائمة:');
       return mainMenu(from, 'اختر ما تريد:');
     }
-    await sendText(from, `🎤 سمعتك تقول: «${said}»`);
     return route(from, said);
   }
 
@@ -596,6 +686,9 @@ async function handle(from: string, message: Record<string, any>) {
       await sendText(from, `🌐 ${SITE}`);
       return mainMenu(from, 'شيء آخر؟');
     }
+    if (id.startsWith('c:')) return setCity(from, id.slice(2));
+    if (id.startsWith('pcity:')) return askCity(from, Number(id.slice(6)) || 0);
+    if (id === 'city') return askCity(from, 0);
     if (id.startsWith('pall:')) return screenAll(from, Number(id.slice(5)) || 0);
     if (id.startsWith('pf:')) {
       const [, product, page] = id.split(':');
@@ -665,7 +758,7 @@ Deno.serve(async (req) => {
         { wa_id: from, name: profileName, last_seen: new Date().toISOString() },
         { onConflict: 'wa_id' }
       );
-      const sendError = await handle(from, message);
+      const sendError = await handle(from, message, profileName);
       if (sendError) await log(from, 'send', sendError);
       return { from, type: message.type, sendError };
     } catch (e) {
