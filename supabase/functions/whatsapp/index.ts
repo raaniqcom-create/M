@@ -521,7 +521,6 @@ async function welcome(to: string, name: string | null) {
       '📌 الخدمة الآن في *محافظة الأنبار* فقط. وإن كنت تريد المنتوج النفطي في محافظة أخرى، سنعلن توفّر النظام فيها قريباً بإذن الله.',
     ].join(String.fromCharCode(10))
   );
-  return askCity(to, 0);
 }
 
 function askCity(to: string, page: number) {
@@ -641,6 +640,11 @@ async function transcribe(waId: string, mediaId: string): Promise<string | null>
 
 // ── intent ─────────────────────────────────────────────────────────────────
 
+const GREETINGS = [
+  'اهلا', 'أهلا', 'اهلين', 'هلا', 'هلو', 'مرحبا', 'مرحبتين', 'سلام', 'السلام',
+  'صباح', 'مساء', 'شلونك', 'شلونكم', 'هاي', 'start', 'بدء', 'ابدا', 'ابدأ', 'القائمة',
+];
+
 const NEAR_WORDS = ['قريب', 'أقرب', 'اقرب', 'قربي', 'وين', 'يمي', 'جنبي'];
 const FAV_WORDS = ['مفضل', 'المفضلة', 'مفضلتي'];
 const OWNER_WORDS = ['محطتي', 'ادارة', 'إدارة', 'حدث', 'حدّث'];
@@ -650,6 +654,10 @@ const OWNER_WORDS = ['محطتي', 'ادارة', 'إدارة', 'حدث', 'حدّ
  *  unmatched question is refused rather than answered. */
 function intentOf(text: string): { kind: string; value?: string } | null {
   const t = text.toLowerCase();
+
+  // A greeting is not an out-of-scope question. Refusing «اهلا» reads as a
+  // slap, and it was the first thing a real user saw.
+  if (GREETINGS.some((w) => t.includes(w))) return { kind: 'menu' };
 
   for (const [product, words] of Object.entries(PRODUCT_WORDS)) {
     if (words.some((w) => t.includes(w))) return { kind: 'fuel', value: product };
@@ -693,6 +701,7 @@ async function route(from: string, text: string) {
     await sendText(from, OUT_OF_SCOPE);
     return mainMenu(from, 'اختر من القائمة:');
   }
+  if (intent.kind === 'menu') return mainMenu(from, 'أهلاً بك 👋 اختر ما تريد:');
   if (intent.kind === 'fuel') return screenFuel(from, intent.value!);
   if (intent.kind === 'nearby') return askLocation(from, '📍 أرسل موقعك وأدلّك على الأقرب إليك.');
   if (intent.kind === 'favs') return screenFavourites(from);
@@ -706,12 +715,24 @@ async function handle(from: string, message: Record<string, any>, name: string |
 
   // First contact — greet, explain, and ask the city once. Everything else
   // waits: a menu shown to someone who does not know what this is gets closed.
+  // First contact: greet, then answer whatever they actually asked. A person
+  // who opens with «اكو بنزين؟» deserves both — the introduction explains who
+  // is answering, and the answer is why they wrote.
   if (!me?.onboarded_at) {
     await db
       .from('whatsapp_users')
       .update({ onboarded_at: new Date().toISOString() })
       .eq('wa_id', from);
-    return welcome(from, name ?? me?.name ?? null);
+    await say(from, 'welcome', pref);
+    await welcome(from, name ?? me?.name ?? null);
+
+    const opener = (message.text?.body ?? '').trim();
+    const asked = message.type !== 'text' || (opener && intentOf(opener)?.kind !== 'menu');
+    if (!asked) {
+      await say(from, 'ask_city', pref);
+      return askCity(from, 0);
+    }
+    // they asked something real — answer it, and the city can wait for «المزيد»
   }
 
   const type = message.type;
