@@ -61,6 +61,28 @@ interface Station {
 
 const PAGE = 9; // the tenth row is always "المزيد"
 
+/** The districts of Anbar. Someone outside the province needs to be told so
+ *  once, kindly — otherwise they read an empty list as a broken service. */
+const ANBAR_CITIES = [
+  'الرمادي', 'الفلوجة', 'هيت', 'حديثة', 'عانة', 'راوة', 'القائم', 'الرطبة',
+  'الحبانية', 'الخالدية', 'عامرية الفلوجة', 'الكرمة', 'البغدادي', 'الحقلانية',
+  'بروانة', 'النخيب',
+];
+const OUTSIDE = 'خارج الأنبار';
+
+interface WaUser {
+  wa_id: string;
+  name: string | null;
+  city: string | null;
+  onboarded_at: string | null;
+}
+
+/** A webhook nobody watches fails in silence. One row per fault beats reading
+ *  platform logs that need a dashboard login to see. */
+async function log(waId: string, kind: string, detail: string) {
+  await db.from('wa_log').insert({ wa_id: waId, kind, detail: detail.slice(0, 900) });
+}
+
 // ── transport ──────────────────────────────────────────────────────────────
 
 async function post(payload: Record<string, unknown>): Promise<string | null> {
@@ -436,17 +458,26 @@ async function toggleProduct(to: string, stationId: string, product: string) {
  *  MSA-only models and costs a fraction of a cent per voice note. WhatsApp
  *  sends OGG/Opus, which Whisper accepts directly — no transcoding, which
  *  matters because Deno Edge cannot run ffmpeg. */
-async function transcribe(mediaId: string): Promise<string | null> {
-  if (!GROQ_KEY) return null;
+async function transcribe(waId: string, mediaId: string): Promise<string | null> {
+  if (!GROQ_KEY) {
+    await log(waId, 'stt', 'GROQ_API_KEY missing');
+    return null;
+  }
 
   const meta = await fetch(`${API}/${mediaId}`, {
     headers: { Authorization: `Bearer ${TOKEN}` },
   }).then((r) => r.json());
-  if (!meta?.url) return null;
+  if (!meta?.url) {
+    await log(waId, 'stt', 'media lookup: ' + JSON.stringify(meta).slice(0, 300));
+    return null;
+  }
 
   // Meta's media URL needs the same bearer token; a plain fetch returns 401.
   const audio = await fetch(meta.url, { headers: { Authorization: `Bearer ${TOKEN}` } });
-  if (!audio.ok) return null;
+  if (!audio.ok) {
+    await log(waId, 'stt', `media download ${audio.status}`);
+    return null;
+  }
 
   const form = new FormData();
   form.append('file', new Blob([await audio.arrayBuffer()]), 'voice.ogg');
@@ -463,10 +494,12 @@ async function transcribe(mediaId: string): Promise<string | null> {
     body: form,
   });
   if (!res.ok) {
-    console.error('groq transcribe failed:', res.status, await res.text());
+    await log(waId, 'stt', `groq ${res.status}: ${(await res.text()).slice(0, 300)}`);
     return null;
   }
-  return (await res.text()).trim();
+  const said = (await res.text()).trim();
+  await log(waId, 'heard', said);
+  return said;
 }
 
 // ── intent ─────────────────────────────────────────────────────────────────
@@ -539,7 +572,8 @@ async function handle(from: string, message: Record<string, any>) {
 
   if (type === 'audio' || type === 'voice') {
     const mediaId = message.audio?.id ?? message.voice?.id;
-    const said = mediaId ? await transcribe(mediaId) : null;
+    if (!mediaId) await log(from, 'stt', 'no media id: ' + JSON.stringify(message).slice(0, 300));
+    const said = mediaId ? await transcribe(from, mediaId) : null;
     if (!said) {
       await sendText(from, '🎤 لم أتمكّن من فهم الرسالة الصوتية. جرّب مرة أخرى أو اختر من القائمة:');
       return mainMenu(from, 'اختر ما تريد:');
@@ -617,33 +651,41 @@ Deno.serve(async (req) => {
 
   if (req.method !== 'POST') return new Response('ok');
 
-  let debug: unknown = null;
-  try {
-    const body = await req.json();
-    const value = body?.entry?.[0]?.changes?.[0]?.value;
-    const message = value?.messages?.[0];
-    if (!message) return new Response('ok');
+  const body = await req.json().catch(() => null);
+  const value = body?.entry?.[0]?.changes?.[0]?.value;
+  const message = value?.messages?.[0];
+  if (!message) return new Response('ok');
 
-    const from: string = message.from;
-    const profileName: string | null = value?.contacts?.[0]?.profile?.name ?? null;
+  const from: string = message.from;
+  const profileName: string | null = value?.contacts?.[0]?.profile?.name ?? null;
 
-    const { error: userError } = await db.from('whatsapp_users').upsert(
-      { wa_id: from, name: profileName, last_seen: new Date().toISOString() },
-      { onConflict: 'wa_id' }
-    );
-    if (userError) console.error('whatsapp_users upsert:', JSON.stringify(userError));
+  const work = (async () => {
+    try {
+      await db.from('whatsapp_users').upsert(
+        { wa_id: from, name: profileName, last_seen: new Date().toISOString() },
+        { onConflict: 'wa_id' }
+      );
+      const sendError = await handle(from, message);
+      if (sendError) await log(from, 'send', sendError);
+      return { from, type: message.type, sendError };
+    } catch (e) {
+      await log(from, 'crash', String(e));
+      return { crash: String(e) };
+    }
+  })();
 
-    const sendError = await handle(from, message);
-    debug = { from, type: message.type, userError, sendError };
-  } catch (e) {
-    console.error('whatsapp handler:', e);
-    debug = { crash: String(e) };
-  }
-
-  // Meta only reads the status code — a non-200 makes it retry, and a retry
-  // loop on a parsing bug looks like abuse from their side.
+  // Debug callers wait for the answer; Meta must not. Transcribing a voice note
+  // takes seconds, and a webhook that replies late is retried — the user gets
+  // the same answer three times and every copy is billable after October.
   if (url.searchParams.get('debug') === '1') {
-    return new Response(JSON.stringify(debug), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify(await work), {
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
+  const runtime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } })
+    .EdgeRuntime;
+  if (runtime?.waitUntil) runtime.waitUntil(work);
+  else await work;
   return new Response('ok');
+
 });
