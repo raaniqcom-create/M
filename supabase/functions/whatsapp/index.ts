@@ -75,6 +75,8 @@ interface WaUser {
   name: string | null;
   city: string | null;
   onboarded_at: string | null;
+  /** null = never asked · true = voice replies · false = text only */
+  voice: boolean | null;
 }
 
 /** A webhook nobody watches fails in silence. One row per fault beats reading
@@ -183,6 +185,19 @@ const sendPin = (to: string, s: Station) =>
     },
   });
 
+/** Sends a recorded clip, but only to people who asked for voice.
+ *
+ *  Recorded once and uploaded once: Meta keeps a media id for 30 days, so a
+ *  voice reply costs nothing to generate and arrives instantly, in a real
+ *  Iraqi voice rather than a synthesised news-reader one. Silence is the right
+ *  fallback — a missing clip must never block the text that carries the facts. */
+async function say(to: string, key: string, wantsVoice: boolean | null) {
+  if (!wantsVoice) return;
+  const { data } = await db.from('wa_audio').select('media_id').eq('key', key).maybeSingle();
+  if (!data?.media_id) return;
+  await post({ to, type: 'audio', audio: { id: data.media_id } });
+}
+
 // ── data ───────────────────────────────────────────────────────────────────
 
 async function stations(): Promise<Station[]> {
@@ -270,6 +285,7 @@ async function moreMenu(to: string) {
     { id: 'favs', title: '⭐ محطاتي المفضلة', description: 'المحطات التي تتابعها' },
     { id: 'site', title: '🌐 فتح الموقع', description: 'الخريطة والتفاصيل' },
     { id: 'city', title: '📌 غيّر مدينتي', description: 'لترتيب المحطات حسب مدينتك' },
+    { id: 'voice', title: '🔊 الصوت أو الكتابة', description: 'اختر كيف يوصلك الرد' },
   ];
   rows.push(
     owner
@@ -476,7 +492,7 @@ async function toggleProduct(to: string, stationId: string, product: string) {
 async function userRow(waId: string): Promise<WaUser | null> {
   const { data } = await db
     .from('whatsapp_users')
-    .select('wa_id, name, city, onboarded_at')
+    .select('wa_id, name, city, onboarded_at, voice')
     .eq('wa_id', waId)
     .maybeSingle();
   return (data as WaUser) ?? null;
@@ -501,6 +517,8 @@ async function welcome(to: string, name: string | null) {
       '«اكو بنزين؟» · «وين أقرب محطة؟» · «اكو كاز؟»',
       '',
       `📲 وللتنبيه *فور* وصول الوقود إلى محطتك المفضلة، ثبّت التطبيق من ${SITE} — الإشعار يصلك هناك مجاناً وفوراً.`,
+      '',
+      '📌 الخدمة الآن في *محافظة الأنبار* فقط. وإن كنت تريد المنتوج النفطي في محافظة أخرى، سنعلن توفّر النظام فيها قريباً بإذن الله.',
     ].join(String.fromCharCode(10))
   );
   return askCity(to, 0);
@@ -519,6 +537,29 @@ function askCity(to: string, page: number) {
   );
 }
 
+function askVoice(to: string) {
+  return sendButtons(
+    to,
+    'كيف تحب يوصلك الرد؟' +
+      String.fromCharCode(10) +
+      'تقدر تغيّرها بأي وقت من «المزيد».',
+    [
+      { id: 'v:1', title: '🔊 صوت وكتابة' },
+      { id: 'v:0', title: '✍️ كتابة فقط' },
+    ]
+  );
+}
+
+async function setVoice(to: string, on: boolean) {
+  await db.from('whatsapp_users').update({ voice: on }).eq('wa_id', to);
+  if (on) await say(to, 'menu', true);
+  await sendText(
+    to,
+    on ? '🔊 تمام، راح يوصلك صوت مع الكتابة.' : '✍️ تمام، كتابة فقط بلا صوت.'
+  );
+  return mainMenu(to, 'تفضّل:');
+}
+
 async function setCity(to: string, city: string) {
   await db.from('whatsapp_users').update({ city }).eq('wa_id', to);
 
@@ -532,7 +573,7 @@ async function setCity(to: string, city: string) {
         'تقدر تتصفّح المحطات الموجودة، ولو صار عندك محطة في مدينتك سجّلها مجاناً.',
       ].join(String.fromCharCode(10))
     );
-    return mainMenu(to, 'تفضّل:');
+    return askVoice(to);
   }
 
   const list = await stations();
@@ -544,7 +585,8 @@ async function setCity(to: string, city: string) {
       : `تمام ✅ سجّلت مدينتك: *${city}*.
 ما عدنا محطات مسجّلة فيها بعد — التسجيل مفتوح مجاناً لأصحاب المحطات، وتقدر تتصفّح باقي المحافظة الآن.`
   );
-  return mainMenu(to, 'تفضّل:');
+  const row = await userRow(to);
+  return row?.voice === null || row?.voice === undefined ? askVoice(to) : mainMenu(to, 'تفضّل:');
 }
 
 // ── voice ──────────────────────────────────────────────────────────────────
@@ -659,6 +701,7 @@ async function route(from: string, text: string) {
 }
 
 async function handle(from: string, message: Record<string, any>, name: string | null) {
+  const pref = (await userRow(from))?.voice ?? null;
   const me = await userRow(from);
 
   // First contact — greet, explain, and ask the city once. Everything else
@@ -694,9 +737,12 @@ async function handle(from: string, message: Record<string, any>, name: string |
 
     if (id === 'menu') return mainMenu(from);
     if (id === 'more') return moreMenu(from);
+    if (id === 'v:1') return setVoice(from, true);
+    if (id === 'v:0') return setVoice(from, false);
+    if (id === 'voice') return askVoice(from);
     if (id === 'nearby') return askLocation(from, '📍 أرسل موقعك وأدلّك على الأقرب إليك.');
     if (id === 'all') return screenAll(from);
-    if (id === 'products') return screenProducts(from);
+    if (id === 'products') { await say(from, 'found_many', pref); return screenProducts(from); }
     if (id === 'favs') return screenFavourites(from);
     if (id === 'manage' || id === 'addst') return screenOwner(from);
     if (id === 'site') {
