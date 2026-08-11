@@ -30,9 +30,13 @@ const PRODUCT_LABELS: Record<string, string> = {
   white_oil: 'نفط أبيض',
 };
 
-async function send(to: string, body: string) {
-  if (!TOKEN || !PHONE_ID) return;
-  await fetch(`https://graph.facebook.com/v21.0/${PHONE_ID}/messages`, {
+/** Returns null on success, or Meta's error text. Meta answers 200 for a queued
+ *  message and 4xx with a reason — a closed 24-hour window, an unregistered
+ *  recipient, an expired token. Swallowing that turns every fault into the same
+ *  silent nothing, which is exactly how an afternoon gets lost. */
+async function send(to: string, body: string): Promise<string | null> {
+  if (!TOKEN || !PHONE_ID) return 'WHATSAPP_TOKEN or WHATSAPP_PHONE_ID missing';
+  const res = await fetch(`https://graph.facebook.com/v25.0/${PHONE_ID}/messages`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${TOKEN}`,
@@ -45,6 +49,10 @@ async function send(to: string, body: string) {
       text: { body, preview_url: false },
     }),
   });
+  if (res.ok) return null;
+  const text = await res.text();
+  console.error('whatsapp send failed:', res.status, text);
+  return `${res.status} ${text}`;
 }
 
 /** The station list, as one message. WhatsApp has no inline keyboards the way
@@ -114,19 +122,28 @@ Deno.serve(async (req) => {
     const profileName: string | null = value?.contacts?.[0]?.profile?.name ?? null;
 
     // Writing to the bot is the registration. No form, no password.
-    await db.from('whatsapp_users').upsert(
+    const { error: userError } = await db.from('whatsapp_users').upsert(
       { wa_id: from, name: profileName, last_seen: new Date().toISOString() },
       { onConflict: 'wa_id' }
     );
+    // Meta only ever reads the status code, so a fault here is invisible unless
+    // it is said out loud. ?debug=1 is how a human asks what went wrong.
+    if (userError) console.error('whatsapp_users upsert:', JSON.stringify(userError));
+
 
     const text: string = (message.text?.body ?? '').trim();
 
-    if (/^(الغاء|إلغاء|stop|ايقاف|إيقاف)$/i.test(text)) {
-      await send(from, 'تم. لن تصلك رسائل. أرسل «محطات» في أي وقت للعودة.');
-      return new Response('ok');
-    }
+    const reply = /^(الغاء|إلغاء|stop|ايقاف|إيقاف)$/i.test(text)
+      ? 'تم. لن تصلك رسائل. أرسل «محطات» في أي وقت للعودة.'
+      : await stationsMessage();
 
-    await send(from, await stationsMessage());
+    const sendError = await send(from, reply);
+
+    if (url.searchParams.get('debug') === '1') {
+      return new Response(JSON.stringify({ from, userError, sendError }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     return new Response('ok');
   } catch {
     // Never surface an error to Meta: a non-200 makes it retry the delivery,
