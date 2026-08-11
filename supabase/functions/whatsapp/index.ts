@@ -701,8 +701,8 @@ async function route(from: string, text: string) {
 }
 
 async function handle(from: string, message: Record<string, any>, name: string | null) {
-  const pref = (await userRow(from))?.voice ?? null;
   const me = await userRow(from);
+  const pref = me?.voice ?? null;
 
   // First contact — greet, explain, and ask the city once. Everything else
   // waits: a menu shown to someone who does not know what this is gets closed.
@@ -717,6 +717,7 @@ async function handle(from: string, message: Record<string, any>, name: string |
   const type = message.type;
 
   if (type === 'location') {
+    await say(from, 'nearest', pref);
     return screenNearby(from, message.location.latitude, message.location.longitude);
   }
 
@@ -725,6 +726,7 @@ async function handle(from: string, message: Record<string, any>, name: string |
     if (!mediaId) await log(from, 'stt', 'no media id: ' + JSON.stringify(message).slice(0, 300));
     const said = mediaId ? await transcribe(from, mediaId) : null;
     if (!said) {
+      await say(from, 'audio_failed', pref);
       await sendText(from, '🎤 لم أتمكّن من فهم الرسالة الصوتية. جرّب مرة أخرى أو اختر من القائمة:');
       return mainMenu(from, 'اختر ما تريد:');
     }
@@ -740,11 +742,17 @@ async function handle(from: string, message: Record<string, any>, name: string |
     if (id === 'v:1') return setVoice(from, true);
     if (id === 'v:0') return setVoice(from, false);
     if (id === 'voice') return askVoice(from);
-    if (id === 'nearby') return askLocation(from, '📍 أرسل موقعك وأدلّك على الأقرب إليك.');
+    if (id === 'nearby') {
+      await say(from, 'ask_location', pref);
+      return askLocation(from, '📍 أرسل موقعك وأدلّك على الأقرب إليك.');
+    }
     if (id === 'all') return screenAll(from);
     if (id === 'products') { await say(from, 'found_many', pref); return screenProducts(from); }
     if (id === 'favs') return screenFavourites(from);
-    if (id === 'manage' || id === 'addst') return screenOwner(from);
+    if (id === 'manage' || id === 'addst') {
+      await say(from, id === 'manage' ? 'owner_panel' : 'register_station', pref);
+      return screenOwner(from);
+    }
     if (id === 'site') {
       await sendText(from, `🌐 ${SITE}`);
       return mainMenu(from, 'شيء آخر؟');
