@@ -191,11 +191,27 @@ const sendPin = (to: string, s: Station) =>
  *  voice reply costs nothing to generate and arrives instantly, in a real
  *  Iraqi voice rather than a synthesised news-reader one. Silence is the right
  *  fallback — a missing clip must never block the text that carries the facts. */
-async function say(to: string, key: string, wantsVoice: boolean | null) {
-  if (!wantsVoice) return;
+/** Either/or, never both. A voice user gets the clip; a text user gets the
+ *  sentence. Sending both is the worst of the two — a wall of text under a
+ *  voice note nobody asked for.
+ *
+ *  Interactive messages are exempt: buttons and lists must carry a body, and a
+ *  voice user still needs something to tap. Their bodies stay short. */
+async function tell(to: string, key: string, text: string, wantsVoice: boolean | null) {
+  if (wantsVoice) {
+    const sent = await say(to, key, true);
+    if (sent) return;
+  }
+  await sendText(to, text);
+}
+
+/** Returns true when a clip was actually delivered, so callers can fall back
+ *  to text rather than leaving the user with silence. */
+async function say(to: string, key: string, wantsVoice: boolean | null): Promise<boolean> {
+  if (!wantsVoice) return false;
   const { data } = await db.from('wa_audio').select('media_id').eq('key', key).maybeSingle();
-  if (!data?.media_id) return;
-  await post({ to, type: 'audio', audio: { id: data.media_id } });
+  if (!data?.media_id) return false;
+  return (await post({ to, type: 'audio', audio: { id: data.media_id } })) === null;
 }
 
 // ── data ───────────────────────────────────────────────────────────────────
@@ -285,7 +301,7 @@ async function moreMenu(to: string) {
     { id: 'favs', title: '⭐ محطاتي المفضلة', description: 'المحطات التي تتابعها' },
     { id: 'site', title: '🌐 فتح الموقع', description: 'الخريطة والتفاصيل' },
     { id: 'city', title: '📌 غيّر مدينتي', description: 'لترتيب المحطات حسب مدينتك' },
-    { id: 'voice', title: '🔊 الصوت أو الكتابة', description: 'اختر كيف يوصلك الرد' },
+    { id: 'voice', title: '🔊 صوتي أو كتابي', description: 'اختر شلون يوصلك الرد' },
   ];
   rows.push(
     owner
@@ -312,7 +328,7 @@ async function screenAll(to: string, page = 0) {
   return sendList(to, '🏬 المحطات المسجّلة — اختر واحدة:', 'اختر محطة', paginate(rows, page, 'pall'));
 }
 
-async function screenProducts(to: string) {
+async function screenProducts(to: string, voice: boolean | null = null) {
   const avail = await availability();
   const counts = new Map<string, number>();
   for (const products of avail.values()) {
@@ -327,19 +343,19 @@ async function screenProducts(to: string) {
     }));
 
   if (!rows.length) {
-    await sendText(to, '⛔ لا يوجد أي منتج متوفر في المحطات الآن.');
+    await tell(to, 'found_none', '⛔ لا يوجد أي منتج متوفر في المحطات الآن.', voice);
     return mainMenu(to, 'شيء آخر؟');
   }
   return sendList(to, '⛽ اختر نوع الوقود:', 'أنواع الوقود', rows);
 }
 
-async function screenFuel(to: string, product: string, page = 0) {
+async function screenFuel(to: string, product: string, page = 0, voice: boolean | null = null) {
   const [list, avail] = await Promise.all([stations(), availability()]);
   const matching = list.filter((s) => avail.get(s.id)?.includes(product));
   const label = PRODUCT_LABELS[product] ?? product;
 
   if (!matching.length) {
-    await sendText(to, `⛔ لا توجد محطة يتوفر فيها *${label}* الآن.`);
+    await tell(to, 'found_none', `⛔ لا توجد محطة يتوفر فيها *${label}* الآن.`, voice);
     return mainMenu(to, 'جرّب نوعاً آخر:');
   }
   const rows = matching.map((s) => ({
@@ -501,9 +517,10 @@ async function userRow(waId: string): Promise<WaUser | null> {
 /** First contact. Says who we are, what the app adds that WhatsApp cannot —
  *  alerts — and then asks the one question that decides whether the rest of
  *  the conversation is useful to this person at all: which city. */
-async function welcome(to: string, name: string | null) {
+async function welcome(to: string, name: string | null, voice: boolean | null = null) {
   const clean = (name ?? '').replace(/[^\p{L}\p{N} ]/gu, '').trim().slice(0, 24);
   const hi = clean ? `أهلاً ${clean} 👋` : 'أهلاً وسهلاً 👋';
+  if (await say(to, 'welcome', voice)) return;
   await sendText(
     to,
     [
@@ -539,12 +556,17 @@ function askCity(to: string, page: number) {
 function askVoice(to: string) {
   return sendButtons(
     to,
-    'كيف تحب يوصلك الرد؟' +
+    'شلون تحب يوصلك الرد؟' +
       String.fromCharCode(10) +
-      'تقدر تغيّرها بأي وقت من «المزيد».',
+      '🔊 صوتي — تسمع الجواب' +
+      String.fromCharCode(10) +
+      '✍️ كتابي — تقرأ الجواب' +
+      String.fromCharCode(10) +
+      String.fromCharCode(10) +
+      'تكدر تغيّرها بأي وقت من «المزيد».',
     [
-      { id: 'v:1', title: '🔊 صوت وكتابة' },
-      { id: 'v:0', title: '✍️ كتابة فقط' },
+      { id: 'v:1', title: '🔊 صوتي' },
+      { id: 'v:0', title: '✍️ كتابي' },
     ]
   );
 }
@@ -554,7 +576,7 @@ async function setVoice(to: string, on: boolean) {
   if (on) await say(to, 'menu', true);
   await sendText(
     to,
-    on ? '🔊 تمام، راح يوصلك صوت مع الكتابة.' : '✍️ تمام، كتابة فقط بلا صوت.'
+    on ? '🔊 تمام، الردود راح توصلك صوت.' : '✍️ تمام، الردود راح توصلك كتابة.'
   );
   return mainMenu(to, 'تفضّل:');
 }
@@ -677,7 +699,7 @@ const OUT_OF_SCOPE = [
 
 // ── routing ────────────────────────────────────────────────────────────────
 
-async function route(from: string, text: string) {
+async function route(from: string, text: string, pref: boolean | null) {
   const [list, avail] = await Promise.all([stations(), availability()]);
   const hits = list.filter(
     (s) => s.name.includes(text) || s.city.includes(text) || (s.address ?? '').includes(text)
@@ -698,11 +720,11 @@ async function route(from: string, text: string) {
 
   const intent = intentOf(text);
   if (!intent) {
-    await sendText(from, OUT_OF_SCOPE);
+    await tell(from, 'out_of_scope', OUT_OF_SCOPE, pref);
     return mainMenu(from, 'اختر من القائمة:');
   }
   if (intent.kind === 'menu') return mainMenu(from, 'أهلاً بك 👋 اختر ما تريد:');
-  if (intent.kind === 'fuel') return screenFuel(from, intent.value!);
+  if (intent.kind === 'fuel') return screenFuel(from, intent.value!, 0, pref);
   if (intent.kind === 'nearby') return askLocation(from, '📍 أرسل موقعك وأدلّك على الأقرب إليك.');
   if (intent.kind === 'favs') return screenFavourites(from);
   if (intent.kind === 'manage') return screenOwner(from);
@@ -723,8 +745,7 @@ async function handle(from: string, message: Record<string, any>, name: string |
       .from('whatsapp_users')
       .update({ onboarded_at: new Date().toISOString() })
       .eq('wa_id', from);
-    await say(from, 'welcome', pref);
-    await welcome(from, name ?? me?.name ?? null);
+    await welcome(from, name ?? me?.name ?? null, pref);
 
     const opener = (message.text?.body ?? '').trim();
     const asked = message.type !== 'text' || (opener && intentOf(opener)?.kind !== 'menu');
@@ -747,11 +768,15 @@ async function handle(from: string, message: Record<string, any>, name: string |
     if (!mediaId) await log(from, 'stt', 'no media id: ' + JSON.stringify(message).slice(0, 300));
     const said = mediaId ? await transcribe(from, mediaId) : null;
     if (!said) {
-      await say(from, 'audio_failed', pref);
-      await sendText(from, '🎤 لم أتمكّن من فهم الرسالة الصوتية. جرّب مرة أخرى أو اختر من القائمة:');
+      await tell(
+        from,
+        'audio_failed',
+        '🎤 لم أتمكّن من فهم الرسالة الصوتية. جرّب مرة أخرى أو اختر من القائمة:',
+        pref
+      );
       return mainMenu(from, 'اختر ما تريد:');
     }
-    return route(from, said);
+    return route(from, said, pref);
   }
 
   if (type === 'interactive') {
@@ -819,7 +844,7 @@ async function handle(from: string, message: Record<string, any>, name: string |
   if (!text || /^(مرحبا|السلام|هلا|هاي|start|بدء|ابدأ|القائمة|محطات)/i.test(text)) {
     return mainMenu(from);
   }
-  return route(from, text);
+  return route(from, text, pref);
 }
 
 // ── entry ──────────────────────────────────────────────────────────────────
