@@ -1,15 +1,17 @@
 // WhatsApp Cloud API webhook — «المحطة التقنية».
 //
-// Two jobs, and Meta requires the first before it will send you the second:
-//   GET  — the subscription handshake. Meta calls once with a challenge and
-//          will not save the webhook unless it is echoed back verbatim.
-//   POST — incoming messages: text, button taps, list picks, location, audio.
-//
-// Design constraints that shaped every screen here:
-//   • Reply buttons cap at 3. Lists cap at 10 rows across all sections.
+// Mirrors the Telegram bot's menus as closely as WhatsApp allows. The platform
+// differences that shaped every screen:
+//   • Reply buttons cap at 3; interactive lists cap at 10 rows across ALL
+//     sections. Telegram's main menu is six rows — so the main menu here is a
+//     list, not buttons, and anything longer than ten paginates.
 //   • There is no edit-message API, so each tap is a new message in the thread.
-//     Keep replies short; a long menu re-sent on every tap is unreadable.
-//   • Writing to the bot is the registration. No form, no password.
+//   • The sender's phone arrives already verified by Meta, so owner access
+//     needs no contact-sharing step — it falls out of a phone match.
+//
+// Scope is enforced structurally, not by instruction: there is no generative
+// model in the reply path. Every answer is built from the stations table, so
+// the bot cannot discuss weather or news because no code path can produce it.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const db = createClient(
@@ -20,7 +22,9 @@ const db = createClient(
 const TOKEN = Deno.env.get('WHATSAPP_TOKEN') ?? '';
 const PHONE_ID = Deno.env.get('WHATSAPP_PHONE_ID') ?? '';
 const VERIFY = Deno.env.get('WHATSAPP_VERIFY_TOKEN') ?? '';
+const GROQ_KEY = Deno.env.get('GROQ_API_KEY') ?? '';
 const API = 'https://graph.facebook.com/v25.0';
+const SITE = 'https://muhta.online';
 
 const PRODUCT_LABELS: Record<string, string> = {
   gasoline_regular: 'بانزين عادي',
@@ -30,6 +34,18 @@ const PRODUCT_LABELS: Record<string, string> = {
   gas: 'غاز',
   lpg: 'LPG',
   white_oil: 'نفط أبيض',
+};
+
+/** Iraqi speakers ask for fuel by several names. Spoken transcripts are messy,
+ *  so match on what people actually say, not on the enum. */
+const PRODUCT_WORDS: Record<string, string[]> = {
+  gasoline_premium: ['محسن', 'محسّن', 'ممتاز', 'سوبر بلس'],
+  gasoline_super: ['سوبر'],
+  gasoline_regular: ['بنزين', 'بانزين', 'عادي', 'بترول'],
+  kerosene: ['كاز', 'كيروسين'],
+  gas: ['غاز'],
+  lpg: ['ال بي جي', 'lpg', 'غاز سائل'],
+  white_oil: ['نفط ابيض', 'نفط أبيض', 'ابيض', 'أبيض'],
 };
 
 interface Station {
@@ -43,11 +59,10 @@ interface Station {
   slug: string | null;
 }
 
+const PAGE = 9; // the tenth row is always "المزيد"
+
 // ── transport ──────────────────────────────────────────────────────────────
 
-/** Returns null on success, or Meta's error text. Meta answers 4xx with a
- *  reason — a closed 24-hour window, an unregistered recipient, an expired
- *  token. Swallowing that turns every fault into the same silent nothing. */
 async function post(payload: Record<string, unknown>): Promise<string | null> {
   if (!TOKEN || !PHONE_ID) return 'WHATSAPP_TOKEN or WHATSAPP_PHONE_ID missing';
   const res = await fetch(`${API}/${PHONE_ID}/messages`, {
@@ -67,12 +82,7 @@ async function post(payload: Record<string, unknown>): Promise<string | null> {
 const sendText = (to: string, body: string) =>
   post({ to, type: 'text', text: { body, preview_url: false } });
 
-/** Up to three. Meta rejects a fourth rather than truncating. */
-const sendButtons = (
-  to: string,
-  body: string,
-  buttons: { id: string; title: string }[]
-) =>
+const sendButtons = (to: string, body: string, buttons: { id: string; title: string }[]) =>
   post({
     to,
     type: 'interactive',
@@ -88,14 +98,9 @@ const sendButtons = (
     },
   });
 
-/** Up to ten rows across all sections — the cap is on the total, not per
- *  section, which is the mistake that gets a payload rejected. */
-const sendList = (
-  to: string,
-  body: string,
-  button: string,
-  rows: { id: string; title: string; description?: string }[]
-) =>
+interface Row { id: string; title: string; description?: string }
+
+const sendList = (to: string, body: string, button: string, rows: Row[]) =>
   post({
     to,
     type: 'interactive',
@@ -117,8 +122,22 @@ const sendList = (
     },
   });
 
-/** The one screen a person who cannot read can still answer: WhatsApp draws a
- *  send-location button, and the reply comes back as coordinates. */
+/** Ten rows is the hard cap, so long lists carry a "more" row into the next
+ *  page. Telegram simply scrolls; here the list has to be walked. */
+function paginate(rows: Row[], page: number, moreId: string): Row[] {
+  if (rows.length <= 10) return rows;
+  const start = page * PAGE;
+  const slice = rows.slice(start, start + PAGE);
+  if (start + PAGE < rows.length) {
+    slice.push({
+      id: `${moreId}:${page + 1}`,
+      title: '⏭ المزيد',
+      description: `${rows.length - start - PAGE} أخرى`,
+    });
+  }
+  return slice;
+}
+
 const askLocation = (to: string, body: string) =>
   post({
     to,
@@ -130,8 +149,6 @@ const askLocation = (to: string, body: string) =>
     },
   });
 
-/** A pin the user can tap straight into Waze or Google Maps. Worth more than
- *  an address line to someone who is driving. */
 const sendPin = (to: string, s: Station) =>
   post({
     to,
@@ -170,8 +187,21 @@ async function availability(): Promise<Map<string, string[]>> {
   return map;
 }
 
-/** Straight-line distance in km. Anbar is flat and the stations are minutes
- *  apart; a routing API would cost money to change the ordering almost never. */
+/** 07XXXXXXXXX / +9647XXXXXXXXX / 9647… all reduce to 7XXXXXXXXX. */
+function phoneCore(raw: string): string {
+  const d = (raw ?? '').replace(/\D/g, '').replace(/^00/, '');
+  return (d.startsWith('964') ? d.slice(3) : d).replace(/^0+/, '');
+}
+
+/** The station this WhatsApp number owns, if any. Meta already verified the
+ *  sender's number, so no contact-sharing dance is needed — unlike Telegram. */
+async function ownedStation(waId: string): Promise<Station | null> {
+  const core = phoneCore(waId);
+  if (!core) return null;
+  const list = await stations();
+  return list.find((s) => phoneCore(s.phone ?? '') === core) ?? null;
+}
+
 function km(aLat: number, aLng: number, bLat: number, bLng: number): number {
   const R = 6371;
   const dLat = ((bLat - aLat) * Math.PI) / 180;
@@ -191,35 +221,41 @@ const fuels = (avail: string[] | undefined) =>
 
 const WELCOME = [
   '⛽ *المحطة التقنية*',
-  'وقود الأنبار — اعرف قبل أن تتحرك.',
+  'منصة وقود الأنبار — اعرف قبل أن تتحرك.',
   '',
-  'اختر من الأزرار في الأسفل 👇',
+  'اختر من القائمة 👇',
 ].join('\n');
 
-const menu = (to: string, body = WELCOME) =>
-  sendButtons(to, body, [
-    { id: 'nearby', title: '📍 الأقرب إليّ' },
-    { id: 'all', title: '⛽ كل المحطات' },
-    { id: 'byfuel', title: '🛢 حسب الوقود' },
-  ]);
+async function mainMenu(to: string, body = WELCOME) {
+  const owner = await ownedStation(to);
+  const rows: Row[] = [
+    { id: 'nearby', title: '📍 المحطات القريبة', description: 'أرسل موقعك ونرتّبها بالمسافة' },
+    { id: 'products', title: '⛽ حسب نوع الوقود', description: 'بانزين · كاز · غاز · نفط أبيض' },
+    { id: 'all', title: '🏬 كل المحطات', description: 'القائمة الكاملة وحالة كل محطة' },
+    { id: 'favs', title: '⭐ محطاتي المفضلة', description: 'المحطات التي تتابعها' },
+  ];
+  rows.push(
+    owner
+      ? { id: 'manage', title: '🏪 إدارة محطتي', description: owner.name }
+      : { id: 'addst', title: '➕ أضف محطتي', description: 'لأصحاب المحطات — مجاناً' }
+  );
+  rows.push({ id: 'site', title: '🌐 فتح الموقع', description: 'الخريطة والتفاصيل' });
+  return sendList(to, body, 'القائمة', rows);
+}
 
-async function screenAll(to: string) {
+async function screenAll(to: string, page = 0) {
   const [list, avail] = await Promise.all([stations(), availability()]);
   if (!list.length) return sendText(to, 'لا توجد محطات معتمدة حالياً.');
 
-  return sendList(
-    to,
-    '⛽ المحطات المسجّلة — اختر واحدة لترى تفاصيلها وموقعها.',
-    'اختر محطة',
-    list.map((s) => ({
-      id: `s:${s.id}`,
-      title: s.name,
-      description: `${s.city} · ${fuels(avail.get(s.id)) ?? 'لا يوجد وقود الآن'}`,
-    }))
-  );
+  const rows = list.map((s) => ({
+    id: `s:${s.id}`,
+    title: s.name,
+    description: `${s.city} · ${fuels(avail.get(s.id)) ?? 'لا يوجد وقود الآن'}`,
+  }));
+  return sendList(to, '🏬 المحطات المسجّلة — اختر واحدة:', 'اختر محطة', paginate(rows, page, 'pall'));
 }
 
-async function screenByFuel(to: string) {
+async function screenProducts(to: string) {
   const avail = await availability();
   const counts = new Map<string, number>();
   for (const products of avail.values()) {
@@ -233,29 +269,32 @@ async function screenByFuel(to: string) {
       description: `متوفر في ${counts.get(p)} محطة`,
     }));
 
-  if (!rows.length) return sendText(to, 'لا يوجد أي منتج متوفر في المحطات الآن.');
-  return sendList(to, '🛢 اختر نوع الوقود:', 'أنواع الوقود', rows);
+  if (!rows.length) {
+    await sendText(to, '⛔ لا يوجد أي منتج متوفر في المحطات الآن.');
+    return mainMenu(to, 'شيء آخر؟');
+  }
+  return sendList(to, '⛽ اختر نوع الوقود:', 'أنواع الوقود', rows);
 }
 
-async function screenFuel(to: string, product: string) {
+async function screenFuel(to: string, product: string, page = 0) {
   const [list, avail] = await Promise.all([stations(), availability()]);
   const matching = list.filter((s) => avail.get(s.id)?.includes(product));
   const label = PRODUCT_LABELS[product] ?? product;
 
   if (!matching.length) {
     await sendText(to, `⛔ لا توجد محطة يتوفر فيها *${label}* الآن.`);
-    return menu(to, 'جرّب نوعاً آخر:');
+    return mainMenu(to, 'جرّب نوعاً آخر:');
   }
-
+  const rows = matching.map((s) => ({
+    id: `s:${s.id}`,
+    title: s.name,
+    description: `${s.city}${s.address ? ' — ' + s.address : ''}`,
+  }));
   return sendList(
     to,
-    `✅ *${label}* متوفر في ${matching.length} محطة — اختر واحدة:`,
+    `✅ *${label}* متوفر في ${matching.length} محطة:`,
     'اختر محطة',
-    matching.map((s) => ({
-      id: `s:${s.id}`,
-      title: s.name,
-      description: `${s.city}${s.address ? ' — ' + s.address : ''}`,
-    }))
+    paginate(rows, page, `pf:${product}`)
   );
 }
 
@@ -272,11 +311,24 @@ async function screenStation(to: string, id: string) {
     f ? `✅ المتوفر الآن: ${f}` : '⛔ لا يوجد وقود متوفر الآن',
   ];
   if (s.phone) lines.push(`📞 ${s.phone}`);
-  if (s.slug) lines.push('', `🔗 muhta.online/${s.slug}`);
+  if (s.slug) lines.push('', `🔗 ${SITE}/${s.slug}`);
 
   await sendText(to, lines.join('\n'));
   if (s.lat && s.lng) await sendPin(to, s);
-  return menu(to, 'شيء آخر؟');
+
+  const { data: fav } = await db
+    .from('whatsapp_favorites')
+    .select('station_id')
+    .eq('wa_id', to)
+    .eq('station_id', id)
+    .maybeSingle();
+
+  return sendButtons(to, 'شيء آخر؟', [
+    fav
+      ? { id: `fd:${id}`, title: '💔 إزالة المفضلة' }
+      : { id: `fa:${id}`, title: '⭐ أضف للمفضلة' },
+    { id: 'menu', title: '🏠 القائمة' },
+  ]);
 }
 
 async function screenNearby(to: string, lat: number, lng: number) {
@@ -287,11 +339,11 @@ async function screenNearby(to: string, lat: number, lng: number) {
   const near = located
     .map((s) => ({ s, d: km(lat, lng, s.lat!, s.lng!) }))
     .sort((a, b) => a.d - b.d)
-    .slice(0, 5);
+    .slice(0, 9);
 
-  await sendList(
+  return sendList(
     to,
-    '📍 أقرب المحطات إليك — اختر واحدة لترى موقعها:',
+    '📍 أقرب المحطات إليك:',
     'اختر محطة',
     near.map(({ s, d }) => ({
       id: `s:${s.id}`,
@@ -299,10 +351,184 @@ async function screenNearby(to: string, lat: number, lng: number) {
       description: `${d.toFixed(1)} كم · ${fuels(avail.get(s.id)) ?? 'لا يوجد وقود'}`,
     }))
   );
+}
+
+async function screenFavourites(to: string) {
+  const { data: favs } = await db
+    .from('whatsapp_favorites')
+    .select('station_id, stations(id, name, city)')
+    .eq('wa_id', to);
+
+  const rows = (favs ?? [])
+    .map((f) => f.stations as unknown as { id: string; name: string; city: string })
+    .filter(Boolean)
+    .map((s) => ({ id: `s:${s.id}`, title: `⭐ ${s.name}`, description: s.city }));
+
+  if (!rows.length) {
+    await sendText(
+      to,
+      '⭐ *محطاتك المفضلة*\n\nلم تضف أي محطة بعد.\nافتح أي محطة واضغط «أضف للمفضلة».'
+    );
+    return mainMenu(to, 'ابدأ من هنا:');
+  }
+  return sendList(to, '⭐ *محطاتك المفضلة*', 'اختر محطة', rows.slice(0, 10));
+}
+
+async function screenOwner(to: string) {
+  const station = await ownedStation(to);
+  if (!station) {
+    await sendText(
+      to,
+      '🏪 لا توجد محطة مسجّلة على رقمك.\n\n' +
+        `سجّل محطتك مجاناً من الموقع: ${SITE}/register\n` +
+        'أو عبر بوت تيليجرام: @muhtaonlinebot'
+    );
+    return mainMenu(to, 'شيء آخر؟');
+  }
+
+  const avail = await availability();
+  const on = new Set(avail.get(station.id) ?? []);
+  const rows = Object.keys(PRODUCT_LABELS).map((p) => ({
+    id: `t:${station.id}:${p}`,
+    title: `${on.has(p) ? '✅' : '⛔'} ${PRODUCT_LABELS[p]}`,
+    description: on.has(p) ? 'متوفر — اضغط لإيقافه' : 'غير متوفر — اضغط لتفعيله',
+  }));
+
+  return sendList(
+    to,
+    `🏪 *${station.name}*\nاضغط على المنتج لتبديل حالته. يظهر التغيير للسائقين فوراً.`,
+    'المنتجات',
+    rows
+  );
+}
+
+async function toggleProduct(to: string, stationId: string, product: string) {
+  const owner = await ownedStation(to);
+  if (!owner || owner.id !== stationId) {
+    return sendText(to, 'هذه المحطة ليست مسجّلة على رقمك.');
+  }
+
+  const { data: row } = await db
+    .from('station_products')
+    .select('is_available')
+    .eq('station_id', stationId)
+    .eq('product', product)
+    .maybeSingle();
+
+  const next = !row?.is_available;
+  await db
+    .from('station_products')
+    .upsert(
+      { station_id: stationId, product, is_available: next, updated_at: new Date().toISOString() },
+      { onConflict: 'station_id,product' }
+    );
+
+  await sendText(
+    to,
+    `${next ? '✅' : '⛔'} ${PRODUCT_LABELS[product]} — ${next ? 'أصبح متوفراً' : 'أصبح غير متوفر'}`
+  );
+  return screenOwner(to);
+}
+
+// ── voice ──────────────────────────────────────────────────────────────────
+
+/** Groq hosts Whisper large-v3, which handles Iraqi dialect far better than
+ *  MSA-only models and costs a fraction of a cent per voice note. WhatsApp
+ *  sends OGG/Opus, which Whisper accepts directly — no transcoding, which
+ *  matters because Deno Edge cannot run ffmpeg. */
+async function transcribe(mediaId: string): Promise<string | null> {
+  if (!GROQ_KEY) return null;
+
+  const meta = await fetch(`${API}/${mediaId}`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  }).then((r) => r.json());
+  if (!meta?.url) return null;
+
+  // Meta's media URL needs the same bearer token; a plain fetch returns 401.
+  const audio = await fetch(meta.url, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  if (!audio.ok) return null;
+
+  const form = new FormData();
+  form.append('file', new Blob([await audio.arrayBuffer()]), 'voice.ogg');
+  form.append('model', 'whisper-large-v3');
+  form.append('language', 'ar');
+  form.append('response_format', 'text');
+  // Priming the decoder with in-domain words measurably improves recall of
+  // station and fuel vocabulary in dialect audio.
+  form.append('prompt', 'محطة وقود بنزين كاز غاز نفط أبيض الأنبار الرمادي اكو وين هسه');
+
+  const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${GROQ_KEY}` },
+    body: form,
+  });
+  if (!res.ok) {
+    console.error('groq transcribe failed:', res.status, await res.text());
+    return null;
+  }
+  return (await res.text()).trim();
+}
+
+// ── intent ─────────────────────────────────────────────────────────────────
+
+const NEAR_WORDS = ['قريب', 'أقرب', 'اقرب', 'قربي', 'وين', 'يمي', 'جنبي'];
+const FAV_WORDS = ['مفضل', 'المفضلة', 'مفضلتي'];
+const OWNER_WORDS = ['محطتي', 'ادارة', 'إدارة', 'حدث', 'حدّث'];
+
+/** Maps a spoken or typed request onto one of the bot's screens. Returns null
+ *  when nothing matches, which is what makes the scope guard airtight: an
+ *  unmatched question is refused rather than answered. */
+function intentOf(text: string): { kind: string; value?: string } | null {
+  const t = text.toLowerCase();
+
+  for (const [product, words] of Object.entries(PRODUCT_WORDS)) {
+    if (words.some((w) => t.includes(w))) return { kind: 'fuel', value: product };
+  }
+  if (NEAR_WORDS.some((w) => t.includes(w))) return { kind: 'nearby' };
+  if (FAV_WORDS.some((w) => t.includes(w))) return { kind: 'favs' };
+  if (OWNER_WORDS.some((w) => t.includes(w))) return { kind: 'manage' };
+  if (t.includes('محط')) return { kind: 'all' };
   return null;
 }
 
+const OUT_OF_SCOPE = [
+  '🙏 عذراً، أنا بوت المحطة التقنية وأجيب عن الوقود والمحطات فقط.',
+  '',
+  'اسألني مثلاً: «اكو بنزين؟» أو «وين أقرب محطة؟» أو «اكو كاز؟»',
+].join('\n');
+
 // ── routing ────────────────────────────────────────────────────────────────
+
+async function route(from: string, text: string) {
+  const [list, avail] = await Promise.all([stations(), availability()]);
+  const hits = list.filter(
+    (s) => s.name.includes(text) || s.city.includes(text) || (s.address ?? '').includes(text)
+  );
+  if (hits.length === 1) return screenStation(from, hits[0].id);
+  if (hits.length > 1) {
+    return sendList(
+      from,
+      `وجدت ${hits.length} نتيجة لـ «${text}»:`,
+      'اختر محطة',
+      hits.slice(0, 10).map((s) => ({
+        id: `s:${s.id}`,
+        title: s.name,
+        description: `${s.city} · ${fuels(avail.get(s.id)) ?? 'لا يوجد وقود'}`,
+      }))
+    );
+  }
+
+  const intent = intentOf(text);
+  if (!intent) {
+    await sendText(from, OUT_OF_SCOPE);
+    return mainMenu(from, 'اختر من القائمة:');
+  }
+  if (intent.kind === 'fuel') return screenFuel(from, intent.value!);
+  if (intent.kind === 'nearby') return askLocation(from, '📍 أرسل موقعك وأدلّك على الأقرب إليك.');
+  if (intent.kind === 'favs') return screenFavourites(from);
+  if (intent.kind === 'manage') return screenOwner(from);
+  return screenAll(from);
+}
 
 async function handle(from: string, message: Record<string, any>) {
   const type = message.type;
@@ -311,61 +537,67 @@ async function handle(from: string, message: Record<string, any>) {
     return screenNearby(from, message.location.latitude, message.location.longitude);
   }
 
-  // A voice note from someone who cannot read is the whole reason this branch
-  // exists. Until transcription is wired, say so plainly and offer the buttons
-  // — never leave the message unanswered.
   if (type === 'audio' || type === 'voice') {
-    await sendText(
-      from,
-      '🎤 وصلتني رسالتك الصوتية. الرد على الصوت قيد التجهيز — استخدم الأزرار الآن:'
-    );
-    return menu(from, 'اختر ما تريد:');
+    const mediaId = message.audio?.id ?? message.voice?.id;
+    const said = mediaId ? await transcribe(mediaId) : null;
+    if (!said) {
+      await sendText(from, '🎤 لم أتمكّن من فهم الرسالة الصوتية. جرّب مرة أخرى أو اختر من القائمة:');
+      return mainMenu(from, 'اختر ما تريد:');
+    }
+    await sendText(from, `🎤 سمعتك تقول: «${said}»`);
+    return route(from, said);
   }
 
   if (type === 'interactive') {
     const id: string =
-      message.interactive?.button_reply?.id ??
-      message.interactive?.list_reply?.id ??
-      '';
-    if (id === 'nearby') {
-      return askLocation(from, '📍 أرسل موقعك وأدلّك على أقرب المحطات إليك.');
-    }
+      message.interactive?.button_reply?.id ?? message.interactive?.list_reply?.id ?? '';
+
+    if (id === 'menu') return mainMenu(from);
+    if (id === 'nearby') return askLocation(from, '📍 أرسل موقعك وأدلّك على الأقرب إليك.');
     if (id === 'all') return screenAll(from);
-    if (id === 'byfuel') return screenByFuel(from);
+    if (id === 'products') return screenProducts(from);
+    if (id === 'favs') return screenFavourites(from);
+    if (id === 'manage' || id === 'addst') return screenOwner(from);
+    if (id === 'site') {
+      await sendText(from, `🌐 ${SITE}`);
+      return mainMenu(from, 'شيء آخر؟');
+    }
+    if (id.startsWith('pall:')) return screenAll(from, Number(id.slice(5)) || 0);
+    if (id.startsWith('pf:')) {
+      const [, product, page] = id.split(':');
+      return screenFuel(from, product, Number(page) || 0);
+    }
     if (id.startsWith('s:')) return screenStation(from, id.slice(2));
     if (id.startsWith('f:')) return screenFuel(from, id.slice(2));
-    return menu(from);
+    if (id.startsWith('t:')) {
+      const [, stationId, product] = id.split(':');
+      return toggleProduct(from, stationId, product);
+    }
+    if (id.startsWith('fa:')) {
+      await db.from('whatsapp_favorites').upsert({ wa_id: from, station_id: id.slice(3) });
+      await sendText(from, '⭐ أُضيفت إلى مفضلتك.');
+      return mainMenu(from, 'شيء آخر؟');
+    }
+    if (id.startsWith('fd:')) {
+      await db
+        .from('whatsapp_favorites')
+        .delete()
+        .eq('wa_id', from)
+        .eq('station_id', id.slice(3));
+      await sendText(from, '💔 أُزيلت من مفضلتك.');
+      return mainMenu(from, 'شيء آخر؟');
+    }
+    return mainMenu(from);
   }
 
   const text: string = (message.text?.body ?? '').trim();
-
   if (/^(الغاء|إلغاء|stop|ايقاف|إيقاف)$/i.test(text)) {
     return sendText(from, 'تم. أرسل «محطات» في أي وقت للعودة.');
   }
-
-  // Free-text search, so a name typed from memory still works.
-  if (text.length > 2 && !/^(محطات|مرحبا|السلام|هلا|start|بدء|ابدأ)/i.test(text)) {
-    const [list, avail] = await Promise.all([stations(), availability()]);
-    const hits = list.filter(
-      (s) => s.name.includes(text) || s.city.includes(text) || (s.address ?? '').includes(text)
-    );
-    if (hits.length === 1) return screenStation(from, hits[0].id);
-    if (hits.length > 1) {
-      return sendList(
-        from,
-        `وجدت ${hits.length} نتيجة لـ «${text}»:`,
-        'اختر محطة',
-        hits.map((s) => ({
-          id: `s:${s.id}`,
-          title: s.name,
-          description: `${s.city} · ${fuels(avail.get(s.id)) ?? 'لا يوجد وقود'}`,
-        }))
-      );
-    }
-    return menu(from, `لم أجد «${text}». اختر من الأزرار:`);
+  if (!text || /^(مرحبا|السلام|هلا|هاي|start|بدء|ابدأ|القائمة|محطات)/i.test(text)) {
+    return mainMenu(from);
   }
-
-  return menu(from);
+  return route(from, text);
 }
 
 // ── entry ──────────────────────────────────────────────────────────────────
@@ -390,8 +622,6 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const value = body?.entry?.[0]?.changes?.[0]?.value;
     const message = value?.messages?.[0];
-
-    // Delivery and read receipts arrive on the same webhook and carry no message.
     if (!message) return new Response('ok');
 
     const from: string = message.from;
@@ -410,12 +640,10 @@ Deno.serve(async (req) => {
     debug = { crash: String(e) };
   }
 
-  // Meta only ever reads the status code — a non-200 makes it retry, and a
-  // retry loop on a parsing bug looks like abuse from their side.
+  // Meta only reads the status code — a non-200 makes it retry, and a retry
+  // loop on a parsing bug looks like abuse from their side.
   if (url.searchParams.get('debug') === '1') {
-    return new Response(JSON.stringify(debug), {
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return new Response(JSON.stringify(debug), { headers: { 'Content-Type': 'application/json' } });
   }
   return new Response('ok');
 });
