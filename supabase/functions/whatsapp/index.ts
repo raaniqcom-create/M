@@ -248,22 +248,35 @@ const WELCOME = [
   'اختر من القائمة 👇',
 ].join('\n');
 
+/** Three buttons is the cap, so the two things a driver actually opens the bot
+ *  for sit on the surface and the rest goes one tap deeper. */
 async function mainMenu(to: string, body = WELCOME) {
+  const owner = await ownedStation(to);
+  return sendButtons(to, body, [
+    { id: 'nearby', title: '📍 أقرب محطة لي' },
+    owner
+      ? { id: 'manage', title: '🏪 محطتي' }
+      : { id: 'addst', title: '🏪 سجّل محطتي' },
+    { id: 'more', title: '⋯ المزيد' },
+  ]);
+}
+
+async function moreMenu(to: string) {
   const owner = await ownedStation(to);
   const rows: Row[] = [
     { id: 'nearby', title: '📍 المحطات القريبة', description: 'أرسل موقعك ونرتّبها بالمسافة' },
     { id: 'products', title: '⛽ حسب نوع الوقود', description: 'بانزين · كاز · غاز · نفط أبيض' },
     { id: 'all', title: '🏬 كل المحطات', description: 'القائمة الكاملة وحالة كل محطة' },
     { id: 'favs', title: '⭐ محطاتي المفضلة', description: 'المحطات التي تتابعها' },
+    { id: 'site', title: '🌐 فتح الموقع', description: 'الخريطة والتفاصيل' },
+    { id: 'city', title: '📌 غيّر مدينتي', description: 'لترتيب المحطات حسب مدينتك' },
   ];
   rows.push(
     owner
       ? { id: 'manage', title: '🏪 إدارة محطتي', description: owner.name }
       : { id: 'addst', title: '➕ أضف محطتي', description: 'لأصحاب المحطات — مجاناً' }
   );
-  rows.push({ id: 'site', title: '🌐 فتح الموقع', description: 'الخريطة والتفاصيل' });
-  rows.push({ id: 'city', title: '📌 غيّر مدينتي', description: 'لترتيب المحطات حسب مدينتك' });
-  return sendList(to, body, 'القائمة', rows);
+  return sendList(to, 'اختر ما تريد:', 'الخيارات', rows);
 }
 
 async function screenAll(to: string, page = 0) {
@@ -473,7 +486,8 @@ async function userRow(waId: string): Promise<WaUser | null> {
  *  alerts — and then asks the one question that decides whether the rest of
  *  the conversation is useful to this person at all: which city. */
 async function welcome(to: string, name: string | null) {
-  const hi = name ? `أهلاً ${name} 👋` : 'أهلاً وسهلاً 👋';
+  const clean = (name ?? '').replace(/[^\p{L}\p{N} ]/gu, '').trim().slice(0, 24);
+  const hi = clean ? `أهلاً ${clean} 👋` : 'أهلاً وسهلاً 👋';
   await sendText(
     to,
     [
@@ -493,8 +507,10 @@ async function welcome(to: string, name: string | null) {
 }
 
 function askCity(to: string, page: number) {
-  const rows: Row[] = ANBAR_CITIES.map((c) => ({ id: `c:${c}`, title: c }));
-  rows.push({ id: `c:${OUTSIDE}`, title: OUTSIDE, description: 'خارج محافظة الأنبار' });
+  // ids stay ASCII: WhatsApp returns a non-ASCII row id mangled, which turned
+  // the confirmation line into question marks.
+  const rows: Row[] = ANBAR_CITIES.map((c, i) => ({ id: `c:${i}`, title: c }));
+  rows.push({ id: 'c:x', title: OUTSIDE, description: 'خارج محافظة الأنبار' });
   return sendList(
     to,
     '📍 من أي مدينة أنت؟' + String.fromCharCode(10) + 'نرتّب لك محطاتها أولاً.',
@@ -677,6 +693,7 @@ async function handle(from: string, message: Record<string, any>, name: string |
       message.interactive?.button_reply?.id ?? message.interactive?.list_reply?.id ?? '';
 
     if (id === 'menu') return mainMenu(from);
+    if (id === 'more') return moreMenu(from);
     if (id === 'nearby') return askLocation(from, '📍 أرسل موقعك وأدلّك على الأقرب إليك.');
     if (id === 'all') return screenAll(from);
     if (id === 'products') return screenProducts(from);
@@ -686,7 +703,10 @@ async function handle(from: string, message: Record<string, any>, name: string |
       await sendText(from, `🌐 ${SITE}`);
       return mainMenu(from, 'شيء آخر؟');
     }
-    if (id.startsWith('c:')) return setCity(from, id.slice(2));
+    if (id.startsWith('c:')) {
+      const key = id.slice(2);
+      return setCity(from, key === 'x' ? OUTSIDE : ANBAR_CITIES[Number(key)] ?? OUTSIDE);
+    }
     if (id.startsWith('pcity:')) return askCity(from, Number(id.slice(6)) || 0);
     if (id === 'city') return askCity(from, 0);
     if (id.startsWith('pall:')) return screenAll(from, Number(id.slice(5)) || 0);
@@ -754,8 +774,14 @@ Deno.serve(async (req) => {
 
   const work = (async () => {
     try {
+      // Only overwrite the name when WhatsApp actually sent one — a payload
+      // without a contacts block would otherwise erase what we already know.
       await db.from('whatsapp_users').upsert(
-        { wa_id: from, name: profileName, last_seen: new Date().toISOString() },
+        {
+          wa_id: from,
+          last_seen: new Date().toISOString(),
+          ...(profileName ? { name: profileName } : {}),
+        },
         { onConflict: 'wa_id' }
       );
       const sendError = await handle(from, message, profileName);
