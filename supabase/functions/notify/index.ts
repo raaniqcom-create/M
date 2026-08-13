@@ -17,6 +17,14 @@ const PRODUCT_LABELS: Record<string, string> = {
   white_oil: 'نفط أبيض',
 };
 
+/** One line for however many products arrived. An owner who switches on five
+ *  of them means one delivery, not five events -- and five buzzes in ten
+ *  seconds is how a driver decides to delete the app. */
+function headline(products: string[]): string {
+  const names = products.map((p) => PRODUCT_LABELS[p] ?? p).join(' و');
+  return `${names} ${products.length > 1 ? 'متوفرة' : 'متوفر'} الآن`;
+}
+
 const TELEGRAM_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
 const SITE = 'https://muhta.online';
 
@@ -41,7 +49,7 @@ const json = (body: unknown, status = 200) =>
 
 /** Fires the bot alert immediately rather than waiting for the scheduled
  *  sweep — fuel queues form within minutes, so a delay is a real cost. */
-async function notifyTelegram(stationId: string, stationName: string, product: string) {
+async function notifyTelegram(stationId: string, stationName: string, products: string[]) {
   const [{ data: favs }, { data: st }] = await Promise.all([
     db.from('telegram_favorites').select('chat_id').eq('station_id', stationId),
     db.from('stations').select('city').eq('id', stationId).maybeSingle(),
@@ -49,7 +57,7 @@ async function notifyTelegram(stationId: string, stationName: string, product: s
   if (!favs?.length) return;
 
   const text =
-    `⛽ <b>${PRODUCT_LABELS[product] ?? product} متوفر الآن</b>\n\n` +
+    `⛽ <b>${headline(products)}</b>\n\n` +
     `<b>${stationName}</b>\n${st?.city ?? ''}\n\n` +
     `${SITE}/station/${stationId}`;
 
@@ -69,9 +77,10 @@ async function notifyTelegram(stationId: string, stationName: string, product: s
   );
 
   // stops the scheduled sweep repeating what was just sent
+  const sent_at = new Date().toISOString();
   await db
     .from('product_alerts_sent')
-    .upsert({ station_id: stationId, product, sent_at: new Date().toISOString() });
+    .upsert(products.map((product) => ({ station_id: stationId, product, sent_at })));
 }
 
 // ---------- Android app (FCM) ----------
@@ -159,7 +168,7 @@ async function fcmAccessToken(sa: {
   return body.access_token;
 }
 
-async function notifyAndroidApps(stationId: string, stationName: string, product: string) {
+async function notifyAndroidApps(stationId: string, stationName: string, body: string) {
   const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
   if (!raw) return;
 
@@ -171,7 +180,6 @@ async function notifyAndroidApps(stationId: string, stationName: string, product
 
   const sa = JSON.parse(raw);
   const access = await fcmAccessToken(sa);
-  const body = `${PRODUCT_LABELS[product] ?? product} متوفر الآن`;
 
   await Promise.allSettled(
     devices.map((d) =>
@@ -233,7 +241,7 @@ async function apnsToken(keyId: string, teamId: string, pem: string): Promise<st
 async function notifyIosApps(
   stationId: string,
   stationName: string,
-  product: string
+  body: string
 ): Promise<Record<string, unknown>> {
   const keyId = Deno.env.get('APNS_KEY_ID');
   const teamId = Deno.env.get('APNS_TEAM_ID');
@@ -271,7 +279,6 @@ async function notifyIosApps(
       },
     };
   }
-  const body = `${PRODUCT_LABELS[product] ?? product} متوفر الآن`;
   const report: string[] = [];
 
   await Promise.allSettled(
@@ -323,11 +330,20 @@ Deno.serve(async (req) => {
 
   const body = await req.json().catch(() => null);
   const stationId = body?.stationId;
-  const product = body?.product;
+  // `product` is still accepted on its own: the admin panel and the
+  // scheduled sweep both send one at a time.
+  const asked: unknown[] = Array.isArray(body?.products)
+    ? body.products
+    : body?.product != null
+      ? [body.product]
+      : [];
+  const wanted = [...new Set(asked)].filter(
+    (p): p is string => typeof p === 'string' && p in PRODUCT_LABELS
+  );
 
   // Anyone can reach this endpoint, so every claim in the request is checked
   // against the database before a single notification goes out.
-  if (typeof stationId !== 'string' || !Object.keys(PRODUCT_LABELS).includes(product)) {
+  if (typeof stationId !== 'string' || !wanted.length || wanted.length !== asked.length) {
     return json({ error: 'invalid payload' }, 400);
   }
 
@@ -341,21 +357,27 @@ Deno.serve(async (req) => {
 
   // only announce fuel that is genuinely in stock right now, so a forged call
   // cannot tell drivers to drive to an empty station
-  const { data: row } = await db
+  const { data: rows } = await db
     .from('station_products')
-    .select('is_available')
+    .select('product')
     .eq('station_id', stationId)
-    .eq('product', product)
-    .maybeSingle();
+    .eq('is_available', true)
+    .in('product', wanted);
 
-  if (!row?.is_available) return json({ error: 'product not available' }, 409);
+  // Order by our own list, not the database's: the message reads in the
+  // order drivers see on the station card.
+  const live = Object.keys(PRODUCT_LABELS).filter((p) =>
+    rows?.some((r) => r.product === p)
+  );
+  if (!live.length) return json({ error: 'product not available' }, 409);
+  const alertText = headline(live);
 
   // Awaited, not fire-and-forget: the runtime may tear the function down as
   // soon as the response returns, dropping an in-flight request.
   const [tg, fcm, apns] = await Promise.allSettled([
-    notifyTelegram(stationId, station.name, product),
-    notifyAndroidApps(stationId, station.name, product),
-    notifyIosApps(stationId, station.name, product),
+    notifyTelegram(stationId, station.name, live),
+    notifyAndroidApps(stationId, station.name, alertText),
+    notifyIosApps(stationId, station.name, alertText),
   ]);
   if (tg.status === 'rejected') console.error('telegram', tg.reason);
   if (fcm.status === 'rejected') console.error('fcm', fcm.reason);
@@ -376,7 +398,7 @@ Deno.serve(async (req) => {
   // the text is built from our own labels, never from the request
   const payload = JSON.stringify({
     title: station.name,
-    body: `${PRODUCT_LABELS[product]} متوفر الآن`,
+    body: alertText,
     stationId,
     url: `/station/${stationId}`,
   });

@@ -50,6 +50,7 @@ function Panel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [newPhone, setNewPhone] = useState('');
   const [phoneNote, setPhoneNote] = useState<string | null>(null);
+  const [sentAt, setSentAt] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -103,16 +104,26 @@ function Panel() {
       return;
     }
 
-    if (next) {
-      fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/notify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        },
-        body: JSON.stringify({ stationId: station.id, product }),
-      }).catch(() => {});
-    }
+    setBusy(null);
+  }
+
+  /** The alert is a separate, deliberate act. Flipping five switches is one
+   *  delivery, not five events — and a driver who gets five buzzes in ten
+   *  seconds deletes the app, which costs us every alert after this one. */
+  async function announce() {
+    if (!station) return;
+    const available = products.filter((p) => p.is_available).map((p) => p.product);
+    if (!available.length) return;
+    setBusy('announce');
+    await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/notify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      },
+      body: JSON.stringify({ stationId: station.id, products: available }),
+    }).catch(() => {});
+    setSentAt(new Date().toISOString());
     setBusy(null);
   }
 
@@ -265,7 +276,9 @@ function Panel() {
 
       <section className="card p-5">
         <h2 className="text-sm font-bold">توفر الوقود</h2>
-        <p className="mt-1 text-xs text-slate-400">تفعيل منتج يرسل تنبيهاً فورياً للمتابعين.</p>
+        <p className="mt-1 text-xs text-slate-400">
+          فعّل ما هو متوفر، ثم أرسل إشعاراً واحداً بكل المنتجات.
+        </p>
         <ul className="mt-2 divide-y divide-slate-100">
           {PRODUCT_ORDER.map((product) => {
             const row = products.find((p) => p.product === product);
@@ -292,6 +305,20 @@ function Panel() {
             );
           })}
         </ul>
+
+        <button
+          type="button"
+          onClick={announce}
+          disabled={busy === 'announce' || !products.some((p) => p.is_available)}
+          className="btn-primary mt-4 w-full disabled:opacity-40"
+        >
+          {busy === 'announce' ? 'جارٍ الإرسال…' : 'إرسال إشعار واحد للمتابعين'}
+        </button>
+        {sentAt && (
+          <p className="mt-2 text-center text-xs font-semibold text-brand">
+            تم إرسال الإشعار.
+          </p>
+        )}
       </section>
 
       <section className="card p-5">

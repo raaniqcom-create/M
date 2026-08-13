@@ -88,19 +88,10 @@ export default function OwnerPage() {
       return;
     }
 
-    if (next) {
-      // fire-and-forget: a failed push must not block the toggle
-      // Supabase edge function rather than a Next.js route: the site is served
-      // as static files and has no server of its own.
-      fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/notify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        },
-        body: JSON.stringify({ stationId: station.id, product }),
-      }).catch(() => {});
-    }
+    // No push here. An owner who switches on five products would fire five
+    // notifications, and the driver who receives five buzzes in ten seconds
+    // deletes the app — which costs us every future alert, not just these.
+    // The announcement belongs to the confirm button, once, for all of them.
     setSavingProduct(null);
   }
 
@@ -135,6 +126,21 @@ export default function OwnerPage() {
       .update({ updated_at: now })
       .eq('station_id', station.id);
     setConfirmedAt(now);
+
+    // One message for everything that is in stock, sent when the owner says
+    // the board is right — not on every tap while they are still deciding.
+    const available = products.filter((p) => p.is_available).map((p) => p.product);
+    if (available.length) {
+      fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/notify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        },
+        body: JSON.stringify({ stationId: station.id, products: available }),
+      }).catch(() => {});
+    }
+
     posterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -319,7 +325,8 @@ export default function OwnerPage() {
             <section className="card p-5">
               <h3 className="text-sm font-bold">تأكيد ونشر التوفّر</h3>
               <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                بعد ضبط المنتجات أعلاه، أكّد القائمة ليُختم الوقت ويجهز المنشور للنشر.
+                بعد ضبط المنتجات أعلاه، أكّد القائمة: يُختم الوقت، ويصل للسائقين إشعار
+                واحد يجمع كل المنتجات المتوفرة، ويجهز المنشور للنشر.
               </p>
               <button type="button" onClick={confirmAvailability} className="btn-primary mt-3 w-full">
                 ✅ تأكيد ونشر التوفّر
