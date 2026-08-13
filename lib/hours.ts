@@ -80,3 +80,30 @@ export function to24Hour(hour12: number, minute: string, isMorning: boolean): st
   const hour24 = isMorning ? (hour12 === 12 ? 0 : hour12) : hour12 === 12 ? 12 : hour12 + 12;
   return `${String(hour24).padStart(2, '0')}:${minute}`;
 }
+
+/** How long an availability claim stays believable.
+ *
+ *  A station that announced petrol five days ago is not making a claim about
+ *  today — yet the chip reads exactly the same as one updated ten minutes ago.
+ *  A driver burns real fuel on that difference, which is the one thing this
+ *  platform exists to prevent. Past this window the product is still listed,
+ *  but never as available. */
+export const FRESH_HOURS = 24;
+
+export function isFresh(updatedAt: string | null | undefined): boolean {
+  if (!updatedAt) return false;
+  const age = Date.now() - new Date(updatedAt).getTime();
+  return age >= 0 && age < FRESH_HOURS * 3600_000;
+}
+
+/** «قبل ٣ ساعات» / «قبل يومين» — the age of the claim, in the driver's words. */
+export function ageLabel(updatedAt: string | null | undefined): string {
+  if (!updatedAt) return 'غير معروف';
+  const mins = Math.floor((Date.now() - new Date(updatedAt).getTime()) / 60000);
+  if (mins < 1) return 'الآن';
+  if (mins < 60) return `قبل ${mins} دقيقة`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `قبل ${hours} ساعة`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? 'قبل يوم' : `قبل ${days} أيام`;
+}

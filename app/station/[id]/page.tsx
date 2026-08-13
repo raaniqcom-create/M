@@ -90,6 +90,7 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
   const { station, rows, level } = result;
   const byProduct = new Map(rows.map((r) => [r.product, r]));
   const open = isOpenNow(station);
+  // an availability claim older than a day is listed, never promised
 
   return (
     <main className="mx-auto max-w-md px-4 pb-16 pt-6">

@@ -5,7 +5,7 @@ import {
   TRAFFIC_LABELS,
   expectedLabel,
 } from '@/lib/products';
-import { hoursLabel, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
+import { ageLabel, hoursLabel, isFresh, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
 import { KIND_LABELS, KIND_STYLES } from '@/lib/stationMeta';
@@ -97,7 +97,8 @@ export function StationCard({
         {PRODUCT_ORDER.map((product) => {
           const row = byProduct.get(product);
           if (!row) return null;
-          const inStock = row.is_available && open;
+          // A five-day-old "available" is not a claim about today.
+          const inStock = row.is_available && open && isFresh(row.updated_at);
           const expected = row.expected_at;
           if (!inStock && !expected) return null;
 

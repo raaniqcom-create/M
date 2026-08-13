@@ -13,7 +13,7 @@ import { playAlert, unlockAudio } from '@/lib/alertSound';
 import { SoundToggle } from '@/components/SoundToggle';
 import { SideMenu } from '@/components/SideMenu';
 import { SoonBadge } from '@/components/SoonBadge';
-import { isOpenNow } from '@/lib/hours';
+import { isFresh, isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { StationCard } from '@/components/StationCard';
 import { PromoStrip } from '@/components/PromoStrip';
@@ -133,14 +133,18 @@ export default function HomePage() {
     if (filters.city) rows = rows.filter((s) => s.city === filters.city);
     if (filters.kind) rows = rows.filter((s) => s.kind === filters.kind);
     if (filters.availableOnly) {
-      rows = rows.filter((s) => isOpenNow(s) && s.products.some((p) => p.is_available));
+      rows = rows.filter(
+        (s) => isOpenNow(s) && s.products.some((p) => p.is_available && isFresh(p.updated_at))
+      );
     }
     if (filters.product) {
       rows = rows.filter((s) =>
         s.products.some(
           (p) =>
             p.product === filters.product &&
-            (filters.availableOnly ? p.is_available && isOpenNow(s) : p.is_available || p.expected_at)
+            (filters.availableOnly
+              ? p.is_available && isFresh(p.updated_at) && isOpenNow(s)
+              : (p.is_available && isFresh(p.updated_at)) || p.expected_at)
         )
       );
     }
@@ -153,7 +157,9 @@ export default function HomePage() {
     // thing we do know — that the station exists and where it is. Sink them
     // instead: pinned first, then anything a driver can act on now.
     const actionable = (s: StationWithStatus) =>
-      s.products.some((p) => (p.is_available && isOpenNow(s)) || p.expected_at);
+      s.products.some(
+        (p) => (p.is_available && isFresh(p.updated_at) && isOpenNow(s)) || p.expected_at
+      );
 
     return [...rows].sort(
       (a, b) =>
@@ -182,7 +188,16 @@ export default function HomePage() {
               <SoundToggle />
             </div>
           </div>
-          <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — جميع مدن المحافظة</p>
+          <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — نبدأ من الرمادي</p>
+
+          {/* Six stations in a whole province, and owners who do not update
+              every day. Saying so plainly costs less than a driver who burns
+              fuel on a stale claim and never opens the app again. */}
+          <p className="mt-2 rounded-lg bg-white/15 px-3 py-2 text-center text-[11px] leading-relaxed text-white">
+            🚧 المنصة في <b>مرحلة التجربة</b> — المحطات تُضاف تباعاً.
+            <br />
+            اتصل بالمحطة قبل أن تتحرك، وحالة الوقود تُعرض بوقت آخر تحديث لها.
+          </p>
           {/* Both of these speak to someone browsing the site. Inside the app
               they are dead weight: the download already happened, and the
               "coming soon" badge contradicts the app in their hand. */}
