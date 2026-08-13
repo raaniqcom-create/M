@@ -78,16 +78,34 @@ async function notifyTelegram(stationId: string, stationName: string, product: s
 
 // ponytail: this JWT/FCM block is duplicated in test-push. Deploys upload one
 // file per function, so a shared module would cost more than the copy.
+/** Accepts the .p8 in either shape it tends to arrive in: the PEM text as
+ *  Apple ships it, or that same text wrapped in one more layer of base64 —
+ *  which is how the key is stored for GitHub Actions, and how it ended up in
+ *  this project's secret. Decoding once on a doubly-encoded key yields the PEM
+ *  text as bytes, and importKey rejects it with "expected valid PKCS#8 data",
+ *  which reads like a corrupt key rather than a double wrap. */
 function pemToPkcs8(pem: string): Uint8Array {
-  const stripped = pem
-    .replace('-----BEGIN PRIVATE KEY-----', '')
-    .replace('-----END PRIVATE KEY-----', '')
-    .split(/\s/)
-    .join('');
-  const raw = atob(stripped);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
+  const decode = (text: string): Uint8Array => {
+    const stripped = text
+      .replace('-----BEGIN PRIVATE KEY-----', '')
+      .replace('-----END PRIVATE KEY-----', '')
+      .split(/\s/)
+      .join('');
+    const raw = atob(stripped);
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  };
+
+  let bytes = decode(pem);
+  // A PKCS#8 key starts with the DER SEQUENCE tag 0x30. Printable ASCII here
+  // means we decoded a wrapper and the real PEM is inside.
+  const looksLikeText = bytes[0] !== 0x30;
+  if (looksLikeText) {
+    const inner = new TextDecoder().decode(bytes);
+    if (inner.includes('PRIVATE KEY')) bytes = decode(inner);
+  }
+  return bytes;
 }
 
 const b64url = (v: Uint8Array | string) =>
@@ -209,21 +227,52 @@ async function apnsToken(keyId: string, teamId: string, pem: string): Promise<st
   return `${unsigned}.${b64url(sig)}`;
 }
 
-async function notifyIosApps(stationId: string, stationName: string, product: string) {
+/** Returns a report rather than swallowing failures into console.error: a
+ *  push that never arrives looks identical to one that was never sent, and the
+ *  only way to tell them apart from outside is to say what APNs answered. */
+async function notifyIosApps(
+  stationId: string,
+  stationName: string,
+  product: string
+): Promise<Record<string, unknown>> {
   const keyId = Deno.env.get('APNS_KEY_ID');
   const teamId = Deno.env.get('APNS_TEAM_ID');
   const pem = Deno.env.get('APNS_PRIVATE_KEY');
   const topic = Deno.env.get('APNS_TOPIC') ?? 'online.muhta.app';
-  if (!keyId || !teamId || !pem) return;
+  if (!keyId || !teamId || !pem) {
+    return { skipped: 'APNS secrets missing', keyId: !!keyId, teamId: !!teamId, pem: !!pem };
+  }
 
   const { data: devices } = await db
     .from('device_tokens')
     .select('token')
     .eq('platform', 'ios');
-  if (!devices?.length) return;
+  if (!devices?.length) return { skipped: 'no ios devices' };
 
-  const jwt = await apnsToken(keyId, teamId, pem);
+  let jwt: string;
+  try {
+    jwt = await apnsToken(keyId, teamId, pem);
+  } catch (e) {
+    // Shape only — never the key itself. Enough to tell a wrong format from a
+    // wrong key without putting a private key in an HTTP response.
+    let firstByte = -1;
+    try {
+      firstByte = pemToPkcs8(pem)[0] ?? -1;
+    } catch { /* decode itself failed */ }
+    return {
+      error: 'jwt: ' + String(e),
+      keyShape: {
+        length: pem.length,
+        hasBeginHeader: pem.includes('BEGIN'),
+        hasRealNewlines: pem.includes(String.fromCharCode(10)),
+        hasEscapedNewlines: pem.includes(String.fromCharCode(92) + 'n'),
+        startsWith: pem.slice(0, 12),
+        firstDecodedByte: firstByte,
+      },
+    };
+  }
   const body = `${PRODUCT_LABELS[product] ?? product} متوفر الآن`;
+  const report: string[] = [];
 
   await Promise.allSettled(
     devices.map((d) =>
@@ -247,11 +296,18 @@ async function notifyIosApps(stationId: string, stationName: string, product: st
         }),
       }).then(async (r) => {
         // 410 is APNs for "this device is gone" — stop writing to it
-        if (r.status === 410) await db.from('device_tokens').delete().eq('token', d.token);
-        else if (!r.ok) console.error('apns', r.status, await r.text());
-      })
+        if (r.status === 410) {
+          await db.from('device_tokens').delete().eq('token', d.token);
+          report.push('410 gone');
+        } else if (!r.ok) {
+          report.push(`${r.status} ${(await r.text()).slice(0, 160)}`);
+        } else {
+          report.push('200 ok');
+        }
+      }, (e) => report.push('fetch: ' + String(e)))
     )
   );
+  return { devices: devices.length, results: report, topic };
 }
 
 // ---------- Handler ----------
@@ -311,7 +367,11 @@ Deno.serve(async (req) => {
     .eq('station_id', stationId)
     .eq('role', 'driver');
 
-  if (!subs?.length) return json({ sent: 0, telegram: tg.status, fcm: fcm.status });
+  const apnsReport = apns.status === 'fulfilled' ? apns.value : { rejected: String(apns.reason) };
+
+  if (!subs?.length) {
+    return json({ sent: 0, telegram: tg.status, fcm: fcm.status, apns: apnsReport });
+  }
 
   // the text is built from our own labels, never from the request
   const payload = JSON.stringify({
