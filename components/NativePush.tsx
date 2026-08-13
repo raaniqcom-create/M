@@ -49,10 +49,20 @@ export function NativePush() {
 
       await PushNotifications.addListener('registration', async (token) => {
         const { supabase } = await import('@/lib/supabase');
-        // upsert so reinstalling or refreshing the token can't pile up rows
-        await supabase
+        // Plain insert, duplicate swallowed. Every upsert resolution PostgREST
+        // offers needs an UPDATE policy, and the only UPDATE policy here is
+        // admin-only — so every registration was rejected 42501 and the table
+        // stayed empty on both platforms since launch. Loosening UPDATE would
+        // let anyone flip is_admin on another device's row and receive the
+        // admin alerts, so the client gives up the update instead.
+        const { error } = await supabase
           .from('device_tokens')
-          .upsert({ token: token.value, platform }, { onConflict: 'token' });
+          .insert({ token: token.value, platform });
+        // 23505 = this device already registered, which is the happy path on
+        // every launch after the first.
+        if (error && error.code !== '23505') {
+          console.error('device token save failed', error);
+        }
         // the admin screen claims this row later; it has no other way to know
         // which of the many device tokens belongs to the phone in your hand
         try {
