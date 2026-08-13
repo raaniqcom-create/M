@@ -3,22 +3,43 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { PRODUCT_LABELS, TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
+import { distanceKm } from '@/lib/stations';
 import { TRAFFIC_PRODUCTS } from '@/types/database';
-import type { FuelProduct, TrafficLevel } from '@/types/database';
+import type { FuelProduct, StationWithStatus, TrafficLevel } from '@/types/database';
 
 const LEVELS: TrafficLevel[] = ['green', 'yellow', 'red'];
 const KEY = 'trip';
 const MIN_MS = 15 * 60_000; // long enough to have arrived
 const MAX_MS = 3 * 60 * 60_000; // after this they no longer remember
 
-/** Asks about the queue at the one moment the driver actually knows: after
- *  they have been. The old prompt sat on the home screen before the trip,
- *  where nobody could answer it honestly — hence two votes in two days. */
-export function TripAsk() {
-  const [trip, setTrip] = useState<{ id: string; name: string } | null>(null);
+/** Close enough to be standing on the forecourt rather than driving past. */
+const NEAR_KM = 0.2;
+
+interface Ask {
+  id: string;
+  name: string;
+  /** true when we found them standing at the station, not just intending to go */
+  here: boolean;
+}
+
+/** Asks about the queue at the one moment the driver actually knows.
+ *
+ *  Two ways in, cheapest first:
+ *   • They are AT the station right now — the honest signal, and the only one
+ *     that catches a driver who never tapped a route button.
+ *   • They tapped الطريق a while ago — an intention, which they may not have
+ *     followed through on.
+ *
+ *  The location check is deliberately silent: it runs only when the browser
+ *  already holds a granted permission, so opening the app never triggers a
+ *  prompt nobody asked for. Someone who declined location simply falls back to
+ *  the trip path. */
+export function TripAsk({ stations }: { stations: StationWithStatus[] | null }) {
+  const [ask, setAsk] = useState<Ask | null>(null);
   const [product, setProduct] = useState<FuelProduct | null>(null);
   const [done, setDone] = useState(false);
 
+  // path 1: the remembered intention
   useEffect(() => {
     try {
       const raw = localStorage.getItem(KEY);
@@ -27,27 +48,62 @@ export function TripAsk() {
       const age = Date.now() - t.at;
       if (age < MIN_MS) return;
       if (age > MAX_MS) return void localStorage.removeItem(KEY);
-      setTrip({ id: t.id, name: t.name });
+      setAsk({ id: t.id, name: t.name, here: false });
     } catch {
       localStorage.removeItem(KEY);
     }
   }, []);
 
+  // path 2: they are standing here now — outranks the intention
+  useEffect(() => {
+    if (!stations?.length || !navigator.geolocation) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const status = await navigator.permissions?.query({ name: 'geolocation' as PermissionName });
+        if (status && status.state !== 'granted') return; // never prompt from here
+      } catch {
+        return; // no permissions API: stay silent rather than risk a prompt
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (cancelled) return;
+          const { latitude, longitude } = pos.coords;
+          const near = stations
+            .filter((s) => s.lat != null && s.lng != null)
+            .map((s) => ({ s, d: distanceKm({ lat: latitude, lng: longitude }, { lat: s.lat!, lng: s.lng! }) }))
+            .sort((a, b) => a.d - b.d)[0];
+          if (near && near.d <= NEAR_KM) {
+            setAsk({ id: near.s.id, name: near.s.name, here: true });
+          }
+        },
+        () => {},
+        { maximumAge: 60_000, timeout: 8_000 }
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [stations]);
+
   async function answer(level: TrafficLevel) {
-    if (!trip || !product) return;
+    if (!ask || !product) return;
     localStorage.removeItem(KEY);
     setDone(true);
     // the pump, not the forecourt: a vote without it cannot be shown on the
     // chip the next driver is actually looking at
-    await supabase.from('traffic_votes').insert({ station_id: trip.id, level, product });
+    await supabase.from('traffic_votes').insert({ station_id: ask.id, level, product });
   }
 
   function dismiss() {
     localStorage.removeItem(KEY);
-    setTrip(null);
+    setAsk(null);
   }
 
-  if (!trip) return null;
+  if (!ask) return null;
 
   if (done) {
     return (
@@ -61,14 +117,16 @@ export function TripAsk() {
     <div className="mb-3 rounded-2xl border border-brand-100 bg-white p-4 shadow-soft">
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-bold">
-          كيف كان الطابور في {trip.name || 'المحطة'}؟
+          {ask.here
+            ? `أنت قرب ${ask.name || 'المحطة'} — شلون الازدحام؟`
+            : `شلون كان الطابور بـ${ask.name || 'المحطة'}؟`}
         </p>
         <button type="button" onClick={dismiss} aria-label="إخفاء" className="text-xs text-slate-400">
           ✕
         </button>
       </div>
       <p className="mt-0.5 text-xs text-slate-500">
-        {product ? `طابور ${PRODUCT_LABELS[product]}` : 'أي منتج عبّأت؟'}
+        {product ? `طابور ${PRODUCT_LABELS[product]}` : 'أي منتج عبّيت؟'}
       </p>
 
       {!product && (

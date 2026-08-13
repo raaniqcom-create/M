@@ -260,7 +260,7 @@ export default function HomePage() {
       </header>
 
       <main className="mx-auto max-w-md px-4 pb-24 pt-4">
-        <TripAsk />
+        <TripAsk stations={stations} />
         {stations && (
           <div className="mb-4">
             <ProductsDashboard
