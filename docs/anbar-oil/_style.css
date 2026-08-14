@@ -155,10 +155,10 @@ footer.foot {
    round. Vector, because a raster QR scaled up by a print shop stops scanning.
    --------------------------------------------------------------------------- */
 .dl {
-  margin-top: 2mm;
+  margin-top: 1.5mm;
   border: 1px solid var(--brand-100, #bbf7d0);
   border-radius: 3mm;
-  padding: 2mm 4mm 1.5mm;
+  padding: 1.4mm 4mm 1mm;
   background: #f7fdf9;
   display: flex;
   align-items: center;
@@ -175,8 +175,8 @@ footer.foot {
 }
 .dl-row { display: flex; gap: 4mm; flex: 1; justify-content: flex-end; }
 .dl-item { text-align: center; }
-.dl-item svg { width: 15mm; height: 15mm; display: block; margin: 0 auto; }
-.dl-item .t { margin-top: 1mm; font-size: 8pt; font-weight: 700; color: #14532d; }
+.dl-item svg { width: 13mm; height: 13mm; display: block; margin: 0 auto; }
+.dl-item .t { margin-top: 0.7mm; font-size: 7.5pt; font-weight: 700; color: #14532d; }
 .dl-item .u { display: none; }
 
 /* The guide has three pages to the letter's one, so its codes get the size a
@@ -193,3 +193,59 @@ footer.foot {
      two broken addresses, and whoever retypes it carries the break with them */
   white-space: nowrap;
 }
+
+/* ---------------------------------------------------------------------------
+   Header block. The phone number is the single thing a reader acts on — an
+   official letter gets a call, not a click — so it leads, at a size that
+   survives a photocopy. The store names sit under it as plain wordmarks
+   rather than Apple's and Google's badge artwork: a letter that reproduces
+   their logos invites a branding objection it does not need, and the claim
+   being made here is only "the app is published there".
+   --------------------------------------------------------------------------- */
+.head-left .phone {
+  font-size: 12pt;
+  font-weight: 800;
+  letter-spacing: .3px;
+  direction: ltr;
+  line-height: 1.3;
+}
+.head-left .site {
+  margin-top: 0.6mm;
+  font-size: 9pt;
+  direction: ltr;
+  opacity: .92;
+}
+.head-left .stores {
+  margin-top: 1mm;
+  display: flex;
+  gap: 1.6mm;
+  justify-content: flex-start;
+}
+.head-left .stores span {
+  font-size: 6.6pt;
+  font-weight: 700;
+  direction: ltr;
+  white-space: nowrap;
+  padding: 0.5mm 1.4mm;
+  border-radius: 1.4mm;
+  background: rgba(255, 255, 255, .18);
+  border: .3pt solid rgba(255, 255, 255, .45);
+}
+
+/* A QR module below ~0.5mm stops resolving on a phone camera. At three codes
+   across a 13mm box the Apple symbol (37 modules) fell to 0.35mm and would not
+   scan — verified by decoding the rendered page. The signature sits in a 74mm
+   column with the rest of the band empty, so the codes move up beside it and
+   get the size they need without costing the letter a line. */
+.close-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6mm;
+  margin-top: 5mm;
+}
+.close-row .dl { flex: 1; margin-top: 0; }
+.close-row .sign { margin-inline-start: 0; width: 62mm; flex: none; }
+.close-row .dl-item svg { width: 19mm; height: 19mm; }
+.close-row .dl h3 { max-width: none; margin-bottom: 2mm; }
+.close-row .dl { display: block; }
+.close-row .dl-row { justify-content: space-between; gap: 3mm; }
