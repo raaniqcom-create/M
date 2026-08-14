@@ -146,3 +146,50 @@ footer.foot {
   border: 1px solid var(--brand-100); border-radius: 999px;
   padding: 3px 12px; font-size: 10pt; font-weight: 700;
 }
+
+/* ---------------------------------------------------------------------------
+   Download block. The letter reaches a desk, not a browser: whoever reads it
+   has a phone in hand and no way to type an App Store URL with Arabic in it.
+   A code they point the camera at is the only link that actually works on
+   paper, so the printed URL sits underneath as the fallback, not the other way
+   round. Vector, because a raster QR scaled up by a print shop stops scanning.
+   --------------------------------------------------------------------------- */
+.dl {
+  margin-top: 2mm;
+  border: 1px solid var(--brand-100, #bbf7d0);
+  border-radius: 3mm;
+  padding: 2mm 4mm 1.5mm;
+  background: #f7fdf9;
+  display: flex;
+  align-items: center;
+  gap: 4mm;
+}
+.dl h3 {
+  margin: 0;
+  font-size: 9.5pt;
+  font-weight: 800;
+  color: var(--brand, #166534);
+  writing-mode: horizontal-tb;
+  max-width: 34mm;
+  line-height: 1.5;
+}
+.dl-row { display: flex; gap: 4mm; flex: 1; justify-content: flex-end; }
+.dl-item { text-align: center; }
+.dl-item svg { width: 15mm; height: 15mm; display: block; margin: 0 auto; }
+.dl-item .t { margin-top: 1mm; font-size: 8pt; font-weight: 700; color: #14532d; }
+.dl-item .u { display: none; }
+
+/* The guide has three pages to the letter's one, so its codes get the size a
+   phone camera actually likes, and the typed URLs come back as a fallback. */
+.dl-lg { display: block; margin-top: 4mm; padding: 4mm 5mm; }
+.dl-lg .dl-row { justify-content: space-between; gap: 6mm; }
+.dl-lg .dl-item { flex: 1; }
+.dl-lg .dl-item svg { width: 26mm; height: 26mm; }
+.dl-lg .dl-item .t { margin-top: 2mm; font-size: 10pt; }
+.dl-lg .dl-item .u {
+  display: block; margin-top: 1mm; font-size: 6.2pt; color: #5b6b62;
+  direction: ltr; line-height: 1.5;
+  /* nowrap on purpose: a URL split across two lines on a printed page reads as
+     two broken addresses, and whoever retypes it carries the break with them */
+  white-space: nowrap;
+}
