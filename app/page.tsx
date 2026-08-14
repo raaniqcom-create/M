@@ -414,8 +414,6 @@ export default function HomePage() {
         )}
         <p className="mt-8 text-center text-[11px] leading-relaxed text-slate-400">
           فكرة وتنفيذ أحمد الرفاعي
-          <span aria-hidden className="mx-1.5 text-slate-300">|</span>
-          مركز الرؤية للابتكار الرقمي
         </p>
       </main>
 
