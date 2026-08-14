@@ -40,15 +40,6 @@ export function NativePush() {
         }).catch(() => {});
       }
 
-      // Deliberately does NOT prompt. iOS and Android 13+ ask exactly once in
-      // the lifetime of an install, and this effect runs the instant the
-      // WebView loads — the dialog used to land on top of the onboarding
-      // screen, before the driver had read a word of why he wants it. The ask
-      // now belongs to FirstRun, on a deliberate tap, after the explanation.
-      // Here we only pick up a permission that already exists.
-      const status = await PushNotifications.checkPermissions();
-      if (status.receive !== 'granted' || cancelled) return;
-
       await PushNotifications.addListener('registration', async (token) => {
         const { supabase } = await import('@/lib/supabase');
         // Plain insert, duplicate swallowed. Every upsert resolution PostgREST
@@ -113,6 +104,21 @@ export function NativePush() {
           }
         });
       }
+
+      // Deliberately does NOT prompt. iOS and Android 13+ ask exactly once in
+      // the lifetime of an install, and this effect runs the instant the
+      // WebView loads — the dialog used to land on top of the onboarding
+      // screen, before the driver had read a word of why he wants it. The ask
+      // belongs to FirstRun, on a deliberate tap, after the explanation.
+      //
+      // The listeners above are attached BEFORE this check, and that ordering
+      // is the whole point: FirstRun calls register() itself once the user
+      // grants permission, and the 'registration' event that follows lands in
+      // the same WebView. Returning early before attaching would leave nobody
+      // listening for it, and the token would never be stored — the device
+      // then looks registered to its owner and is invisible to the server.
+      const status = await PushNotifications.checkPermissions();
+      if (status.receive !== 'granted' || cancelled) return;
 
       await PushNotifications.register();
     })().catch((e) => console.error('native push setup failed', e));
