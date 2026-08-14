@@ -11,6 +11,8 @@ import {
   type Tone,
 } from '@/lib/alertSound';
 import { useSession } from '@/lib/useSession';
+import { useNativeApp } from '@/lib/useNativeApp';
+import { shareApp } from '@/lib/shareApp';
 import { XIcon } from './icons';
 
 /** The drawer holds everything that isn't the driver's main job: alerts,
@@ -22,12 +24,14 @@ import { XIcon } from './icons';
  *  thing a driver opens the menu to find. */
 export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) {
   const [open, setOpen] = useState(false);
-  const [tone, setToneState] = useState<Tone>('1');
+  const [tone, setToneState] = useState<Tone>('2');
   const [muted, setMutedState] = useState(false);
   // The picker stays folded away: opening a menu should never make a phone
   // make a noise, and the tone is chosen once and then forgotten about.
   const [picking, setPicking] = useState(false);
   const { signedIn, role } = useSession();
+  const native = useNativeApp();
+  const [shareNote, setShareNote] = useState<string | null>(null);
 
   useEffect(() => {
     setToneState(getTone());
@@ -55,6 +59,16 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
     setToneState(t);
     previewTone(t); // only ever on a deliberate tap, never on open
     setPicking(false);
+  }
+
+  async function share() {
+    const r = await shareApp();
+    if (r === 'shared') return setOpen(false);
+    setShareNote(
+      r === 'copied'
+        ? 'تم نسخ النص — الصقه في أي تطبيق تريد.'
+        : 'تعذّرت المشاركة. انسخ الرابط muhta.online يدوياً.'
+    );
   }
 
   function toggleMute() {
@@ -125,12 +139,28 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                 }}
               />
 
-              <Item
-                href="/download"
-                icon="📲"
-                title="حمّل التطبيق"
-                note="آيفون وأندرويد — مجاناً"
+              <Row
+                icon="📤"
+                title="شارك التطبيق مع أهلك وأصدقائك"
+                note="على أي تطبيق تختاره"
+                onClick={share}
               />
+              {shareNote && (
+                <p className="mx-3 rounded-lg bg-brand-50 px-3 py-2 text-[11px] font-semibold text-brand-700">
+                  {shareNote}
+                </p>
+              )}
+
+              {/* Offering the download to someone inside the app is noise —
+                  they are holding it. On the website it is the whole point. */}
+              {!native && (
+                <Item
+                  href="/download"
+                  icon="📲"
+                  title="حمّل التطبيق"
+                  note="آيفون وأندرويد — مجاناً"
+                />
+              )}
 
               <Label>لأصحاب المحطات</Label>
 
