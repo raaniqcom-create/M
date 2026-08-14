@@ -168,18 +168,52 @@ async function fcmAccessToken(sa: {
   return body.access_token;
 }
 
-async function notifyAndroidApps(stationId: string, stationName: string, body: string) {
+/** Reports like the APNs path rather than swallowing failures. A push that
+ *  never arrives is indistinguishable from one never sent, and this function
+ *  used to return silently on a missing secret, a bad service account, and
+ *  every rejected send alike — the exact blind spot that hid the iOS outage.
+ *
+ *  The credential is exchanged BEFORE the device count is checked, on purpose:
+ *  with no Android device registered yet, that exchange is the only proof the
+ *  secret is intact. Waiting until a real phone exists means discovering a
+ *  truncated key from a user who never got their notification. */
+async function notifyAndroidApps(
+  stationId: string,
+  stationName: string,
+  body: string
+): Promise<Record<string, unknown>> {
   const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
-  if (!raw) return;
+  if (!raw) return { skipped: 'FIREBASE_SERVICE_ACCOUNT missing' };
+
+  let sa: { project_id: string; client_email: string; private_key: string; token_uri: string };
+  try {
+    sa = JSON.parse(raw);
+  } catch (e) {
+    return { error: 'service account is not valid JSON: ' + String(e), length: raw.length };
+  }
+
+  let access: string;
+  try {
+    access = await fcmAccessToken(sa);
+  } catch (e) {
+    return {
+      error: 'oauth: ' + String(e),
+      project: sa.project_id,
+      keyShape: {
+        length: sa.private_key?.length ?? 0,
+        hasBeginHeader: sa.private_key?.includes('BEGIN') ?? false,
+        hasRealNewlines: sa.private_key?.includes(String.fromCharCode(10)) ?? false,
+      },
+    };
+  }
 
   const { data: devices } = await db
     .from('device_tokens')
     .select('token')
     .eq('platform', 'android');
-  if (!devices?.length) return;
+  if (!devices?.length) return { credentialOk: true, project: sa.project_id, skipped: 'no android devices' };
 
-  const sa = JSON.parse(raw);
-  const access = await fcmAccessToken(sa);
+  const report: string[] = [];
 
   await Promise.allSettled(
     devices.map((d) =>
@@ -200,10 +234,18 @@ async function notifyAndroidApps(stationId: string, stationName: string, body: s
         }),
       }).then(async (r) => {
         // a token dies when the app is uninstalled — drop it rather than retry forever
-        if (r.status === 404) await db.from('device_tokens').delete().eq('token', d.token);
-      })
+        if (r.status === 404) {
+          await db.from('device_tokens').delete().eq('token', d.token);
+          report.push('404 unregistered');
+        } else if (!r.ok) {
+          report.push(`${r.status} ${(await r.text()).slice(0, 160)}`);
+        } else {
+          report.push('200 ok');
+        }
+      }, (e) => report.push('fetch: ' + String(e)))
     )
   );
+  return { devices: devices.length, results: report, channel: 'muhta_alerts', sound: 'alert' };
 }
 
 /** iOS talks to APNs directly rather than through Firebase. Routing it through
@@ -390,9 +432,10 @@ Deno.serve(async (req) => {
     .eq('role', 'driver');
 
   const apnsReport = apns.status === 'fulfilled' ? apns.value : { rejected: String(apns.reason) };
+  const fcmReport = fcm.status === 'fulfilled' ? fcm.value : { rejected: String(fcm.reason) };
 
   if (!subs?.length) {
-    return json({ sent: 0, telegram: tg.status, fcm: fcm.status, apns: apnsReport });
+    return json({ sent: 0, telegram: tg.status, fcm: fcmReport, apns: apnsReport });
   }
 
   // the text is built from our own labels, never from the request
@@ -428,6 +471,7 @@ Deno.serve(async (req) => {
     sent: results.filter((r) => r.status === 'fulfilled').length,
     pruned: dead.length,
     telegram: tg.status,
-    fcm: fcm.status,
+    fcm: fcmReport,
+    apns: apnsReport,
   });
 });
