@@ -185,7 +185,15 @@ export default function AdminPage() {
   return (
     <main className="mx-auto max-w-md px-4 pb-16 pt-6">
       <header className="flex items-center justify-between">
-        <h1 className="text-lg font-extrabold text-brand">لوحة الإدارة</h1>
+        <div>
+          <h1 className="text-lg font-extrabold text-brand">لوحة الإدارة</h1>
+          {/* ?view=driver stops the home page bouncing a signed-in admin
+              straight back here, so the site can be inspected as a driver
+              sees it without giving up the session. */}
+          <a href="/?view=driver" className="text-[11px] font-bold text-slate-400">
+            عرض المنصة كسائق ↗
+          </a>
+        </div>
         <button
           type="button"
           onClick={async () => {

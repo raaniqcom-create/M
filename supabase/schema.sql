@@ -241,3 +241,44 @@ AS $function$
 $function$;
 
 grant execute on function alerts_unsubscribe(text) to anon, authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- admin_stats(): counts for the admin panel.
+--
+-- device_tokens and alerts grant SELECT to nobody, so the panel read [] from
+-- the browser and showed zeros. This runs as the owner and returns numbers
+-- only — never a device token, never a push endpoint. The admin has no need
+-- for either, so nobody gets them.
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.admin_stats()
+ RETURNS json
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+declare
+  caller_role text;
+begin
+  select p.role::text into caller_role from profiles p where p.id = auth.uid();
+  if caller_role is distinct from 'admin' then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+
+  return json_build_object(
+    'devices', (
+      select coalesce(json_object_agg(platform, n), '{}'::json)
+        from (select platform, count(*) n from device_tokens group by platform) d
+    ),
+    -- one person holds a row per (city, product) pair, so the honest number of
+    -- people is the number of distinct addresses, not the number of rows
+    'listeners', (
+      select coalesce(json_object_agg(channel, n), '{}'::json)
+        from (select channel, count(distinct address) n from alerts group by channel) a
+    ),
+    'alertRows', (select count(*) from alerts)
+  );
+end $function$;
+
+revoke all on function admin_stats() from public;
+grant execute on function admin_stats() to authenticated;

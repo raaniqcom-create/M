@@ -23,35 +23,30 @@ export function AdminStats() {
   const [devices, setDevices] = useState<Record<string, number> | null>(null);
   const [listeners, setListeners] = useState<Record<string, number> | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [failed, setFailed] = useState(false);
 
   const load = useCallback(async () => {
-    const [d, a, s] = await Promise.all([
-      supabase.from('device_tokens').select('platform'),
-      supabase.from('alerts').select('channel, address'),
+    // device_tokens and alerts grant SELECT to nobody — reading them from the
+    // browser returned [] and the whole panel showed zeros. The counts come
+    // from a security-definer function that hands back numbers only: the admin
+    // never needs a device token or a push endpoint, so nobody gets one.
+    const [stats, s] = await Promise.all([
+      supabase.rpc('admin_stats'),
       supabase
         .from('stations')
         .select('*, station_products(updated_at)')
         .in('status', ['approved', 'suspended']),
     ]);
 
-    const tally = (list: { platform?: string; channel?: string }[] | null, key: 'platform' | 'channel') => {
-      const m: Record<string, number> = {};
-      for (const r of list ?? []) m[String(r[key])] = (m[String(r[key])] ?? 0) + 1;
-      return m;
-    };
-
-    setDevices(tally(d.data, 'platform'));
-    // one person can hold several rows (a city per fuel), so count devices
-    setListeners(
-      Object.fromEntries(
-        Object.entries(
-          (a.data ?? []).reduce<Record<string, Set<string>>>((acc, r) => {
-            (acc[r.channel] ??= new Set()).add(r.address);
-            return acc;
-          }, {})
-        ).map(([k, v]) => [k, v.size])
-      )
-    );
+    if (stats.error) {
+      setFailed(true);
+      setDevices({});
+      setListeners({});
+    } else {
+      const v = stats.data as { devices: Record<string, number>; listeners: Record<string, number> };
+      setDevices(v?.devices ?? {});
+      setListeners(v?.listeners ?? {});
+    }
     setRows((s.data as Row[]) ?? []);
   }, []);
 
@@ -89,6 +84,12 @@ export function AdminStats() {
 
   return (
     <div className="space-y-4">
+      {failed && (
+        <p className="card p-4 text-xs leading-relaxed text-traffic-red">
+          تعذّر قراءة أرقام المستخدمين. تأكد أنك داخل بحساب الإدارة، ثم أعد تحميل الصفحة.
+        </p>
+      )}
+
       <section className="card p-5">
         <h2 className="text-sm font-bold">المستخدمون</h2>
         <p className="mt-1 text-xs text-slate-400">أجهزة سجّلت نفسها في النظام</p>
