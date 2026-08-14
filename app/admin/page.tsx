@@ -7,6 +7,7 @@ import { CheckIcon, LogOutIcon, MapPinIcon, SpinnerIcon, XIcon } from '@/compone
 import { AdminStationForm } from '@/components/AdminStationForm';
 import { BroadcastPanel } from '@/components/BroadcastPanel';
 import { ReviewsPanel } from '@/components/ReviewsPanel';
+import { AdminStats } from '@/components/AdminStats';
 import { findSimilar } from '@/lib/similar';
 import { announceStation, rebuildSite } from '@/lib/rebuild';
 import { KIND_LABELS, KIND_STYLES, KINDS } from '@/lib/stationMeta';
@@ -28,9 +29,9 @@ export default function AdminPage() {
   // Stations first. The list used to be buried inside the "add a station"
   // tab, so the one thing an admin opens this page to look at was two taps
   // and a scroll past a registration form.
-  const [tab, setTab] = useState<'stations' | 'requests' | 'add' | 'ads' | 'offers' | 'reviews'>(
-    'stations'
-  );
+  const [tab, setTab] = useState<
+    'stations' | 'requests' | 'add' | 'stats' | 'ads' | 'offers' | 'reviews'
+  >('stations');
   const [q, setQ] = useState('');
   const [pending, setPending] = useState<Station[]>([]);
   const [approved, setApproved] = useState<Station[]>([]);
@@ -218,6 +219,7 @@ export default function AdminPage() {
           ['stations', `المحطات (${approved.length})`],
           ['requests', `الطلبات${pending.length ? ` (${pending.length})` : ''}`],
           ['add', 'إضافة محطة'],
+          ['stats', 'الإحصائيات'],
           ['ads', 'الإعلانات'],
           ['offers', 'العروض'],
           ['reviews', 'التقييمات'],
@@ -239,6 +241,12 @@ export default function AdminPage() {
       {tab === 'add' && adminId && (
         <div className="mt-4">
           <AdminStationForm adminId={adminId} onDone={load} />
+        </div>
+      )}
+
+      {tab === 'stats' && (
+        <div className="mt-4">
+          <AdminStats />
         </div>
       )}
 
