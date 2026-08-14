@@ -3,6 +3,7 @@ import { Tajawal } from 'next/font/google';
 import './globals.css';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { NativePush } from '@/components/NativePush';
+import { APPLE_APP_ID } from '@/lib/stores';
 
 const tajawal = Tajawal({
   subsets: ['arabic', 'latin'],
@@ -31,6 +32,10 @@ export const metadata: Metadata = {
   ],
   manifest: '/manifest.json',
   appleWebApp: { capable: true, title: 'المحطة التقنية', statusBarStyle: 'default' },
+  // Safari's own banner, above the page and outside our control — one tap
+  // straight to the listing, and it disappears by itself once the app is
+  // installed. Costs one meta tag and beats anything we could draw.
+  itunes: { appId: APPLE_APP_ID },
   icons: { icon: '/icons/icon-192.png', apple: '/icons/apple-touch-icon.png' },
   openGraph: {
     type: 'website',

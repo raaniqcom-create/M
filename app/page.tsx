@@ -12,7 +12,6 @@ import { homeFor, useSession } from '@/lib/useSession';
 import { playAlert, unlockAudio } from '@/lib/alertSound';
 import { SoundToggle } from '@/components/SoundToggle';
 import { SideMenu } from '@/components/SideMenu';
-import { SoonBadge } from '@/components/SoonBadge';
 import { isFresh, isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { StationCard } from '@/components/StationCard';
@@ -328,20 +327,19 @@ export default function HomePage() {
               {visible.length === 0 && (
                 <div className="card p-8 text-center">
                   <FuelIcon className="mx-auto h-8 w-8 text-brand-200" />
-                  {/* Before launch the list is empty by design, so say that
-                      plainly and point owners at registration instead of
-                      showing drivers a bare "no results". */}
+                  {/* The list is empty by design while the first stations
+                      register, so say that plainly and point owners at
+                      registration instead of showing drivers a bare
+                      "no results". The platform itself is live — it is the
+                      stations that are still arriving. */}
                   {!query && countActive(filters) === 0 && stations?.length === 0 ? (
                     <>
-                      <div className="mt-3 flex justify-center">
-                        <SoonBadge />
-                      </div>
                       <p className="mt-3 text-sm font-bold text-slate-700">
-                        المنصة تنطلق قريباً
+                        لا توجد محطات مسجّلة بعد
                       </p>
                       <p className="mt-2 text-xs leading-relaxed text-slate-500">
-                        نستقبل الآن تسجيل المحطات في جميع مدن الأنبار. سجّل محطتك اليوم
-                        لتظهر للسائقين من أول يوم.
+                        المنصة تعمل الآن ونستقبل تسجيل المحطات في جميع مدن الأنبار. سجّل
+                        محطتك اليوم لتظهر للسائقين من أول يوم.
                       </p>
                       <a href="/register" className="btn-primary mt-5 w-full">
                         سجّل محطتك مجاناً
