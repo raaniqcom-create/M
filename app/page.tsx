@@ -21,7 +21,7 @@ import { TripAsk } from '@/components/TripAsk';
 import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
 import { InstallPrompt } from '@/components/InstallPrompt';
-import { AlertSetup } from '@/components/AlertSetup';
+import { WaitingForStations } from '@/components/WaitingForStations';
 import { FirstRun } from '@/components/FirstRun';
 import { SearchBar, EMPTY_FILTERS, countActive, type Filters } from '@/components/SearchBar';
 import { FuelIcon, ListIcon, MapPinIcon, SearchIcon, SpinnerIcon } from '@/components/icons';
@@ -341,21 +341,7 @@ export default function HomePage() {
                       "no results". The platform itself is live — it is the
                       stations that are still arriving. */}
                   {!query && countActive(filters) === 0 && stations?.length === 0 ? (
-                    <>
-                      <p className="mt-3 text-sm font-bold text-slate-700">
-                        لا توجد محطات مسجّلة بعد
-                      </p>
-                      <p className="mt-2 text-xs leading-relaxed text-slate-500">
-                        المنصة تعمل الآن ونستقبل تسجيل المحطات في جميع مدن الأنبار.
-                        لا تنتظر — اختر مدينتك ووقودك، ونحن ننبّهك أول ما تصل محطة.
-                      </p>
-                      <div className="mt-5 border-t border-slate-100 pt-5 text-right">
-                        <AlertSetup compact />
-                      </div>
-                      <a href="/register" className="btn-ghost mt-5 w-full">
-                        صاحب محطة؟ سجّلها مجاناً
-                      </a>
-                    </>
+                    <WaitingForStations />
                   ) : (
                     <p className="mt-3 text-sm font-medium text-slate-600">
                       {query

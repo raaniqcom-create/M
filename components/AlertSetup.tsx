@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CITY_NAMES } from '@/lib/cities';
-import { PRODUCT_LABELS, PRODUCT_ORDER } from '@/lib/products';
+import { PRODUCT_LABELS } from '@/lib/products';
+import { AlertChips } from './AlertChips';
 import {
   ALERTS_CHANGED,
   clearChoice,
@@ -47,9 +47,6 @@ export function AlertSetup({
     window.addEventListener(ALERTS_CHANGED, sync);
     return () => window.removeEventListener(ALERTS_CHANGED, sync);
   }, []);
-
-  const toggle = <T,>(list: T[], v: T): T[] =>
-    list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
 
   async function save() {
     setBusy(true);
@@ -114,53 +111,12 @@ export function AlertSetup({
         إشعار فوراً — بلا حساب وبلا رقم هاتف.
       </p>
 
-      <p className="mt-4 text-xs font-bold text-slate-700">
-        المدينة <span className="font-normal text-slate-400">(اتركها فارغة = كل المدن)</span>
-      </p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {CITY_NAMES.map((c) => {
-          const on = cities.includes(c);
-          return (
-            <button
-              key={c}
-              type="button"
-              aria-pressed={on}
-              onClick={() => setCities(toggle(cities, c))}
-              className={`min-h-[44px] rounded-full border px-3.5 text-xs font-semibold transition-colors ${
-                on
-                  ? 'border-brand bg-brand text-white'
-                  : 'border-slate-200 bg-white text-slate-600'
-              }`}
-            >
-              {c}
-            </button>
-          );
-        })}
-      </div>
-
-      <p className="mt-5 text-xs font-bold text-slate-700">
-        نوع الوقود <span className="font-normal text-slate-400">(اتركه فارغاً = الكل)</span>
-      </p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {PRODUCT_ORDER.map((p) => {
-          const on = products.includes(p);
-          return (
-            <button
-              key={p}
-              type="button"
-              aria-pressed={on}
-              onClick={() => setProducts(toggle(products, p))}
-              className={`min-h-[44px] rounded-full border px-3.5 text-xs font-semibold transition-colors ${
-                on
-                  ? 'border-brand bg-brand text-white'
-                  : 'border-slate-200 bg-white text-slate-600'
-              }`}
-            >
-              {PRODUCT_LABELS[p]}
-            </button>
-          );
-        })}
-      </div>
+      <AlertChips
+        cities={cities}
+        products={products}
+        onCities={setCities}
+        onProducts={setProducts}
+      />
 
       {error && (
         <div className="mt-4 rounded-xl bg-red-50 p-3">
