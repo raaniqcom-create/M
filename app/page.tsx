@@ -215,11 +215,11 @@ export default function HomePage() {
               {role === 'admin' ? '🛡 فتح لوحة الإدارة' : '🏪 العودة إلى لوحة محطتي'}
             </a>
           )}
+          {/* The blinking "قريباً" pill used to sit right beside this live
+              download link. Both store listings went out today; telling a
+              visitor the app is still coming, next to a button that installs
+              it, is the one contradiction that costs the install. */}
           {!native && !signedIn && (
-            {/* The blinking "قريباً" pill sat right beside a live download
-                link. Both store listings went out today; telling a visitor the
-                app is still coming, next to a button that installs it, is the
-                one contradiction that costs the install. */}
             <div className="mt-2 flex items-center justify-center gap-2">
               <a
                 href="/download"
