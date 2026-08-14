@@ -249,3 +249,54 @@ footer.foot {
 .close-row .dl h3 { max-width: none; margin-bottom: 2mm; }
 .close-row .dl { display: block; }
 .close-row .dl-row { justify-content: space-between; gap: 3mm; }
+
+/* ---------------------------------------------------------------------------
+   Download page. Three cards rather than a bare row of codes: each one answers
+   "which do I need?" before it answers "how", which is the question a reader
+   who is not sure what a QR is actually has. 30mm gives every symbol a module
+   well above the 0.5mm a phone camera needs, measured on the printed page.
+   --------------------------------------------------------------------------- */
+.qr-grid {
+  display: flex;
+  gap: 5mm;
+  margin-top: 5mm;
+}
+.qr-card {
+  flex: 1;
+  position: relative;
+  border: 1px solid var(--brand-100, #bbf7d0);
+  border-radius: 4mm;
+  padding: 6mm 3mm 4mm;
+  text-align: center;
+  background: #f7fdf9;
+}
+.qr-badge {
+  position: absolute;
+  top: -3.5mm;
+  inset-inline-start: 50%;
+  transform: translateX(50%);
+  width: 7mm;
+  height: 7mm;
+  line-height: 7mm;
+  border-radius: 50%;
+  background: var(--brand, #166534);
+  color: #fff;
+  font-size: 9pt;
+  font-weight: 800;
+}
+.qr-card svg { width: 30mm; height: 30mm; display: block; margin: 0 auto; }
+.qr-t { margin-top: 3mm; font-size: 10.5pt; font-weight: 800; color: #14532d; }
+.qr-s { margin-top: 0.8mm; font-size: 8.5pt; color: #5b6b62; }
+.qr-u {
+  margin-top: 2mm; font-size: 6.4pt; color: #7a8b81;
+  direction: ltr; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.note-box {
+  margin-top: 6mm;
+  border-inline-start: 3px solid var(--brand, #166534);
+  border-radius: 0;
+  background: #f1f8f4;
+  padding: 3.5mm 4mm;
+  font-size: 10pt;
+  line-height: 1.75;
+}
