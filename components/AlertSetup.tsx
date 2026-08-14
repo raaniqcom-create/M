@@ -11,6 +11,7 @@ import {
   type AlertChoice,
 } from '@/lib/alerts';
 import { BellIcon, SpinnerIcon } from '@/components/icons';
+import { detectPlatform, storeUrl } from '@/lib/stores';
 import type { FuelProduct } from '@/types/database';
 
 /** The promise the platform can keep on day one, before a single station has
@@ -29,6 +30,8 @@ export function AlertSetup({
   const [saved, setSaved] = useState<AlertChoice | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unsupported, setUnsupported] = useState(false);
+  const [store, setStore] = useState<string | null>(null);
 
   useEffect(() => {
     const sync = () => {
@@ -39,6 +42,7 @@ export function AlertSetup({
       setProducts(c.products);
     };
     sync();
+    setStore(storeUrl(detectPlatform()));
     // the onboarding screen and the empty-state picker are mounted together
     window.addEventListener(ALERTS_CHANGED, sync);
     return () => window.removeEventListener(ALERTS_CHANGED, sync);
@@ -60,6 +64,7 @@ export function AlertSetup({
       // A failed save leaves nothing subscribed, so the green panel must go
       // with it — the two used to render stacked, contradicting each other.
       setSaved(null);
+      setUnsupported(result === 'unsupported');
       setError(
         result === 'denied'
           ? 'الإشعارات ممنوعة لهذا التطبيق. فعّلها من إعدادات هاتفك ثم أعد المحاولة.'
@@ -158,7 +163,22 @@ export function AlertSetup({
       </div>
 
       {error && (
-        <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs leading-relaxed text-red-700">{error}</p>
+        <div className="mt-4 rounded-xl bg-red-50 p-3">
+          <p className="text-xs leading-relaxed text-red-700">{error}</p>
+          {/* Safari on iPhone has no Web Push outside an installed app, so the
+              only honest next step is the store — not a retry that cannot
+              succeed however many times it is tapped. */}
+          {unsupported && store && (
+            <a
+              href={store}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-primary mt-3 w-full"
+            >
+              حمّل التطبيق
+            </a>
+          )}
+        </div>
       )}
 
       <button

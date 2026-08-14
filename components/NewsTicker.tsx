@@ -47,7 +47,7 @@ export function NewsTicker({ stations }: { stations: StationWithStatus[] }) {
   const duration = Math.max(20, items.length * 7);
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-brand-600 bg-brand-700 text-white">
+    <div className="fixed inset-x-0 bottom-0 pb-[env(safe-area-inset-bottom)] z-40 border-t border-brand-600 bg-brand-700 text-white">
       <div className="flex items-stretch">
         <span className="z-10 flex shrink-0 items-center bg-brand-900 px-3 text-xs font-bold">
           آخر التحديثات

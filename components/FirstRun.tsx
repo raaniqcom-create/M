@@ -52,6 +52,7 @@ export function FirstRun() {
   const [permission, setPermission] = useState<Permission>('unknown');
   const [asking, setAsking] = useState(false);
   const [tone, setToneState] = useState<Tone>('2');
+  const [done, setDone] = useState(false);
 
   useEffect(() => {
     setToneState(getTone());
@@ -77,6 +78,17 @@ export function FirstRun() {
     }
     setShow(true);
   }, []);
+
+  // Coming back from the Settings app resumes the WebView without remounting,
+  // so nothing would ever re-read the permission the user just granted.
+  useEffect(() => {
+    if (!show || permission !== 'denied') return;
+    const recheck = () => {
+      if (document.visibilityState === 'visible') void grant();
+    };
+    document.addEventListener('visibilitychange', recheck);
+    return () => document.removeEventListener('visibilitychange', recheck);
+  }, [show, permission]);
 
   useEffect(() => {
     document.body.style.overflow = show ? 'hidden' : '';
@@ -144,10 +156,20 @@ export function FirstRun() {
               ✅ تم السماح بالإشعارات
             </p>
           ) : permission === 'denied' ? (
-            <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-              رُفض الإذن. افتح <b>إعدادات الهاتف ← المحطة التقنية ← الإشعارات</b> وفعّلها،
-              ثم ارجع وأكمل الاختيار بالأسفل.
-            </p>
+            <>
+              <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                رُفض الإذن. افتح <b>إعدادات الهاتف ← المحطة التقنية ← الإشعارات</b> وفعّلها،
+                ثم ارجع — سنتحقق تلقائياً.
+              </p>
+              <button
+                type="button"
+                onClick={grant}
+                disabled={asking}
+                className="btn-ghost mt-2 w-full disabled:opacity-60"
+              >
+                أعدت التفعيل — تحقّق الآن
+              </button>
+            </>
           ) : permission === 'unsupported' ? (
             <p className="mt-3 rounded-xl bg-slate-100 p-3 text-xs leading-relaxed text-slate-600">
               هذا المتصفح لا يدعم الإشعارات. حمّل التطبيق لتصلك التنبيهات.
@@ -185,16 +207,22 @@ export function FirstRun() {
         </div>
 
         <div className="mt-4">
-          <AlertSetup onSaved={close} />
+          <AlertSetup onSaved={() => setDone(true)} />
         </div>
 
-        <button
-          type="button"
-          onClick={close}
-          className="mt-4 min-h-[44px] w-full text-center text-sm font-semibold text-slate-500"
-        >
-          تخطّي الآن
-        </button>
+        {done ? (
+          <button type="button" onClick={close} className="btn-primary mt-4 w-full">
+            تم — اعرض المحطات
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={close}
+            className="mt-4 min-h-[44px] w-full text-center text-sm font-semibold text-slate-500"
+          >
+            تخطّي الآن
+          </button>
+        )}
       </div>
     </div>
   );

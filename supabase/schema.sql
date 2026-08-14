@@ -168,3 +168,76 @@ create policy "ads: public read active" on ads for select using (
 create policy "ads: admin write" on ads for all using (
   exists (select 1 from profiles where id = auth.uid() and role = 'admin')
 );
+
+
+-- ---------------------------------------------------------------------------
+-- alerts: who wants to hear about which fuel, where.
+--
+-- A null city or product means "any". One row per (device, city, product).
+-- Insert-only from the client: anonymous visitors hold no UPDATE grant in this
+-- project, and there is no SELECT policy either, so the current choice lives in
+-- localStorage rather than being read back. Deletion goes through
+-- alerts_unsubscribe() — a plain DELETE policy let anyone holding the published
+-- anon key wipe every subscription on the platform with one filtered request.
+-- ---------------------------------------------------------------------------
+
+create table if not exists alerts (
+  id            uuid primary key default gen_random_uuid(),
+  channel       text not null check (channel in ('web','ios','android','telegram')),
+  address       text not null,          -- web: endpoint | native: device token | telegram: chat_id
+  keys          jsonb,                  -- web push only: {p256dh, auth}
+  city          text,                   -- null = any city
+  product       fuel_product,           -- null = any product
+  last_sent_at  timestamptz not null default '-infinity',
+  created_at    timestamptz not null default now()
+);
+
+-- Two partial indexes rather than one over coalesce(product::text,''): casting
+-- an enum to text is STABLE, not IMMUTABLE, so Postgres refuses it in an index.
+create unique index if not exists alerts_uniq_product on alerts (channel, address, coalesce(city, ''), product)
+  where product is not null;
+create unique index if not exists alerts_uniq_anyproduct on alerts (channel, address, coalesce(city, ''))
+  where product is null;
+create index if not exists alerts_match on alerts (city, product);
+
+alter table alerts enable row level security;
+create policy "alerts: anyone may subscribe" on alerts for insert with check (true);
+grant select, insert on alerts to anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.alerts_for(p_city text, p_products fuel_product[], p_stamp boolean DEFAULT true)
+ RETURNS TABLE(channel text, address text, keys jsonb)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+begin
+  if p_stamp then
+    return query
+    with hit as (
+      update alerts a set last_sent_at = now()
+       where (a.city    is null or a.city    = p_city)
+         and (a.product is null or a.product = any(p_products))
+         and a.last_sent_at < now() - interval '45 minutes'
+      returning a.channel, a.address, a.keys
+    )
+    select distinct on (h.address) h.channel, h.address, h.keys from hit h order by h.address;
+  else
+    return query
+    select distinct on (a.address) a.channel, a.address, a.keys
+      from alerts a
+     where (a.city    is null or a.city    = p_city)
+       and (a.product is null or a.product = any(p_products))
+     order by a.address;
+  end if;
+end $function$;
+
+revoke all on function alerts_for(text, fuel_product[], boolean) from public, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.alerts_unsubscribe(p_address text)
+ RETURNS void
+ LANGUAGE sql
+ SECURITY DEFINER
+AS $function$
+  delete from alerts where address = p_address;
+$function$;
+
+grant execute on function alerts_unsubscribe(text) to anon, authenticated;

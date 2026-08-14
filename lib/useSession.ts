@@ -3,12 +3,24 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
-export type Session = { signedIn: boolean; role: 'admin' | 'owner' | null };
+export type Session = {
+  signedIn: boolean;
+  role: 'admin' | 'owner' | null;
+  /** False until the first answer lands. Anything that must not
+   *  appear for a signed-in owner has to wait for this: the check is
+   *  two network round trips, and 1-3s of "nobody is signed in" on
+   *  Iraqi mobile data is long enough to flash a whole screen. */
+  ready: boolean;
+};
 
 /** Who is holding the phone, if anyone. The menu and the home screen both need
  *  it to stop offering "sign in" to someone already signed in. */
 export function useSession(): Session {
-  const [session, setSession] = useState<Session>({ signedIn: false, role: null });
+  const [session, setSession] = useState<Session>({
+    signedIn: false,
+    role: null,
+    ready: false,
+  });
 
   useEffect(() => {
     let alive = true;
@@ -16,14 +28,18 @@ export function useSession(): Session {
     async function read() {
       const { data } = await supabase.auth.getUser();
       if (!alive) return;
-      if (!data.user) return setSession({ signedIn: false, role: null });
+      if (!data.user) return setSession({ signedIn: false, role: null, ready: true });
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', data.user.id)
         .maybeSingle();
       if (alive) {
-        setSession({ signedIn: true, role: profile?.role === 'admin' ? 'admin' : 'owner' });
+        setSession({
+          signedIn: true,
+          role: profile?.role === 'admin' ? 'admin' : 'owner',
+          ready: true,
+        });
       }
     }
 

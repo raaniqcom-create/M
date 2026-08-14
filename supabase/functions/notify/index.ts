@@ -265,7 +265,7 @@ async function notifyAndroidApps(
           message: {
             token: d.token,
             notification: { title, body },
-            data: { stationId },
+            data: { stationId, url: isNewStation ? '/' : `/station/${stationId}` },
             android: {
               priority: 'HIGH',
               // the channel carries the custom tone
@@ -382,6 +382,7 @@ async function notifyIosApps(
             'interruption-level': 'time-sensitive',
           },
           stationId,
+          url: isNewStation ? '/' : `/station/${stationId}`,
         }),
       }).then(async (r) => {
         // 410 is APNs for "this device is gone" — stop writing to it
@@ -527,7 +528,10 @@ Deno.serve(async (req) => {
     title: alertTitle,
     body: alertBody,
     stationId,
-    url: `/station/${stationId}`,
+    // An approval fires the moment the admin taps, while the static export
+    // that contains the station's page is still building — about two minutes
+    // of 404 for everyone who taps. Send them somewhere that already exists.
+    url: isNewStation ? '/' : `/station/${stationId}`,
   });
 
   const results = await Promise.allSettled(

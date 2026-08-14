@@ -78,6 +78,42 @@ export function NativePush() {
         console.error('push registration failed', err);
       });
 
+      // Tapping a notification must land on the thing it was about. Without
+      // this the app simply opens on the home list and the driver has to find
+      // the station himself — after we told him it had fuel.
+      await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+        const data = action.notification.data ?? {};
+        // `url` is set by the sender; it points home for a just-approved
+        // station whose page is still being built.
+        window.location.href =
+          data.url ?? (data.stationId ? `/station/${data.stationId}/` : '/');
+      });
+
+      // Android drops a payload's notification block while the app is in the
+      // foreground — the push arrives and nothing is shown. iOS handles this
+      // itself through presentationOptions in capacitor.config.json.
+      if (platform === 'android') {
+        await PushNotifications.addListener('pushNotificationReceived', async (n) => {
+          if (!n.title && !n.body) return;
+          try {
+            const { LocalNotifications } = await import('@capacitor/local-notifications');
+            await LocalNotifications.schedule({
+              notifications: [
+                {
+                  id: Date.now() % 2147483647,
+                  title: n.title ?? 'المحطة التقنية',
+                  body: n.body ?? '',
+                  channelId: 'muhta_alerts',
+                  extra: n.data,
+                },
+              ],
+            });
+          } catch {
+            /* plugin absent in an older shell — the push is simply not shown */
+          }
+        });
+      }
+
       await PushNotifications.register();
     })().catch((e) => console.error('native push setup failed', e));
 

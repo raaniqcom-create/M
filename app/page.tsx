@@ -48,7 +48,7 @@ export default function HomePage() {
   const { visits, online } = useSiteStats();
   const { toggle: toggleFavorite, isFavorite } = useFavorites();
   const native = useNativeApp();
-  const { signedIn, role } = useSession();
+  const { signedIn, role, ready } = useSession();
 
   // Send an owner or admin to their panel on open. Only once, and never when
   // they asked for the driver view — a redirect they cannot escape is worse
@@ -417,7 +417,7 @@ export default function HomePage() {
         </p>
       </main>
 
-      <FirstRun />
+      {ready && !signedIn && <FirstRun />}
       <InstallPrompt />
       <NewsTicker stations={stations ?? []} />
     </>
