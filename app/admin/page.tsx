@@ -25,7 +25,13 @@ export default function AdminPage() {
   const router = useRouter();
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [adminId, setAdminId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'add' | 'requests' | 'ads' | 'offers' | 'reviews'>('add');
+  // Stations first. The list used to be buried inside the "add a station"
+  // tab, so the one thing an admin opens this page to look at was two taps
+  // and a scroll past a registration form.
+  const [tab, setTab] = useState<'stations' | 'requests' | 'add' | 'ads' | 'offers' | 'reviews'>(
+    'stations'
+  );
+  const [q, setQ] = useState('');
   const [pending, setPending] = useState<Station[]>([]);
   const [approved, setApproved] = useState<Station[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
@@ -192,10 +198,26 @@ export default function AdminPage() {
         </button>
       </header>
 
-      <div className="mt-5 grid grid-cols-3 gap-1 rounded-xl bg-brand-50 p-1">
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        {[
+          { label: 'محطة معتمدة', value: approved.length },
+          { label: 'طلب معلّق', value: pending.length, warn: pending.length > 0 },
+          { label: 'مدينة فيها محطة', value: new Set(approved.map((s) => s.city)).size },
+        ].map((stat) => (
+          <div key={stat.label} className="rounded-xl bg-brand-50 py-2.5 text-center">
+            <p className={`text-lg font-extrabold leading-none ${stat.warn ? 'text-traffic-red' : 'text-brand-700'}`}>
+              {stat.value}
+            </p>
+            <p className="mt-1 text-[11px] font-semibold text-slate-500">{stat.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-brand-50 p-1">
         {([
+          ['stations', `المحطات (${approved.length})`],
+          ['requests', `الطلبات${pending.length ? ` (${pending.length})` : ''}`],
           ['add', 'إضافة محطة'],
-          ['requests', `الطلبات (${pending.length})`],
           ['ads', 'الإعلانات'],
           ['offers', 'العروض'],
           ['reviews', 'التقييمات'],
@@ -205,9 +227,9 @@ export default function AdminPage() {
             type="button"
             onClick={() => setTab(t)}
             aria-pressed={tab === t}
-            className={`min-h-[42px] rounded-lg text-[13px] font-semibold transition-colors duration-200 ${
+            className={`min-h-[44px] rounded-lg px-1 text-[12px] font-semibold transition-colors duration-200 ${
               tab === t ? 'bg-white text-brand shadow-soft' : 'text-brand-700'
-            }`}
+            } ${t === 'requests' && pending.length ? 'text-traffic-red' : ''}`}
           >
             {label}
           </button>
@@ -215,9 +237,20 @@ export default function AdminPage() {
       </div>
 
       {tab === 'add' && adminId && (
-        <div className="mt-4 space-y-4">
+        <div className="mt-4">
           <AdminStationForm adminId={adminId} onDone={load} />
+        </div>
+      )}
 
+      {tab === 'stations' && (
+        <div className="mt-4 space-y-4">
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="ابحث باسم المحطة أو المدينة"
+            className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
+          />
           <section className="card p-5">
             <h2 className="text-sm font-bold">المحطات المعتمدة ({approved.length})</h2>
             <p className="mt-1 text-xs text-slate-400">اضغط على النوع لتبديله بين حكومية وأهلية</p>
@@ -233,7 +266,15 @@ export default function AdminPage() {
               </button>
             )}
             <ul className="mt-3 space-y-3">
-              {approved.map((s) => (
+              {approved
+                .filter(
+                  (s) =>
+                    !q.trim() ||
+                    s.name.includes(q.trim()) ||
+                    s.city.includes(q.trim()) ||
+                    s.address.includes(q.trim())
+                )
+                .map((s) => (
                 <li key={s.id} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
                   {/* the name is the way in: everything per-station lives on
                       its own page rather than swelling this list */}
@@ -273,7 +314,7 @@ export default function AdminPage() {
                     </button>
                   </div>
                 </li>
-              ))}
+                ))}
               {approved.length === 0 && (
                 <li className="text-sm text-slate-400">لا توجد محطات معتمدة بعد</li>
               )}
