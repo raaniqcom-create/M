@@ -52,8 +52,16 @@ async function currentTarget(): Promise<Target | null> {
   ).Capacitor;
 
   if (cap?.isNativePlatform?.()) {
-    const token = localStorage.getItem('device-token');
-    if (!token) return null; // registration hasn't come back yet
+    // On a first launch this runs while APNs/FCM registration is still in
+    // flight, so a straight read returns null and the driver is told his
+    // permissions failed — on the one screen that has to work. Wait for the
+    // token the way the user already is.
+    let token = localStorage.getItem('device-token');
+    for (let i = 0; !token && i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      token = localStorage.getItem('device-token');
+    }
+    if (!token) return null;
     return {
       channel: cap.getPlatform?.() === 'ios' ? 'ios' : 'android',
       address: token,

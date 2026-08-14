@@ -10,7 +10,14 @@ import type { FuelProduct } from '@/types/database';
 /** The promise the platform can keep on day one, before a single station has
  *  registered: pick your city and your fuel, and the phone rings the moment
  *  one appears. Nothing here needs an account. */
-export function AlertSetup({ compact = false }: { compact?: boolean }) {
+export function AlertSetup({
+  compact = false,
+  onSaved,
+}: {
+  compact?: boolean;
+  /** Lets the first-run screen step aside the moment the choice lands. */
+  onSaved?: () => void;
+}) {
   const [cities, setCities] = useState<string[]>([]);
   const [products, setProducts] = useState<FuelProduct[]>([]);
   const [saved, setSaved] = useState<AlertChoice | null>(null);
@@ -36,6 +43,7 @@ export function AlertSetup({ compact = false }: { compact?: boolean }) {
     setBusy(false);
     if (result === 'ok') {
       setSaved({ cities, products });
+      onSaved?.();
       return;
     }
     setError(

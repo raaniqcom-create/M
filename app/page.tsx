@@ -21,6 +21,7 @@ import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import { AlertSetup } from '@/components/AlertSetup';
+import { FirstRun } from '@/components/FirstRun';
 import { SearchBar, EMPTY_FILTERS, countActive, type Filters } from '@/components/SearchBar';
 import { FuelIcon, ListIcon, MapPinIcon, SearchIcon, SpinnerIcon } from '@/components/icons';
 import type { FuelProduct, StationWithStatus } from '@/types/database';
@@ -414,6 +415,7 @@ export default function HomePage() {
         </p>
       </main>
 
+      <FirstRun />
       <InstallPrompt />
       <NewsTicker stations={stations ?? []} />
     </>
