@@ -3,7 +3,13 @@
 import { useEffect, useState } from 'react';
 import { CITY_NAMES } from '@/lib/cities';
 import { PRODUCT_LABELS, PRODUCT_ORDER } from '@/lib/products';
-import { readChoice, saveChoice, clearChoice, type AlertChoice } from '@/lib/alerts';
+import {
+  ALERTS_CHANGED,
+  clearChoice,
+  readChoice,
+  saveChoice,
+  type AlertChoice,
+} from '@/lib/alerts';
 import { BellIcon, SpinnerIcon } from '@/components/icons';
 import type { FuelProduct } from '@/types/database';
 
@@ -25,12 +31,17 @@ export function AlertSetup({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const c = readChoice();
-    if (c) {
+    const sync = () => {
+      const c = readChoice();
+      if (!c) return setSaved(null);
       setSaved(c);
       setCities(c.cities);
       setProducts(c.products);
-    }
+    };
+    sync();
+    // the onboarding screen and the empty-state picker are mounted together
+    window.addEventListener(ALERTS_CHANGED, sync);
+    return () => window.removeEventListener(ALERTS_CHANGED, sync);
   }, []);
 
   const toggle = <T,>(list: T[], v: T): T[] =>
@@ -39,27 +50,47 @@ export function AlertSetup({
   async function save() {
     setBusy(true);
     setError(null);
-    const result = await saveChoice({ cities, products });
-    setBusy(false);
-    if (result === 'ok') {
-      setSaved({ cities, products });
-      onSaved?.();
-      return;
+    try {
+      const result = await saveChoice({ cities, products });
+      if (result === 'ok') {
+        setSaved({ cities, products });
+        onSaved?.();
+        return;
+      }
+      // A failed save leaves nothing subscribed, so the green panel must go
+      // with it — the two used to render stacked, contradicting each other.
+      setSaved(null);
+      setError(
+        result === 'denied'
+          ? 'الإشعارات ممنوعة لهذا التطبيق. فعّلها من إعدادات هاتفك ثم أعد المحاولة.'
+          : result === 'unsupported'
+            ? 'هذا المتصفح لا يدعم الإشعارات — حمّل التطبيق لتصلك التنبيهات.'
+            : result === 'pending'
+              ? 'التسجيل لم يكتمل بعد. انتظر لحظة وأعد المحاولة.'
+              : 'تعذّر الحفظ. تأكد من الاتصال وأعد المحاولة.'
+      );
+    } catch {
+      setSaved(null);
+      setError('تعذّر الحفظ. تأكد من الاتصال وأعد المحاولة.');
+    } finally {
+      setBusy(false);
     }
-    setError(
-      result === 'no-permission'
-        ? 'لم يُسمح بالإشعارات. فعّلها من إعدادات المتصفح أو الهاتف ثم أعد المحاولة.'
-        : 'تعذّر الحفظ. تأكد من الاتصال وأعد المحاولة.'
-    );
   }
 
   async function stop() {
     setBusy(true);
-    await clearChoice();
-    setBusy(false);
-    setSaved(null);
-    setCities([]);
-    setProducts([]);
+    try {
+      if (!(await clearChoice())) {
+        setError('تعذّر الإيقاف. تأكد من الاتصال وأعد المحاولة.');
+        return;
+      }
+      setSaved(null);
+      setCities([]);
+      setProducts([]);
+      setError(null);
+    } finally {
+      setBusy(false);
+    }
   }
 
   const cityLabel = cities.length ? cities.join('، ') : 'كل مدن الأنبار';
@@ -90,7 +121,7 @@ export function AlertSetup({
               type="button"
               aria-pressed={on}
               onClick={() => setCities(toggle(cities, c))}
-              className={`min-h-[36px] rounded-full border px-3 text-xs font-semibold transition-colors ${
+              className={`min-h-[44px] rounded-full border px-3.5 text-xs font-semibold transition-colors ${
                 on
                   ? 'border-brand bg-brand text-white'
                   : 'border-slate-200 bg-white text-slate-600'
@@ -114,7 +145,7 @@ export function AlertSetup({
               type="button"
               aria-pressed={on}
               onClick={() => setProducts(toggle(products, p))}
-              className={`min-h-[36px] rounded-full border px-3 text-xs font-semibold transition-colors ${
+              className={`min-h-[44px] rounded-full border px-3.5 text-xs font-semibold transition-colors ${
                 on
                   ? 'border-brand bg-brand text-white'
                   : 'border-slate-200 bg-white text-slate-600'

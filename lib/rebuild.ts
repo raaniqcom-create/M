@@ -14,11 +14,13 @@ import { supabase } from './supabase';
  *  failure: the approval stands either way. */
 export async function announceStation(stationId: string): Promise<void> {
   try {
+    const { data } = await supabase.auth.getSession();
     await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/notify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        Authorization: `Bearer ${data.session?.access_token ?? ''}`,
       },
       body: JSON.stringify({ stationId, newStation: true }),
     });

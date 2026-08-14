@@ -68,10 +68,15 @@ interface Listener {
   keys: { p256dh?: string; auth?: string } | null;
 }
 
-async function audienceFor(city: string, products: string[]): Promise<Listener[]> {
+async function audienceFor(
+  city: string,
+  products: string[],
+  stamp = true
+): Promise<Listener[]> {
   const { data, error } = await db.rpc('alerts_for', {
     p_city: city,
     p_products: products,
+    p_stamp: stamp,
   });
   if (error) {
     console.error('alerts_for', error);
@@ -397,6 +402,28 @@ async function notifyIosApps(
 
 // ---------- Handler ----------
 
+/** The endpoint answered to anyone: no apikey, no session, no cookie. Station
+ *  ids are public (they are in every /station/<id> URL), so a stranger could
+ *  announce fuel that never arrived, and — worse — spend every subscriber's
+ *  cooldown so the real announcement was silently dropped.
+ *
+ *  Only the station's own owner or an admin may speak for a station. */
+async function callerMayAnnounce(req: Request, stationId: string): Promise<boolean> {
+  const auth = req.headers.get('Authorization') ?? '';
+  const jwt = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!jwt) return false;
+
+  const { data, error } = await db.auth.getUser(jwt);
+  if (error || !data.user) return false;
+
+  const [{ data: profile }, { data: station }] = await Promise.all([
+    db.from('profiles').select('role').eq('id', data.user.id).maybeSingle(),
+    db.from('stations').select('owner_id').eq('id', stationId).maybeSingle(),
+  ]);
+
+  return profile?.role === 'admin' || station?.owner_id === data.user.id;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
@@ -426,6 +453,9 @@ Deno.serve(async (req) => {
   // Anyone can reach this endpoint, so every claim in the request is checked
   // against the database before a single notification goes out.
   if (typeof stationId !== 'string') return json({ error: 'invalid payload' }, 400);
+  if (!(await callerMayAnnounce(req, stationId))) {
+    return json({ error: 'unauthorized' }, 401);
+  }
   if (!isNewStation && (!wanted.length || wanted.length !== asked.length)) {
     return json({ error: 'invalid payload' }, 400);
   }
@@ -458,7 +488,11 @@ Deno.serve(async (req) => {
   const alertTitle = isNewStation ? `⛽ محطة جديدة` : headline(live);
   const alertBody = placeline(station.name, station.city);
 
-  const listeners = await audienceFor(station.city, isNewStation ? allProducts : live);
+  const listeners = await audienceFor(
+    station.city,
+    isNewStation ? allProducts : live,
+    !isNewStation
+  );
   const pick = (c: string) => listeners.filter((l) => l.channel === c);
   const webListeners = pick('web');
 

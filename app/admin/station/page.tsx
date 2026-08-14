@@ -115,11 +115,13 @@ function Panel() {
     const available = products.filter((p) => p.is_available).map((p) => p.product);
     if (!available.length) return;
     setBusy('announce');
+    const { data: sess } = await supabase.auth.getSession();
     await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/notify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        Authorization: `Bearer ${sess.session?.access_token ?? ''}`,
       },
       body: JSON.stringify({ stationId: station.id, products: available }),
     }).catch(() => {});

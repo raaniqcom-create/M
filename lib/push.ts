@@ -30,7 +30,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   ]);
 }
 
-async function getPushSubscription(): Promise<PushSubscription | null> {
+export async function getPushSubscription(): Promise<PushSubscription | null> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
 
   const registration = await withTimeout(navigator.serviceWorker.ready, 15000);

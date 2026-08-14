@@ -40,11 +40,13 @@ export function NativePush() {
         }).catch(() => {});
       }
 
-      // Android 13+ needs the runtime prompt; older versions grant implicitly
-      let status = await PushNotifications.checkPermissions();
-      if (status.receive === 'prompt' || status.receive === 'prompt-with-rationale') {
-        status = await PushNotifications.requestPermissions();
-      }
+      // Deliberately does NOT prompt. iOS and Android 13+ ask exactly once in
+      // the lifetime of an install, and this effect runs the instant the
+      // WebView loads — the dialog used to land on top of the onboarding
+      // screen, before the driver had read a word of why he wants it. The ask
+      // now belongs to FirstRun, on a deliberate tap, after the explanation.
+      // Here we only pick up a permission that already exists.
+      const status = await PushNotifications.checkPermissions();
       if (status.receive !== 'granted' || cancelled) return;
 
       await PushNotifications.addListener('registration', async (token) => {

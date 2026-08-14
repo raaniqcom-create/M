@@ -216,11 +216,11 @@ export default function HomePage() {
             </a>
           )}
           {!native && !signedIn && (
+            {/* The blinking "قريباً" pill sat right beside a live download
+                link. Both store listings went out today; telling a visitor the
+                app is still coming, next to a button that installs it, is the
+                one contradiction that costs the install. */}
             <div className="mt-2 flex items-center justify-center gap-2">
-              <span className="flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold backdrop-blur-sm">
-                <span aria-hidden className="h-1.5 w-1.5 animate-blink rounded-full bg-white" />
-                <span className="animate-blink">قريباً</span>
-              </span>
               <a
                 href="/download"
                 className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11px] font-extrabold text-brand-700"

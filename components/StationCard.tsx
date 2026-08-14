@@ -9,7 +9,6 @@ import { ageLabel, hoursLabel, isFresh, isOpenNow, PERIOD_LABELS } from '@/lib/h
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
 import { KIND_LABELS, KIND_STYLES } from '@/lib/stationMeta';
-import { BellButton } from './BellButton';
 import { RouteButton } from './RouteButton';
 import { StarIcon } from './icons';
 import { MapPinIcon, PhoneIcon } from './icons';
@@ -87,7 +86,6 @@ export function StationCard({
               <StarIcon filled={isFavorite} />
             </button>
           )}
-          <BellButton stationId={station.id} />
         </div>
       </header>
 

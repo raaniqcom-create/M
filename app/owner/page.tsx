@@ -131,11 +131,15 @@ export default function OwnerPage() {
     // the board is right — not on every tap while they are still deciding.
     const available = products.filter((p) => p.is_available).map((p) => p.product);
     if (available.length) {
+      // notify only speaks for a station on its owner's or an admin's word, so
+      // the session token rides along — the endpoint used to answer anyone.
+      const { data: sess } = await supabase.auth.getSession();
       fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/notify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          Authorization: `Bearer ${sess.session?.access_token ?? ''}`,
         },
         body: JSON.stringify({ stationId: station.id, products: available }),
       }).catch(() => {});
