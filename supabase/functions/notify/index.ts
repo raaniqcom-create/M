@@ -222,6 +222,7 @@ async function notifyAndroidApps(
   stationId: string,
   title: string,
   body: string,
+  url: string,
   tokens: string[]
 ): Promise<Record<string, unknown>> {
   const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
@@ -265,7 +266,7 @@ async function notifyAndroidApps(
           message: {
             token: d.token,
             notification: { title, body },
-            data: { stationId, url: isNewStation ? '/' : `/station/${stationId}` },
+            data: { stationId, url },
             android: {
               priority: 'HIGH',
               // the channel carries the custom tone
@@ -326,6 +327,7 @@ async function notifyIosApps(
   stationId: string,
   title: string,
   body: string,
+  url: string,
   tokens: string[]
 ): Promise<Record<string, unknown>> {
   const keyId = Deno.env.get('APNS_KEY_ID');
@@ -382,7 +384,7 @@ async function notifyIosApps(
             'interruption-level': 'time-sensitive',
           },
           stationId,
-          url: isNewStation ? '/' : `/station/${stationId}`,
+          url,
         }),
       }).then(async (r) => {
         // 410 is APNs for "this device is gone" — stop writing to it
@@ -488,6 +490,10 @@ Deno.serve(async (req) => {
   if (!isNewStation && !live.length) return json({ error: 'product not available' }, 409);
   const alertTitle = isNewStation ? `⛽ محطة جديدة` : headline(live);
   const alertBody = placeline(station.name, station.city);
+  // An approval fires while the static export containing the station's
+  // page is still building — about two minutes of 404 for anyone who
+  // taps. Send those somewhere that already exists.
+  const alertUrl = isNewStation ? '/' : `/station/${stationId}`;
 
   const listeners = await audienceFor(
     station.city,
@@ -501,8 +507,8 @@ Deno.serve(async (req) => {
   // soon as the response returns, dropping an in-flight request.
   const [tg, fcm, apns] = await Promise.allSettled([
     notifyTelegram(stationId, station.name, isNewStation ? [] : live),
-    notifyAndroidApps(stationId, alertTitle, alertBody, pick('android').map((l) => l.address)),
-    notifyIosApps(stationId, alertTitle, alertBody, pick('ios').map((l) => l.address)),
+    notifyAndroidApps(stationId, alertTitle, alertBody, alertUrl, pick('android').map((l) => l.address)),
+    notifyIosApps(stationId, alertTitle, alertBody, alertUrl, pick('ios').map((l) => l.address)),
   ]);
   if (tg.status === 'rejected') console.error('telegram', tg.reason);
   if (fcm.status === 'rejected') console.error('fcm', fcm.reason);
@@ -531,7 +537,7 @@ Deno.serve(async (req) => {
     // An approval fires the moment the admin taps, while the static export
     // that contains the station's page is still building — about two minutes
     // of 404 for everyone who taps. Send them somewhere that already exists.
-    url: isNewStation ? '/' : `/station/${stationId}`,
+    url: alertUrl,
   });
 
   const results = await Promise.allSettled(
