@@ -11,10 +11,15 @@ import {
   type Tone,
 } from '@/lib/alertSound';
 import { useSession } from '@/lib/useSession';
+import { XIcon } from './icons';
 
-/** The drawer holds everything that isn't the driver's main job: signing in as
- *  an owner, sound settings, help. Keeping them out of the header leaves the
- *  first screen for stations, which is what the app is for. */
+/** The drawer holds everything that isn't the driver's main job: alerts,
+ *  signing in as an owner, sound settings, help. Keeping them out of the
+ *  header leaves the first screen for stations, which is what the app is for.
+ *
+ *  Grouped by who each row is for — driver, then station owner, then settings
+ *  — because the previous flat list put "sign in to my station" above the one
+ *  thing a driver opens the menu to find. */
 export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) {
   const [open, setOpen] = useState(false);
   const [tone, setToneState] = useState<Tone>('1');
@@ -35,6 +40,14 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
     return () => {
       document.body.style.overflow = '';
     };
+  }, [open]);
+
+  // Escape closes it, the way every other dialog on a phone browser behaves
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
   function chooseTone(t: Tone) {
@@ -66,21 +79,61 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="القائمة">
           <button
             type="button"
             aria-label="إغلاق القائمة"
             onClick={() => setOpen(false)}
-            className="flex-1 bg-black/40"
+            className="scrim-enter absolute inset-0 bg-black/40"
           />
 
-          <aside className="flex h-full w-[82%] max-w-xs flex-col overflow-y-auto bg-white pb-[env(safe-area-inset-bottom)] shadow-xl">
-            <div className="bg-gradient-to-b from-brand-700 to-brand px-4 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] text-white">
-              <p className="text-base font-extrabold">المحطة التقنية</p>
-              <p className="mt-0.5 text-xs text-white/80">منصة وقود الأنبار</p>
+          {/* Pinned to the physical right and slid in from it. Anchoring by
+              flex order instead flips with dir="rtl" and lands on the left. */}
+          <aside className="drawer-enter absolute inset-y-0 right-0 flex w-[86%] max-w-[20rem] flex-col overflow-y-auto bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl">
+            <div className="flex items-start justify-between bg-gradient-to-b from-brand-700 to-brand px-4 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] text-white">
+              <div>
+                <p className="text-base font-extrabold">المحطة التقنية</p>
+                <p className="mt-0.5 text-xs text-white/80">منصة وقود الأنبار</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="إغلاق"
+                className="-me-1 flex h-8 w-8 items-center justify-center rounded-lg text-white/80 hover:bg-white/10"
+              >
+                <XIcon className="h-4 w-4" />
+              </button>
             </div>
 
-            <nav className="flex flex-col p-3 text-sm">
+            <nav className="flex flex-col gap-0.5 p-3 text-sm">
+              <Label>للسائقين</Label>
+
+              <Item
+                href="/alerts"
+                icon="🔔"
+                title="نبّهني عند توفر الوقود"
+                note="اختر مدينتك ونوع الوقود"
+              />
+
+              <Row
+                icon="⛽"
+                title="المحطات المتاحة الآن"
+                note="التي يتوفر فيها وقود"
+                onClick={() => {
+                  onAvailableOnly?.();
+                  setOpen(false);
+                }}
+              />
+
+              <Item
+                href="/download"
+                icon="📲"
+                title="حمّل التطبيق"
+                note="آيفون وأندرويد — مجاناً"
+              />
+
+              <Label>لأصحاب المحطات</Label>
+
               {/* Offering "sign in" to someone already signed in is the most
                   common way an app makes a returning user feel lost. */}
               {signedIn ? (
@@ -90,41 +143,13 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                   <Item href="/owner" icon="🏪" title="لوحة محطتي" note="تحديث التوفر والمنشورات" />
                 )
               ) : (
-                <Item
-                  href="/login"
-                  icon="🏪"
-                  title="الدخول إلى محطتي"
-                  note="لأصحاب المحطات — تحديث التوفر"
-                />
+                <>
+                  <Item href="/register" icon="➕" title="سجّل محطتك" note="مجاناً، بضع خطوات" />
+                  <Item href="/login" icon="🏪" title="الدخول إلى محطتي" note="تحديث التوفر" />
+                </>
               )}
 
-              <Item
-                href="/subscribe"
-                icon="🔔"
-                title="اشترك بالعروض"
-                note="للسائقين — يصلك توفر الوقود برسالة"
-              />
-
-              <button
-                type="button"
-                onClick={() => {
-                  onAvailableOnly?.();
-                  setOpen(false);
-                }}
-                className="flex items-start gap-3 rounded-xl px-3 py-3 text-right active:bg-slate-50"
-              >
-                <span className="text-lg leading-none">⛽</span>
-                <span className="min-w-0">
-                  <span className="block font-bold text-slate-800">المحطات المتاحة الآن</span>
-                  <span className="block text-xs text-slate-500">التي يتوفر فيها وقود</span>
-                </span>
-              </button>
-
-              {!signedIn && (
-                <Item href="/register" icon="➕" title="سجّل محطتك" note="مجاناً، بضع خطوات" />
-              )}
-
-              <p className="mt-4 px-3 pb-1 text-[11px] font-bold text-slate-400">إعدادات التطبيق</p>
+              <Label>الصوت</Label>
 
               <div className="rounded-xl border border-slate-200 p-3">
                 <div className="flex items-center justify-between">
@@ -184,8 +209,9 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                 </button>
               </div>
 
-              <p className="mt-4 px-3 pb-1 text-[11px] font-bold text-slate-400">أخرى</p>
+              <Label>أخرى</Label>
               <Item href="https://t.me/muhtaonlinebot" icon="💬" title="بوت تيليجرام" note="تنبيهات وإدارة محطتك" external />
+              <Item href="/subscribe" icon="✉️" title="اشترك برسالة" note="لمن لا يستخدم التطبيق" />
               <Item href="/privacy" icon="🛡" title="الخصوصية" note="ما نجمعه ولماذا" />
             </nav>
           </aside>
@@ -194,6 +220,26 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
     </>
   );
 }
+
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-4 px-3 pb-1 text-[11px] font-bold text-slate-400 first:mt-0">{children}</p>
+  );
+}
+
+function Body({ icon, title, note }: { icon: string; title: string; note: string }) {
+  return (
+    <>
+      <span className="w-6 shrink-0 text-center text-lg leading-none">{icon}</span>
+      <span className="min-w-0">
+        <span className="block font-bold text-slate-800">{title}</span>
+        <span className="block text-xs text-slate-500">{note}</span>
+      </span>
+    </>
+  );
+}
+
+const ROW = 'flex items-start gap-3 rounded-xl px-3 py-3 text-right active:bg-slate-50';
 
 function Item({
   href,
@@ -209,16 +255,26 @@ function Item({
   external?: boolean;
 }) {
   return (
-    <a
-      href={href}
-      {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-      className="flex items-start gap-3 rounded-xl px-3 py-3 active:bg-slate-50"
-    >
-      <span className="text-lg leading-none">{icon}</span>
-      <span className="min-w-0">
-        <span className="block font-bold text-slate-800">{title}</span>
-        <span className="block text-xs text-slate-500">{note}</span>
-      </span>
+    <a href={href} {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})} className={ROW}>
+      <Body icon={icon} title={title} note={note} />
     </a>
+  );
+}
+
+function Row({
+  icon,
+  title,
+  note,
+  onClick,
+}: {
+  icon: string;
+  title: string;
+  note: string;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick} className={`${ROW} w-full`}>
+      <Body icon={icon} title={title} note={note} />
+    </button>
   );
 }

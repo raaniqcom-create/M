@@ -20,6 +20,7 @@ import { TripAsk } from '@/components/TripAsk';
 import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
 import { InstallPrompt } from '@/components/InstallPrompt';
+import { AlertSetup } from '@/components/AlertSetup';
 import { SearchBar, EMPTY_FILTERS, countActive, type Filters } from '@/components/SearchBar';
 import { FuelIcon, ListIcon, MapPinIcon, SearchIcon, SpinnerIcon } from '@/components/icons';
 import type { FuelProduct, StationWithStatus } from '@/types/database';
@@ -338,11 +339,14 @@ export default function HomePage() {
                         لا توجد محطات مسجّلة بعد
                       </p>
                       <p className="mt-2 text-xs leading-relaxed text-slate-500">
-                        المنصة تعمل الآن ونستقبل تسجيل المحطات في جميع مدن الأنبار. سجّل
-                        محطتك اليوم لتظهر للسائقين من أول يوم.
+                        المنصة تعمل الآن ونستقبل تسجيل المحطات في جميع مدن الأنبار.
+                        لا تنتظر — اختر مدينتك ووقودك، ونحن ننبّهك أول ما تصل محطة.
                       </p>
-                      <a href="/register" className="btn-primary mt-5 w-full">
-                        سجّل محطتك مجاناً
+                      <div className="mt-5 border-t border-slate-100 pt-5 text-right">
+                        <AlertSetup compact />
+                      </div>
+                      <a href="/register" className="btn-ghost mt-5 w-full">
+                        صاحب محطة؟ سجّلها مجاناً
                       </a>
                     </>
                   ) : (
@@ -381,10 +385,12 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* The only line saying registration is open used to live inside the
-            empty state, so it vanished the moment the first station appeared —
-            exactly when owners started looking. */}
-        {!signedIn && (
+        {/* Registration is offered exactly once. While the map is empty the
+            call sits inside the empty state, where the eye already is; once
+            stations exist that block disappears and this banner takes over —
+            which is also when owners start looking. Showing both at once put
+            the same green button on screen twice. */}
+        {!signedIn && stations !== null && stations.length > 0 && (
           <section className="mt-6 rounded-2xl border border-brand-100 bg-brand-50 p-4 text-center">
             <p className="text-sm font-bold text-brand-900">محطتك غير مسجّلة؟</p>
             <p className="mt-1 text-xs leading-relaxed text-brand-800">
@@ -399,6 +405,11 @@ export default function HomePage() {
             </a>
           </section>
         )}
+        <p className="mt-8 text-center text-[11px] leading-relaxed text-slate-400">
+          فكرة وتنفيذ أحمد الرفاعي
+          <span aria-hidden className="mx-1.5 text-slate-300">|</span>
+          مركز الرؤية للابتكار الرقمي
+        </p>
       </main>
 
       <InstallPrompt />

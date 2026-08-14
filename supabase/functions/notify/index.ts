@@ -45,11 +45,38 @@ const json = (body: unknown, status = 200) =>
     headers: { ...CORS, 'Content-Type': 'application/json' },
   });
 
+/** Who asked to hear about this. Replaces three separate "every device on the
+ *  platform" queries — the app channels used to broadcast every arrival at
+ *  every station to everyone who had ever opened the app, which is a fine way
+ *  to get uninstalled the week the station count grows.
+ *
+ *  The matching, the 45-minute per-device cooldown and the de-duplication all
+ *  live in alerts_for() so a device subscribed to five matching rows still
+ *  gets exactly one message. */
+interface Listener {
+  channel: string;
+  address: string;
+  keys: { p256dh?: string; auth?: string } | null;
+}
+
+async function audienceFor(city: string, products: string[]): Promise<Listener[]> {
+  const { data, error } = await db.rpc('alerts_for', {
+    p_city: city,
+    p_products: products,
+  });
+  if (error) {
+    console.error('alerts_for', error);
+    return [];
+  }
+  return (data ?? []) as Listener[];
+}
+
 // ---------- Telegram ----------
 
 /** Fires the bot alert immediately rather than waiting for the scheduled
  *  sweep — fuel queues form within minutes, so a delay is a real cost. */
 async function notifyTelegram(stationId: string, stationName: string, products: string[]) {
+  if (!products.length) return; // an approval announcement names no fuel
   const [{ data: favs }, { data: st }] = await Promise.all([
     db.from('telegram_favorites').select('chat_id').eq('station_id', stationId),
     db.from('stations').select('city').eq('id', stationId).maybeSingle(),
@@ -180,7 +207,8 @@ async function fcmAccessToken(sa: {
 async function notifyAndroidApps(
   stationId: string,
   stationName: string,
-  body: string
+  body: string,
+  tokens: string[]
 ): Promise<Record<string, unknown>> {
   const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
   if (!raw) return { skipped: 'FIREBASE_SERVICE_ACCOUNT missing' };
@@ -207,11 +235,10 @@ async function notifyAndroidApps(
     };
   }
 
-  const { data: devices } = await db
-    .from('device_tokens')
-    .select('token')
-    .eq('platform', 'android');
-  if (!devices?.length) return { credentialOk: true, project: sa.project_id, skipped: 'no android devices' };
+  const devices = tokens.map((token) => ({ token }));
+  if (!devices.length) {
+    return { credentialOk: true, project: sa.project_id, skipped: 'no android listeners' };
+  }
 
   const report: string[] = [];
 
@@ -235,6 +262,7 @@ async function notifyAndroidApps(
       }).then(async (r) => {
         // a token dies when the app is uninstalled — drop it rather than retry forever
         if (r.status === 404) {
+          await db.from('alerts').delete().eq('address', d.token);
           await db.from('device_tokens').delete().eq('token', d.token);
           report.push('404 unregistered');
         } else if (!r.ok) {
@@ -283,7 +311,8 @@ async function apnsToken(keyId: string, teamId: string, pem: string): Promise<st
 async function notifyIosApps(
   stationId: string,
   stationName: string,
-  body: string
+  body: string,
+  tokens: string[]
 ): Promise<Record<string, unknown>> {
   const keyId = Deno.env.get('APNS_KEY_ID');
   const teamId = Deno.env.get('APNS_TEAM_ID');
@@ -293,11 +322,8 @@ async function notifyIosApps(
     return { skipped: 'APNS secrets missing', keyId: !!keyId, teamId: !!teamId, pem: !!pem };
   }
 
-  const { data: devices } = await db
-    .from('device_tokens')
-    .select('token')
-    .eq('platform', 'ios');
-  if (!devices?.length) return { skipped: 'no ios devices' };
+  const devices = tokens.map((token) => ({ token }));
+  if (!devices.length) return { skipped: 'no ios listeners' };
 
   let jwt: string;
   try {
@@ -346,6 +372,7 @@ async function notifyIosApps(
       }).then(async (r) => {
         // 410 is APNs for "this device is gone" — stop writing to it
         if (r.status === 410) {
+          await db.from('alerts').delete().eq('address', d.token);
           await db.from('device_tokens').delete().eq('token', d.token);
           report.push('410 gone');
         } else if (!r.ok) {
@@ -382,16 +409,21 @@ Deno.serve(async (req) => {
   const wanted = [...new Set(asked)].filter(
     (p): p is string => typeof p === 'string' && p in PRODUCT_LABELS
   );
+  // A station joining is news in its own right — that is the entire promise
+  // made to everyone who subscribed while the map was still empty. It has no
+  // product to verify, so it takes its own path through the checks below.
+  const isNewStation = body?.newStation === true;
 
   // Anyone can reach this endpoint, so every claim in the request is checked
   // against the database before a single notification goes out.
-  if (typeof stationId !== 'string' || !wanted.length || wanted.length !== asked.length) {
+  if (typeof stationId !== 'string') return json({ error: 'invalid payload' }, 400);
+  if (!isNewStation && (!wanted.length || wanted.length !== asked.length)) {
     return json({ error: 'invalid payload' }, 400);
   }
 
   const { data: station } = await db
     .from('stations')
-    .select('name, status')
+    .select('name, status, city')
     .eq('id', stationId)
     .maybeSingle();
 
@@ -399,6 +431,8 @@ Deno.serve(async (req) => {
 
   // only announce fuel that is genuinely in stock right now, so a forged call
   // cannot tell drivers to drive to an empty station
+  // Anyone watching this city, whatever fuel they picked, is owed this one.
+  const allProducts = Object.keys(PRODUCT_LABELS);
   const { data: rows } = await db
     .from('station_products')
     .select('product')
@@ -411,31 +445,39 @@ Deno.serve(async (req) => {
   const live = Object.keys(PRODUCT_LABELS).filter((p) =>
     rows?.some((r) => r.product === p)
   );
-  if (!live.length) return json({ error: 'product not available' }, 409);
-  const alertText = headline(live);
+  if (!isNewStation && !live.length) return json({ error: 'product not available' }, 409);
+  const alertText = isNewStation
+    ? `محطة جديدة في ${station.city}`
+    : headline(live);
+
+  const listeners = await audienceFor(station.city, isNewStation ? allProducts : live);
+  const pick = (c: string) => listeners.filter((l) => l.channel === c);
+  const webListeners = pick('web');
 
   // Awaited, not fire-and-forget: the runtime may tear the function down as
   // soon as the response returns, dropping an in-flight request.
   const [tg, fcm, apns] = await Promise.allSettled([
-    notifyTelegram(stationId, station.name, live),
-    notifyAndroidApps(stationId, station.name, alertText),
-    notifyIosApps(stationId, station.name, alertText),
+    notifyTelegram(stationId, station.name, isNewStation ? [] : live),
+    notifyAndroidApps(stationId, station.name, alertText, pick('android').map((l) => l.address)),
+    notifyIosApps(stationId, station.name, alertText, pick('ios').map((l) => l.address)),
   ]);
   if (tg.status === 'rejected') console.error('telegram', tg.reason);
   if (fcm.status === 'rejected') console.error('fcm', fcm.reason);
   if (apns.status === 'rejected') console.error('apns', apns.reason);
 
-  const { data: subs } = await db
-    .from('push_subscriptions')
-    .select('id, endpoint, p256dh, auth')
-    .eq('station_id', stationId)
-    .eq('role', 'driver');
 
   const apnsReport = apns.status === 'fulfilled' ? apns.value : { rejected: String(apns.reason) };
   const fcmReport = fcm.status === 'fulfilled' ? fcm.value : { rejected: String(fcm.reason) };
 
-  if (!subs?.length) {
-    return json({ sent: 0, telegram: tg.status, fcm: fcmReport, apns: apnsReport });
+  if (!webListeners.length) {
+    return json({
+      sent: 0,
+      listeners: listeners.length,
+      city: station.city,
+      telegram: tg.status,
+      fcm: fcmReport,
+      apns: apnsReport,
+    });
   }
 
   // the text is built from our own labels, never from the request
@@ -447,9 +489,9 @@ Deno.serve(async (req) => {
   });
 
   const results = await Promise.allSettled(
-    subs.map((s) =>
+    webListeners.map((l) =>
       webpush.sendNotification(
-        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+        { endpoint: l.address, keys: { p256dh: l.keys?.p256dh, auth: l.keys?.auth } },
         payload
       )
     )
@@ -460,16 +502,18 @@ Deno.serve(async (req) => {
     .map((r, i) =>
       r.status === 'rejected' &&
       [404, 410].includes((r.reason as { statusCode?: number })?.statusCode ?? 0)
-        ? subs[i].id
+        ? webListeners[i].address
         : null
     )
     .filter(Boolean) as string[];
 
-  if (dead.length) await db.from('push_subscriptions').delete().in('id', dead);
+  if (dead.length) await db.from('alerts').delete().in('address', dead);
 
   return json({
     sent: results.filter((r) => r.status === 'fulfilled').length,
     pruned: dead.length,
+    listeners: listeners.length,
+    city: station.city,
     telegram: tg.status,
     fcm: fcmReport,
     apns: apnsReport,
