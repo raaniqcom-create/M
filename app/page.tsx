@@ -190,13 +190,15 @@ export default function HomePage() {
           </div>
           <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — نبدأ من الرمادي</p>
 
-          {/* Six stations in a whole province, and owners who do not update
-              every day. Saying so plainly costs less than a driver who burns
-              fuel on a stale claim and never opens the app again. */}
+          {/* An empty list is only a disappointment if nothing is offered in
+              its place. Tell the visitor what to do right now instead of what
+              the platform lacks — and keep the honesty about calling ahead,
+              which is what stops a driver burning fuel on a stale claim. */}
           <p className="mt-2 rounded-lg bg-white/15 px-3 py-2 text-center text-[11px] leading-relaxed text-white">
-            🚧 المنصة في <b>مرحلة التجربة</b> — المحطات تُضاف تباعاً.
+            🔔 اختر <b>مدينتك</b> و<b>نوع الوقود</b> الذي يهمك، وانتظر — أول ما تسجّل
+            محطة ويتوفر المنتج، يصلك إشعار.
             <br />
-            اتصل بالمحطة قبل أن تتحرك، وحالة الوقود تُعرض بوقت آخر تحديث لها.
+            المحطات تُضاف تباعاً. واتصل بالمحطة قبل أن تتحرك.
           </p>
           {/* Both of these speak to someone browsing the site. Inside the app
               they are dead weight: the download already happened, and the
