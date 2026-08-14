@@ -10,9 +10,11 @@ const MIN_GAP_MS = 15_000;
 export const TONES = ['1', '2'] as const;
 export type Tone = (typeof TONES)[number];
 
+/** Tone 2 is the default: it carries better on a phone speaker in a car,
+ *  which is where this is heard. Tone 1 stays for anyone who prefers it. */
 export function getTone(): Tone {
   const v = typeof localStorage !== 'undefined' ? localStorage.getItem(TONE_KEY) : null;
-  return v === '2' ? '2' : '1';
+  return v === '1' ? '1' : '2';
 }
 
 /** Swapping the tone drops the cached element so the next play picks up the

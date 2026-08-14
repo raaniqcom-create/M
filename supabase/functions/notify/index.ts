@@ -17,12 +17,21 @@ const PRODUCT_LABELS: Record<string, string> = {
   white_oil: 'نفط أبيض',
 };
 
-/** One line for however many products arrived. An owner who switches on five
- *  of them means one delivery, not five events -- and five buzzes in ten
- *  seconds is how a driver decides to delete the app. */
+/** The title is the fuel and nothing else.
+ *
+ *  Station name used to lead. That is backwards on a lock screen: every
+ *  station in the province is called «mahatta something», so the first
+ *  words a driver reads told him nothing, while the one fact he opened the
+ *  app for sat on the second line where the OS truncates. The verb went too
+ *  — the notification firing IS «available now», and the phone stamps the
+ *  time beside it for free. */
 function headline(products: string[]): string {
-  const names = products.map((p) => PRODUCT_LABELS[p] ?? p).join(' و');
-  return `${names} ${products.length > 1 ? 'متوفرة' : 'متوفر'} الآن`;
+  return `⛽ ${products.map((p) => PRODUCT_LABELS[p] ?? p).join(' و')}`;
+}
+
+/** Where, on one line: the station, then the city. */
+function placeline(stationName: string, city: string): string {
+  return city ? `${stationName} · ${city}` : stationName;
 }
 
 const TELEGRAM_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
@@ -84,7 +93,7 @@ async function notifyTelegram(stationId: string, stationName: string, products: 
   if (!favs?.length) return;
 
   const text =
-    `⛽ <b>${headline(products)}</b>\n\n` +
+    `<b>${headline(products)}</b>\n\n` +
     `<b>${stationName}</b>\n${st?.city ?? ''}\n\n` +
     `${SITE}/station/${stationId}`;
 
@@ -206,7 +215,7 @@ async function fcmAccessToken(sa: {
  *  truncated key from a user who never got their notification. */
 async function notifyAndroidApps(
   stationId: string,
-  stationName: string,
+  title: string,
   body: string,
   tokens: string[]
 ): Promise<Record<string, unknown>> {
@@ -250,7 +259,7 @@ async function notifyAndroidApps(
         body: JSON.stringify({
           message: {
             token: d.token,
-            notification: { title: stationName, body },
+            notification: { title, body },
             data: { stationId },
             android: {
               priority: 'HIGH',
@@ -310,7 +319,7 @@ async function apnsToken(keyId: string, teamId: string, pem: string): Promise<st
  *  only way to tell them apart from outside is to say what APNs answered. */
 async function notifyIosApps(
   stationId: string,
-  stationName: string,
+  title: string,
   body: string,
   tokens: string[]
 ): Promise<Record<string, unknown>> {
@@ -361,7 +370,7 @@ async function notifyIosApps(
         },
         body: JSON.stringify({
           aps: {
-            alert: { title: stationName, body },
+            alert: { title, body },
             // ships in the app bundle as ios/App/App/alert.caf; iOS falls back
             // to the default tone if it is ever missing
             sound: 'alert.caf',
@@ -446,9 +455,8 @@ Deno.serve(async (req) => {
     rows?.some((r) => r.product === p)
   );
   if (!isNewStation && !live.length) return json({ error: 'product not available' }, 409);
-  const alertText = isNewStation
-    ? `محطة جديدة في ${station.city}`
-    : headline(live);
+  const alertTitle = isNewStation ? `⛽ محطة جديدة` : headline(live);
+  const alertBody = placeline(station.name, station.city);
 
   const listeners = await audienceFor(station.city, isNewStation ? allProducts : live);
   const pick = (c: string) => listeners.filter((l) => l.channel === c);
@@ -458,8 +466,8 @@ Deno.serve(async (req) => {
   // soon as the response returns, dropping an in-flight request.
   const [tg, fcm, apns] = await Promise.allSettled([
     notifyTelegram(stationId, station.name, isNewStation ? [] : live),
-    notifyAndroidApps(stationId, station.name, alertText, pick('android').map((l) => l.address)),
-    notifyIosApps(stationId, station.name, alertText, pick('ios').map((l) => l.address)),
+    notifyAndroidApps(stationId, alertTitle, alertBody, pick('android').map((l) => l.address)),
+    notifyIosApps(stationId, alertTitle, alertBody, pick('ios').map((l) => l.address)),
   ]);
   if (tg.status === 'rejected') console.error('telegram', tg.reason);
   if (fcm.status === 'rejected') console.error('fcm', fcm.reason);
@@ -482,8 +490,8 @@ Deno.serve(async (req) => {
 
   // the text is built from our own labels, never from the request
   const payload = JSON.stringify({
-    title: station.name,
-    body: alertText,
+    title: alertTitle,
+    body: alertBody,
     stationId,
     url: `/station/${stationId}`,
   });

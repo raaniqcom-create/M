@@ -14,6 +14,7 @@ import { SoundToggle } from '@/components/SoundToggle';
 import { SideMenu } from '@/components/SideMenu';
 import { isFresh, isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS } from '@/lib/products';
+import { CITY_NAMES } from '@/lib/cities';
 import { StationCard } from '@/components/StationCard';
 import { PromoStrip } from '@/components/PromoStrip';
 import { TripAsk } from '@/components/TripAsk';
@@ -239,11 +240,14 @@ export default function HomePage() {
             />
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2">
+          {/* Coverage sits beside the counts on purpose: with no stations yet,
+              "16 cities" is the only number that says how far this reaches. */}
+          <div className="mt-4 grid grid-cols-4 gap-2">
             {[
               { label: 'زائر', value: visits ?? '—' },
-              { label: 'محطة مسجلة', value: stations?.length ?? '—' },
-              { label: 'متصل الآن', value: online, live: true },
+              { label: 'مدينة', value: CITY_NAMES.length },
+              { label: 'محطة', value: stations?.length ?? '—' },
+              { label: 'متصل', value: online, live: true },
             ].map((stat) => (
               <div
                 key={stat.label}
