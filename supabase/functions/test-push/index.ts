@@ -23,8 +23,8 @@ const CORS = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
-const TITLE = '⛽ إشعار تجريبي';
-const BODY = 'المحطة التقنية · وصلك هذا الإشعار بنجاح';
+const DEFAULT_TITLE = '⛽ إشعار تجريبي';
+const DEFAULT_BODY = 'المحطة التقنية · وصلك هذا الإشعار بنجاح';
 
 // ponytail: the PEM/JWT helpers are duplicated from notify. Deploys upload one
 // file per function, so a shared module costs more than the copy.
@@ -54,7 +54,7 @@ const b64url = (v: Uint8Array | string) =>
     .split('/').join('_')
     .replace(/=+$/, '');
 
-async function sendApns(token: string): Promise<{ ok: boolean; detail: string }> {
+async function sendApns(token: string, title: string, body: string): Promise<{ ok: boolean; detail: string }> {
   const keyId = Deno.env.get('APNS_KEY_ID');
   const teamId = Deno.env.get('APNS_TEAM_ID');
   const pem = Deno.env.get('APNS_PRIVATE_KEY');
@@ -82,7 +82,7 @@ async function sendApns(token: string): Promise<{ ok: boolean; detail: string }>
     },
     body: JSON.stringify({
       aps: {
-        alert: { title: TITLE, body: BODY },
+        alert: { title, body },
         sound: 'alert.caf',
         'interruption-level': 'time-sensitive',
       },
@@ -122,7 +122,7 @@ async function fcmAccessToken(sa: { client_email: string; private_key: string; t
   return body.access_token as string;
 }
 
-async function sendFcm(token: string): Promise<{ ok: boolean; detail: string }> {
+async function sendFcm(token: string, title: string, body: string): Promise<{ ok: boolean; detail: string }> {
   const raw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
   if (!raw) return { ok: false, detail: 'سرّ Firebase غير مضبوط' };
   const sa = JSON.parse(raw);
@@ -133,7 +133,7 @@ async function sendFcm(token: string): Promise<{ ok: boolean; detail: string }> 
     body: JSON.stringify({
       message: {
         token,
-        notification: { title: TITLE, body: BODY },
+        notification: { title, body },
         data: { url: '/' },
         android: { priority: 'HIGH', notification: { channel_id: 'muhta_alerts', sound: 'alert' } },
       },
@@ -147,7 +147,13 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
   try {
-    const { deviceToken, endpoint, p256dh, auth } = (await req.json().catch(() => ({}))) ?? {};
+    const { deviceToken, endpoint, p256dh, auth, title, body } =
+      (await req.json().catch(() => ({}))) ?? {};
+
+    // Custom text is capped and trimmed: a lock screen truncates anyway, and
+    // an unbounded string here would be an open megaphone on the anon key.
+    const t = (typeof title === 'string' && title.trim() ? title : DEFAULT_TITLE).slice(0, 64);
+    const b = (typeof body === 'string' && body.trim() ? body : DEFAULT_BODY).slice(0, 178);
 
     if (typeof deviceToken === 'string' && deviceToken.length > 20) {
       // The token itself does not say which vendor issued it, so ask the row
@@ -162,7 +168,8 @@ Deno.serve(async (req) => {
         return json({ error: 'هذا الجهاز غير مسجّل في النظام. افتح التطبيق وفعّل الإشعارات ثم أعد المحاولة.' }, 404);
       }
 
-      const out = row.platform === 'ios' ? await sendApns(deviceToken) : await sendFcm(deviceToken);
+      const out =
+        row.platform === 'ios' ? await sendApns(deviceToken, t, b) : await sendFcm(deviceToken, t, b);
       return out.ok
         ? json({ sent: true, via: row.platform, detail: out.detail })
         : json({ error: out.detail, via: row.platform }, 502);
@@ -176,7 +183,7 @@ Deno.serve(async (req) => {
       );
       await webpush.sendNotification(
         { endpoint, keys: { p256dh, auth } },
-        JSON.stringify({ title: TITLE, body: BODY, url: '/' })
+        JSON.stringify({ title: t, body: b, url: '/' })
       );
       return json({ sent: true, via: 'webpush' });
     }
