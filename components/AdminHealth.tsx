@@ -38,6 +38,13 @@ export function AdminHealth() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
+  const [title, setTitle] = useState('⛽ المحطة التقنية');
+  const [text, setText] = useState('');
+  const [reach, setReach] = useState<{ ios: number; android: number; web: number } | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setError(null);
     const { data: sess } = await supabase.auth.getSession();
@@ -98,6 +105,51 @@ export function AdminHealth() {
       setTestResult('تعذّر الإرسال. تأكد من الاتصال.');
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function callAnnounce(dryRun: boolean) {
+    const { data: sess } = await supabase.auth.getSession();
+    const res = await fetch(`${FN}/announce`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        Authorization: `Bearer ${sess.session?.access_token ?? ''}`,
+      },
+      body: JSON.stringify({ title, body: text, dryRun }),
+    });
+    return { ok: res.ok, out: await res.json().catch(() => null) };
+  }
+
+  /** Counts before it sends. A notification cannot be recalled, so the number
+   *  of phones about to buzz is shown while the decision is still reversible. */
+  async function preview() {
+    setSendResult(null);
+    const { ok, out } = await callAnnounce(true);
+    if (!ok) return setSendResult(out?.error ?? 'تعذّر الاتصال');
+    setReach(out.audience);
+    setConfirming(true);
+  }
+
+  async function confirmSend() {
+    setSending(true);
+    setSendResult(null);
+    try {
+      const { ok, out } = await callAnnounce(false);
+      if (!ok) {
+        setSendResult(out?.error ?? 'تعذّر الإرسال');
+        return;
+      }
+      setSendResult(
+        `✅ وصل ${out.ok}` +
+          (out.failed ? ` · فشل ${out.failed}` : '') +
+          (out.pruned ? ` · حُذف ${out.pruned} جهاز لم يعد موجوداً` : '')
+      );
+      setConfirming(false);
+      setText('');
+    } finally {
+      setSending(false);
     }
   }
 
@@ -180,6 +232,86 @@ export function AdminHealth() {
         {testResult && (
           <p className="mt-2 rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-700">
             {testResult}
+          </p>
+        )}
+      </section>
+
+      <section className="card p-5">
+        <h2 className="text-sm font-bold">إعلان لكل المستخدمين</h2>
+        <p className="mt-1 text-xs leading-relaxed text-slate-400">
+          يصل كل جهاز مسجّل. الإشعار لا يُسترجَع بعد إرساله، لذا يُعرض عدد الهواتف قبل
+          الإرسال لا بعده.
+        </p>
+
+        <label htmlFor="an-title" className="label mt-3">العنوان</label>
+        <input
+          id="an-title"
+          value={title}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            setConfirming(false);
+          }}
+          maxLength={64}
+          className="field"
+          placeholder="⛽ المحطة التقنية"
+        />
+
+        <label htmlFor="an-body" className="label mt-3">النص</label>
+        <textarea
+          id="an-body"
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setConfirming(false);
+          }}
+          maxLength={178}
+          rows={3}
+          className="field py-2"
+          placeholder="هذا صوت المنصة — ستسمعه عند توفر الوقود."
+        />
+        <p className="mt-1 text-[11px] text-slate-400">{text.length} / 178 حرفاً</p>
+
+        {!confirming ? (
+          <button
+            type="button"
+            onClick={preview}
+            disabled={!title.trim() || !text.trim()}
+            className="btn-ghost mt-3 w-full disabled:opacity-40"
+          >
+            كم جهازاً سيصله؟
+          </button>
+        ) : (
+          <>
+            <div className="mt-3 rounded-xl bg-amber-50 p-3">
+              <p className="text-xs font-bold text-amber-900">
+                سيصل {(reach?.ios ?? 0) + (reach?.android ?? 0) + (reach?.web ?? 0)} جهازاً —
+                {' '}{reach?.ios ?? 0} آيفون · {reach?.android ?? 0} أندرويد · {reach?.web ?? 0} متصفح
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-amber-800">
+                راجع النص مرة أخيرة. لا يمكن سحبه بعد الإرسال.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={confirmSend}
+              disabled={sending}
+              className="btn-primary mt-2 w-full disabled:opacity-60"
+            >
+              {sending ? <SpinnerIcon className="mx-auto h-5 w-5" /> : 'أرسل الآن'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="mt-1 min-h-[44px] w-full text-center text-xs font-semibold text-slate-400"
+            >
+              تراجع
+            </button>
+          </>
+        )}
+
+        {sendResult && (
+          <p className="mt-2 rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-700">
+            {sendResult}
           </p>
         )}
       </section>
