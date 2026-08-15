@@ -108,7 +108,7 @@ export function TripAsk({ stations }: { stations: StationWithStatus[] | null }) 
   if (done) {
     return (
       <div className="mb-3 rounded-2xl bg-brand-50 px-4 py-3 text-center text-sm font-bold text-brand-700">
-        شكراً — ساعدت غيرك من السائقين.
+        شكراً — ساعدت غيرك من المستخدمين.
       </div>
     );
   }

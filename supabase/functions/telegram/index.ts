@@ -163,7 +163,7 @@ const PRE_LAUNCH_WELCOME =
   '① ثبّت نغمة التنبيه من الزر أدناه\n' +
   '② تأكد أن إشعارات هذه المحادثة <b>غير مكتومة</b>\n\n' +
   'وقتها سيصلك تنبيه فور توفر الوقود قرب موقعك.\n\n' +
-  '🏪 صاحب محطة؟ سجّلها الآن لتظهر للسائقين من أول يوم.';
+  '🏪 صاحب محطة؟ سجّلها الآن لتظهر للمستخدمين من أول يوم.';
 
 const welcomeFor = (userId: number) =>
   PRE_LAUNCH && !isAdmin(userId) ? PRE_LAUNCH_WELCOME : WELCOME;
@@ -499,7 +499,7 @@ async function ask(chat: number, step: string, d: Draft) {
       return void (await send(
         chat,
         'شارك موقع المحطة إن كنت فيها الآن، أو اختره من الخريطة.\n' +
-          '<i>الدبوس هو ما يقود السائق إليك.</i>',
+          '<i>الدبوس هو ما يقود المستخدم إليك.</i>',
         {
           reply_markup: {
             keyboard: [[{ text: '📍 مشاركة الموقع', request_location: true }], [{ text: SKIP_LOCATION }]],
@@ -740,7 +740,7 @@ async function createStation(chat: number, userId: number, d: Draft) {
     chat,
     `✅ <b>تم تقديم الطلب</b>\n\n` +
       `<b>${name}</b>\n${city} — ${address}\n☎️ <code>0${core}</code>\n` +
-      '⏳ بانتظار الموافقة — تظهر للسائقين فور اعتمادها.\n\n' +
+      '⏳ بانتظار الموافقة — تظهر للمستخدمين فور اعتمادها.\n\n' +
       (d.lat ? '' : `📍 الموقع على مركز ${city} — أرسل موقع المحطة الآن لتصحيح الدبوس.\n\n`) +
       credentials,
     { reply_markup: { inline_keyboard: rows } }
@@ -762,7 +762,7 @@ async function approveOne(chat: number, userId: number, stationId: string, query
     .select('name')
     .single();
   await answer(queryId, 'تمت الموافقة ✅');
-  await send(chat, `✅ <b>${data?.name ?? 'المحطة'}</b> معتمدة وظاهرة للسائقين الآن.`, {
+  await send(chat, `✅ <b>${data?.name ?? 'المحطة'}</b> معتمدة وظاهرة للمستخدمين الآن.`, {
     reply_markup: {
       inline_keyboard: [
         [{ text: '⛽ حدّد المتوفر', callback_data: `r:${stationId}` }],
@@ -805,10 +805,10 @@ const PUBLIC_ANNOUNCEMENT = [
   '',
   'نستقبل الآن تسجيل محطات الوقود في جميع مدن الأنبار، <b>مجاناً بلا رسوم ولا عمولة</b>.',
   '',
-  'محطتك تظهر للسائقين مع ما يتوفر لديك من وقود، ويصلهم تنبيه فور وصول أي منتج.',
+  'محطتك تظهر للمستخدمين مع ما يتوفر لديك من وقود، ويصلهم تنبيه فور وصول أي منتج.',
   '',
   '🏪 صاحب محطة؟ سجّلها من الزر أدناه.',
-  `🚗 سائق؟ افتح ${SITE} لترى أقرب محطة فيها وقود الآن.`,
+  `🚗 تبحث عن وقود؟ افتح ${SITE} لترى أقرب محطة فيها وقود الآن.`,
 ].join(String.fromCharCode(10));
 
 // Sent to every admin by /announce, once, when the feature goes live.
@@ -817,7 +817,7 @@ const ANNOUNCEMENT =
   'اضغط «لوحة الإدارة ← 🏪 تسجيل محطة»، أو أرسل <code>/station</code>.\n\n' +
   'يسألك البوت خطوة واحدة في كل مرة: المحافظة، المدينة، العنوان، الموقع، ' +
   'اسم المحطة، هاتفها، ثم المسؤول ورقمه.\n\n' +
-  'ما تسجّلونه يُعتمد فوراً ويظهر للسائقين، ويُنشأ لصاحب المحطة حساب دخول ' +
+  'ما تسجّلونه يُعتمد فوراً ويظهر للمستخدمين، ويُنشأ لصاحب المحطة حساب دخول ' +
   'وكلمة مرور تُسلَّم له.';
 
 async function setGovernment(chat: number, userId: number, stationId: string, queryId: string) {

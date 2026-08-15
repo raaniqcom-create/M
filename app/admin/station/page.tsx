@@ -213,7 +213,7 @@ function Panel() {
       <section className="card p-5">
         <h2 className="text-sm font-bold">حالة المحطة</h2>
         <p className="mt-1 text-xs text-slate-400">
-          الإيقاف يخفيها عن السائقين فوراً دون حذف بياناتها — للمحطة التي لا تحدّث حالتها.
+          الإيقاف يخفيها عن المستخدمين فوراً دون حذف بياناتها — للمحطة التي لا تحدّث حالتها.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-2">
           {station.status !== 'approved' && (
@@ -236,7 +236,7 @@ function Panel() {
               linking to it blindly hands the admin a 404. */}
           {station.slug && station.status === 'approved' ? (
             <a href={`/${station.slug}`} className="btn-ghost col-span-2">
-              معاينة كما يراها السائق
+              معاينة كما يراها المستخدم
             </a>
           ) : (
             <p className="col-span-2 rounded-xl bg-slate-50 px-3 py-2.5 text-center text-xs text-slate-500">
@@ -251,7 +251,7 @@ function Panel() {
       <section className="card p-5">
         <h2 className="text-sm font-bold">رقم المحطة الأساسي</h2>
         <p className="mt-1 text-xs text-slate-400">
-          هذا الرقم يظهر للسائقين وهو اسم دخول صاحب المحطة معاً. تغييره ينقل ملكية اللوحة
+          هذا الرقم يظهر للمستخدمين وهو اسم دخول صاحب المحطة معاً. تغييره ينقل ملكية اللوحة
           إلى الرقم الجديد.
         </p>
         <p className="mt-2 text-xs font-bold text-slate-600" dir="ltr">{station.phone}</p>

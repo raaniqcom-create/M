@@ -7,7 +7,7 @@ const SLIDES = [
   {
     icon: FuelIcon,
     title: 'سجّل محطتك مجاناً',
-    body: 'اعرض توفر الوقود لديك لآلاف السائقين',
+    body: 'اعرض توفر الوقود لديك لآلاف المستخدمين',
     // /login was the wrong door: an owner without an account tapped "register"
     // and landed on a sign-in form for a password they never had.
     href: '/register',
@@ -15,7 +15,7 @@ const SLIDES = [
   {
     icon: MapPinIcon,
     title: 'شارك بحالة الازدحام',
-    body: 'ضغطة واحدة تساعد بقية السائقين',
+    body: 'ضغطة واحدة تساعد بقية المستخدمين',
     href: null,
   },
   {

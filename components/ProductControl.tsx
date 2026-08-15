@@ -125,7 +125,7 @@ export function ProductControl({
               </div>
 
               <p className="mt-2 text-[11px] font-bold text-amber-900">
-                يظهر للسائقين: {expectedLabel(expectedAt)}
+                يظهر للمستخدمين: {expectedLabel(expectedAt)}
                 {expectedPeriod ? ` — ${PERIOD_LABELS[expectedPeriod]}` : ''}
               </p>
             </>

@@ -120,7 +120,7 @@ export default function DownloadPage() {
       <section className="card mt-4 border-brand-100 p-5 text-center">
         <p className="text-sm font-bold">صاحب محطة؟</p>
         <p className="mt-2 text-xs leading-relaxed text-slate-500">
-          سجّل محطتك مجاناً لتظهر للسائقين، وحدّث توفر الوقود بضغطة واحدة.
+          سجّل محطتك مجاناً لتظهر للمستخدمين، وحدّث توفر الوقود بضغطة واحدة.
         </p>
         <a href="/register" className="btn-primary mt-4 w-full">
           سجّل محطتك مجاناً

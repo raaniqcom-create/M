@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import {
   getTone,
   isMuted,
@@ -13,15 +13,33 @@ import {
 import { useSession } from '@/lib/useSession';
 import { useNativeApp } from '@/lib/useNativeApp';
 import { shareApp } from '@/lib/shareApp';
-import { XIcon } from './icons';
+import {
+  DownloadIcon,
+  FuelIcon,
+  InfoIcon,
+  LockIcon,
+  MapPinIcon,
+  MessageIcon,
+  PlusIcon,
+  ShareIcon,
+  ShieldIcon,
+  StoreIcon,
+  UserIcon,
+  VolumeIcon,
+  XIcon,
+} from './icons';
 
-/** The drawer holds everything that isn't the driver's main job: alerts,
- *  signing in as an owner, sound settings, help. Keeping them out of the
- *  header leaves the first screen for stations, which is what the app is for.
+type Icon = ComponentType<{ className?: string }>;
+
+/** The drawer, grouped by whose question each row answers.
  *
- *  Grouped by who each row is for — driver, then station owner, then settings
- *  — because the previous flat list put "sign in to my station" above the one
- *  thing a driver opens the menu to find. */
+ *  Rows are titled by what the person wants, not by what the machine does:
+ *  the whole platform is a fuel alert, so a row called "alert me when fuel
+ *  arrives" names the product, not a destination. What the person actually
+ *  goes there to change is their cities and their fuel.
+ *
+ *  Icons come from the app's own set. The emoji that were here read as a
+ *  different product — and broke the rule written at the top of icons.tsx. */
 export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) {
   const [open, setOpen] = useState(false);
   const [tone, setToneState] = useState<Tone>('2');
@@ -29,9 +47,12 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
   // The picker stays folded away: opening a menu should never make a phone
   // make a noise, and the tone is chosen once and then forgotten about.
   const [picking, setPicking] = useState(false);
-  const { signedIn, role } = useSession();
-  const native = useNativeApp();
   const [shareNote, setShareNote] = useState<string | null>(null);
+  // `ready` matters: reading the session is two network round trips, and
+  // without it a returning owner watched "register your station" sit there
+  // for a second before it was replaced by their own panel.
+  const { signedIn, role, ready } = useSession();
+  const native = useNativeApp();
 
   useEffect(() => {
     setToneState(getTone());
@@ -85,7 +106,7 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
         aria-label="القائمة"
         className="flex h-9 w-9 items-center justify-center rounded-lg text-white/80 transition-colors duration-200 hover:bg-white/10 hover:text-white"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-6 w-6">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden className="h-6 w-6">
           <line x1="3" y1="6" x2="21" y2="6" />
           <line x1="3" y1="12" x2="21" y2="12" />
           <line x1="3" y1="18" x2="21" y2="18" />
@@ -103,7 +124,7 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
 
           {/* Pinned to the physical right and slid in from it. Anchoring by
               flex order instead flips with dir="rtl" and lands on the left. */}
-          <aside className="drawer-enter absolute inset-y-0 right-0 flex w-[86%] max-w-[20rem] flex-col overflow-y-auto bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl">
+          <aside className="drawer-enter absolute inset-y-0 right-0 flex w-[86%] max-w-[20rem] flex-col overflow-y-auto bg-white pb-[env(safe-area-inset-bottom)] shadow-lift">
             <div className="flex items-start justify-between bg-gradient-to-b from-brand-700 to-brand px-4 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] text-white">
               <div>
                 <p className="text-base font-extrabold">المحطة التقنية</p>
@@ -120,71 +141,33 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
             </div>
 
             <nav className="flex flex-col gap-0.5 p-3 text-sm">
-              <Label>للسائقين</Label>
+              {/* The one thing we want from a visitor who is not signed in, so
+                  it leads rather than waiting at the bottom of a list. */}
+              {ready && !signedIn && (
+                <a href="/register" className="btn-primary mb-1 w-full">
+                  <PlusIcon className="h-4 w-4" />
+                  سجّل محطتك مجاناً
+                </a>
+              )}
+
+              <Label>اختياراتي</Label>
 
               <Item
                 href="/alerts"
-                icon="🔔"
-                title="نبّهني عند توفر الوقود"
-                note="اختر مدينتك ونوع الوقود"
+                icon={MapPinIcon}
+                title="المدن ونوع الوقود"
+                note="ما تريد أن يصلك عنه إشعار"
+                accent
               />
-
-              <Row
-                icon="⛽"
-                title="المحطات المتاحة الآن"
-                note="التي يتوفر فيها وقود"
-                onClick={() => {
-                  onAvailableOnly?.();
-                  setOpen(false);
-                }}
-              />
-
-              <Row
-                icon="📤"
-                title="شارك التطبيق مع أهلك وأصدقائك"
-                note="على أي تطبيق تختاره"
-                onClick={share}
-              />
-              {shareNote && (
-                <p className="mx-3 rounded-lg bg-brand-50 px-3 py-2 text-[11px] font-semibold text-brand-700">
-                  {shareNote}
-                </p>
-              )}
-
-              {/* Offering the download to someone inside the app is noise —
-                  they are holding it. On the website it is the whole point. */}
-              {!native && (
-                <Item
-                  href="/download"
-                  icon="📲"
-                  title="حمّل التطبيق"
-                  note="آيفون وأندرويد — مجاناً"
-                />
-              )}
-
-              <Label>لأصحاب المحطات</Label>
-
-              {/* Offering "sign in" to someone already signed in is the most
-                  common way an app makes a returning user feel lost. */}
-              {signedIn ? (
-                role === 'admin' ? (
-                  <Item href="/admin" icon="🛡" title="لوحة الإدارة" note="المحطات والطلبات والشكاوى" />
-                ) : (
-                  <Item href="/owner" icon="🏪" title="لوحة محطتي" note="تحديث التوفر والمنشورات" />
-                )
-              ) : (
-                <>
-                  <Item href="/register" icon="➕" title="سجّل محطتك" note="مجاناً، بضع خطوات" />
-                  <Item href="/login" icon="🏪" title="الدخول إلى محطتي" note="تحديث التوفر" />
-                </>
-              )}
-
-              <Label>الصوت</Label>
 
               <div className="rounded-xl border border-slate-200 p-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-slate-700">
-                    نغمة التنبيه · <span className="text-slate-500">النغمة {tone === '1' ? '١' : '٢'}</span>
+                  <p className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                    <VolumeIcon className="h-4 w-4 text-brand" />
+                    نغمة التنبيه ·{' '}
+                    <span className="font-normal text-slate-500">
+                      النغمة {tone === '1' ? '١' : '٢'}
+                    </span>
                   </p>
                   <button
                     type="button"
@@ -204,7 +187,7 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                           type="button"
                           onClick={() => chooseTone(t)}
                           aria-pressed={tone === t}
-                          className={`rounded-lg border px-2 py-2 text-xs font-bold transition-colors duration-200 ${
+                          className={`min-h-[44px] rounded-lg border text-xs font-bold transition-colors duration-200 ${
                             tone === t
                               ? 'border-brand bg-brand-100 text-brand'
                               : 'border-slate-200 text-slate-600'
@@ -214,7 +197,9 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                         </button>
                       ))}
                     </div>
-                    <p className="mt-2 text-[11px] text-slate-400">تُشغَّل عند الضغط لتسمعها قبل الاعتماد.</p>
+                    <p className="mt-2 text-[11px] text-slate-400">
+                      اضغط لتسمعها. إن لم تغيّرها تبقى النغمة ٢.
+                    </p>
                   </>
                 )}
 
@@ -239,10 +224,87 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                 </button>
               </div>
 
-              <Label>أخرى</Label>
-              <Item href="https://t.me/muhtaonlinebot" icon="💬" title="بوت تيليجرام" note="تنبيهات وإدارة محطتك" external />
-              <Item href="/subscribe" icon="✉️" title="اشترك برسالة" note="لمن لا يستخدم التطبيق" />
-              <Item href="/privacy" icon="🛡" title="الخصوصية" note="ما نجمعه ولماذا" />
+              <Label>المحطات</Label>
+
+              <Row
+                icon={FuelIcon}
+                title="المحطات المتاحة الآن"
+                note="المفتوحة والمتوفر بها وقود"
+                accent
+                onClick={() => {
+                  onAvailableOnly?.();
+                  setOpen(false);
+                }}
+              />
+
+              <Label>حسابي</Label>
+
+              {/* Nothing renders until the session is known — offering "sign in"
+                  to someone already signed in is the fastest way to make a
+                  returning user feel lost. */}
+              {ready &&
+                (signedIn ? (
+                  role === 'admin' ? (
+                    <Item
+                      href="/admin"
+                      icon={ShieldIcon}
+                      title="لوحة التحكم"
+                      note="المحطات والطلبات والإحصائيات"
+                      accent
+                    />
+                  ) : (
+                    <Item
+                      href="/owner"
+                      icon={StoreIcon}
+                      title="لوحة محطتي"
+                      note="تحديث التوفر والمنشورات"
+                      accent
+                    />
+                  )
+                ) : (
+                  <Item
+                    href="/login"
+                    icon={UserIcon}
+                    title="الدخول إلى حسابي"
+                    note="لأصحاب المحطات وإدارة المنصة"
+                    accent
+                  />
+                ))}
+
+              <Label>التطبيق</Label>
+
+              <Row
+                icon={ShareIcon}
+                title="شارك التطبيق"
+                note="على أي تطبيق تختاره"
+                onClick={share}
+              />
+              {shareNote && (
+                <p className="mx-3 rounded-lg bg-brand-50 px-3 py-2 text-[11px] font-semibold text-brand-700">
+                  {shareNote}
+                </p>
+              )}
+
+              {/* Offering the download to someone inside the app is noise —
+                  they are holding it. On the website it is the whole point. */}
+              {!native && (
+                <Item
+                  href="/download"
+                  icon={DownloadIcon}
+                  title="حمّل التطبيق"
+                  note="آيفون وأندرويد — مجاناً"
+                />
+              )}
+
+              <Item
+                href="https://t.me/muhtaonlinebot"
+                icon={MessageIcon}
+                title="بوت تيليجرام"
+                note="حالياً للمحطات فقط"
+                external
+              />
+              <Item href="/about" icon={InfoIcon} title="من نحن" note="الفكرة والتواصل" />
+              <Item href="/privacy" icon={LockIcon} title="الخصوصية" note="ما نجمعه ولماذا" />
             </nav>
           </aside>
         </div>
@@ -257,13 +319,16 @@ function Label({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Body({ icon, title, note }: { icon: string; title: string; note: string }) {
+/** Green marks the rows that are about the person using the app; the rest of
+ *  the drawer is housekeeping and stays grey. Colour that means everything
+ *  means nothing. */
+function Body({ icon: Icon, title, note, accent }: { icon: Icon; title: string; note?: string; accent?: boolean }) {
   return (
     <>
-      <span className="w-6 shrink-0 text-center text-lg leading-none">{icon}</span>
+      <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${accent ? 'text-brand' : 'text-slate-400'}`} />
       <span className="min-w-0">
         <span className="block font-bold text-slate-800">{title}</span>
-        <span className="block text-xs text-slate-500">{note}</span>
+        {note && <span className="block text-xs text-slate-500">{note}</span>}
       </span>
     </>
   );
@@ -276,17 +341,19 @@ function Item({
   icon,
   title,
   note,
+  accent,
   external,
 }: {
   href: string;
-  icon: string;
+  icon: Icon;
   title: string;
-  note: string;
+  note?: string;
+  accent?: boolean;
   external?: boolean;
 }) {
   return (
     <a href={href} {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})} className={ROW}>
-      <Body icon={icon} title={title} note={note} />
+      <Body icon={icon} title={title} note={note} accent={accent} />
     </a>
   );
 }
@@ -295,16 +362,18 @@ function Row({
   icon,
   title,
   note,
+  accent,
   onClick,
 }: {
-  icon: string;
+  icon: Icon;
   title: string;
-  note: string;
+  note?: string;
+  accent?: boolean;
   onClick: () => void;
 }) {
   return (
     <button type="button" onClick={onClick} className={`${ROW} w-full`}>
-      <Body icon={icon} title={title} note={note} />
+      <Body icon={icon} title={title} note={note} accent={accent} />
     </button>
   );
 }

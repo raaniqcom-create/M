@@ -12,7 +12,7 @@ export default function SubscribePage() {
       <header className="mb-6 text-center">
         <h1 className="text-xl font-extrabold">اشترك بالعروض</h1>
         <p className="mt-1 text-sm leading-relaxed text-slate-500">
-          للسائقين والمواطنين — يصلك خبر توفر الوقود والعروض في مدينتك.
+          للمستخدمين والمواطنين — يصلك خبر توفر الوقود والعروض في مدينتك.
           لا حساب ولا كلمة مرور، رقمك فقط.
         </p>
       </header>

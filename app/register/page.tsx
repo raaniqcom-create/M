@@ -4,7 +4,7 @@ import { StationRegisterForm } from '@/components/StationRegisterForm';
 export const metadata: Metadata = {
   title: 'تسجيل محطة',
   description:
-    'سجّل محطتك في المحطة التقنية مجاناً وأعلن توفر الوقود لآلاف السائقين في الأنبار.',
+    'سجّل محطتك في المحطة التقنية مجاناً وأعلن توفر الوقود لآلاف المستخدمين في الأنبار.',
 };
 
 // A dedicated link owners can be sent directly, without landing on a login

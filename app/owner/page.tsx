@@ -184,7 +184,7 @@ export default function OwnerPage() {
         <div>
           <h1 className="text-lg font-extrabold text-brand">لوحة صاحب المحطة</h1>
           <a href="/?view=driver" className="text-[11px] font-bold text-slate-400">
-            عرض المنصة كسائق ↗
+            عرض المنصة كمستخدم ↗
           </a>
         </div>
         <button
@@ -238,7 +238,7 @@ export default function OwnerPage() {
               </p>
               {station.temp_closed && (
                 <p className="mt-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-traffic-red">
-                  ⛔ مغلقة مؤقتاً — لا تظهر كمفتوحة للسائقين
+                  ⛔ مغلقة مؤقتاً — لا تظهر كمفتوحة للمستخدمين
                 </p>
               )}
               {/* Closing for an incident beats the timetable: a driver sent to
@@ -281,8 +281,8 @@ export default function OwnerPage() {
             <section className="card p-5">
               <h3 className="text-sm font-bold">حالة الازدحام</h3>
               <p className="mt-1 text-xs text-slate-400">
-                أنت الوحيد الذي يرى ساحتك. تحديدك يظهر للسائقين بدل تصويتهم، ويبقى حتى تغيّره —
-                وتصويت السائقين يسقط بعد ٣٠ دقيقة. اضغط مرة أخرى للإلغاء.
+                أنت الوحيد الذي يرى ساحتك. تحديدك يظهر للمستخدمين بدل تصويتهم، ويبقى حتى تغيّره —
+                وتصويت المستخدمين يسقط بعد ٣٠ دقيقة. اضغط مرة أخرى للإلغاء.
               </p>
               <div className="mt-3 grid grid-cols-3 gap-2">
                 {LEVELS.map((level) => {
@@ -329,7 +329,7 @@ export default function OwnerPage() {
             <section className="card p-5">
               <h3 className="text-sm font-bold">تأكيد ونشر التوفّر</h3>
               <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                بعد ضبط المنتجات أعلاه، أكّد القائمة: يُختم الوقت، ويصل للسائقين إشعار
+                بعد ضبط المنتجات أعلاه، أكّد القائمة: يُختم الوقت، ويصل للمستخدمين إشعار
                 واحد يجمع كل المنتجات المتوفرة، ويجهز المنشور للنشر.
               </p>
               <button type="button" onClick={confirmAvailability} className="btn-primary mt-3 w-full">
@@ -422,7 +422,7 @@ export default function OwnerPage() {
                   </a>
                   <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
                     تعديل الاسم أو الرقم أو الموقع يمرّ بالإدارة للتحقق، حتى لا تتغيّر بيانات
-                    محطة يعتمد عليها السائقون دون مراجعة.
+                    محطة يعتمد عليها المستخدمون دون مراجعة.
                   </p>
                 </section>
             <OwnerReminders stationId={station.id} />

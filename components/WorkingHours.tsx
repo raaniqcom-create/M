@@ -43,7 +43,7 @@ export function WorkingHours({
         </span>
       </div>
       <p className="mt-1 text-xs text-slate-400">
-        خارج هذه الأوقات تظهر محطتك للسائقين كمغلقة، ولا يُطلب منهم التوجّه إليها.
+        خارج هذه الأوقات تظهر محطتك للمستخدمين كمغلقة، ولا يُطلب منهم التوجّه إليها.
       </p>
 
       <label className="mt-3 flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 px-3">

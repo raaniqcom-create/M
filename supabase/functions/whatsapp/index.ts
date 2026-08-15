@@ -469,7 +469,7 @@ async function screenOwner(to: string) {
 
   return sendList(
     to,
-    `🏪 *${station.name}*\nاضغط على المنتج لتبديل حالته. يظهر التغيير للسائقين فوراً.`,
+    `🏪 *${station.name}*\nاضغط على المنتج لتبديل حالته. يظهر التغيير للمستخدمين فوراً.`,
     'المنتجات',
     rows
   );

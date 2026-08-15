@@ -25,7 +25,7 @@ export default function PrivacyPage() {
       </section>
 
       <section className="mt-8 space-y-3">
-        <h2 className="text-lg font-bold">للسائقين: لا نطلب أي حساب</h2>
+        <h2 className="text-lg font-bold">للمستخدمين: لا نطلب أي حساب</h2>
         <p className="text-sm leading-relaxed text-slate-700">
           تصفح المنصة لا يتطلب تسجيلاً ولا اسماً ولا رقم هاتف ولا بريداً إلكترونياً.
         </p>
@@ -123,7 +123,7 @@ export default function PrivacyPage() {
       <section className="mt-8 space-y-3">
         <h2 className="text-lg font-bold">الأطفال</h2>
         <p className="text-sm leading-relaxed text-slate-700">
-          المنصة موجهة للسائقين وأصحاب المحطات، ولا تجمع عمداً أي بيانات عن الأطفال دون
+          المنصة موجهة للمستخدمين وأصحاب المحطات، ولا تجمع عمداً أي بيانات عن الأطفال دون
           سن ١٣.
         </p>
       </section>

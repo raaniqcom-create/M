@@ -4,12 +4,10 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { phoneToEmail } from '@/lib/phone';
-import { StationRegisterForm } from '@/components/StationRegisterForm';
-import { EyeIcon, EyeOffIcon, FuelIcon, SpinnerIcon } from '@/components/icons';
+import { EyeIcon, EyeOffIcon, FuelIcon, MessageIcon, PlusIcon, SpinnerIcon } from '@/components/icons';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -65,11 +63,8 @@ export default function LoginPage() {
         <span className="text-lg font-extrabold">المحطة التقنية</span>
       </a>
 
-      {mode === 'signup' ? (
-        <StationRegisterForm />
-      ) : (
-        <form onSubmit={submit} className="card space-y-4 p-5">
-          <h1 className="text-base font-bold">دخول أصحاب المحطات</h1>
+      <form onSubmit={submit} className="card space-y-4 p-5">
+        <h1 className="text-base font-bold">الدخول إلى حسابي</h1>
 
           <div>
             <label htmlFor="identifier" className="label">
@@ -127,23 +122,31 @@ export default function LoginPage() {
             </div>
           )}
 
-          <button type="submit" disabled={busy} className="btn-primary w-full">
-            {busy && <SpinnerIcon className="h-4 w-4" />}
-            دخول
-          </button>
-        </form>
-      )}
+        <button type="submit" disabled={busy} className="btn-primary w-full">
+          {busy && <SpinnerIcon className="h-4 w-4" />}
+          دخول
+        </button>
+      </form>
 
-      <button
-        type="button"
-        onClick={() => {
-          setMode(mode === 'login' ? 'signup' : 'login');
-          setError(null);
-        }}
-        className="mt-4 min-h-[44px] w-full text-sm font-semibold text-brand"
-      >
-        {mode === 'login' ? 'ليس لديك حساب؟ سجّل محطتك مجاناً' : 'لديك حساب؟ سجّل الدخول'}
-      </button>
+      <section className="card mt-4 p-5">
+        <h2 className="text-sm font-bold">ليس لديك حساب؟</h2>
+        <p className="mt-1 text-xs leading-relaxed text-slate-500">
+          الحساب لأصحاب المحطات. أما من يريد معرفة توفر الوقود فلا يحتاج حساباً —
+          يكفي أن يختار مدينته ونوع الوقود من التطبيق.
+        </p>
+
+        <a href="/register" className="btn-primary mt-4 w-full">
+          <PlusIcon className="h-4 w-4" />
+          محطة جديدة — سجّل محطتك مجاناً
+        </a>
+        <a href="/subscribe" className="btn-ghost mt-2 w-full">
+          <MessageIcon className="h-4 w-4" />
+          مستخدم — استلم التنبيهات برسالة
+        </a>
+        <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+          الاشتراك بالرسائل لمن لا يستعمل التطبيق — رقمك فقط، بلا حساب ولا كلمة مرور.
+        </p>
+      </section>
 
       <a href="/" className="block min-h-[44px] pt-3 text-center text-sm text-slate-500">
         العودة للصفحة الرئيسية

@@ -262,7 +262,7 @@ export function StationRegisterForm() {
             />
           )}
         </div>
-        <p className="mt-1 text-xs text-slate-400">هذا الرقم وحده يظهر للسائقين</p>
+        <p className="mt-1 text-xs text-slate-400">هذا الرقم وحده يظهر للمستخدمين</p>
       </div>
 
       <p className="rounded-xl bg-brand-50 p-3 text-xs leading-relaxed text-brand-900">
@@ -303,7 +303,7 @@ export function StationRegisterForm() {
         إرسال الطلب
       </button>
       <p className="text-center text-xs text-slate-400">
-        تظهر محطتك للسائقين بعد موافقة الإدارة
+        تظهر محطتك للمستخدمين بعد موافقة الإدارة
       </p>
     </form>
   );

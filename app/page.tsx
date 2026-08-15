@@ -387,7 +387,7 @@ export default function HomePage() {
           <section className="mt-6 rounded-2xl border border-brand-100 bg-brand-50 p-4 text-center">
             <p className="text-sm font-bold text-brand-900">محطتك غير مسجّلة؟</p>
             <p className="mt-1 text-xs leading-relaxed text-brand-800">
-              أضفها مجاناً وتظهر لآلاف السائقين في الأنبار — بلا رسوم ولا عمولة.
+              أضفها مجاناً وتظهر لآلاف المستخدمين في الأنبار — بلا رسوم ولا عمولة.
               التسجيل مفتوح الآن لجميع مدن المحافظة.
             </p>
             <a href="/register" className="btn-primary mt-3 w-full">

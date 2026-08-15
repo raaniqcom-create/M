@@ -192,7 +192,7 @@ export default function AdminPage() {
               straight back here, so the site can be inspected as a driver
               sees it without giving up the session. */}
           <a href="/?view=driver" className="text-[11px] font-bold text-slate-400">
-            عرض المنصة كسائق ↗
+            عرض المنصة كمستخدم ↗
           </a>
         </div>
         <button
@@ -310,7 +310,7 @@ export default function AdminPage() {
                   </a>
                   {s.status === 'suspended' && (
                     <p className="mt-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-bold text-traffic-red">
-                      ⛔ موقوفة — لا تظهر للسائقين
+                      ⛔ موقوفة — لا تظهر للمستخدمين
                     </p>
                   )}
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
