@@ -108,3 +108,18 @@ export const SlidersIcon = ({ className = 'h-5 w-5' }: IconProps) => (
     <path d="M10 5H3M21 5h-7M6 5v14M18 12v7M18 5v3M14 12H3M21 12h-3M14 19H3M21 19h-3M6 19v-3" />
   </svg>
 );
+
+export const EyeIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+export const EyeOffIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M10.6 6.2A9.9 9.9 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3 3.6M6.6 6.6A17 17 0 0 0 2 12s3.5 6 10 6a9.7 9.7 0 0 0 4-.8" />
+    <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    <line x1="3" y1="3" x2="21" y2="21" />
+  </svg>
+);

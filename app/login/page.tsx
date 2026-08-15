@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { phoneToEmail } from '@/lib/phone';
 import { StationRegisterForm } from '@/components/StationRegisterForm';
-import { FuelIcon, SpinnerIcon } from '@/components/icons';
+import { EyeIcon, EyeOffIcon, FuelIcon, SpinnerIcon } from '@/components/icons';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -101,15 +101,17 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="field pl-16"
+                className="field pr-12"
                 dir="ltr"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="absolute left-2 top-1/2 h-9 -translate-y-1/2 px-2 text-xs font-semibold text-slate-500"
+                aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                aria-pressed={showPassword}
+                className="absolute right-1.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 active:bg-slate-100"
               >
-                {showPassword ? 'إخفاء' : 'إظهار'}
+                {showPassword ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
               </button>
             </div>
           </div>

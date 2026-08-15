@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { PRODUCT_ORDER } from '@/lib/products';
 import { ANBAR_CITIES } from '@/lib/cities';
 import { isValidIraqiMobile, phoneToEmail, displayPhone } from '@/lib/phone';
-import { SpinnerIcon } from './icons';
+import { EyeIcon, EyeOffIcon, SpinnerIcon } from './icons';
 import { LocationField } from './LocationField';
 
 // One screen, plain labels, no jargon: station managers register from a phone,
@@ -159,15 +159,17 @@ export function StationRegisterForm() {
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="field pl-16"
+            className="field pr-12"
             dir="ltr"
           />
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
-            className="absolute left-2 top-1/2 h-9 -translate-y-1/2 px-2 text-xs font-semibold text-slate-500"
+            aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+            aria-pressed={showPassword}
+            className="absolute right-1.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 active:bg-slate-100"
           >
-            {showPassword ? 'إخفاء' : 'إظهار'}
+            {showPassword ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
           </button>
         </div>
         <p className="mt-1 text-xs text-slate-400">٦ أحرف أو أرقام على الأقل — احفظها جيداً</p>
