@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FuelIcon } from '@/components/icons';
+import { AndroidIcon, AppleIcon, CheckIcon, FuelIcon, MessageIcon } from '@/components/icons';
 import { useNativeApp } from '@/lib/useNativeApp';
 import { APP_STORE_URL, PLAY_STORE_URL, detectPlatform, type Platform } from '@/lib/stores';
 
@@ -33,9 +33,7 @@ export default function DownloadPage() {
       rel="noopener noreferrer"
       className="card flex items-center gap-4 p-5"
     >
-      <span className="text-2xl" aria-hidden>
-        🤖
-      </span>
+      <AndroidIcon className="h-7 w-7 shrink-0 text-brand" />
       <span className="min-w-0 flex-1">
         <span className="block text-base font-bold">أندرويد</span>
         <span className="block text-xs text-slate-500">من Google Play — مجاناً</span>
@@ -51,9 +49,7 @@ export default function DownloadPage() {
       rel="noopener noreferrer"
       className="card flex items-center gap-4 p-5"
     >
-      <span className="text-2xl" aria-hidden>
-        🍎
-      </span>
+      <AppleIcon className="h-7 w-7 shrink-0 text-brand" />
       <span className="min-w-0 flex-1">
         <span className="block text-base font-bold">آيفون وآيباد</span>
         <span className="block text-xs text-slate-500">من App Store — مجاناً</span>
@@ -77,8 +73,9 @@ export default function DownloadPage() {
       </p>
 
       {installed && (
-        <p className="mt-5 rounded-xl bg-brand-50 p-3 text-center text-sm font-semibold text-brand">
-          ✅ التطبيق مثبّت لديك بالفعل
+        <p className="mt-5 flex items-center justify-center gap-2 rounded-xl bg-brand-50 p-3 text-center text-sm font-semibold text-brand">
+          <CheckIcon className="h-4 w-4" />
+          التطبيق مثبّت لديك بالفعل
         </p>
       )}
 
@@ -99,13 +96,11 @@ export default function DownloadPage() {
 
       <section className="card mt-4 p-5">
         <div className="flex items-center gap-2">
-          <span className="text-xl" aria-hidden>
-            💬
-          </span>
+          <MessageIcon className="h-5 w-5 text-slate-400" />
           <h2 className="text-base font-bold">بوت تيليجرام</h2>
         </div>
         <p className="mt-3 text-sm leading-relaxed text-slate-600">
-          بديل بلا تحميل، يعمل على كل الأجهزة. يخبرك بأقرب المحطات وما يتوفر فيها الآن.
+          حالياً للمحطات فقط — يحدّث صاحب المحطة التوفر من تيليجرام بلا تحميل تطبيق.
         </p>
         <a
           href="https://t.me/muhtaonlinebot"

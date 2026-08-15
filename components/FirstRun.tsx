@@ -5,7 +5,7 @@ import { AlertChips } from './AlertChips';
 import { readChoice, saveChoice } from '@/lib/alerts';
 import { getTone, previewTone, setTone, TONES, type Tone } from '@/lib/alertSound';
 import { detectPlatform, storeUrl } from '@/lib/stores';
-import { BellIcon, FuelIcon, SpinnerIcon } from './icons';
+import { BellIcon, CheckIcon, FuelIcon, SpinnerIcon } from './icons';
 import type { FuelProduct } from '@/types/database';
 
 const SEEN = 'first-run-seen';
@@ -258,8 +258,9 @@ export function FirstRun() {
               </p>
 
               {permission === 'granted' && (
-                <p className="mt-3 rounded-xl bg-brand-50 p-3 text-xs font-bold text-brand-700">
-                  ✅ تم السماح بالإشعارات
+                <p className="mt-3 flex items-center gap-2 rounded-xl bg-brand-50 p-3 text-xs font-bold text-brand-700">
+                  <CheckIcon className="h-4 w-4" />
+                  تم السماح بالإشعارات
                 </p>
               )}
 

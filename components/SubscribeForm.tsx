@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { CITY_NAMES } from '@/lib/cities';
-import { SpinnerIcon } from './icons';
+import { CheckIcon, SpinnerIcon } from './icons';
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -59,7 +59,7 @@ export function SubscribeForm() {
   if (step === 'done') {
     return (
       <section className="card p-5 text-center">
-        <p className="text-2xl">✅</p>
+        <CheckIcon className="mx-auto h-8 w-8 text-brand" />
         <p className="mt-2 text-sm font-bold">
           {mode === 'unsubscribe' ? 'تم إيقاف الرسائل' : 'تم تسجيلك'}
         </p>

@@ -10,7 +10,7 @@ import {
   saveChoice,
   type AlertChoice,
 } from '@/lib/alerts';
-import { BellIcon, SpinnerIcon } from '@/components/icons';
+import { BellIcon, CheckIcon, SpinnerIcon } from '@/components/icons';
 import { detectPlatform, storeUrl } from '@/lib/stores';
 import type { FuelProduct } from '@/types/database';
 
@@ -154,8 +154,11 @@ export function AlertSetup({
 
       {saved && (
         <>
-          <p className="mt-3 rounded-xl bg-brand-50 p-3 text-xs leading-relaxed font-semibold text-brand-700">
-            ✅ التنبيهات مفعّلة — {productLabel} في {cityLabel}.
+          <p className="mt-3 flex items-start gap-2 rounded-xl bg-brand-50 p-3 text-xs leading-relaxed font-semibold text-brand-700">
+            <CheckIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              التنبيهات مفعّلة — {productLabel} في {cityLabel}.
+            </span>
           </p>
           <button
             type="button"

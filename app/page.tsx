@@ -24,7 +24,17 @@ import { InstallPrompt } from '@/components/InstallPrompt';
 import { WaitingForStations } from '@/components/WaitingForStations';
 import { FirstRun } from '@/components/FirstRun';
 import { SearchBar, EMPTY_FILTERS, countActive, type Filters } from '@/components/SearchBar';
-import { FuelIcon, ListIcon, MapPinIcon, SearchIcon, SpinnerIcon } from '@/components/icons';
+import {
+  BellIcon,
+  DownloadIcon,
+  FuelIcon,
+  ListIcon,
+  MapPinIcon,
+  SearchIcon,
+  ShieldIcon,
+  SpinnerIcon,
+  StoreIcon,
+} from '@/components/icons';
 import type { FuelProduct, StationWithStatus } from '@/types/database';
 
 // Leaflet touches window at import time, so it can't be server-rendered
@@ -196,11 +206,14 @@ export default function HomePage() {
               its place. Tell the visitor what to do right now instead of what
               the platform lacks — and keep the honesty about calling ahead,
               which is what stops a driver burning fuel on a stale claim. */}
-          <p className="mt-2 rounded-lg bg-white/15 px-3 py-2 text-center text-[11px] leading-relaxed text-white">
-            🔔 اختر <b>مدينتك</b> و<b>نوع الوقود</b> الذي يهمك، وانتظر — أول ما تسجّل
-            محطة ويتوفر المنتج، يصلك إشعار.
-            <br />
-            المحطات تُضاف تباعاً. واتصل بالمحطة قبل أن تتحرك.
+          <p className="mt-2 flex items-start gap-2 rounded-lg bg-white/15 px-3 py-2 text-[11px] leading-relaxed text-white">
+            <BellIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              اختر <b>مدينتك</b> و<b>نوع الوقود</b> الذي يهمك، وانتظر — أول ما تسجّل محطة
+              ويتوفر المنتج، يصلك إشعار.
+              <br />
+              المحطات تُضاف تباعاً. واتصل بالمحطة قبل أن تتحرك.
+            </span>
           </p>
           {/* Both of these speak to someone browsing the site. Inside the app
               they are dead weight: the download already happened, and the
@@ -212,7 +225,17 @@ export default function HomePage() {
               href={role === 'admin' ? '/admin' : '/owner'}
               className="mt-2 flex items-center justify-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-extrabold text-brand-700"
             >
-              {role === 'admin' ? '🛡 فتح لوحة الإدارة' : '🏪 العودة إلى لوحة محطتي'}
+              {role === 'admin' ? (
+                <>
+                  <ShieldIcon className="h-4 w-4" />
+                  فتح لوحة التحكم
+                </>
+              ) : (
+                <>
+                  <StoreIcon className="h-4 w-4" />
+                  العودة إلى لوحة محطتي
+                </>
+              )}
             </a>
           )}
           {/* The blinking "قريباً" pill used to sit right beside this live
@@ -225,7 +248,8 @@ export default function HomePage() {
                 href="/download"
                 className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11px] font-extrabold text-brand-700"
               >
-                📱 حمّل التطبيق
+                <DownloadIcon className="h-4 w-4" />
+                حمّل التطبيق
               </a>
             </div>
           )}
