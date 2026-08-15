@@ -282,3 +282,75 @@ end $function$;
 
 revoke all on function admin_stats() from public;
 grant execute on function admin_stats() to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- station_slug() + the slug half of stations_guard().
+--
+-- Nothing generated a slug: not the owner form, not the admin form, and the
+-- column has no default. Every station carried slug = null and the share card
+-- rendered muhta.online/null — the one link an owner is told to publish.
+-- Fixing it in the callers would leave the next caller to forget, so it lands
+-- in the trigger every insert already passes through. Owners may still rename
+-- it from their panel; this only guarantees one exists.
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.station_slug(p_name text, p_id uuid)
+ RETURNS text
+ LANGUAGE plpgsql
+ IMMUTABLE
+AS $function$
+declare
+  base text;
+begin
+  -- Latin names transliterate straight through; Arabic ones cannot, so they
+  -- fall back to a short token off the id rather than an empty string.
+  base := lower(regexp_replace(coalesce(p_name, ''), '[^a-zA-Z0-9]+', '-', 'g'));
+  base := trim(both '-' from base);
+  base := left(base, 24);
+  if base = '' or length(base) < 3 then
+    base := 'm' || left(replace(p_id::text, '-', ''), 7);
+  end if;
+  return base;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.stations_guard()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  candidate text;
+  n int := 0;
+begin
+  -- Every insert passes here, whoever makes it, so this is the one place a
+  -- missing slug can be caught for good.
+  if new.slug is null or btrim(new.slug) = '' then
+    candidate := station_slug(new.name, new.id);
+    -- these static routes resolve before the /[slug] catch-all, so a station
+    -- claiming one would own a link that never opens
+    while candidate in ('login','register','owner','admin','station','offline','api',
+                        'icons','ads','alerts','download','privacy','subscribe',
+                        'reset','test-push','manifest.json','sw.js')
+          or exists (select 1 from stations s where s.slug = candidate and s.id <> new.id)
+    loop
+      n := n + 1;
+      candidate := station_slug(new.name, new.id) || '-' || n::text;
+    end loop;
+    new.slug := candidate;
+  end if;
+
+  -- service-role callers (edge functions) and admins are trusted
+  if auth.uid() is null
+     or exists (select 1 from profiles where id = auth.uid() and role = 'admin') then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    new.status := 'pending';
+  else
+    new.status := old.status;
+    new.owner_id := old.owner_id;
+  end if;
+  return new;
+end $function$;
