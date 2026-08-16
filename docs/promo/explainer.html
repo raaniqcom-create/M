@@ -339,12 +339,14 @@ html.v #mark{bottom:120px;inset-inline-start:50%;transform:translateX(50%)}
   <audio id="voice" src="voice.mp3" preload="auto"></audio>
 </div></div>
 
-<div class="hud" id="hud">اضغط في أي مكان للبدء بالصوت · F ملء الشاشة · V أفقي/عمودي · R إعادة · مسافة إيقاف</div>
+<div class="hud hidden" id="hud">اضغط في أي مكان للبدء بالصوت · F ملء الشاشة · V أفقي/عمودي · R إعادة · مسافة إيقاف</div>
 
 <script>
 // المسرح مقاس ثابت؛ نقيسه ليملأ أي نافذة بلا تشويه، فالتسجيل يخرج بأي دقة.
 const stage = document.getElementById('stage');
 const root = document.documentElement;
+const voice = document.getElementById('voice');
+const hud = document.getElementById('hud');
 
 // ?v=story يفتح العمودي مباشرة، فيمكن ربط اختصار لكل مقاس بلا تعديل الملف
 if (new URLSearchParams(location.search).get('v') === 'story') root.classList.add('v');
@@ -357,52 +359,63 @@ const fit = () => {
 };
 addEventListener('resize', fit); fit();
 
-// e.code لا e.key: الأول هو المفتاح الفيزيائي، والثاني هو الحرف الذي تنتجه
-// لوحة المفاتيح. على تخطيط عربي يعطي المفتاح R حرف «ق»، فكانت المقارنة
-// تفشل دائماً — ونجت المسافة وحدها لأنها كانت مكتوبة بـcode من البداية.
-// ---- الصوت يقود الصورة ----
+// ---- الصوت وحده يحرّك الصورة ----
 //
-// المتصفحات تمنع التشغيل التلقائي بصوت، فأول ضغطة أو نقرة تبدأ كل شيء معاً.
-// وبعدها تُضبط ساعة الأنيميشن على currentTime في كل إطار: انزياحُ عشرات
-// الأجزاء من الثانية بين ساعة الصوت وساعة العرض يتراكم على ٨٢ ثانية، وهو
-// بالضبط ما يجعل المشهد يسبق الجملة أو يتأخّر عنها في نهاية الفيديو.
-const voice = document.getElementById('voice');
+// كانت المشاهد تعمل بساعتها منذ لحظة فتح الصفحة، والصوت لا يبدأ إلا عند
+// الضغط. فما بين الفتح والضغط تكون الصورة قد سبقت — ثم يعيدها الضبط إلى
+// البداية، فتُعرض المشاهد مرتين: مرة وهي سابقة، ومرة بعد أن تُرَدّ. وهذا
+// هو التكرار الذي رآه صاحب المشروع، والسبق الذي رآه: عطلٌ واحد لا ثلاثة.
+//
+// فلا شيء يعمل بساعته الآن. كل الحركات تُجمَّد عند الفتح، ولا تتقدّم إلا
+// بمقدار currentTime في كل إطار. لا ساعة ثانية تسبق أو تتأخّر.
+let anims = [];
 let started = false;
 
-function sync() {
-  if (!voice.paused) {
-    const ms = voice.currentTime * 1000;
-    for (const a of document.getAnimations()) {
-      try { a.currentTime = ms; } catch {}
-    }
-  }
-  requestAnimationFrame(sync);
+const scrub = (ms) => {
+  for (const a of anims) { try { a.currentTime = ms; } catch {} }
+};
+
+function collect() {
+  anims = document.getAnimations();
+  for (const a of anims) { try { a.pause(); } catch {} }
+  scrub(started ? voice.currentTime * 1000 : 0);
+}
+
+collect();
+// الخطوط والصور قد تُنشئ حركات متأخّرة، فتُجمَع مرة أخرى بعد اكتمال التحميل
+addEventListener('load', collect);
+
+function tick() {
+  scrub(voice.currentTime * 1000);
+  requestAnimationFrame(tick);
 }
 
 function start() {
   if (started) return;
   started = true;
-  document.getElementById('hud').classList.add('hidden');
+  hud.classList.add('hidden');
   voice.currentTime = 0;
   voice.play().catch(() => {});
-  requestAnimationFrame(sync);
+  requestAnimationFrame(tick);
 }
 
-addEventListener('click', start, { once: true });
+addEventListener('click', start);
 
+// e.code لا e.key: الأول هو المفتاح الفيزيائي، والثاني هو الحرف الذي تنتجه
+// لوحة المفاتيح. على تخطيط عربي يعطي المفتاح R حرف «ق»، فكانت المقارنة
+// تفشل دائماً — ونجت المسافة وحدها لأنها كانت مكتوبة بـcode من البداية.
 addEventListener('keydown', (e) => {
   if (!started && (e.code === 'Space' || e.code === 'Enter')) { e.preventDefault(); return start(); }
   switch (e.code) {
     case 'KeyR': location.reload(); break;
     case 'KeyF': document.documentElement.requestFullscreen?.(); break;
-    case 'KeyH': document.getElementById('hud').classList.toggle('hidden'); break;
-    case 'KeyV': root.classList.toggle('v'); fit(); break;
+    case 'KeyH': hud.classList.toggle('hidden'); break;
+    case 'KeyV': root.classList.toggle('v'); fit(); collect(); break;
     case 'Space':
+      // إيقاف الصوت يكفي: الصورة لا تملك ساعة تمضي بها وحدها
       e.preventDefault();
-      // يوقف الصوت والصورة معاً — إيقاف أحدهما وحده يفكّ التزامن
       if (voice.paused) voice.play().catch(() => {});
       else voice.pause();
-      document.body.classList.toggle('paused');
       break;
   }
 });
