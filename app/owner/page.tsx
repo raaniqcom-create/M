@@ -183,7 +183,7 @@ export default function OwnerPage() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-extrabold text-brand">لوحة صاحب المحطة</h1>
-          <a href="/?view=driver" className="text-[11px] font-bold text-slate-400">
+          <a href="/?view=user" className="text-[11px] font-bold text-slate-400">
             عرض المنصة كمستخدم ↗
           </a>
         </div>

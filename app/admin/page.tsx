@@ -34,6 +34,7 @@ export default function AdminPage() {
     'stations' | 'requests' | 'add' | 'system' | 'stats' | 'ads' | 'offers' | 'reviews'
   >('stations');
   const [q, setQ] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState<Station[]>([]);
   const [approved, setApproved] = useState<Station[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
@@ -86,8 +87,14 @@ export default function AdminPage() {
     setPending((prev) => prev.filter((s) => s.id !== id));
     await supabase.from('stations').update({ status }).eq('id', id);
     if (status === 'approved') {
-      await rebuildSite();
-      await announceStation(id);
+      // Rebuild first and only announce if it was accepted. Announcing a
+      // station whose page was never generated sends every subscriber to a 404.
+      const why = await rebuildSite();
+      if (why) {
+        setNotice(`المحطة اعتُمدت، لكن تحديث الموقع فشل: ${why} — لم يُرسل الإشعار بعد.`);
+      } else {
+        await announceStation(id);
+      }
     }
     load();
   }
@@ -188,10 +195,10 @@ export default function AdminPage() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-extrabold text-brand">لوحة الإدارة</h1>
-          {/* ?view=driver stops the home page bouncing a signed-in admin
-              straight back here, so the site can be inspected as a driver
-              sees it without giving up the session. */}
-          <a href="/?view=driver" className="text-[11px] font-bold text-slate-400">
+          {/* ?view=user stops the home page bouncing a signed-in admin
+              straight back here, so the site can be inspected the way an
+              ordinary visitor sees it without giving up the session. */}
+          <a href="/?view=user" className="text-[11px] font-bold text-slate-400">
             عرض المنصة كمستخدم ↗
           </a>
         </div>
@@ -207,6 +214,21 @@ export default function AdminPage() {
           <LogOutIcon />
         </button>
       </header>
+
+      {/* Approval half-succeeding is the one failure the admin must not miss:
+          the station is live in the database but has no page on the site. */}
+      {notice && (
+        <div className="mt-4 rounded-xl border border-traffic-red bg-red-50 p-3">
+          <p className="text-xs leading-relaxed text-traffic-red">{notice}</p>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="mt-2 text-[11px] font-bold text-traffic-red underline"
+          >
+            إخفاء
+          </button>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-3 gap-2">
         {[

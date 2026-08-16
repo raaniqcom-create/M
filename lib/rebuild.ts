@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { callFn } from './fn';
 
 /** Asks the site to rebuild so a newly approved station gets its own page.
  *
@@ -29,18 +30,13 @@ export async function announceStation(stationId: string): Promise<void> {
   }
 }
 
-export async function rebuildSite(): Promise<boolean> {
-  try {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) return false;
-
-    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/rebuild`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+/** Returns the reason it failed, or null when the rebuild was accepted.
+ *
+ *  It used to return a bare boolean that every caller ignored. That hid a real
+ *  outage: the gateway was rejecting the token, so approving a station flipped
+ *  its status and announced it to every subscriber while the station's own page
+ *  was never generated. Approval looked perfect and the link 404'd. */
+export async function rebuildSite(): Promise<string | null> {
+  const r = await callFn('rebuild');
+  return r.ok ? null : r.error;
 }

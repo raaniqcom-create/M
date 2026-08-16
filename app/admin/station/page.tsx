@@ -133,10 +133,12 @@ function Panel() {
     if (!station) return;
     setBusy('status');
     await supabase.from('stations').update({ status }).eq('id', station.id);
-    // a newly approved station has no page until the site is rebuilt
+    // A newly approved station has no page until the site is rebuilt, so the
+    // announcement waits for the rebuild rather than racing it to a 404.
     if (status === 'approved') {
-      await rebuildSite();
-      await announceStation(station.id);
+      const why = await rebuildSite();
+      if (why) setPhoneNote(`المحطة اعتُمدت، لكن تحديث الموقع فشل: ${why} — لم يُرسل الإشعار بعد.`);
+      else await announceStation(station.id);
     }
     setStation({ ...station, status });
     setBusy(null);

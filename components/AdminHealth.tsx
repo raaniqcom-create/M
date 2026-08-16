@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { callFn } from '@/lib/fn';
 import { ageLabel, isFresh, isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { CheckIcon, SpinnerIcon, XIcon } from './icons';
@@ -35,6 +36,7 @@ export function AdminHealth() {
   const [report, setReport] = useState<Report | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(true);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
@@ -47,19 +49,10 @@ export function AdminHealth() {
 
   const load = useCallback(async () => {
     setError(null);
-    const { data: sess } = await supabase.auth.getSession();
-    const token = sess.session?.access_token ?? '';
+    setBusy(true);
 
     const [h, s] = await Promise.all([
-      fetch(`${FN}/health`, {
-        method: 'POST',
-        headers: {
-          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-          Authorization: `Bearer ${token}`,
-        },
-      })
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-        .catch(() => null),
+      callFn<Report>('health'),
       supabase
         .from('stations')
         .select('*, station_products(product, is_available, updated_at)')
@@ -67,9 +60,10 @@ export function AdminHealth() {
         .order('city'),
     ]);
 
-    if (!h) setError('تعذّر فحص النظام. تأكد أنك داخل بحساب الإدارة.');
-    setReport(h);
+    setError(h.error);
+    setReport(h.data);
     setRows((s.data as Row[]) ?? []);
+    setBusy(false);
   }, []);
 
   useEffect(() => {
@@ -109,25 +103,21 @@ export function AdminHealth() {
   }
 
   async function callAnnounce(dryRun: boolean) {
-    const { data: sess } = await supabase.auth.getSession();
-    const res = await fetch(`${FN}/announce`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        Authorization: `Bearer ${sess.session?.access_token ?? ''}`,
-      },
-      body: JSON.stringify({ title, body: text, dryRun }),
-    });
-    return { ok: res.ok, out: await res.json().catch(() => null) };
+    const r = await callFn<{
+      audience: { ios: number; android: number; web: number };
+      ok: number;
+      failed: number;
+      pruned: number;
+    }>('announce', { title, body: text, dryRun });
+    return { ok: r.ok, out: r.data, error: r.error };
   }
 
   /** Counts before it sends. A notification cannot be recalled, so the number
    *  of phones about to buzz is shown while the decision is still reversible. */
   async function preview() {
     setSendResult(null);
-    const { ok, out } = await callAnnounce(true);
-    if (!ok) return setSendResult(out?.error ?? 'تعذّر الاتصال');
+    const { ok, out, error: why } = await callAnnounce(true);
+    if (!ok || !out) return setSendResult(why ?? 'تعذّر الاتصال');
     setReach(out.audience);
     setConfirming(true);
   }
@@ -136,9 +126,9 @@ export function AdminHealth() {
     setSending(true);
     setSendResult(null);
     try {
-      const { ok, out } = await callAnnounce(false);
-      if (!ok) {
-        setSendResult(out?.error ?? 'تعذّر الإرسال');
+      const { ok, out, error: why } = await callAnnounce(false);
+      if (!ok || !out) {
+        setSendResult(why ?? 'تعذّر الإرسال');
         return;
       }
       setSendResult(
@@ -177,7 +167,17 @@ export function AdminHealth() {
         </p>
 
         {error && (
-          <p className="mt-3 rounded-xl bg-red-50 p-3 text-xs text-traffic-red">{error}</p>
+          <div className="mt-3 rounded-xl bg-red-50 p-3">
+            <p className="text-xs leading-relaxed text-traffic-red">{error}</p>
+            <button
+              type="button"
+              onClick={load}
+              disabled={busy}
+              className="mt-2 text-[11px] font-bold text-traffic-red underline disabled:opacity-50"
+            >
+              {busy ? 'جارٍ المحاولة…' : 'أعد المحاولة'}
+            </button>
+          </div>
         )}
 
         <ul className="mt-3 space-y-2">

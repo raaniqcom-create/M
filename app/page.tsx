@@ -61,7 +61,7 @@ export default function HomePage() {
   const { signedIn, role, ready } = useSession();
 
   // Send an owner or admin to their panel on open. Only once, and never when
-  // they asked for the driver view — a redirect they cannot escape is worse
+  // they asked for the visitor view — a redirect they cannot escape is worse
   // than the wrong landing page.
   useEffect(() => {
     if (!signedIn) return;

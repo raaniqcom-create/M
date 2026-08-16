@@ -1,0 +1,35 @@
+project_id = "snlafcvuoxpxcdbtinsy"
+
+# Who checks the caller's token: the gateway, or the function?
+#
+# The project's auth signing key was rotated from the legacy symmetric HS256 to
+# an asymmetric ES256 key. GoTrue now issues ES256 access tokens, and the edge
+# gateway's legacy `verify_jwt` path cannot verify them — it answers
+# 401 UNAUTHORIZED_ASYMMETRIC_JWT before the function ever runs.
+#
+# Four functions were deployed with verify_jwt on, and all four broke at once:
+#   health          — the admin's system panel, which then blamed the admin's account
+#   rebuild         — so approving a station never regenerated the site, and the
+#                     link handed to the owner 404'd while subscribers were told
+#                     the station had joined
+#   announce        — the broadcast
+#   delete-account  — account deletion, which the App Store requires
+#
+# Turning the gateway check off removes nothing: each of these four reads the
+# Authorization header itself, calls auth.getUser(jwt) against GoTrue (which
+# does verify ES256), and rejects a non-admin with 403. That check is the real
+# boundary; the gateway was a duplicate of it that no longer works.
+#
+# Every other function in this project already runs with verify_jwt = false.
+
+[functions.health]
+verify_jwt = false
+
+[functions.rebuild]
+verify_jwt = false
+
+[functions.announce]
+verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = false
