@@ -3,7 +3,7 @@
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { useEffect } from 'react';
-import { PRODUCT_LABELS, TRAFFIC_LABELS } from '@/lib/products';
+import { activeTrafficLevel, PRODUCT_LABELS, TRAFFIC_LABELS } from '@/lib/products';
 import type { StationWithStatus, TrafficLevel } from '@/types/database';
 
 import { ANBAR_CENTER, ANBAR_ZOOM } from '@/lib/cities';
@@ -74,7 +74,7 @@ export default function StationMap({
       <FitToStations stations={stations} />
 
       {stations.map((s) => {
-        const level = s.manual_traffic_level ?? s.traffic?.majority_level ?? null;
+        const level = activeTrafficLevel(s, s.traffic);
         const available = s.products.filter((p) => p.is_available);
         return (
           <Marker key={s.id} position={[s.lat, s.lng]} icon={pinIcon(level, available.length > 0)}>

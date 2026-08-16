@@ -100,20 +100,16 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
         <h1 className="text-lg font-extrabold">{station.name}</h1>
         <p className="mt-1 text-sm text-slate-500">{station.address}</p>
 
-        {level && (
-          <span
-            className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${TRAFFIC_COLORS[level].bg} ${TRAFFIC_COLORS[level].text}`}
-          >
-            <span className={`h-2 w-2 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
-            الازدحام: {TRAFFIC_LABELS[level]}
-          </span>
-        )}
 
         {/* Written but never mounted until now, so the traffic on every station
             page could only ever come from its owner. The people standing in it
             are the ones who know. */}
         <div className="mt-4 border-t border-slate-100 pt-4">
-          <TrafficVote stationId={station.id} />
+          <TrafficVote
+            stationId={station.id}
+            manualLevel={station.manual_traffic_level}
+            manualSetAt={station.manual_traffic_set_at}
+          />
         </div>
 
         <h2 className="mt-5 text-sm font-bold">المنتجات</h2>

@@ -90,3 +90,29 @@ export function isoDateIn(days: number): string {
   const day = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${month}-${day}`;
 }
+
+/** كم تبقى حالة الازدحام التي يحدّدها صاحب المحطة صالحة. */
+export const MANUAL_TRAFFIC_MINUTES = 30;
+
+/** الحالة التي تُعرض فعلاً، أو لا شيء.
+ *
+ *  تحديد صاحب المحطة يتقدّم على تصويت الناس ما دام طازجاً — فهو واقف في
+ *  الساحة ويراها. لكنه ينتهي: حالةٌ حُدِّدت صباحاً ولم تُمسّ بعدها تصف صباحاً
+ *  انتهى، وكانت تحجب التصويت الحيّ لتقول ذلك. تصويت المستخدمين يسقط بعد ٣٠
+ *  دقيقة، فتحديد المالك يسقط بعدها أيضاً — العدل نفسه للطرفين.
+ *
+ *  manual_traffic_set_at كان يُكتب ولا يُقرأ في أي موضع. هذه أول قراءة له. */
+export function activeTrafficLevel(
+  station: {
+    manual_traffic_level?: TrafficLevel | null;
+    manual_traffic_set_at?: string | null;
+  },
+  votes?: { majority_level?: TrafficLevel | null } | null
+): TrafficLevel | null {
+  const setAt = station.manual_traffic_set_at
+    ? new Date(station.manual_traffic_set_at).getTime()
+    : 0;
+  const stillFresh = setAt > 0 && Date.now() - setAt < MANUAL_TRAFFIC_MINUTES * 60_000;
+  if (stillFresh && station.manual_traffic_level) return station.manual_traffic_level;
+  return votes?.majority_level ?? null;
+}

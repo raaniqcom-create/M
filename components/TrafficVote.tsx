@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
+import { activeTrafficLevel, TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
 import type { StationTrafficAvg, TrafficLevel } from '@/types/database';
 
 const LEVELS: TrafficLevel[] = ['green', 'yellow', 'red'];
@@ -11,9 +11,15 @@ const VOTE_WINDOW_MS = 30 * 60 * 1000;
 export function TrafficVote({
   stationId,
   traffic: initial = null,
+  manualLevel = null,
+  manualSetAt = null,
 }: {
   stationId: string;
   traffic?: StationTrafficAvg | null;
+  /** what the owner set, and when — its 30-minute expiry is judged here,
+   *  because this page is a static file and a build-time clock would freeze it */
+  manualLevel?: TrafficLevel | null;
+  manualSetAt?: string | null;
 }) {
   const voteKey = `voted:${stationId}`;
   const [voted, setVoted] = useState(false);
@@ -58,8 +64,23 @@ export function TrafficVote({
     refresh();
   }
 
+  // مقيسة هنا لا في البناء: الصفحة ملف ثابت، وساعة البناء كانت ستُجمّد الصلاحية
+  const active = activeTrafficLevel(
+    { manual_traffic_level: manualLevel, manual_traffic_set_at: manualSetAt },
+    traffic
+  );
+
   return (
     <div>
+      {active && (
+        <span
+          className={`mb-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${TRAFFIC_COLORS[active].bg} ${TRAFFIC_COLORS[active].text}`}
+        >
+          <span className={`h-2 w-2 rounded-full ${TRAFFIC_COLORS[active].dot}`} />
+          الازدحام الآن: {TRAFFIC_LABELS[active]}
+        </span>
+      )}
+
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-slate-500">
           {voted ? 'شكراً، تم تسجيل تقييمك' : 'كيف الازدحام الآن؟'}

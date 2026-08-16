@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { cancelTrafficReminder, scheduleTrafficReminder } from '@/lib/trafficReminder';
 import {
   PRODUCT_LABELS,
   PRODUCT_ORDER,
+  activeTrafficLevel,
+  MANUAL_TRAFFIC_MINUTES,
   TRAFFIC_COLORS,
   TRAFFIC_LABELS,
   expectedLabel,
@@ -32,6 +35,7 @@ export default function OwnerPage() {
   const [loading, setLoading] = useState(true);
   const [savingProduct, setSavingProduct] = useState<FuelProduct | null>(null);
   const [view, setView] = useState<'main' | 'info' | 'data'>('main');
+  const [trafficNote, setTrafficNote] = useState<string | null>(null);
 
   const load = useCallback(async (uid: string) => {
     // maybeSingle() errors outright when an owner holds more than one station,
@@ -161,11 +165,36 @@ export default function OwnerPage() {
   async function setTraffic(level: TrafficLevel) {
     if (!station) return;
     const next = station.manual_traffic_level === level ? null : level;
-    setStation({ ...station, manual_traffic_level: next });
-    await supabase
+    const now = new Date().toISOString();
+    setStation({ ...station, manual_traffic_level: next, manual_traffic_set_at: now });
+
+    const { error } = await supabase
       .from('stations')
-      .update({ manual_traffic_level: next, manual_traffic_set_at: new Date().toISOString() })
+      .update({ manual_traffic_level: next, manual_traffic_set_at: now })
       .eq('id', station.id);
+
+    if (error) {
+      // the toggle used to flip on screen whether or not the row was written
+      setStation({ ...station });
+      setTrafficNote('تعذّر حفظ حالة الازدحام. تحقّق من الاتصال وحاول مجدداً.');
+      return;
+    }
+
+    // A reading is only worth showing while it is recent, so the reminder is
+    // tied to the reading rather than to the clock: set one, and thirty
+    // minutes later the phone asks for the next. Clear it, and nothing is
+    // pending to remind about.
+    if (next) {
+      const armed = await scheduleTrafficReminder(station.name);
+      setTrafficNote(
+        armed
+          ? `سيصلك تذكير بعد ${MANUAL_TRAFFIC_MINUTES} دقيقة لتحديثها — وإن لم تحدّثها تُمسح تلقائياً.`
+          : `تُمسح تلقائياً بعد ${MANUAL_TRAFFIC_MINUTES} دقيقة إن لم تحدّثها.`
+      );
+    } else {
+      await cancelTrafficReminder();
+      setTrafficNote(null);
+    }
   }
 
   async function signOut() {
@@ -284,12 +313,14 @@ export default function OwnerPage() {
             <section className="card p-5">
               <h3 className="text-sm font-bold">حالة الازدحام</h3>
               <p className="mt-1 text-xs text-slate-400">
-                أنت الوحيد الذي يرى ساحتك. تحديدك يظهر للمستخدمين بدل تصويتهم، ويبقى حتى تغيّره —
-                وتصويت المستخدمين يسقط بعد ٣٠ دقيقة. اضغط مرة أخرى للإلغاء.
+                أنت الوحيد الذي يرى ساحتك، فتحديدك يظهر للمستخدمين بدل تصويتهم. ويبقى{' '}
+                {MANUAL_TRAFFIC_MINUTES} دقيقة ثم يُمسح — كما يسقط تصويتهم بعد المدّة نفسها،
+                فحالةٌ من ساعة مضت لا تصف الساحة الآن. اضغط مرة أخرى للإلغاء.
               </p>
               <div className="mt-3 grid grid-cols-3 gap-2">
                 {LEVELS.map((level) => {
-                  const active = station.manual_traffic_level === level;
+                  // بالصلاحية لا بالحقل وحده: حالةٌ انتهت مدّتها لا تُعرض مضيئة
+                  const active = activeTrafficLevel(station) === level;
                   return (
                     <button
                       key={level}
@@ -308,6 +339,12 @@ export default function OwnerPage() {
                   );
                 })}
               </div>
+
+              {trafficNote && (
+                <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-xs font-semibold leading-relaxed text-brand-700">
+                  {trafficNote}
+                </p>
+              )}
             </section>
             <section className="card p-5">
               <h3 className="text-sm font-bold">توفر المنتجات</h3>

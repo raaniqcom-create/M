@@ -1,6 +1,7 @@
 import {
   PRODUCT_LABELS,
   PRODUCT_ORDER,
+  activeTrafficLevel,
   TRAFFIC_COLORS,
   TRAFFIC_LABELS,
   expectedLabel,
@@ -29,7 +30,8 @@ export function StationCard({
   const byProduct = new Map(station.products.map((p) => [p.product, p]));
   const open = isOpenNow(station);
   // an owner's manual setting overrides the crowd average
-  const level = station.manual_traffic_level ?? station.traffic?.majority_level ?? null;
+  // تحديد المالك يسقط بعد ٣٠ دقيقة كما يسقط تصويت الناس
+  const level = activeTrafficLevel(station, station.traffic);
 
   return (
     <article className={`card p-4 ${tinted ? 'border-brand-100 bg-brand-50/60' : ''}`}>
