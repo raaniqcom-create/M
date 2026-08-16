@@ -354,13 +354,17 @@ const fit = () => {
 };
 addEventListener('resize', fit); fit();
 
+// e.code لا e.key: الأول هو المفتاح الفيزيائي، والثاني هو الحرف الذي تنتجه
+// لوحة المفاتيح. على تخطيط عربي يعطي المفتاح R حرف «ق»، فكانت المقارنة
+// تفشل دائماً — ونجت المسافة وحدها لأنها كانت مكتوبة بـcode من البداية.
 addEventListener('keydown', (e) => {
-  const k = e.key.toLowerCase();
-  if (k === 'r') location.reload();
-  if (k === 'f') document.documentElement.requestFullscreen?.();
-  if (k === 'h') document.getElementById('hud').classList.toggle('hidden');
-  if (k === 'v') { root.classList.toggle('v'); fit(); }
-  if (e.code === 'Space') { e.preventDefault(); document.body.classList.toggle('paused'); }
+  switch (e.code) {
+    case 'KeyR': location.reload(); break;
+    case 'KeyF': document.documentElement.requestFullscreen?.(); break;
+    case 'KeyH': document.getElementById('hud').classList.toggle('hidden'); break;
+    case 'KeyV': root.classList.toggle('v'); fit(); break;
+    case 'Space': e.preventDefault(); document.body.classList.toggle('paused'); break;
+  }
 });
 </script>
 </body>
