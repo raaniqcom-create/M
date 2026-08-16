@@ -24,8 +24,8 @@ html,body{height:100%;background:#000;overflow:hidden;font-family:Tajawal,system
 #fit{position:fixed;inset:0}
 /* مقاسان من ملف واحد: الأفقي للقناة وفيسبوك، والعمودي للقصص.
    ?v=story أو مفتاح V. ملفّان منفصلان كانا سيفترقان عند أول تعديل. */
-:root{--W:1920px;--H:1080px}
-html.v{--W:1080px;--H:1920px}
+:root{--W:1920px;--H:1080px;--band:175px}
+html.v{--W:1080px;--H:1920px;--band:245px}
 /* Centred by transform, not by grid: a grid item wider than its container
    aligns to start and spills off-screen instead of centring. */
 #stage{
@@ -33,7 +33,10 @@ html.v{--W:1080px;--H:1920px}
   overflow:hidden;background:linear-gradient(160deg,#ffffff 0%,var(--brand-50) 100%);
   transform-origin:center;
 }
-.scene{position:absolute;inset:0;opacity:0;display:grid;place-items:center;align-content:center;gap:34px;text-align:center}
+/* المشاهد تنتهي عند حدّ الشريط السفلي، لا تحته. جعلُ العلامة معتمة فوق
+   العناصر كان يخفي المرور، لا يمنعه — وحافّة هاتفٍ تختفي خلف بطاقة تُقرأ
+   خطأً في التصميم. فالشريط جزء من التخطيط، والمشهد يتوسّط ما فوقه. */
+.scene{position:absolute;inset:0 0 var(--band) 0;opacity:0;display:grid;place-items:center;align-content:center;gap:34px;text-align:center}
 .paused *{animation-play-state:paused !important}
 
 /* لكل مشهد ظهور واختفاء بنفس المنحنى، فلا يقفز شيء */
@@ -75,8 +78,10 @@ p.sub{font-size:44px;font-weight:500;color:var(--mute);line-height:1.6}
 
 /* ---------- 4 · الزر والإشعار ---------- */
 .split{display:flex;align-items:center;gap:110px}
+/* ٧٥٠ لا ٧٩٠: ارتفاع المشهد صار ٩٠٥ بعد حجز الشريط، والعنوان فوق الهاتف
+   يأخذ ١٢٦ منها. بـ٧٩٠ كان المجموع يتجاوزها فيهرب الفائض إلى الأعلى. */
 .phone{
-  width:400px;height:790px;border-radius:56px;background:#fff;position:relative;
+  width:400px;height:750px;border-radius:56px;background:#fff;position:relative;
   border:14px solid #0f172a;box-shadow:0 30px 70px rgba(20,83,45,.22);overflow:hidden;flex:none;
 }
 .phone .top{height:112px;background:linear-gradient(180deg,var(--brand-700),var(--brand));display:grid;place-items:center;color:#fff;font-weight:800;font-size:27px}
@@ -132,7 +137,7 @@ p.sub{font-size:44px;font-weight:500;color:var(--mute);line-height:1.6}
 #mark{
   position:absolute;bottom:44px;inset-inline-start:52px;z-index:5;
   display:flex;align-items:center;gap:20px;
-  background:rgba(255,255,255,.92);border:2px solid var(--brand-100);
+  background:#fff;border:2px solid var(--brand-100);
   border-radius:26px;padding:16px 28px 16px 20px;
   box-shadow:0 10px 30px rgba(20,83,45,.14);
   animation:fade .8s both;animation-delay:.4s;
