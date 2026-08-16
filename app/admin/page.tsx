@@ -52,16 +52,21 @@ export default function AdminPage() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) {
+      // getSession reads the stored session and refreshes it when needed;
+      // getUser is a round trip to the auth server, and when that request was
+      // dropped this guard read it as "not signed in" and threw the admin back
+      // to the login form they had just completed.
+      const { data: sess } = await supabase.auth.getSession();
+      const user = sess.session?.user;
+      if (!user) {
         router.replace('/login');
         return;
       }
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', data.user.id)
-        .single();
+        .eq('id', user.id)
+        .maybeSingle();
 
       if (profile?.role !== 'admin') {
         setAllowed(false);
@@ -78,7 +83,7 @@ export default function AdminPage() {
           .update({ is_admin: true })
           .eq('token', deviceToken);
       }
-      setAdminId(data.user.id);
+      setAdminId(user.id);
       load();
     })();
   }, [router, load]);

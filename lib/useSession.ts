@@ -26,13 +26,17 @@ export function useSession(): Session {
     let alive = true;
 
     async function read() {
-      const { data } = await supabase.auth.getUser();
+      // stored session rather than a round trip: this hook drives the side
+      // menu, and a dropped request used to redraw a signed-in owner as a
+      // stranger being invited to register
+      const { data } = await supabase.auth.getSession();
+      const user = data.session?.user;
       if (!alive) return;
-      if (!data.user) return setSession({ signedIn: false, role: null, ready: true });
+      if (!user) return setSession({ signedIn: false, role: null, ready: true });
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', data.user.id)
+        .eq('id', user.id)
         .maybeSingle();
       if (alive) {
         setSession({

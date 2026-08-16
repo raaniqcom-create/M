@@ -23,7 +23,7 @@ export function AdminStats() {
   const [devices, setDevices] = useState<Record<string, number> | null>(null);
   const [listeners, setListeners] = useState<Record<string, number> | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     // device_tokens and alerts grant SELECT to nobody — reading them from the
@@ -39,7 +39,18 @@ export function AdminStats() {
     ]);
 
     if (stats.error) {
-      setFailed(true);
+      // The old message blamed the admin's account for every failure. It is
+      // wrong for most of them: this panel only renders after the page guard
+      // has already confirmed the role, so "you are not an admin" is the one
+      // explanation that cannot be true here. Say what the database said.
+      const e = stats.error;
+      setFailed(
+        e.code === '42501'
+          ? 'قاعدة البيانات رفضت الطلب لهذا الحساب (42501). سجّل الخروج ثم الدخول من جديد.'
+          : e.code === 'PGRST202'
+            ? 'دالة الإحصائيات غير موجودة على الخادم (admin_stats).'
+            : `تعذّرت قراءة الأرقام — ${e.code ?? 'خطأ'}: ${e.message ?? 'سبب غير معروف'}`
+      );
       setDevices({});
       setListeners({});
     } else {
@@ -86,7 +97,7 @@ export function AdminStats() {
     <div className="space-y-4">
       {failed && (
         <p className="card p-4 text-xs leading-relaxed text-traffic-red">
-          تعذّر قراءة أرقام المستخدمين. تأكد أنك داخل بحساب الإدارة، ثم أعد تحميل الصفحة.
+          {failed}
         </p>
       )}
 

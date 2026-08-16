@@ -70,12 +70,15 @@ function Panel() {
 
   useEffect(() => {
     (async () => {
-      const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user) return setAllowed(false);
+      // stored session, not a round trip — a dropped request must not read as
+      // "not signed in"
+      const { data: sess } = await supabase.auth.getSession();
+      const user = sess.session?.user;
+      if (!user) return setAllowed(false);
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', auth.user.id)
+        .eq('id', user.id)
         .maybeSingle();
       if (profile?.role !== 'admin') return setAllowed(false);
       setAllowed(true);

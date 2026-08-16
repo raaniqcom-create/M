@@ -83,9 +83,20 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    // a dropped connection must surface as a retry prompt, not an endless spinner
+    // A dropped connection must surface as a retry prompt, not an endless
+    // spinner — and that was the intent here, but nothing enforced it. If a
+    // request neither resolves nor rejects (a WebView that suspends mid-flight
+    // is the common way), .catch never runs and the first screen of the app is
+    // a spinner that never stops. So the wait is bounded here rather than
+    // trusted to the transport.
+    const withDeadline = (p: Promise<StationWithStatus[]>, ms: number) =>
+      new Promise<StationWithStatus[]>((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('timeout')), ms);
+        p.then(resolve, reject).finally(() => clearTimeout(t));
+      });
+
     const refresh = () =>
-      loadStations()
+      withDeadline(loadStations(), 15000)
         .then((rows) => {
           setStations(rows);
           setFailed(false);

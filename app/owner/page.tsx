@@ -56,13 +56,16 @@ export default function OwnerPage() {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) {
+    // stored session, not a round trip — a dropped request must not read as
+    // "not signed in" and send a station owner back to the login form
+    supabase.auth.getSession().then(({ data }) => {
+      const user = data.session?.user;
+      if (!user) {
         router.replace('/login');
         return;
       }
-      setUserId(data.user.id);
-      load(data.user.id);
+      setUserId(user.id);
+      load(user.id);
     });
   }, [router, load]);
 

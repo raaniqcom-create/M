@@ -28,7 +28,10 @@ export default function LoginPage() {
         ? phoneToEmail(value)
         : `${value}@muhta.app`;
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: signIn, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
     if (signInError) {
       setBusy(false);
@@ -45,15 +48,27 @@ export default function LoginPage() {
       return;
     }
 
-    const { data: auth } = await supabase.auth.getUser();
+    // The session just came back in `signIn` — asking the server again for the
+    // same user is a second round trip that can fail on a weak connection, and
+    // when it did the guard on the next page saw no user and bounced back here.
+    // That is the "I have to sign in twice" everyone hit.
+    const uid = signIn.session?.user?.id;
+    if (!uid) {
+      setBusy(false);
+      setError('تعذّر إنشاء الجلسة. حاول مجدداً.');
+      return;
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', auth.user!.id)
+      .eq('id', uid)
       .maybeSingle();
 
     setBusy(false);
-    router.push(profile?.role === 'admin' ? '/admin' : '/owner');
+    // replace, not push: the back button should not return to a login form the
+    // person has already passed
+    router.replace(profile?.role === 'admin' ? '/admin' : '/owner');
   }
 
   return (
