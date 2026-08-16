@@ -98,11 +98,13 @@ export async function unsubscribeFromStation(
 ): Promise<void> {
   const endpoint = localStorage.getItem(subKey(stationId, role));
   if (!endpoint) return;
-  await supabase
-    .from('push_subscriptions')
-    .delete()
-    .eq('station_id', stationId)
-    .eq('endpoint', endpoint)
-    .eq('role', role);
+  // Through an RPC rather than a DELETE. The delete policy on this table was
+  // USING (true), so the same request with the filters removed emptied it for
+  // everybody; the function can only ever reach the one row named here.
+  await supabase.rpc('push_unsubscribe', {
+    p_station_id: stationId,
+    p_endpoint: endpoint,
+    p_role: role,
+  });
   localStorage.removeItem(subKey(stationId, role));
 }

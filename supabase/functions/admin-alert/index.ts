@@ -142,6 +142,11 @@ async function pushToAdmins(title: string, body: string) {
   return sent;
 }
 
+/** Telegram's HTML mode needs these three neutralised; the lock-screen push
+ *  carries the raw text, which is fine because a notification renders no markup. */
+const escapeHtml = (s: string) =>
+  s.split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;');
+
 async function telegramAdmins(text: string) {
   const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
   const ids = (Deno.env.get('TELEGRAM_ADMIN_IDS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -185,7 +190,12 @@ Deno.serve(async (req) => {
 
     const [push] = await Promise.allSettled([
       pushToAdmins(title, body),
-      telegramAdmins(`<b>${title}</b>\n${body}`),
+      // `reason` inside body is the one field a caller writes, and this message
+      // is sent with parse_mode: HTML. Unescaped, a complaint reading
+      // «<a href="…">اضغط هنا</a>» would arrive on the admin's Telegram as a
+      // working link that the platform appears to have sent itself. The push
+      // above takes body raw — a lock screen renders no markup.
+      telegramAdmins(`<b>${title}</b>\n${escapeHtml(body)}`),
     ]);
     return json({ ok: true, devices: push.status === 'fulfilled' ? push.value : 0 });
   } catch (err) {
