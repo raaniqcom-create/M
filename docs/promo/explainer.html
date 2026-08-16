@@ -205,6 +205,23 @@ html.v #mark{bottom:120px;inset-inline-start:50%;transform:translateX(50%)}
 #prog{position:absolute;bottom:0;inset-inline-start:0;height:8px;background:var(--brand);width:0;animation:bar var(--t) linear forwards}
 .hud{position:fixed;bottom:18px;inset-inline-start:18px;color:#94a3b8;font-size:15px;font-weight:600;z-index:9}
 .hidden{display:none}
+
+/* زر التسجيل خارج المسرح، ويختفي قبل أن يبدأ التقاط الصورة فلا يظهر فيها */
+#rec{
+  position:fixed;top:18px;inset-inline-end:18px;z-index:10;
+  display:flex;align-items:center;gap:9px;cursor:pointer;
+  background:var(--brand);color:#fff;border:0;border-radius:14px;
+  padding:13px 20px;font-family:inherit;font-size:15px;font-weight:800;
+  box-shadow:0 8px 22px rgba(20,83,45,.28);
+}
+#rec:disabled{background:#94a3b8;cursor:default;box-shadow:none}
+#rec svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#note{
+  position:fixed;top:70px;inset-inline-end:18px;z-index:10;max-width:330px;
+  background:#fff;border:2px solid var(--brand-100);border-radius:14px;
+  padding:14px 16px;font-size:13px;font-weight:600;color:var(--ink);
+  line-height:1.7;box-shadow:0 10px 28px rgba(20,83,45,.16);
+}
 </style>
 </head>
 <body>
@@ -339,6 +356,11 @@ html.v #mark{bottom:120px;inset-inline-start:50%;transform:translateX(50%)}
   <audio id="voice" src="voice.mp3" preload="auto"></audio>
 </div></div>
 
+<button id="rec" type="button">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+  <span id="reclabel">تحميل الفيديو</span>
+</button>
+<div id="note" class="hidden"></div>
 <div class="hud hidden" id="hud">اضغط في أي مكان للبدء بالصوت · F ملء الشاشة · V أفقي/عمودي · R إعادة · مسافة إيقاف</div>
 
 <script>
@@ -399,7 +421,106 @@ function start() {
   requestAnimationFrame(tick);
 }
 
-addEventListener('click', start);
+addEventListener('click', (e) => { if (!e.target.closest('#rec, #note')) start(); });
+
+// ---- تسجيل الفيديو من داخل المتصفح ----
+//
+// الصفحة أنيميشن حيّ لا ملف، فالتحميل يعني تسجيلها أولاً. الصورة تُلتقط
+// بـgetDisplayMedia (يختار المشغّل «هذا التبويب»)، أما الصوت فيُؤخذ من عنصر
+// الصوت نفسه عبر captureStream لا من مخرج الجهاز — فلا يحتاج «مشاركة صوت
+// التبويب»، ولا يلتقط أصوات النظام، ويخرج نظيفاً كما وُلد.
+const rec = document.getElementById('rec');
+const note = document.getElementById('note');
+const reclabel = document.getElementById('reclabel');
+
+const say = (html) => { note.innerHTML = html; note.classList.remove('hidden'); };
+
+// أفضل صيغة يدعمها هذا المتصفح — mp4 إن وُجد، وإلا webm
+function bestType() {
+  const want = [
+    'video/mp4;codecs=avc1,mp4a.40.2',
+    'video/mp4',
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+  ];
+  return want.find((t) => MediaRecorder.isTypeSupported(t)) || '';
+}
+
+rec.addEventListener('click', async () => {
+  if (!navigator.mediaDevices?.getDisplayMedia || !window.MediaRecorder) {
+    return say('هذا المتصفح لا يدعم التسجيل. استعمل Chrome أو Edge.');
+  }
+
+  let display;
+  try {
+    display = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 30 },
+      audio: false,
+    });
+  } catch {
+    return say('أُلغي اختيار الشاشة. اضغط الزر ثم اختر <b>هذا التبويب</b>.');
+  }
+
+  const type = bestType();
+  const mixed = new MediaStream([
+    ...display.getVideoTracks(),
+    ...voice.captureStream().getAudioTracks(),
+  ]);
+
+  const chunks = [];
+  const mr = new MediaRecorder(mixed, type ? { mimeType: type, videoBitsPerSecond: 8e6 } : {});
+  mr.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+
+  mr.onstop = () => {
+    display.getTracks().forEach((t) => t.stop());
+    const blob = new Blob(chunks, { type: mr.mimeType || 'video/webm' });
+    const ext = (mr.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `muhta-${root.classList.contains('v') ? 'story' : 'wide'}.${ext}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+    rec.disabled = false;
+    reclabel.textContent = 'تحميل الفيديو';
+    say(`جاهز — <b>${a.download}</b> · ${(blob.size / 1048576).toFixed(1)} م.ب`);
+  };
+
+  // إن أوقف المشغّل المشاركة من شريط المتصفح، يُحفظ ما سُجّل بدل أن يضيع
+  display.getVideoTracks()[0].addEventListener('ended', () => {
+    if (mr.state !== 'inactive') mr.stop();
+  });
+
+  rec.disabled = true;
+  note.classList.add('hidden');
+  hud.classList.add('hidden');
+
+  // من الصفر في الحالتين: الزر قد يُضغط بعد تشغيل سابق
+  started = true;
+  voice.pause();
+  voice.currentTime = 0;
+  scrub(0);
+
+  // مهلة قصيرة ليستقرّ الالتقاط قبل أن تتحرّك أول جملة
+  await new Promise((r) => setTimeout(r, 600));
+
+  mr.start();
+  voice.play().catch(() => {});
+  requestAnimationFrame(tick);
+
+  const total = voice.duration || 82.03;
+  const label = () => {
+    if (mr.state === 'inactive') return;
+    reclabel.textContent = `يسجّل… ${Math.min(total, voice.currentTime).toFixed(0)}/${total.toFixed(0)}`;
+    setTimeout(label, 500);
+  };
+  label();
+
+  voice.addEventListener('ended', () => {
+    // ذيل قصير ليُلتقط آخر خبوّ قبل الإيقاف
+    setTimeout(() => mr.state !== 'inactive' && mr.stop(), 700);
+  }, { once: true });
+});
 
 // e.code لا e.key: الأول هو المفتاح الفيزيائي، والثاني هو الحرف الذي تنتجه
 // لوحة المفاتيح. على تخطيط عربي يعطي المفتاح R حرف «ق»، فكانت المقارنة
