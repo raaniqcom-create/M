@@ -101,10 +101,24 @@ export async function unsubscribeFromStation(
   // Through an RPC rather than a DELETE. The delete policy on this table was
   // USING (true), so the same request with the filters removed emptied it for
   // everybody; the function can only ever reach the one row named here.
-  await supabase.rpc('push_unsubscribe', {
+  const { error } = await supabase.rpc('push_unsubscribe', {
     p_station_id: stationId,
     p_endpoint: endpoint,
     p_role: role,
   });
+
+  // The migration that creates that function and the migration that removes the
+  // old policy are deliberately run either side of this deploy, so for one of
+  // those two windows exactly one of these paths exists. Trying both means the
+  // person tapping "unsubscribe" is never the one who pays for the ordering.
+  if (error) {
+    await supabase
+      .from('push_subscriptions')
+      .delete()
+      .eq('station_id', stationId)
+      .eq('endpoint', endpoint)
+      .eq('role', role);
+  }
+
   localStorage.removeItem(subKey(stationId, role));
 }
