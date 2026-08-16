@@ -99,10 +99,12 @@ export default function AdminPage() {
     load();
   }
 
-  // Seeded demo rows all carry this fixed prefix, so cleanup is one click and
-  // can never catch a station a real owner registered.
+  // A demo station is whatever is flagged is_demo — the same column the public
+  // list, the station pages and the build all filter on. The old seed rows
+  // predate that column and are still recognised by their fixed UUID prefix,
+  // so cleanup covers both and can never catch a real owner's station.
   const DEMO_PREFIX = 'b0000000-0000-0000-0000-';
-  const demoStations = approved.filter((s) => s.id.startsWith(DEMO_PREFIX));
+  const demoStations = approved.filter((s) => s.is_demo || s.id.startsWith(DEMO_PREFIX));
 
   async function removeStation(id: string, name: string) {
     if (!confirm(`حذف «${name}» نهائياً؟ لا يمكن التراجع عن هذا الإجراء.`)) return;

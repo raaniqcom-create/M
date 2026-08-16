@@ -30,6 +30,10 @@ export interface Station {
   temp_closed: boolean;
   manual_traffic_level: TrafficLevel | null;
   manual_traffic_set_at: string | null;
+  /** Hidden from the public list, the station pages and the build. A real
+   *  station in every other respect, so it is how the owner experience is
+   *  inspected without putting a fake forecourt on the live map. */
+  is_demo: boolean;
   created_at: string;
 }
 

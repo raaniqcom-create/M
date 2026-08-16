@@ -30,6 +30,11 @@ export function AdminStationForm({ adminId, onDone }: { adminId: string; onDone:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // A demo station is real in every way its owner can see, and invisible on the
+  // public list, the station pages and the build. It is the only safe way to
+  // look at the owner's screen while the live map is about to fill with real
+  // forecourts.
+  const [demo, setDemo] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -40,7 +45,10 @@ export function AdminStationForm({ adminId, onDone }: { adminId: string; onDone:
     setBusy(true);
     setError(null);
 
-    const fd = new FormData(e.currentTarget);
+    // Grab the form now: React nulls currentTarget once the handler yields, so
+    // reading it after the awaits below throws and swallows the reset.
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     const { data, error: insertError } = await supabase
       .from('stations')
       .insert({
@@ -53,6 +61,7 @@ export function AdminStationForm({ adminId, onDone }: { adminId: string; onDone:
         lat: coords.lat,
         lng: coords.lng,
         status: 'approved',
+        is_demo: demo,
       })
       .select('id')
       .single();
@@ -99,7 +108,8 @@ export function AdminStationForm({ adminId, onDone }: { adminId: string; onDone:
       setSaved(true);
     }
     setCoords(null);
-    e.currentTarget.reset();
+    setDemo(false);
+    form.reset();
     onDone();
   }
 
@@ -242,6 +252,22 @@ export function AdminStationForm({ adminId, onDone }: { adminId: string; onDone:
           </button>
         </div>
       )}
+
+      <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
+        <input
+          type="checkbox"
+          checked={demo}
+          onChange={(e) => setDemo(e.target.checked)}
+          className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
+        />
+        <span className="min-w-0">
+          <span className="block text-xs font-bold text-slate-700">محطة تجريبية</span>
+          <span className="block text-[11px] leading-relaxed text-slate-500">
+            لا تظهر للناس ولا في صفحات المحطات — لكن حساب صاحبها يعمل كاملاً. للتجربة
+            قبل الإطلاق.
+          </span>
+        </span>
+      </label>
 
       <button type="submit" disabled={busy || !!handover} className="btn-primary w-full disabled:opacity-50">
         {busy && <SpinnerIcon className="h-4 w-4" />}
