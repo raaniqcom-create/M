@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>المحطة التقنية — فيديو الشرح</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ============================================================================
+   فيديو شرح «المحطة التقنية» — يُسجَّل بالشاشة، لا يُصدَّر من برنامج مونتاج.
+   مسرح ثابت 1920×1080 يتقلّص ليملأ النافذة، والتوقيت كله بـanimation-delay
+   على خط زمني واحد اسمه --t. تغيير مشهد = تغيير رقمين.
+   مفاتيح:  R إعادة  ·  F ملء الشاشة  ·  المسافة إيقاف/تشغيل
+   ========================================================================= */
+:root{
+  --brand:#16a34a; --brand-600:#15803d; --brand-700:#166534; --brand-900:#14532d;
+  --brand-50:#f0fdf4; --brand-100:#dcfce7; --brand-400:#4ade80;
+  --red:#dc2626; --amber:#d97706;
+  --ink:#0f172a; --mute:#64748b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#000;overflow:hidden;font-family:Tajawal,system-ui,sans-serif}
+#fit{position:fixed;inset:0}
+/* Centred by transform, not by grid: a grid item wider than its container
+   aligns to start and spills off-screen instead of centring. */
+#stage{
+  width:1920px;height:1080px;position:absolute;top:50%;left:50%;
+  overflow:hidden;background:linear-gradient(160deg,#ffffff 0%,var(--brand-50) 100%);
+  transform-origin:center;
+}
+.scene{position:absolute;inset:0;opacity:0;display:grid;place-items:center;align-content:center;gap:34px;text-align:center}
+.paused *{animation-play-state:paused !important}
+
+/* لكل مشهد ظهور واختفاء بنفس المنحنى، فلا يقفز شيء */
+@keyframes scene{0%{opacity:0;transform:scale(.985)}6%{opacity:1;transform:scale(1)}88%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.01)}}
+@keyframes rise{from{opacity:0;transform:translateY(38px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pop{0%{opacity:0;transform:scale(.6)}60%{transform:scale(1.06)}100%{opacity:1;transform:scale(1)}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes drift{from{transform:translateY(0)}to{transform:translateY(-26px)}}
+@keyframes ring{0%{transform:scale(.4);opacity:.75}100%{transform:scale(3.4);opacity:0}}
+@keyframes fly{0%{opacity:0;transform:translate(0,0) scale(.5)}18%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(1)}}
+@keyframes bar{from{width:0}to{width:100%}}
+@keyframes flip{0%{transform:rotateX(90deg);opacity:0}100%{transform:rotateX(0);opacity:1}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
+
+h1{font-size:104px;font-weight:900;color:var(--brand-900);line-height:1.15;letter-spacing:-1px}
+h2{font-size:74px;font-weight:800;color:var(--brand-700);line-height:1.25}
+p.sub{font-size:44px;font-weight:500;color:var(--mute);line-height:1.6}
+.big{font-size:132px;font-weight:900;color:var(--brand);line-height:1}
+
+/* ---------- 1 · السؤال ---------- */
+.bubbles{position:relative;width:1500px;height:560px}
+.bub{
+  position:absolute;background:#fff;border:2px solid #e2e8f0;border-radius:34px;
+  padding:26px 40px;font-size:40px;font-weight:700;color:var(--ink);
+  box-shadow:0 12px 34px rgba(20,83,45,.10);opacity:0;
+  animation:pop .55s cubic-bezier(.2,1.3,.4,1) forwards;
+}
+.bub::after{content:'';position:absolute;bottom:-16px;inset-inline-end:52px;width:26px;height:26px;background:#fff;border-inline-end:2px solid #e2e8f0;border-bottom:2px solid #e2e8f0;transform:rotate(45deg)}
+
+/* ---------- 2 · الكلفة ---------- */
+.cost{display:flex;gap:34px}
+.cost .card{
+  width:400px;background:#fff;border-radius:34px;padding:52px 34px;opacity:0;
+  border:2px solid #fee2e2;box-shadow:0 12px 34px rgba(220,38,38,.10);
+  animation:rise .6s cubic-bezier(.2,.9,.3,1) forwards;
+}
+.cost .n{font-size:88px;font-weight:900;color:var(--red);line-height:1}
+.cost .l{margin-top:14px;font-size:34px;font-weight:600;color:var(--mute);line-height:1.5}
+
+/* ---------- 4 · الزر والإشعار ---------- */
+.split{display:flex;align-items:center;gap:110px}
+.phone{
+  width:400px;height:790px;border-radius:56px;background:#fff;position:relative;
+  border:14px solid #0f172a;box-shadow:0 30px 70px rgba(20,83,45,.22);overflow:hidden;flex:none;
+}
+.phone .top{height:112px;background:linear-gradient(180deg,var(--brand-700),var(--brand));display:grid;place-items:center;color:#fff;font-weight:800;font-size:27px}
+.phone .body{padding:24px}
+.row{display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border-radius:22px;padding:22px 24px;margin-bottom:16px;font-size:28px;font-weight:700;color:var(--ink)}
+.pill{width:92px;height:46px;border-radius:99px;background:#cbd5e1;position:relative;transition:background .35s}
+.pill i{position:absolute;top:5px;inset-inline-start:5px;width:36px;height:36px;border-radius:50%;background:#fff;transition:transform .35s cubic-bezier(.2,1.3,.4,1)}
+.on .pill{background:var(--brand)}
+.on .pill i{transform:translateX(-46px)}
+.emit{position:absolute;inset-inline-start:50%;top:300px;width:60px;height:60px;border-radius:50%;border:5px solid var(--brand);opacity:0}
+.spark{position:absolute;inset-inline-start:46%;top:320px;width:26px;height:26px;border-radius:50%;background:var(--brand);opacity:0}
+
+/* ---------- 5 · الاستقبال ---------- */
+.grid3{display:flex;gap:44px}
+.mini{width:250px;background:#fff;border-radius:34px;border:2px solid var(--brand-100);padding:30px 22px;opacity:0;box-shadow:0 10px 30px rgba(20,83,45,.10);animation:pop .5s cubic-bezier(.2,1.3,.4,1) forwards}
+.mini .t{font-size:26px;font-weight:800;color:var(--brand-700)}
+.mini .b{margin-top:10px;font-size:22px;font-weight:600;color:var(--mute);line-height:1.5}
+.mini .dot{width:16px;height:16px;border-radius:50%;background:var(--brand);margin:0 auto 16px}
+
+/* ---------- 6 · مجاني ---------- */
+.free{display:flex;gap:30px;flex-wrap:wrap;justify-content:center;max-width:1450px}
+.chip{background:#fff;border:3px solid var(--brand-100);border-radius:99px;padding:26px 46px;font-size:38px;font-weight:800;color:var(--brand-700);opacity:0;animation:pop .5s cubic-bezier(.2,1.3,.4,1) forwards}
+
+/* ---------- 7 · الختام ---------- */
+.cta{display:flex;gap:26px}
+.badge{background:var(--ink);color:#fff;border-radius:24px;padding:26px 46px;font-size:34px;font-weight:800;opacity:0;animation:rise .6s cubic-bezier(.2,.9,.3,1) forwards}
+.url{font-size:96px;font-weight:900;color:var(--brand);direction:ltr;letter-spacing:1px}
+.slogan{font-size:52px;font-weight:800;color:var(--brand-700)}
+
+/* شريط التقدّم — يُخفى بالضغط على H قبل التسجيل إن أردته نظيفاً تماماً */
+#prog{position:absolute;bottom:0;inset-inline-start:0;height:8px;background:var(--brand);width:0;animation:bar var(--t) linear forwards}
+.hud{position:fixed;bottom:18px;inset-inline-start:18px;color:#94a3b8;font-size:15px;font-weight:600;z-index:9}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div id="fit"><div id="stage">
+
+  <!-- 1 · السؤال الذي يتكرر كل يوم -->
+  <section class="scene" style="animation:scene 7s both">
+    <h1>سؤالٌ يتكرّر كل يوم<br>في الأنبار</h1>
+    <div class="bubbles">
+      <div class="bub" style="inset-inline-start:60px;  top:40px;  animation-delay:.9s">وين يكو بنزين اليوم؟</div>
+      <div class="bub" style="inset-inline-end:90px;  top:150px; animation-delay:1.5s">محطة الرمادي فاتحة؟</div>
+      <div class="bub" style="inset-inline-start:180px;top:290px; animation-delay:2.1s">النفط الأبيض موجود؟</div>
+      <div class="bub" style="inset-inline-end:150px; top:400px; animation-delay:2.7s">الغاز خلص لو باقي؟</div>
+      <div class="bub" style="inset-inline-start:520px;top:490px; animation-delay:3.3s">أطلع لو ما أطلع؟</div>
+    </div>
+  </section>
+
+  <!-- 2 · ثمن الجواب الناقص -->
+  <section class="scene" style="animation:scene 7s both;animation-delay:6.6s">
+    <h2>والجواب يكلّف</h2>
+    <div class="cost">
+      <div class="card" style="animation-delay:7.4s"><div class="n">ساعة</div><div class="l">في طابور<br>ينتهي قبل دورك</div></div>
+      <div class="card" style="animation-delay:7.9s"><div class="n">لتر</div><div class="l">يُحرق في الدوران<br>بين المحطات</div></div>
+      <div class="card" style="animation-delay:8.4s"><div class="n">خبر</div><div class="l">من منشور قديم<br>أو مكالمة</div></div>
+    </div>
+  </section>
+
+  <!-- 3 · المعلومة موجودة -->
+  <section class="scene" style="animation:scene 6.5s both;animation-delay:13.2s">
+    <p class="sub" style="animation:fade .8s both;animation-delay:13.8s">المعلومة موجودة أصلاً</p>
+    <h1 style="animation:rise .8s cubic-bezier(.2,.9,.3,1) both;animation-delay:14.4s">عند صاحب المحطة نفسه</h1>
+    <p class="sub" style="animation:fade .8s both;animation-delay:15.6s">لكن لا طريق يوصلها إلى الناس</p>
+  </section>
+
+  <!-- 4 · ضغطة واحدة -->
+  <section class="scene" style="animation:scene 9s both;animation-delay:19.4s">
+    <h2 style="animation:fade .7s both;animation-delay:20s">فصنعنا الطريق</h2>
+    <div class="split">
+      <div class="phone">
+        <div class="top">لوحة محطتي</div>
+        <div class="body">
+          <div class="row" style="animation:flip .5s both;animation-delay:20.8s"><span>بنزين</span><span class="pill"><i></i></span></div>
+          <div class="row on" style="animation:flip .5s both;animation-delay:21.1s"><span>بنزين سوبر</span><span class="pill"><i></i></span></div>
+          <div class="row" style="animation:flip .5s both;animation-delay:21.4s"><span>نفط أبيض</span><span class="pill"><i></i></span></div>
+          <div class="row on" style="animation:flip .5s both;animation-delay:21.7s"><span>غاز</span><span class="pill"><i></i></span></div>
+        </div>
+        <div class="emit" style="animation:ring 1.6s ease-out infinite;animation-delay:22.4s"></div>
+        <div class="emit" style="animation:ring 1.6s ease-out infinite;animation-delay:23s"></div>
+      </div>
+      <div style="text-align:start">
+        <div class="big" style="animation:pop .7s cubic-bezier(.2,1.3,.4,1) both;animation-delay:22.4s">ضغطة واحدة</div>
+        <p class="sub" style="max-width:640px;margin-top:24px;animation:fade .8s both;animation-delay:23.2s">
+          صاحب المحطة يحدّث التوفّر من هاتفه،<br>فتصل لحظتها إلى كل من ينتظرها.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 · تصل لمن اختارها -->
+  <section class="scene" style="animation:scene 9s both;animation-delay:28.6s">
+    <h2 style="animation:fade .7s both;animation-delay:29.2s">تصل لمن اختار مدينته ونوع وقوده</h2>
+    <div class="grid3">
+      <div class="mini" style="animation-delay:30s"><div class="dot"></div><div class="t">بنزين متوفّر</div><div class="b">محطة الفلوجة<br>الفلوجة</div></div>
+      <div class="mini" style="animation-delay:30.5s"><div class="dot"></div><div class="t">غاز متوفّر</div><div class="b">محطة الرمادي<br>الرمادي</div></div>
+      <div class="mini" style="animation-delay:31s"><div class="dot"></div><div class="t">نفط أبيض متوفّر</div><div class="b">محطة هيت<br>هيت</div></div>
+      <div class="mini" style="animation-delay:31.5s"><div class="dot"></div><div class="t">بنزين سوبر</div><div class="b">محطة القائم<br>القائم</div></div>
+    </div>
+    <p class="sub" style="animation:fade .8s both;animation-delay:32.6s">تعرف قبل أن تتحرّك — لا دوران، ولا طابور ينتهي قبل دورك.</p>
+  </section>
+
+  <!-- 6 · مجانية بالكامل -->
+  <section class="scene" style="animation:scene 7s both;animation-delay:37.9s">
+    <h2>مجانية بالكامل</h2>
+    <div class="free">
+      <span class="chip" style="animation-delay:38.7s">بلا رسوم على المستخدم</span>
+      <span class="chip" style="animation-delay:39.1s">بلا رسوم على المحطة</span>
+      <span class="chip" style="animation-delay:39.5s">بلا حساب</span>
+      <span class="chip" style="animation-delay:39.9s">بلا بيانات شخصية</span>
+      <span class="chip" style="animation-delay:40.3s">بلا إعلانات مزعجة</span>
+    </div>
+  </section>
+
+  <!-- 7 · الختام -->
+  <section class="scene" style="animation:scene 9.5s both;animation-delay:44.4s">
+    <h1 style="animation:pop .8s cubic-bezier(.2,1.3,.4,1) both;animation-delay:45s">المحطة التقنية</h1>
+    <div class="slogan" style="animation:fade .8s both;animation-delay:45.8s">التقنية حقٌّ للجميع</div>
+    <div class="url" style="animation:rise .8s cubic-bezier(.2,.9,.3,1) both;animation-delay:46.6s">muhta.online</div>
+    <div class="cta">
+      <span class="badge" style="animation-delay:47.4s">App&nbsp;Store</span>
+      <span class="badge" style="animation-delay:47.8s">Google&nbsp;Play</span>
+    </div>
+    <p class="sub" style="font-size:36px;animation:fade .8s both;animation-delay:48.6s">صاحب محطة؟ سجّل محطتك مجاناً — 0784 444 6633</p>
+  </section>
+
+  <div id="prog" style="--t:54s"></div>
+</div></div>
+
+<div class="hud" id="hud">R إعادة · F ملء الشاشة · مسافة إيقاف · H إخفاء هذا السطر</div>
+
+<script>
+// المسرح مقاس ثابت؛ نقيسه ليملأ أي نافذة بلا تشويه، فالتسجيل يخرج بأي دقة.
+const stage = document.getElementById('stage');
+const fit = () => {
+  const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+  // translate(-50%,-50%) runs before scale, so the box is centred at any size
+  stage.style.transform = `translate(-50%, -50%) scale(${s})`;
+};
+addEventListener('resize', fit); fit();
+
+addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'r') location.reload();
+  if (k === 'f') document.documentElement.requestFullscreen?.();
+  if (k === 'h') document.getElementById('hud').classList.toggle('hidden');
+  if (e.code === 'Space') { e.preventDefault(); document.body.classList.toggle('paused'); }
+});
+</script>
+</body>
+</html>
