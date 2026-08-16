@@ -96,11 +96,31 @@ p.sub{font-size:44px;font-weight:500;color:var(--mute);line-height:1.6}
 .free{display:flex;gap:30px;flex-wrap:wrap;justify-content:center;max-width:1450px}
 .chip{background:#fff;border:3px solid var(--brand-100);border-radius:99px;padding:26px 46px;font-size:38px;font-weight:800;color:var(--brand-700);opacity:0;animation:pop .5s cubic-bezier(.2,1.3,.4,1) forwards}
 
-/* ---------- 7 · الختام ---------- */
-.cta{display:flex;gap:26px}
-.badge{background:var(--ink);color:#fff;border-radius:24px;padding:26px 46px;font-size:34px;font-weight:800;opacity:0;animation:rise .6s cubic-bezier(.2,.9,.3,1) forwards}
-.url{font-size:96px;font-weight:900;color:var(--brand);direction:ltr;letter-spacing:1px}
+/* ---------- 7 · الدعوة ---------- */
+.invite{display:flex;gap:44px}
+.side{
+  width:620px;background:#fff;border-radius:40px;border:3px solid var(--brand-100);
+  padding:52px 44px;opacity:0;box-shadow:0 14px 40px rgba(20,83,45,.12);
+  animation:rise .65s cubic-bezier(.2,.9,.3,1) forwards;
+}
+.side .who{font-size:52px;font-weight:900;color:var(--brand)}
+.side .what{margin-top:20px;font-size:36px;font-weight:600;color:var(--mute);line-height:1.6}
+
+/* ---------- 8 · الختام ---------- */
 .slogan{font-size:52px;font-weight:800;color:var(--brand-700)}
+.qrs{display:flex;gap:56px;align-items:flex-start}
+.qr{opacity:0;animation:pop .6s cubic-bezier(.2,1.3,.4,1) forwards;text-align:center}
+/* ٣٤٠ بكسل داخل إطار ١٩٢٠: أكبر رمز فيه ٥٣ مربّعاً، فيقع كل مربّع على نحو
+   ٣٫٤ بكسل حين يُشاهَد الفيديو بعرض ١٠٨٠ على هاتف — فوق حدّ القراءة بهامش.
+   بـ٢٧٠ كان يهبط إلى ٢٫٥ ويصير الأمر مقامرة على ضغط الفيديو. */
+.qr .box{width:340px;height:340px;background:#fff;border-radius:26px;padding:18px;box-shadow:0 12px 34px rgba(20,83,45,.14)}
+.qr .box svg{width:100%;height:100%;display:block}
+/* الرمز نفسه بلون الحبر لا بالأخضر. الأخضر على الأبيض تباينه نحو ٣٫٩:١، وهو
+   يكفي على الورق وقد لا يكفي بعد ضغط الفيديو وانزياح الألوان في البث.
+   الإطار والعنوان يحملان الهوية؛ المربّعات وظيفتها أن تُقرأ. */
+.qr .box svg path[stroke]{stroke:var(--ink)}
+.qr figcaption{margin-top:20px;font-size:30px;font-weight:600;color:var(--mute);line-height:1.5}
+.qr figcaption b{font-weight:900;color:var(--brand-700)}
 
 /* شريط التقدّم — يُخفى بالضغط على H قبل التسجيل إن أردته نظيفاً تماماً */
 #prog{position:absolute;bottom:0;inset-inline-start:0;height:8px;background:var(--brand);width:0;animation:bar var(--t) linear forwards}
@@ -115,10 +135,10 @@ p.sub{font-size:44px;font-weight:500;color:var(--mute);line-height:1.6}
   <section class="scene" style="animation:scene 7s both">
     <h1>سؤالٌ يتكرّر كل يوم<br>في الأنبار</h1>
     <div class="bubbles">
-      <div class="bub" style="inset-inline-start:60px;  top:40px;  animation-delay:.9s">وين يكو بنزين اليوم؟</div>
-      <div class="bub" style="inset-inline-end:90px;  top:150px; animation-delay:1.5s">محطة الرمادي فاتحة؟</div>
-      <div class="bub" style="inset-inline-start:180px;top:290px; animation-delay:2.1s">النفط الأبيض موجود؟</div>
-      <div class="bub" style="inset-inline-end:150px; top:400px; animation-delay:2.7s">الغاز خلص لو باقي؟</div>
+      <div class="bub" style="inset-inline-start:60px;  top:40px;  animation-delay:.9s">وين اكو بانزين؟</div>
+      <div class="bub" style="inset-inline-end:90px;  top:150px; animation-delay:1.5s">اكو محسن لو عادي؟</div>
+      <div class="bub" style="inset-inline-start:180px;top:290px; animation-delay:2.1s">اكو كاز؟</div>
+      <div class="bub" style="inset-inline-end:150px; top:400px; animation-delay:2.7s">المحطة فاتحة؟</div>
       <div class="bub" style="inset-inline-start:520px;top:490px; animation-delay:3.3s">أطلع لو ما أطلع؟</div>
     </div>
   </section>
@@ -147,9 +167,9 @@ p.sub{font-size:44px;font-weight:500;color:var(--mute);line-height:1.6}
       <div class="phone">
         <div class="top">لوحة محطتي</div>
         <div class="body">
-          <div class="row" style="animation:flip .5s both;animation-delay:20.8s"><span>بنزين</span><span class="pill"><i></i></span></div>
-          <div class="row on" style="animation:flip .5s both;animation-delay:21.1s"><span>بنزين سوبر</span><span class="pill"><i></i></span></div>
-          <div class="row" style="animation:flip .5s both;animation-delay:21.4s"><span>نفط أبيض</span><span class="pill"><i></i></span></div>
+          <div class="row" style="animation:flip .5s both;animation-delay:20.8s"><span>بانزين عادي</span><span class="pill"><i></i></span></div>
+          <div class="row on" style="animation:flip .5s both;animation-delay:21.1s"><span>بانزين محسن</span><span class="pill"><i></i></span></div>
+          <div class="row" style="animation:flip .5s both;animation-delay:21.4s"><span>كاز</span><span class="pill"><i></i></span></div>
           <div class="row on" style="animation:flip .5s both;animation-delay:21.7s"><span>غاز</span><span class="pill"><i></i></span></div>
         </div>
         <div class="emit" style="animation:ring 1.6s ease-out infinite;animation-delay:22.4s"></div>
@@ -168,10 +188,10 @@ p.sub{font-size:44px;font-weight:500;color:var(--mute);line-height:1.6}
   <section class="scene" style="animation:scene 9s both;animation-delay:28.6s">
     <h2 style="animation:fade .7s both;animation-delay:29.2s">تصل لمن اختار مدينته ونوع وقوده</h2>
     <div class="grid3">
-      <div class="mini" style="animation-delay:30s"><div class="dot"></div><div class="t">بنزين متوفّر</div><div class="b">محطة الفلوجة<br>الفلوجة</div></div>
-      <div class="mini" style="animation-delay:30.5s"><div class="dot"></div><div class="t">غاز متوفّر</div><div class="b">محطة الرمادي<br>الرمادي</div></div>
-      <div class="mini" style="animation-delay:31s"><div class="dot"></div><div class="t">نفط أبيض متوفّر</div><div class="b">محطة هيت<br>هيت</div></div>
-      <div class="mini" style="animation-delay:31.5s"><div class="dot"></div><div class="t">بنزين سوبر</div><div class="b">محطة القائم<br>القائم</div></div>
+      <div class="mini" style="animation-delay:30s"><div class="dot"></div><div class="t">بانزين محسن</div><div class="b">محطة الفلوجة<br>الفلوجة</div></div>
+      <div class="mini" style="animation-delay:30.5s"><div class="dot"></div><div class="t">بانزين عادي</div><div class="b">محطة الرمادي<br>الرمادي</div></div>
+      <div class="mini" style="animation-delay:31s"><div class="dot"></div><div class="t">كاز</div><div class="b">محطة هيت<br>هيت</div></div>
+      <div class="mini" style="animation-delay:31.5s"><div class="dot"></div><div class="t">غاز</div><div class="b">محطة القائم<br>القائم</div></div>
     </div>
     <p class="sub" style="animation:fade .8s both;animation-delay:32.6s">تعرف قبل أن تتحرّك — لا دوران، ولا طابور ينتهي قبل دورك.</p>
   </section>
@@ -188,19 +208,35 @@ p.sub{font-size:44px;font-weight:500;color:var(--mute);line-height:1.6}
     </div>
   </section>
 
-  <!-- 7 · الختام -->
-  <section class="scene" style="animation:scene 9.5s both;animation-delay:44.4s">
-    <h1 style="animation:pop .8s cubic-bezier(.2,1.3,.4,1) both;animation-delay:45s">المحطة التقنية</h1>
-    <div class="slogan" style="animation:fade .8s both;animation-delay:45.8s">التقنية حقٌّ للجميع</div>
-    <div class="url" style="animation:rise .8s cubic-bezier(.2,.9,.3,1) both;animation-delay:46.6s">muhta.online</div>
-    <div class="cta">
-      <span class="badge" style="animation-delay:47.4s">App&nbsp;Store</span>
-      <span class="badge" style="animation-delay:47.8s">Google&nbsp;Play</span>
+  <!-- 7 · الدعوة — للطرفين، فكلٌّ منهما نصف المنصة -->
+  <section class="scene" style="animation:scene 8s both;animation-delay:44.4s">
+    <h2 style="animation:fade .7s both;animation-delay:45s">انضمّ إلينا</h2>
+    <div class="invite">
+      <div class="side" style="animation-delay:45.7s">
+        <div class="who">صاحب محطة؟</div>
+        <div class="what">سجّل محطتك مجاناً،<br>وحدّث التوفّر بضغطة</div>
+      </div>
+      <div class="side" style="animation-delay:46.3s">
+        <div class="who">مستخدم؟</div>
+        <div class="what">حمّل التطبيق، واختر<br>مدينتك ونوع وقودك</div>
+      </div>
     </div>
-    <p class="sub" style="font-size:36px;animation:fade .8s both;animation-delay:48.6s">صاحب محطة؟ سجّل محطتك مجاناً — 0784 444 6633</p>
+    <p class="sub" style="animation:fade .8s both;animation-delay:47.2s">وكلاهما مجاني تماماً.</p>
   </section>
 
-  <div id="prog" style="--t:54s"></div>
+  <!-- 8 · الختام — رموز تُصوَّر من الشاشة مباشرة -->
+  <section class="scene" style="animation:scene 11s both;animation-delay:52.2s">
+    <h1 style="animation:pop .8s cubic-bezier(.2,1.3,.4,1) both;animation-delay:52.8s">المحطة التقنية</h1>
+    <div class="slogan" style="animation:fade .8s both;animation-delay:53.6s">التقنية حقٌّ للجميع</div>
+    <div class="qrs">
+      <figure class="qr" style="animation-delay:54.4s"><div class="box"><svg shape-rendering="crispEdges" aria-hidden="true" viewBox="0 0 740 740" xmlns="http://www.w3.org/2000/svg" class="segno"><g transform="scale(20)"><path fill="#fff" d="M0 0h37v37h-37z"/><path class="qrline" stroke="#16a34a" d="M4 4.5h7m3 0h4m3 0h3m2 0h7m-29 1h1m5 0h1m1 0h4m2 0h3m1 0h1m1 0h1m1 0h1m5 0h1m-29 1h1m1 0h3m1 0h1m2 0h1m1 0h1m1 0h1m2 0h2m1 0h2m1 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m4 0h1m3 0h2m1 0h2m2 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m8 0h1m6 0h1m1 0h3m1 0h1m-29 1h1m5 0h1m1 0h2m1 0h4m3 0h2m2 0h1m5 0h1m-29 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-21 1h2m7 0h2m1 0h1m-17 1h4m3 0h2m1 0h1m3 0h3m1 0h2m3 0h1m-28 1h2m2 0h2m1 0h1m3 0h3m2 0h1m2 0h2m1 0h3m2 0h2m-29 1h2m1 0h1m2 0h3m1 0h1m1 0h1m1 0h3m4 0h1m4 0h1m1 0h1m-29 1h1m1 0h1m2 0h1m1 0h6m1 0h1m1 0h2m3 0h1m1 0h3m1 0h2m-29 1h1m1 0h5m5 0h1m3 0h4m3 0h1m1 0h1m2 0h1m-29 1h1m6 0h1m1 0h2m1 0h1m1 0h3m1 0h1m3 0h1m1 0h1m1 0h1m1 0h1m-28 1h4m1 0h1m1 0h6m4 0h1m1 0h1m3 0h1m2 0h2m-28 1h1m2 0h2m2 0h1m8 0h2m1 0h2m1 0h1m1 0h1m2 0h1m-29 1h5m1 0h1m1 0h1m2 0h1m3 0h1m1 0h2m1 0h2m-22 1h1m1 0h2m1 0h1m2 0h4m1 0h1m1 0h1m1 0h4m1 0h3m3 0h1m-27 1h1m3 0h3m1 0h2m1 0h1m1 0h1m1 0h1m2 0h1m2 0h1m1 0h2m1 0h1m-25 1h2m1 0h1m1 0h1m3 0h1m1 0h1m1 0h4m3 0h2m2 0h1m-29 1h3m2 0h2m2 0h1m1 0h1m1 0h1m2 0h1m3 0h6m1 0h1m-20 1h1m2 0h1m1 0h2m2 0h4m3 0h1m1 0h1m1 0h1m-29 1h7m1 0h1m4 0h1m3 0h1m1 0h2m1 0h1m1 0h1m3 0h1m-29 1h1m5 0h1m1 0h3m3 0h3m1 0h3m3 0h2m1 0h2m-29 1h1m1 0h3m1 0h1m1 0h1m6 0h2m2 0h6m2 0h1m-28 1h1m1 0h3m1 0h1m2 0h1m1 0h1m2 0h2m7 0h1m3 0h1m-28 1h1m1 0h3m1 0h1m4 0h2m1 0h1m1 0h1m1 0h4m4 0h3m-29 1h1m5 0h1m3 0h4m6 0h1m1 0h2m1 0h1m1 0h2m-29 1h7m3 0h3m1 0h1m1 0h1m2 0h3m2 0h2m1 0h1"/></g></svg></div><figcaption>الموقع<br><b>muhta.online</b></figcaption></figure>
+      <figure class="qr" style="animation-delay:54.9s"><div class="box"><svg shape-rendering="crispEdges" aria-hidden="true" viewBox="0 0 900 900" xmlns="http://www.w3.org/2000/svg" class="segno"><g transform="scale(20)"><path fill="#fff" d="M0 0h45v45h-45z"/><path class="qrline" stroke="#16a34a" d="M4 4.5h7m1 0h1m2 0h2m1 0h1m1 0h3m4 0h1m6 0h7m-37 1h1m5 0h1m1 0h2m5 0h1m7 0h1m2 0h3m1 0h1m5 0h1m-37 1h1m1 0h3m1 0h1m1 0h1m1 0h4m2 0h1m1 0h6m3 0h2m1 0h1m1 0h3m1 0h1m-37 1h1m1 0h3m1 0h1m2 0h2m2 0h3m6 0h1m1 0h2m1 0h1m2 0h1m1 0h3m1 0h1m-37 1h1m1 0h3m1 0h1m4 0h1m4 0h1m4 0h6m3 0h1m1 0h3m1 0h1m-37 1h1m5 0h1m1 0h4m1 0h1m1 0h6m2 0h6m1 0h1m5 0h1m-37 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-29 1h2m3 0h1m7 0h1m3 0h1m2 0h1m-27 1h3m1 0h1m1 0h4m3 0h3m1 0h1m1 0h1m1 0h1m2 0h1m2 0h3m2 0h3m-37 1h2m1 0h1m3 0h1m2 0h1m3 0h1m2 0h1m1 0h1m2 0h4m1 0h1m1 0h1m-25 1h2m1 0h1m4 0h1m1 0h1m2 0h1m3 0h2m1 0h3m2 0h2m4 0h1m-37 1h1m1 0h1m1 0h1m2 0h2m3 0h1m4 0h2m1 0h1m1 0h3m1 0h2m2 0h2m1 0h1m1 0h2m-37 1h1m1 0h3m1 0h1m4 0h2m2 0h1m1 0h2m1 0h2m1 0h1m1 0h3m1 0h4m1 0h2m-36 1h1m2 0h1m3 0h3m3 0h4m1 0h1m2 0h5m2 0h2m1 0h1m1 0h3m-35 1h3m2 0h2m5 0h2m2 0h3m3 0h6m1 0h1m2 0h1m1 0h2m-36 1h2m2 0h1m1 0h1m2 0h1m2 0h1m2 0h2m1 0h2m3 0h1m2 0h1m2 0h1m5 0h1m-34 1h4m1 0h1m2 0h3m2 0h4m1 0h1m1 0h1m1 0h2m2 0h4m1 0h1m1 0h1m-37 1h1m3 0h2m1 0h2m1 0h1m1 0h3m6 0h3m4 0h2m1 0h1m1 0h1m-34 1h2m1 0h2m1 0h1m2 0h1m2 0h1m1 0h1m1 0h1m2 0h1m2 0h2m1 0h3m2 0h2m2 0h3m-37 1h1m3 0h2m5 0h1m1 0h3m1 0h1m1 0h3m1 0h2m2 0h2m1 0h1m2 0h1m1 0h1m-35 1h3m1 0h3m2 0h2m9 0h1m2 0h2m4 0h7m-35 1h2m3 0h3m1 0h4m1 0h2m2 0h1m2 0h2m1 0h1m4 0h1m2 0h2m-35 1h2m1 0h3m6 0h1m2 0h2m2 0h1m1 0h3m2 0h1m6 0h1m1 0h1m-37 1h2m1 0h1m1 0h1m1 0h4m8 0h1m3 0h1m2 0h1m2 0h3m3 0h2m-37 1h1m4 0h2m3 0h5m6 0h1m1 0h1m6 0h5m-35 1h1m1 0h4m1 0h7m2 0h2m1 0h1m1 0h2m1 0h1m1 0h2m1 0h1m3 0h1m-34 1h1m1 0h1m3 0h1m2 0h1m3 0h1m1 0h1m1 0h2m1 0h2m5 0h2m1 0h2m2 0h3m-37 1h1m3 0h2m1 0h2m2 0h2m3 0h1m1 0h2m1 0h1m2 0h1m1 0h2m1 0h1m3 0h1m1 0h1m-36 1h1m1 0h1m1 0h1m1 0h1m6 0h2m1 0h1m8 0h8m1 0h2m-28 1h2m2 0h3m1 0h2m2 0h1m2 0h2m1 0h3m3 0h1m2 0h1m-36 1h7m2 0h2m1 0h1m1 0h1m1 0h3m2 0h2m2 0h1m2 0h1m1 0h1m1 0h2m1 0h2m-37 1h1m5 0h1m5 0h2m4 0h1m1 0h2m2 0h1m1 0h1m1 0h1m3 0h1m3 0h1m-37 1h1m1 0h3m1 0h1m1 0h1m2 0h2m1 0h1m1 0h3m2 0h12m1 0h1m1 0h1m-37 1h1m1 0h3m1 0h1m1 0h3m1 0h2m1 0h1m2 0h1m9 0h1m1 0h3m1 0h1m-35 1h1m1 0h3m1 0h1m1 0h2m3 0h2m2 0h2m3 0h5m1 0h2m1 0h1m1 0h2m1 0h1m-37 1h1m5 0h1m3 0h1m3 0h3m1 0h2m2 0h2m2 0h3m1 0h2m4 0h1m-37 1h7m3 0h1m5 0h2m2 0h1m1 0h2m1 0h1m4 0h1m2 0h4"/></g></svg></div><figcaption>آيفون<br><b>App&nbsp;Store</b></figcaption></figure>
+      <figure class="qr" style="animation-delay:55.4s"><div class="box"><svg shape-rendering="crispEdges" aria-hidden="true" viewBox="0 0 1060 1060" xmlns="http://www.w3.org/2000/svg" class="segno"><g transform="scale(20)"><path fill="#fff" d="M0 0h53v53h-53z"/><path class="qrline" stroke="#16a34a" d="M4 4.5h7m1 0h1m1 0h2m1 0h3m2 0h4m1 0h2m2 0h6m3 0h1m1 0h7m-45 1h1m5 0h1m1 0h1m4 0h3m2 0h1m2 0h2m3 0h3m1 0h1m4 0h1m2 0h1m5 0h1m-45 1h1m1 0h3m1 0h1m2 0h1m1 0h2m2 0h2m7 0h1m2 0h1m7 0h1m2 0h1m1 0h3m1 0h1m-45 1h1m1 0h3m1 0h1m1 0h3m2 0h1m2 0h1m4 0h1m1 0h1m1 0h1m1 0h1m2 0h2m1 0h1m1 0h2m1 0h1m1 0h3m1 0h1m-45 1h1m1 0h3m1 0h1m1 0h1m1 0h3m2 0h3m1 0h7m2 0h9m1 0h1m1 0h3m1 0h1m-45 1h1m5 0h1m1 0h3m1 0h1m1 0h2m1 0h4m3 0h2m1 0h1m1 0h5m4 0h1m5 0h1m-45 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-35 1h3m1 0h1m2 0h1m2 0h1m3 0h1m1 0h1m1 0h1m3 0h1m2 0h1m-33 1h1m2 0h1m3 0h2m1 0h1m1 0h2m1 0h7m5 0h2m1 0h1m5 0h3m1 0h2m-41 1h2m1 0h2m3 0h1m2 0h1m1 0h4m1 0h1m1 0h5m2 0h1m1 0h1m1 0h1m7 0h2m-45 1h3m3 0h1m1 0h2m1 0h1m3 0h3m2 0h1m1 0h1m5 0h2m4 0h1m1 0h2m1 0h1m1 0h2m1 0h1m-45 1h4m3 0h1m2 0h2m2 0h1m1 0h1m3 0h1m2 0h1m1 0h4m1 0h2m2 0h2m1 0h2m1 0h1m3 0h1m-45 1h1m1 0h1m3 0h1m1 0h1m1 0h2m1 0h2m1 0h4m1 0h1m1 0h3m3 0h4m2 0h1m2 0h1m1 0h1m3 0h1m-45 1h5m2 0h1m1 0h1m2 0h2m3 0h2m1 0h1m5 0h1m1 0h1m5 0h1m2 0h1m3 0h2m1 0h1m-45 1h1m2 0h1m2 0h1m6 0h2m1 0h2m2 0h2m1 0h1m2 0h4m1 0h1m3 0h4m1 0h4m-44 1h4m1 0h1m1 0h3m3 0h1m2 0h9m2 0h3m1 0h3m1 0h1m3 0h2m2 0h1m-43 1h1m1 0h1m2 0h2m1 0h1m1 0h2m2 0h1m1 0h3m1 0h1m8 0h3m8 0h1m2 0h1m-45 1h1m2 0h3m2 0h1m1 0h1m3 0h1m1 0h2m1 0h3m1 0h1m1 0h1m6 0h1m5 0h1m2 0h1m1 0h1m-44 1h2m2 0h1m1 0h1m2 0h8m3 0h3m2 0h1m2 0h1m1 0h2m1 0h1m1 0h2m2 0h3m1 0h2m-43 1h4m2 0h1m1 0h1m1 0h2m3 0h1m3 0h1m1 0h2m5 0h1m1 0h1m4 0h3m4 0h1m-45 1h10m1 0h1m1 0h2m2 0h2m1 0h6m1 0h3m1 0h1m1 0h9m1 0h2m-43 1h3m3 0h2m1 0h4m1 0h1m1 0h3m3 0h4m2 0h2m4 0h1m3 0h1m1 0h3m-45 1h5m1 0h1m1 0h2m1 0h1m2 0h2m4 0h1m1 0h1m1 0h1m2 0h1m2 0h1m3 0h1m1 0h1m1 0h1m1 0h2m2 0h1m-45 1h1m1 0h1m1 0h1m3 0h2m1 0h1m3 0h1m2 0h3m3 0h2m1 0h2m5 0h1m1 0h1m3 0h2m1 0h1m-44 1h1m1 0h1m1 0h5m3 0h1m1 0h11m1 0h1m1 0h2m1 0h2m3 0h6m1 0h1m-44 1h1m2 0h1m3 0h5m1 0h1m1 0h1m1 0h1m2 0h1m1 0h1m2 0h1m1 0h4m3 0h1m2 0h2m1 0h3m1 0h1m-43 1h1m1 0h4m1 0h1m3 0h1m1 0h1m2 0h1m7 0h3m7 0h2m1 0h1m2 0h2m-42 1h1m2 0h1m1 0h3m1 0h4m1 0h1m3 0h1m1 0h1m2 0h2m2 0h4m1 0h1m1 0h3m1 0h1m2 0h2m-45 1h1m3 0h1m1 0h4m4 0h2m3 0h1m1 0h2m4 0h2m1 0h1m1 0h3m1 0h1m2 0h2m-40 1h2m2 0h1m2 0h1m2 0h2m1 0h4m3 0h3m2 0h1m1 0h1m1 0h2m4 0h1m4 0h3m-40 1h3m6 0h3m4 0h1m2 0h3m5 0h1m1 0h1m2 0h3m1 0h1m2 0h2m-45 1h1m4 0h1m3 0h3m2 0h2m1 0h3m1 0h4m1 0h1m5 0h3m1 0h1m1 0h1m1 0h1m-35 1h2m1 0h2m1 0h1m1 0h1m2 0h2m2 0h1m3 0h1m1 0h5m1 0h1m1 0h1m2 0h2m1 0h1m1 0h1m-44 1h4m1 0h1m3 0h4m3 0h1m1 0h1m3 0h1m1 0h1m1 0h3m3 0h1m2 0h1m1 0h1m6 0h1m-41 1h1m1 0h3m2 0h4m1 0h4m2 0h3m1 0h1m1 0h2m4 0h2m2 0h2m2 0h1m1 0h1m-44 1h4m3 0h4m1 0h1m1 0h3m1 0h4m1 0h3m4 0h1m1 0h1m1 0h2m3 0h2m-42 1h1m2 0h2m1 0h1m4 0h1m4 0h3m1 0h6m1 0h7m2 0h6m2 0h1m-37 1h4m1 0h4m2 0h2m3 0h2m1 0h1m1 0h1m1 0h4m1 0h1m3 0h1m1 0h1m1 0h1m-45 1h7m8 0h1m4 0h1m1 0h1m1 0h1m1 0h2m1 0h4m2 0h2m1 0h1m1 0h1m-41 1h1m5 0h1m3 0h4m2 0h3m1 0h1m3 0h2m1 0h2m2 0h2m1 0h3m3 0h1m-41 1h1m1 0h3m1 0h1m2 0h2m1 0h1m2 0h2m1 0h8m1 0h2m3 0h3m1 0h5m2 0h1m-44 1h1m1 0h3m1 0h1m1 0h1m1 0h2m4 0h1m1 0h1m1 0h1m2 0h2m3 0h1m2 0h2m3 0h3m1 0h1m-41 1h1m1 0h3m1 0h1m3 0h1m2 0h2m1 0h1m1 0h2m3 0h1m1 0h2m5 0h1m2 0h3m1 0h2m3 0h1m-45 1h1m5 0h1m3 0h1m2 0h2m2 0h1m1 0h1m2 0h1m2 0h3m1 0h7m3 0h2m-41 1h7m2 0h3m2 0h2m2 0h1m1 0h3m1 0h4m3 0h1m1 0h2m2 0h3m1 0h1m1 0h1"/></g></svg></div><figcaption>أندرويد<br><b>Google&nbsp;Play</b></figcaption></figure>
+    </div>
+    <p class="sub" style="font-size:38px;animation:fade .8s both;animation-delay:56.2s">صوّر الرمز بكاميرا هاتفك</p>
+  </section>
+
+  <div id="prog" style="--t:63s"></div>
 </div></div>
 
 <div class="hud" id="hud">R إعادة · F ملء الشاشة · مسافة إيقاف · H إخفاء هذا السطر</div>
