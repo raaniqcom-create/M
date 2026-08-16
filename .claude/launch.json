@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "mahatta-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 3000
+      "name": "promo",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "serve", "docs/promo", "-l", "4173", "--no-clipboard"],
+      "port": 4173
     }
   ]
 }
