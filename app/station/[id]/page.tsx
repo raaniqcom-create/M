@@ -12,6 +12,7 @@ import { hoursLabel, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
 import { MapPinIcon, PhoneIcon } from '@/components/icons';
 import { RouteButton } from '@/components/RouteButton';
 import { ComplaintButton } from '@/components/ComplaintButton';
+import { TrafficVote } from '@/components/TrafficVote';
 import type { Station, StationProduct, TrafficLevel } from '@/types/database';
 
 // server-side anon client: same RLS rules, but usable during SSR for OG tags
@@ -107,6 +108,13 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
             الازدحام: {TRAFFIC_LABELS[level]}
           </span>
         )}
+
+        {/* Written but never mounted until now, so the traffic on every station
+            page could only ever come from its owner. The people standing in it
+            are the ones who know. */}
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <TrafficVote stationId={station.id} />
+        </div>
 
         <h2 className="mt-5 text-sm font-bold">المنتجات</h2>
         <ul className="mt-2 divide-y divide-slate-100">

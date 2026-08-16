@@ -10,30 +10,52 @@ const VOTE_WINDOW_MS = 30 * 60 * 1000;
 
 export function TrafficVote({
   stationId,
-  traffic,
+  traffic: initial = null,
 }: {
   stationId: string;
-  traffic: StationTrafficAvg | null;
+  traffic?: StationTrafficAvg | null;
 }) {
   const voteKey = `voted:${stationId}`;
   const [voted, setVoted] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [traffic, setTraffic] = useState<StationTrafficAvg | null>(initial);
+
+  // The station page is a static file, so anything passed in was true when the
+  // site was last built. Votes expire after 30 minutes — a build-time count is
+  // almost always wrong by the time somebody reads it.
+  async function refresh() {
+    const { data } = await supabase
+      .from('station_traffic_avg')
+      .select('*')
+      .eq('station_id', stationId)
+      .maybeSingle();
+    setTraffic((data as StationTrafficAvg) ?? null);
+  }
 
   // survive a refresh: one vote per station per 30-minute window
   useEffect(() => {
     const last = Number(localStorage.getItem(voteKey) ?? 0);
     if (Date.now() - last < VOTE_WINDOW_MS) setVoted(true);
-  }, [voteKey]);
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voteKey, stationId]);
 
   async function vote(level: TrafficLevel) {
     if (voted || busy) return;
     setBusy(true);
-    const { error } = await supabase.from('traffic_votes').insert({ station_id: stationId, level });
+    setError(null);
+    const { error: e } = await supabase.from('traffic_votes').insert({ station_id: stationId, level });
     setBusy(false);
-    if (!error) {
-      localStorage.setItem(voteKey, String(Date.now()));
-      setVoted(true);
+    if (e) {
+      // a rejected vote used to leave the button silently unchanged, so the
+      // person tapped it again and again
+      setError('تعذّر تسجيل التقييم. تحقّق من الاتصال وحاول مجدداً.');
+      return;
     }
+    localStorage.setItem(voteKey, String(Date.now()));
+    setVoted(true);
+    refresh();
   }
 
   return (
@@ -69,6 +91,8 @@ export function TrafficVote({
           );
         })}
       </div>
+
+      {error && <p className="mt-2 text-xs font-semibold text-traffic-red">{error}</p>}
     </div>
   );
 }

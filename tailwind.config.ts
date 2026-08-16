@@ -1,7 +1,12 @@
 import type { Config } from 'tailwindcss';
 
 export default {
-  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
+  // lib/ belongs here: the traffic and product palettes live in lib/products.ts
+  // as class-name strings. Without this path Tailwind never saw them, so
+  // bg-traffic-green and bg-traffic-yellow were never generated and those two
+  // dots rendered with no colour at all. Only the red one showed — and only by
+  // luck, because that class also appears in two component files.
+  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}', './lib/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
