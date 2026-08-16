@@ -22,14 +22,12 @@ export default function NotFound() {
     }
 
     (async () => {
-      // is_demo rows are excluded from the build and from the public list, so
-      // they have no page and never will — "being prepared" would be a lie the
-      // visitor keeps refreshing.
-      const query = supabase
-        .from('stations')
-        .select('id')
-        .eq('status', 'approved')
-        .eq('is_demo', false);
+      // The comment that stood here said demo rows have no page "and never
+      // will", so claiming one was being prepared would be a lie. That was
+      // true of the build, and it is what made the demo station's own link
+      // answer «الرابط غير صحيح». The build now generates a page for every
+      // approved station; is_demo only keeps it out of the public list.
+      const query = supabase.from('stations').select('id').eq('status', 'approved');
       const { data } = stationId
         ? await query.eq('id', stationId).maybeSingle()
         : await query.ilike('slug', slug!).maybeSingle();

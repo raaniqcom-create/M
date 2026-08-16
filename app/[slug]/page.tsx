@@ -9,11 +9,15 @@ const db = createClient(
 export const dynamicParams = false;
 
 export async function generateStaticParams() {
+  // is_demo keeps a station out of the public LIST. It must not deny it a
+  // page: the owner panel hands every station a link and tells its owner to
+  // publish it, and a test station is exactly what gets checked first — the
+  // demo station's own link answered "الرابط غير صحيح" because no page for it
+  // was ever generated.
   const { data } = await db
     .from('stations')
     .select('slug')
     .eq('status', 'approved')
-    .eq('is_demo', false)
     .not('slug', 'is', null);
   const params = (data ?? []).map(({ slug }) => ({ slug }));
   return params.length ? params : [{ slug: 'none' }];

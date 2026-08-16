@@ -26,11 +26,12 @@ const db = createClient(
 export const dynamicParams = false;
 
 export async function generateStaticParams() {
+  // see app/[slug]/page.tsx — is_demo hides a station from the list, it does
+  // not mean the station has no page
   const { data } = await db
     .from('stations')
     .select('id')
-    .eq('status', 'approved')
-    .eq('is_demo', false);
+    .eq('status', 'approved');
   const params = (data ?? []).map(({ id }) => ({ id }));
   // a static export must emit at least one path for a dynamic route
   return params.length ? params : [{ id: 'none' }];
