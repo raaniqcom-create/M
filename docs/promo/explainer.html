@@ -22,10 +22,14 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:#000;overflow:hidden;font-family:Tajawal,system-ui,sans-serif}
 #fit{position:fixed;inset:0}
+/* مقاسان من ملف واحد: الأفقي للقناة وفيسبوك، والعمودي للقصص.
+   ?v=story أو مفتاح V. ملفّان منفصلان كانا سيفترقان عند أول تعديل. */
+:root{--W:1920px;--H:1080px}
+html.v{--W:1080px;--H:1920px}
 /* Centred by transform, not by grid: a grid item wider than its container
    aligns to start and spills off-screen instead of centring. */
 #stage{
-  width:1920px;height:1080px;position:absolute;top:50%;left:50%;
+  width:var(--W);height:var(--H);position:absolute;top:50%;left:50%;
   overflow:hidden;background:linear-gradient(160deg,#ffffff 0%,var(--brand-50) 100%);
   transform-origin:center;
 }
@@ -121,6 +125,73 @@ p.sub{font-size:44px;font-weight:500;color:var(--mute);line-height:1.6}
 .qr .box svg path[stroke]{stroke:var(--ink)}
 .qr figcaption{margin-top:20px;font-size:30px;font-weight:600;color:var(--mute);line-height:1.5}
 .qr figcaption b{font-weight:900;color:var(--brand-700)}
+
+/* ---------- العلامة الثابتة ---------- */
+/* تبقى طوال الفيديو: من يلتقط المقطع في منتصفه يعرف اسم التطبيق وأين يجده.
+   في أسفل جهة البداية، بعيداً عن مركز كل المشاهد. */
+#mark{
+  position:absolute;bottom:44px;inset-inline-start:52px;z-index:5;
+  display:flex;align-items:center;gap:20px;
+  background:rgba(255,255,255,.92);border:2px solid var(--brand-100);
+  border-radius:26px;padding:16px 28px 16px 20px;
+  box-shadow:0 10px 30px rgba(20,83,45,.14);
+  animation:fade .8s both;animation-delay:.4s;
+}
+#mark .logo{width:64px;height:64px;flex:none}
+#mark .txt{text-align:start;line-height:1.3}
+#mark .nm{font-size:27px;font-weight:900;color:var(--brand-900);white-space:nowrap}
+/* السطران يتبادلان في المكان نفسه، فلا يتزحزح شيء حولهما */
+#mark .stores{position:relative;height:30px;margin-top:2px;min-width:290px}
+#mark .st{
+  position:absolute;inset-inline-start:0;top:0;display:flex;align-items:center;gap:9px;
+  font-size:22px;font-weight:700;color:var(--mute);white-space:nowrap;
+}
+#mark .st svg{width:22px;height:22px;flex:none;fill:var(--brand-700)}
+@keyframes swapA{0%,4%{opacity:0}8%,46%{opacity:1}50%,100%{opacity:0}}
+@keyframes swapB{0%,50%{opacity:0}54%,96%{opacity:1}100%{opacity:0}}
+#mark .a{animation:swapA 7s ease-in-out infinite}
+#mark .b{animation:swapB 7s ease-in-out infinite}
+
+/* ---------- العمودي 1080×1920 ---------- */
+/* الإطار أضيق ونصفه ارتفاع، فالصفوف تصير أعمدة والخط يصغر نسبةً إلى العرض */
+html.v h1{font-size:82px}
+html.v h2{font-size:60px}
+html.v p.sub{font-size:38px}
+html.v .big{font-size:104px}
+html.v .scene{gap:44px;padding:0 50px}
+
+html.v .bubbles{width:940px;height:auto;display:flex;flex-direction:column;gap:24px}
+html.v .bub{position:static;align-self:flex-start;font-size:36px;padding:22px 34px}
+html.v .bub:nth-child(even){align-self:flex-end}
+
+html.v .cost{flex-direction:column;gap:22px}
+html.v .cost .card{width:820px;display:flex;align-items:center;gap:30px;padding:32px 40px;text-align:start}
+html.v .cost .n{font-size:64px;flex:none;min-width:170px}
+html.v .cost .l{margin-top:0;font-size:30px}
+
+html.v .split{flex-direction:column;gap:44px}
+html.v .phone{width:330px;height:650px;border-width:12px}
+html.v .split>div:last-child{text-align:center}
+html.v .split .sub{margin-inline:auto}
+
+html.v .grid3{flex-wrap:wrap;justify-content:center;max-width:900px;gap:28px}
+html.v .mini{width:280px}
+
+html.v .free{max-width:940px;gap:22px}
+html.v .chip{font-size:32px;padding:22px 36px}
+
+html.v .invite{flex-direction:column;gap:28px}
+html.v .side{width:880px;padding:40px 44px;text-align:start}
+html.v .side .who{font-size:46px}
+html.v .side .what{font-size:32px}
+
+/* ٣ رموز × ٣٤٠ لا تتّسع في ١٠٨٠؛ و٣٠٠ داخل إطار ١٠٨٠ تُشاهَد بعرض الهاتف
+   كاملاً، فيقع المربّع على ٥٫٧ بكسل — أوسع هامشاً من الأفقي أصلاً. */
+html.v .qrs{gap:34px}
+html.v .qr .box{width:300px;height:300px}
+html.v .qr figcaption{font-size:26px}
+
+html.v #mark{bottom:120px;inset-inline-start:50%;transform:translateX(50%)}
 
 /* شريط التقدّم — يُخفى بالضغط على H قبل التسجيل إن أردته نظيفاً تماماً */
 #prog{position:absolute;bottom:0;inset-inline-start:0;height:8px;background:var(--brand);width:0;animation:bar var(--t) linear forwards}
@@ -236,16 +307,58 @@ p.sub{font-size:44px;font-weight:500;color:var(--mute);line-height:1.6}
     <p class="sub" style="font-size:38px;animation:fade .8s both;animation-delay:56.2s">صوّر الرمز بكاميرا هاتفك</p>
   </section>
 
+  <!-- العلامة الثابتة — لا تغيب في أي مشهد -->
+  <div id="mark">
+    <svg class="logo" viewBox="0 0 512 512" aria-hidden="true">
+      <defs>
+        <linearGradient id="mkB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#1e40af"/></linearGradient>
+        <linearGradient id="mkO" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fb923c"/><stop offset="1" stop-color="#ea580c"/></linearGradient>
+        <linearGradient id="mkG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22c55e"/><stop offset="1" stop-color="#15803d"/></linearGradient>
+      </defs>
+      <circle cx="256" cy="256" r="168" fill="none" stroke="#eef2f7" stroke-width="16"/>
+      <path d="M256 88a168 168 0 0 1 0 336" fill="none" stroke="url(#mkB)" stroke-width="24" stroke-linecap="round"/>
+      <path d="M256 424a168 168 0 0 1-104-300" fill="none" stroke="url(#mkO)" stroke-width="24" stroke-linecap="round"/>
+      <g transform="translate(132 186) scale(5.6)" fill="none" stroke="url(#mkB)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="1" y1="22" x2="15" y2="22"/><line x1="2" y1="9" x2="14" y2="9"/>
+        <path d="M14 22V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v18"/>
+        <path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/>
+      </g>
+      <g transform="translate(340 196)">
+        <path d="M42 42c0 28-36 58-40 62a3 3 0 0 1-4 0C-6 100-42 70-42 42a42 42 0 0 1 84 0" fill="url(#mkG)"/>
+        <path d="M-24 39h11l6-14 9 28 7-14h14" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </svg>
+    <div class="txt">
+      <div class="nm">تطبيق المحطة التقنية</div>
+      <div class="stores">
+        <div class="st a">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.05 12.94c-.02-2.15 1.76-3.18 1.84-3.23-1-1.47-2.56-1.67-3.12-1.69-1.33-.13-2.6.78-3.27.78-.67 0-1.72-.76-2.83-.74-1.45.02-2.79.84-3.54 2.14-1.51 2.62-.39 6.5 1.09 8.62.72 1.04 1.58 2.21 2.71 2.17 1.09-.05 1.5-.7 2.82-.7 1.31 0 1.69.7 2.84.68 1.17-.02 1.91-1.06 2.63-2.1.83-1.2 1.17-2.37 1.19-2.43-.03-.01-2.28-.87-2.3-3.46zM14.9 6.3c.6-.73 1-1.73.89-2.74-.86.04-1.9.57-2.51 1.29-.55.64-1.03 1.67-.9 2.65.96.08 1.93-.49 2.52-1.2z"/></svg>
+          متوفّر على App&nbsp;Store
+        </div>
+        <div class="st b">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.6 2.3c-.25.26-.4.67-.4 1.2v17c0 .53.15.94.4 1.2l.06.06 9.53-9.53v-.22L3.66 2.24l-.06.06zm12.77 6.3L14.1 6.33 4.9 1.14c-.3-.17-.58-.2-.8-.1l12.27 12.27 2.27-2.27-2.27-2.44zm-2.27 5.6l2.27-2.27 2.86 1.62c.72.41.72 1.08 0 1.49l-2.86 1.62-2.27-2.46zM4.1 22.96c.22.1.5.07.8-.1l9.2-5.19 2.27-2.27L4.1 22.96z"/></svg>
+          متوفّر على Google&nbsp;Play
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="prog" style="--t:63s"></div>
 </div></div>
 
-<div class="hud" id="hud">R إعادة · F ملء الشاشة · مسافة إيقاف · H إخفاء هذا السطر</div>
+<div class="hud" id="hud">R إعادة · F ملء الشاشة · V أفقي/عمودي · مسافة إيقاف · H إخفاء هذا السطر</div>
 
 <script>
 // المسرح مقاس ثابت؛ نقيسه ليملأ أي نافذة بلا تشويه، فالتسجيل يخرج بأي دقة.
 const stage = document.getElementById('stage');
+const root = document.documentElement;
+
+// ?v=story يفتح العمودي مباشرة، فيمكن ربط اختصار لكل مقاس بلا تعديل الملف
+if (new URLSearchParams(location.search).get('v') === 'story') root.classList.add('v');
+
+// المقاس يُقرأ من العنصر نفسه، فيتبع المتغيّرين --W/--H بلا رقمين مكرّرين هنا
 const fit = () => {
-  const s = Math.min(innerWidth / 1920, innerHeight / 1080);
+  const s = Math.min(innerWidth / stage.offsetWidth, innerHeight / stage.offsetHeight);
   // translate(-50%,-50%) runs before scale, so the box is centred at any size
   stage.style.transform = `translate(-50%, -50%) scale(${s})`;
 };
@@ -256,6 +369,7 @@ addEventListener('keydown', (e) => {
   if (k === 'r') location.reload();
   if (k === 'f') document.documentElement.requestFullscreen?.();
   if (k === 'h') document.getElementById('hud').classList.toggle('hidden');
+  if (k === 'v') { root.classList.toggle('v'); fit(); }
   if (e.code === 'Space') { e.preventDefault(); document.body.classList.toggle('paused'); }
 });
 </script>
