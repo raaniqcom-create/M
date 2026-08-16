@@ -207,8 +207,14 @@ html.v #mark{bottom:120px;inset-inline-start:50%;transform:translateX(50%)}
 .hidden{display:none}
 
 /* زر التسجيل خارج المسرح، ويختفي قبل أن يبدأ التقاط الصورة فلا يظهر فيها */
+#bar{position:fixed;top:18px;inset-inline-end:18px;z-index:10;display:flex;align-items:stretch;gap:8px}
+#hiderec{
+  display:grid;place-items:center;cursor:pointer;width:44px;
+  background:#fff;color:#64748b;border:2px solid var(--brand-100);border-radius:14px;
+  box-shadow:0 8px 22px rgba(20,83,45,.14);
+}
+#hiderec svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
 #rec{
-  position:fixed;top:18px;inset-inline-end:18px;z-index:10;
   display:flex;align-items:center;gap:9px;cursor:pointer;
   background:var(--brand);color:#fff;border:0;border-radius:14px;
   padding:13px 20px;font-family:inherit;font-size:15px;font-weight:800;
@@ -356,12 +362,17 @@ html.v #mark{bottom:120px;inset-inline-start:50%;transform:translateX(50%)}
   <audio id="voice" src="voice.mp3" preload="auto"></audio>
 </div></div>
 
-<button id="rec" type="button">
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-  <span id="reclabel">تحميل الفيديو</span>
-</button>
+<div id="bar">
+  <button id="rec" type="button">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+    <span id="reclabel">تحميل الفيديو</span>
+  </button>
+  <button id="hiderec" type="button" title="إخفاء (D لإظهاره)" aria-label="إخفاء زر التحميل">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+  </button>
+</div>
 <div id="note" class="hidden"></div>
-<div class="hud hidden" id="hud">اضغط في أي مكان للبدء بالصوت · F ملء الشاشة · V أفقي/عمودي · R إعادة · مسافة إيقاف</div>
+<div class="hud hidden" id="hud">اضغط في أي مكان للبدء · D زر التحميل · F ملء الشاشة · V أفقي/عمودي · R إعادة · مسافة إيقاف</div>
 
 <script>
 // المسرح مقاس ثابت؛ نقيسه ليملأ أي نافذة بلا تشويه، فالتسجيل يخرج بأي دقة.
@@ -421,7 +432,15 @@ function start() {
   requestAnimationFrame(tick);
 }
 
-addEventListener('click', (e) => { if (!e.target.closest('#rec, #note')) start(); });
+addEventListener('click', (e) => { if (!e.target.closest('#bar, #note')) start(); });
+
+// إخفاء زر التحميل: يختفي أثناء التسجيل تلقائياً، لكن قد يُراد إخفاؤه قبله
+// لمعاينة الإطار نظيفاً أو لتصوير الشاشة بأداة أخرى. D يعيده.
+const bar = document.getElementById('bar');
+document.getElementById('hiderec').addEventListener('click', () => {
+  bar.classList.add('hidden');
+  note.classList.add('hidden');
+});
 
 // ---- تسجيل الفيديو من داخل المتصفح ----
 //
@@ -452,41 +471,81 @@ rec.addEventListener('click', async () => {
     return say('هذا المتصفح لا يدعم التسجيل. استعمل Chrome أو Edge.');
   }
 
+  // المقاس الهدف من المسرح نفسه: ١٩٢٠×١٠٨٠ أفقياً و١٠٨٠×١٩٢٠ عمودياً
+  const W = stage.offsetWidth;
+  const H = stage.offsetHeight;
+
   let display;
   try {
     display = await navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: 30 },
+      // preferCurrentTab يجعل كروم يختار هذا التبويب سلفاً، فتبقى ضغطة واحدة
+      preferCurrentTab: true,
+      video: { frameRate: 30, width: { ideal: 3840 }, height: { ideal: 2160 } },
       audio: false,
     });
   } catch {
-    return say('أُلغي اختيار الشاشة. اضغط الزر ثم اختر <b>هذا التبويب</b>.');
+    return say('أُلغي اختيار الشاشة. اضغط الزر ثم اختر <b>هذا التبويب</b> ثم Share.');
   }
+
+  // ---- من نافذة المتصفح إلى إطار الفيديو ----
+  //
+  // التسجيل المباشر لمجرى الشاشة كان يخرج بمقاس النافذة وفيه شريطان أسودان
+  // على الجانبين، لأن المسرح يتوسّطها ولا يملؤها. فالمجرى يُرسم الآن في لوحة
+  // بمقاس المسرح تماماً، ويُقتطع منه موضع المسرح وحده — بلا حواف، وبالدقة
+  // المطلوبة مهما كان حجم النافذة.
+  const src = document.createElement('video');
+  src.srcObject = display;
+  src.muted = true;
+  await src.play().catch(() => {});
+  await new Promise((r) => (src.readyState >= 2 ? r() : (src.onloadedmetadata = r)));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  ctx.imageSmoothingQuality = 'high';
+
+  // تحذير صادق بدل تكبيرٍ صامت يفقد الحدّة
+  const shot = src.videoWidth / (innerWidth || 1);
+  const havePx = Math.round(stage.getBoundingClientRect().width * shot);
+  const thin = havePx < W * 0.92;
+
+  let drawing = true;
+  function paint() {
+    if (!drawing) return;
+    const r = stage.getBoundingClientRect();       // يُقاس كل إطار، فينضبط
+    const k = src.videoWidth / (innerWidth || 1);  // نافذة → بكسل ملتقط
+    ctx.drawImage(src, r.left * k, r.top * k, r.width * k, r.height * k, 0, 0, W, H);
+    requestAnimationFrame(paint);
+  }
+  paint();
 
   const type = bestType();
   const mixed = new MediaStream([
-    ...display.getVideoTracks(),
+    ...canvas.captureStream(30).getVideoTracks(),
     ...voice.captureStream().getAudioTracks(),
   ]);
 
   const chunks = [];
-  const mr = new MediaRecorder(mixed, type ? { mimeType: type, videoBitsPerSecond: 8e6 } : {});
+  const mr = new MediaRecorder(mixed, type ? { mimeType: type, videoBitsPerSecond: 12e6, audioBitsPerSecond: 192e3 } : {});
   mr.ondataavailable = (e) => e.data.size && chunks.push(e.data);
 
   mr.onstop = () => {
+    drawing = false;
     display.getTracks().forEach((t) => t.stop());
     const blob = new Blob(chunks, { type: mr.mimeType || 'video/webm' });
     const ext = (mr.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `muhta-${root.classList.contains('v') ? 'story' : 'wide'}.${ext}`;
+    a.download = `muhta-${root.classList.contains('v') ? 'story-1080x1920' : 'wide-1920x1080'}.${ext}`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 30000);
     rec.disabled = false;
+    bar.classList.remove('hidden');
     reclabel.textContent = 'تحميل الفيديو';
-    say(`جاهز — <b>${a.download}</b> · ${(blob.size / 1048576).toFixed(1)} م.ب`);
+    say(`جاهز — <b>${a.download}</b><br>${W}×${H} · ${(blob.size / 1048576).toFixed(1)} م.ب`);
   };
 
-  // إن أوقف المشغّل المشاركة من شريط المتصفح، يُحفظ ما سُجّل بدل أن يضيع
   display.getVideoTracks()[0].addEventListener('ended', () => {
     if (mr.state !== 'inactive') mr.stop();
   });
@@ -494,14 +553,13 @@ rec.addEventListener('click', async () => {
   rec.disabled = true;
   note.classList.add('hidden');
   hud.classList.add('hidden');
+  bar.classList.add('hidden');
 
-  // من الصفر في الحالتين: الزر قد يُضغط بعد تشغيل سابق
   started = true;
   voice.pause();
   voice.currentTime = 0;
   scrub(0);
 
-  // مهلة قصيرة ليستقرّ الالتقاط قبل أن تتحرّك أول جملة
   await new Promise((r) => setTimeout(r, 600));
 
   mr.start();
@@ -515,9 +573,9 @@ rec.addEventListener('click', async () => {
     setTimeout(label, 500);
   };
   label();
+  if (thin) say(`النافذة صغيرة: الملتقط ${havePx}px والهدف ${W}px، فستفقد بعض الحدّة.<br>كبّر النافذة أو اضغط F قبل التسجيل.`);
 
   voice.addEventListener('ended', () => {
-    // ذيل قصير ليُلتقط آخر خبوّ قبل الإيقاف
     setTimeout(() => mr.state !== 'inactive' && mr.stop(), 700);
   }, { once: true });
 });
@@ -531,6 +589,7 @@ addEventListener('keydown', (e) => {
     case 'KeyR': location.reload(); break;
     case 'KeyF': document.documentElement.requestFullscreen?.(); break;
     case 'KeyH': hud.classList.toggle('hidden'); break;
+    case 'KeyD': bar.classList.toggle('hidden'); break;
     case 'KeyV': root.classList.toggle('v'); fit(); collect(); break;
     case 'Space':
       // إيقاف الصوت يكفي: الصورة لا تملك ساعة تمضي بها وحدها
