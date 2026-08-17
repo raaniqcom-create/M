@@ -23,3 +23,7 @@ ios/DerivedData/
 *.p8
 store/*.png
 backups/
+
+# مخرجات التوليد: يُعاد إنتاجها بـscripts/render-video.mjs
+# ولا تُخزَّن في المستودع — عشرون ميغابايت لكل نسخة، وتتغيّر مع كل تعديل
+docs/promo/*.mp4
