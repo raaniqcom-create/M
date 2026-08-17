@@ -28,6 +28,9 @@ export default function NewsPage() {
       .from('announcements')
       .select('*')
       .eq('active', true)
+      // كما في الشريط: المدير يرى ما لم يُرسل بحكم سياسته، والجدول يجب أن
+      // يسري عليه أيضاً وإلا رأى الخبر قبل الناس وحسبه منشوراً
+      .not('sent_at', 'is', null)
       .order('created_at', { ascending: false })
       .limit(10)
       .then(({ data }) => setItems((data as Announcement[]) ?? []));

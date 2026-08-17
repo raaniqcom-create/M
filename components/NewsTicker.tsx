@@ -47,8 +47,12 @@ export function NewsTicker({ stations }: { stations: StationWithStatus[] }) {
     let alive = true;
     supabase
       .from('announcements')
-      .select('ticker, expires_at, active')
+      .select('ticker, expires_at, active, sent_at')
       .eq('active', true)
+      // RLS يخفي غير المُرسَل عن الزائر، لكن سياسة الإدارة FOR ALL — وهي تشمل
+      // القراءة — فكان المدير وحده يرى خبراً لم يُرسل بعد، ويقرأه على أنه عطل.
+      // الشرط هنا يجعل الجدول يسري على الجميع بالتساوي.
+      .not('sent_at', 'is', null)
       .order('created_at', { ascending: false })
       .limit(5)
       .then(({ data }) => {
