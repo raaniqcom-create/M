@@ -117,7 +117,7 @@ export default function DownloadPage() {
         <p className="mt-2 text-xs leading-relaxed text-slate-500">
           سجّل محطتك مجاناً لتظهر للمستخدمين، وحدّث توفر الوقود بضغطة واحدة.
         </p>
-        <a href="/register" className="btn-primary mt-4 w-full">
+        <a href="/register" className="btn-ghost mt-4 w-full">
           سجّل محطتك مجاناً
         </a>
       </section>

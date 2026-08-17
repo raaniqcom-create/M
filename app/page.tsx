@@ -17,6 +17,7 @@ import { PRODUCT_LABELS } from '@/lib/products';
 import { CITY_NAMES } from '@/lib/cities';
 import { StationCard } from '@/components/StationCard';
 import { PromoStrip } from '@/components/PromoStrip';
+import { AlertsPrompt } from '@/components/AlertsPrompt';
 import { TripAsk } from '@/components/TripAsk';
 import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
@@ -217,15 +218,23 @@ export default function HomePage() {
               its place. Tell the visitor what to do right now instead of what
               the platform lacks — and keep the honesty about calling ahead,
               which is what stops a driver burning fuel on a stale claim. */}
-          <p className="mt-2 flex items-start gap-2 rounded-lg bg-white/15 px-3 py-2 text-[11px] leading-relaxed text-white">
+          {/* This told the visitor to "choose your city and your fuel" and gave
+              them nothing to tap — while the nearest green button on the screen
+              was «سجّل محطتك مجاناً». An instruction with no target sends people
+              to the loudest control instead, which is exactly how citizens ended
+              up on the owner registration form. */}
+          <a
+            href="/alerts"
+            className="mt-2 flex items-start gap-2 rounded-lg bg-white/15 px-3 py-2 text-[11px] leading-relaxed text-white"
+          >
             <BellIcon className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
               اختر <b>مدينتك</b> و<b>نوع الوقود</b> الذي يهمك، وانتظر — أول ما تسجّل محطة
-              ويتوفر المنتج، يصلك إشعار.
+              ويتوفر المنتج، يصلك إشعار. <b className="underline">اختر الآن ←</b>
               <br />
               المحطات تُضاف تباعاً. واتصل بالمحطة قبل أن تتحرك.
             </span>
-          </p>
+          </a>
           {/* Both of these speak to someone browsing the site. Inside the app
               they are dead weight: the download already happened, and the
               "coming soon" badge contradicts the app in their hand. */}
@@ -418,16 +427,28 @@ export default function HomePage() {
             stations exist that block disappears and this banner takes over —
             which is also when owners start looking. Showing both at once put
             the same green button on screen twice. */}
+        {/* Above the owner banner, not below it: whoever has not chosen a city
+            and a fuel yet is the visitor this platform exists for. */}
+        {!signedIn && <AlertsPrompt />}
+
         {!signedIn && stations !== null && stations.length > 0 && (
           <section className="mt-6 rounded-2xl border border-brand-100 bg-brand-50 p-4 text-center">
-            <p className="text-sm font-bold text-brand-900">محطتك غير مسجّلة؟</p>
+            <p className="text-sm font-bold text-brand-900">صاحب محطة؟ محطتك غير مسجّلة؟</p>
             <p className="mt-1 text-xs leading-relaxed text-brand-800">
               أضفها مجاناً وتظهر لآلاف المستخدمين في الأنبار — بلا رسوم ولا عمولة.
               التسجيل مفتوح الآن لجميع مدن المحافظة.
             </p>
-            <a href="/register" className="btn-primary mt-3 w-full">
+            {/* Ghost, not primary: this block speaks to a few dozen owners and
+                sits in front of everyone else. It should be findable, not loud. */}
+            <a href="/register" className="btn-ghost mt-3 w-full">
               سجّل محطتك مجاناً
             </a>
+            <p className="mt-3 border-t border-brand-100 pt-3 text-xs text-brand-800">
+              لست صاحب محطة؟{' '}
+              <a href="/alerts" className="font-bold underline">
+                فعّل التنبيهات ليصلك خبر الوقود
+              </a>
+            </p>
             <a href="/login" className="mt-2 block min-h-[44px] pt-2 text-xs font-semibold text-brand-700">
               لديك حساب؟ سجّل الدخول
             </a>

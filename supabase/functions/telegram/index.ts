@@ -125,16 +125,26 @@ async function pendingCount(): Promise<number> {
 
 async function mainMenu(userId: number) {
   const owner = await hasStation(userId);
+  // «➕ أضف محطتي» reads as "sign me up" to someone who came for alerts, and it
+  // sat as one of only three buttons with nothing here offering notifications
+  // at all. The question goes first so the button sorts its own audience.
   const mine = owner
     ? { text: '🏪 إدارة محطتي', callback_data: 'manage' }
-    : { text: '➕ أضف محطتي', callback_data: 'addst' };
+    : { text: '🏪 صاحب محطة؟ سجّل محطتك', callback_data: 'addst' };
 
-  // Before launch there is nothing for a driver to search — every station list
-  // would come back empty and read as a broken bot. Show the two things that
+  // The citizen's door, missing entirely until now: the bot had no city+fuel
+  // flow, so the only plausible-looking action was registering a station.
+  // Links to the same screen the site uses rather than rebuilding the picker
+  // inside the bot.
+  const alerts = { text: '🔔 نبّهني عند توفّر الوقود', url: `${SITE}/alerts` };
+
+  // Before launch there is nothing for a user to search — every station list
+  // would come back empty and read as a broken bot. Show the things that
   // are genuinely useful now instead.
   if (PRE_LAUNCH && !isAdmin(userId)) {
     return {
       inline_keyboard: [
+        [alerts],
         [{ text: '🔔 ثبّت نغمة التنبيه', callback_data: 'tone' }],
         [mine],
         [{ text: '🌐 فتح الموقع', url: SITE }],
@@ -143,6 +153,7 @@ async function mainMenu(userId: number) {
   }
 
   const rows = [
+    [alerts],
     [{ text: '📍 المحطات القريبة مني', callback_data: 'nearby' }],
     [{ text: '⛽ ابحث حسب نوع الوقود', callback_data: 'products' }],
     [{ text: '⭐ محطاتي المفضلة', callback_data: 'favs' }],
@@ -152,9 +163,15 @@ async function mainMenu(userId: number) {
   ];
   if (isAdmin(userId)) {
     const n = await pendingCount();
-    rows.splice(5, 0, [{ text: `📋 طلبات المحطات (${n})`, callback_data: 'req' }]);
-    rows.splice(6, 0, [{ text: '🏬 المحطات المسجلة', callback_data: 'people' }]);
-    rows.splice(7, 0, [{ text: '🛡 لوحة الإدارة', callback_data: 'admin' }]);
+    // Anchored to the row it must sit above rather than to a hard-coded index:
+    // the numbers here were 5/6/7 for a six-row menu, so adding one row at the
+    // top silently moved all three admin buttons somewhere else.
+    const before = rows.findIndex((r) => r[0] === mine);
+    rows.splice(before < 0 ? rows.length : before, 0,
+      [{ text: `📋 طلبات المحطات (${n})`, callback_data: 'req' }],
+      [{ text: '🏬 المحطات المسجلة', callback_data: 'people' }],
+      [{ text: '🛡 لوحة الإدارة', callback_data: 'admin' }],
+    );
   }
   return { inline_keyboard: rows };
 }
@@ -524,7 +541,11 @@ async function ask(chat: number, step: string, d: Draft) {
     case 'province':
       // an owner who registered on the site has no link yet, so the menu shows
       // them "add mine" — give them the way back instead of a second station
-      return void (await send(chat, '🏪 <b>تسجيل محطة</b>\n\nاختر المحافظة:', {
+      return void (await send(chat,
+        '🏪 <b>تسجيل محطة</b>\n\n' +
+        '⚠️ هذا لأصحاب المحطات. إن كنت تريد أن يصلك إشعار عند توفّر الوقود ' +
+        `فلا تسجّل هنا — اختر مدينتك ونوع وقودك من ${SITE}/alerts\n\n` +
+        'اختر المحافظة:', {
         reply_markup: {
           inline_keyboard: [
             ...twoColumn(PROVINCES, 'wp:'),

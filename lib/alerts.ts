@@ -20,6 +20,10 @@ import type { FuelProduct } from '@/types/database';
  *  every subscription on the platform with one filtered request. */
 
 const KEY = 'alerts-choice';
+/** One key per followed station rather than a list inside `alerts-choice`:
+ *  a follow and a city choice are set and cleared by different buttons, and
+ *  keeping them in one blob is how one would silently overwrite the other. */
+const FOLLOW = (stationId: string) => `follow:${stationId}`;
 export const ALERTS_CHANGED = 'alerts-changed';
 
 export interface AlertChoice {
@@ -132,9 +136,22 @@ export async function saveChoice(choice: AlertChoice): Promise<SaveResult> {
   const target = await currentTarget();
   if (typeof target === 'string') return target;
 
-  const { error: gone } = await supabase.rpc('alerts_unsubscribe', {
+  // alerts_clear_choice, not alerts_unsubscribe: the latter deletes every row
+  // for this address, and this runs on every edit of the city picker — so
+  // changing your city would silently drop the stations you follow.
+  //
+  // Falls back if that function is not deployed yet. Shipping a client that
+  // calls an RPC the database does not have would break every alert edit on
+  // the platform until the migration landed, and the ordering is not something
+  // a person changing their city should ever pay for.
+  let { error: gone } = await supabase.rpc('alerts_clear_choice', {
     p_address: target.address,
   });
+  if (gone) {
+    ({ error: gone } = await supabase.rpc('alerts_unsubscribe', {
+      p_address: target.address,
+    }));
+  }
   if (gone) return 'failed';
 
   // An empty city list means "anywhere", an empty product list "any fuel" —
@@ -175,6 +192,70 @@ export async function clearChoice(): Promise<boolean> {
     if (error) return false;
   }
   localStorage.removeItem(KEY);
+  // alerts_unsubscribe drops the follow rows too, so the mirrors have to go
+  // with them — otherwise every station page keeps claiming "you follow this"
+  // for a subscription the server no longer has.
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith('follow:'))
+      .forEach((k) => localStorage.removeItem(k));
+  } catch {}
+  announceChange();
+  return true;
+}
+
+/** ------------------------------------------------------------------------
+ *  Following one station.
+ *
+ *  Same table, same sender, same de-duplication as the city alerts above — a
+ *  row with `station_id` set and city/product null. It deliberately does NOT
+ *  use push_subscriptions: that table is written by lib/push.ts and read by no
+ *  sender at all, so a button built on it would look like it worked and
+ *  deliver nothing.
+ *
+ *  The mirror stores the address, so unfollowing never has to re-derive a push
+ *  target — which would raise a permission prompt on the way to cancelling.
+ *  --------------------------------------------------------------------- */
+
+export function isFollowing(stationId: string): boolean {
+  try {
+    return localStorage.getItem(FOLLOW(stationId)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export async function followStation(stationId: string): Promise<SaveResult> {
+  const target = await currentTarget();
+  if (typeof target === 'string') return target;
+
+  const { error } = await supabase.from('alerts').insert({
+    channel: target.channel,
+    address: target.address,
+    keys: target.keys,
+    city: null,
+    product: null,
+    station_id: stationId,
+  });
+  // 23505 means this device already follows it — the state the caller asked
+  // for, so it is a success, not a failure (same call as lib/push.ts:89).
+  if (error && error.code !== '23505') return 'failed';
+
+  localStorage.setItem(FOLLOW(stationId), target.address);
+  announceChange();
+  return 'ok';
+}
+
+export async function unfollowStation(stationId: string): Promise<boolean> {
+  const address = localStorage.getItem(FOLLOW(stationId));
+  if (address) {
+    const { error } = await supabase.rpc('alerts_unfollow_station', {
+      p_address: address,
+      p_station: stationId,
+    });
+    if (error) return false;
+  }
+  localStorage.removeItem(FOLLOW(stationId));
   announceChange();
   return true;
 }

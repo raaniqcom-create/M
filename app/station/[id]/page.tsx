@@ -14,6 +14,7 @@ import { RouteButton } from '@/components/RouteButton';
 import { ComplaintButton } from '@/components/ComplaintButton';
 import { TrafficVote } from '@/components/TrafficVote';
 import { StationLive } from '@/components/StationLive';
+import { FollowStation } from '@/components/FollowStation';
 import type { Station, StationProduct, TrafficLevel } from '@/types/database';
 
 // server-side anon client: same RLS rules, but usable during SSR for OG tags
@@ -104,6 +105,10 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
         <h1 className="text-lg font-extrabold">{station.name}</h1>
         <p className="mt-1 text-sm text-slate-500">{station.address}</p>
 
+        {/* Directly under the name, above everything else: this is the question
+            people open a station page holding, and the page having no answer to
+            it is why they went off and registered the station instead. */}
+        <FollowStation stationId={station.id} city={station.city} />
 
         {/* Written but never mounted until now, so the traffic on every station
             page could only ever come from its owner. The people standing in it

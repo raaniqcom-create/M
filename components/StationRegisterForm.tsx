@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { PRODUCT_ORDER } from '@/lib/products';
 import { ANBAR_CITIES } from '@/lib/cities';
 import { isValidIraqiMobile, phoneToEmail, displayPhone } from '@/lib/phone';
+import { findSimilar } from '@/lib/similar';
+import type { Station } from '@/types/database';
 import { EyeIcon, EyeOffIcon, SpinnerIcon } from './icons';
 import { LocationField } from './LocationField';
 
@@ -25,7 +27,30 @@ export function StationRegisterForm() {
   const [existing, setExisting] = useState<
     { name: string; city: string; address: string; phone: string } | null
   >(null);
+  // a station already on the platform that this name looks like
+  const [twin, setTwin] = useState<{ id: string; name: string } | null>(null);
+  const [owns, setOwns] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  /** «الرحاب» went in four times under four phone numbers, so the ALREADY check
+   *  below — which compares the phone — never fired once. This compares the
+   *  name, using the same matcher the admin panel judges requests with
+   *  (lib/similar.ts, app/admin/page.tsx:414). Advisory on purpose: two real
+   *  stations can share a name, so it warns and offers the door the person
+   *  probably wanted, and never blocks. */
+  async function checkName(name: string) {
+    if (!name.trim()) {
+      setTwin(null);
+      return;
+    }
+    const { data } = await supabase.from('stations').select('id, name, city, phone').eq('city', city);
+    if (!data) return;
+    // a sentinel rather than '': core('') would equal core(null) and match any
+    // station whose phone is missing, flagging an unrelated row as a twin
+    const request = { id: '', name, city, phone: '999999999999' } as Station;
+    const [hit] = findSimilar(request, data as Station[]);
+    setTwin(hit ? { id: hit.id, name: hit.name } : null);
+  }
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -125,13 +150,35 @@ export function StationRegisterForm() {
         <label htmlFor="name" className="label">
           اسم المحطة <span className="text-traffic-red">*</span>
         </label>
-        <input id="name" name="name" required className="field" placeholder="محطة الرمادي المركزية" />
+        <input
+          id="name"
+          name="name"
+          required
+          className="field"
+          placeholder="محطة الرمادي المركزية"
+          onBlur={(e) => checkName(e.target.value)}
+        />
         {/* Two of the first twelve registrations were people's own names. The
             field says "station name" but the person filling it in believed they
             were subscribing, so the label alone did not reach them. */}
         <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
           اسم المحطة كما هو معروف عند الناس — لا اسمك الشخصي.
         </p>
+
+        {twin && (
+          <div className="mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
+            <p className="text-xs font-extrabold text-amber-900">
+              «{twin.name}» مسجّلة بالفعل في {city}.
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-amber-900">
+              إن كنت تريد أن يصلك إشعار عند توفّر الوقود فيها، فتابِعها ولا تسجّلها من
+              جديد. ولا تكمل التسجيل هنا إلا إن كنت صاحبها.
+            </p>
+            <a href={`/station/${twin.id}`} className="btn-primary mt-3 w-full">
+              افتح صفحتها وتابعها
+            </a>
+          </div>
+        )}
       </div>
 
       <div>
@@ -304,7 +351,21 @@ export function StationRegisterForm() {
         </p>
       )}
 
-      <button type="submit" disabled={busy} className="btn-primary w-full">
+      {/* The last gate before an auth user, a station row and four product rows
+          are created — all of which happen before any admin can intervene. */}
+      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+        <input
+          type="checkbox"
+          checked={owns}
+          onChange={(e) => setOwns(e.target.checked)}
+          className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
+        />
+        <span className="text-xs leading-relaxed text-slate-600">
+          أؤكّد أنني <b>صاحب هذه المحطة</b> أو المسؤول عن تحديث بياناتها.
+        </span>
+      </label>
+
+      <button type="submit" disabled={busy || !owns} className="btn-primary w-full">
         {busy && <SpinnerIcon className="h-4 w-4" />}
         إرسال الطلب
       </button>

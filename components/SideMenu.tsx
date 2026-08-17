@@ -14,11 +14,11 @@ import { useSession } from '@/lib/useSession';
 import { useNativeApp } from '@/lib/useNativeApp';
 import { shareApp } from '@/lib/shareApp';
 import {
+  BellRingIcon,
   DownloadIcon,
   FuelIcon,
   InfoIcon,
   LockIcon,
-  MapPinIcon,
   MessageIcon,
   PlusIcon,
   ShareIcon,
@@ -141,24 +141,23 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
             </div>
 
             <nav className="flex flex-col gap-0.5 p-3 text-sm">
-              {/* The one thing we want from a visitor who is not signed in, so
-                  it leads rather than waiting at the bottom of a list. */}
-              {ready && !signedIn && (
-                <a href="/register" className="btn-primary mb-1 w-full">
-                  <PlusIcon className="h-4 w-4" />
-                  سجّل محطتك مجاناً
-                </a>
-              )}
+              {/* This used to be «سجّل محطتك مجاناً» — the greenest, widest,
+                  first thing in the app's only navigation, shown to every
+                  visitor. The row that actually served them sat underneath it
+                  in grey, titled «المدن ونوع الوقود»: a settings label, not a
+                  need. So people opening the menu to set up notifications met
+                  the owner's call to action first, and answered it. The station
+                  owners are a few dozen; the people wanting alerts are all the
+                  rest. The loudest control belongs to them. */}
+              <a href="/alerts" className="btn-primary mb-1 w-full">
+                <BellRingIcon className="h-4 w-4" />
+                نبّهني عند توفّر الوقود
+              </a>
+              <p className="mb-2 px-1 text-center text-[11px] text-slate-400">
+                اختر مدينتك ونوع وقودك — بلا حساب
+              </p>
 
               <Label>اختياراتي</Label>
-
-              <Item
-                href="/alerts"
-                icon={MapPinIcon}
-                title="المدن ونوع الوقود"
-                note="ما تريد أن يصلك عنه إشعار"
-                accent
-              />
 
               <div className="rounded-xl border border-slate-200 p-3">
                 <div className="flex items-center justify-between">
@@ -262,13 +261,25 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                     />
                   )
                 ) : (
-                  <Item
-                    href="/login"
-                    icon={UserIcon}
-                    title="الدخول إلى حسابي"
-                    note="لأصحاب المحطات وإدارة المنصة"
-                    accent
-                  />
+                  <>
+                    <Item
+                      href="/login"
+                      icon={UserIcon}
+                      title="الدخول إلى حسابي"
+                      note="لأصحاب المحطات وإدارة المنصة"
+                      accent
+                    />
+                    {/* Still here, still free, still one tap — but under
+                        «حسابي» where an owner looks, instead of at the top
+                        where everyone trips over it. And phrased as a question
+                        so the first word sorts the reader. */}
+                    <Item
+                      href="/register"
+                      icon={PlusIcon}
+                      title="صاحب محطة؟ سجّلها مجاناً"
+                      note="لعرض توفّر الوقود لديك للناس"
+                    />
+                  </>
                 ))}
 
               <Label>التطبيق</Label>
@@ -300,7 +311,7 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                 href="https://t.me/muhtaonlinebot"
                 icon={MessageIcon}
                 title="بوت تيليجرام"
-                note="حالياً للمحطات فقط"
+                note="تنبيهات ومحطات قريبة"
                 external
               />
               <Item href="/about" icon={InfoIcon} title="من نحن" note="الفكرة والتواصل" />

@@ -71,18 +71,35 @@ interface Listener {
 async function audienceFor(
   city: string,
   products: string[],
-  stamp = true
+  stamp = true,
+  stationId: string | null = null
 ): Promise<Listener[]> {
   const { data, error } = await db.rpc('alerts_for', {
     p_city: city,
     p_products: products,
     p_stamp: stamp,
+    // Whoever tapped «تابع هذه المحطة» is matched by station rather than by
+    // city, and carries a cooldown of its own — so a neighbouring station
+    // announcing first cannot swallow the alert they explicitly asked for.
+    p_station: stationId,
   });
-  if (error) {
-    console.error('alerts_for', error);
+  if (!error) return (data ?? []) as Listener[];
+
+  // The four-argument form arrives with a migration. If this function is
+  // deployed first, every notification on the platform would stop — so fall
+  // back to the three-argument call rather than let the deploy order decide
+  // whether people hear that fuel arrived. Station followers simply are not
+  // matched until the migration lands.
+  const { data: legacy, error: legacyError } = await db.rpc('alerts_for', {
+    p_city: city,
+    p_products: products,
+    p_stamp: stamp,
+  });
+  if (legacyError) {
+    console.error('alerts_for', error, legacyError);
     return [];
   }
-  return (data ?? []) as Listener[];
+  return (legacy ?? []) as Listener[];
 }
 
 // ---------- Telegram ----------
@@ -498,7 +515,8 @@ Deno.serve(async (req) => {
   const listeners = await audienceFor(
     station.city,
     isNewStation ? allProducts : live,
-    !isNewStation
+    !isNewStation,
+    stationId
   );
   const pick = (c: string) => listeners.filter((l) => l.channel === c);
   const webListeners = pick('web');

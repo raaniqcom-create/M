@@ -83,7 +83,7 @@ export default function NewsPage() {
           سجّل محطتك مجاناً، فيصل خبر توفّر الوقود عندك إلى أهل مدينتك لحظة تعلنه — وتظهر
           محطتك على الخريطة بصفحة خاصة بها.
         </p>
-        <a href="/register" className="btn-primary mt-4 w-full">
+        <a href="/register" className="btn-ghost mt-4 w-full">
           <PlusIcon className="h-4 w-4" />
           سجّل محطتك مجاناً
         </a>

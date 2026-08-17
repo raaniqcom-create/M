@@ -80,7 +80,11 @@ export default function AboutPage() {
         </div>
       </section>
 
-      <a href="/register" className="btn-primary mt-4 w-full">
+      {/* The only register CTA in the app with no framing at all — a bare
+          imperative on a page every visitor reads. The question goes first here
+          too, so nobody answers a call that was not meant for them. */}
+      <p className="mt-6 text-center text-sm font-bold">صاحب محطة؟</p>
+      <a href="/register" className="btn-ghost mt-2 w-full">
         سجّل محطتك مجاناً
       </a>
       <a href="/" className="mt-2 block min-h-[44px] pt-3 text-center text-sm text-slate-500">
