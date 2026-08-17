@@ -33,3 +33,8 @@ verify_jwt = false
 
 [functions.delete-account]
 verify_jwt = false
+
+# يناديها pg_cron برأس x-cron-secret وحده، بلا Authorization — فبوابة JWT
+# ترفضه قبل أن تعمل الدالة. والدالة تتحقق من السرّ بنفسها.
+[functions.owner-daily]
+verify_jwt = false

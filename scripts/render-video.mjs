@@ -13,7 +13,7 @@
 //   node scripts/render-video.mjs wide       # 1920x1080 only
 //   node scripts/render-video.mjs story      # 1080x1920 only
 import { spawn } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync, existsSync, statSync, readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -22,6 +22,7 @@ const PORT = 9455;
 const FPS = 30;
 const PAGE = resolve('docs/promo/explainer.html');
 const AUDIO = resolve('docs/promo/voice.mp3');
+const CUES = resolve('docs/promo/cues.json');
 const OUTDIR = resolve('docs/promo');
 
 const MODES = {
@@ -141,7 +142,10 @@ for (const name of modes) {
   if (g.w !== w || g.h !== h) throw new Error(`${name}: stage is ${g.w}x${g.h}, expected ${w}x${h}`);
   if (g.left !== 0 || g.top !== 0) throw new Error(`${name}: stage offset ${g.left},${g.top} — frame would be cropped`);
 
-  const total = Math.round(82.03 * FPS);
+  // length comes from the cue table the soundtrack was built from —
+  // a hard-coded number here would silently clip or pad the video
+  const seconds = JSON.parse(readFileSync(CUES, 'utf8')).total;
+  const total = Math.round(seconds * FPS);
   process.stdout.write(`${name} ${w}x${h}  ${total} frames  `);
 
   for (let n = 0; n < total; n++) {

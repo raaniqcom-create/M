@@ -50,6 +50,17 @@ export default function OwnerPage() {
 
     setStation(st ?? null);
     if (st) {
+      // Claim this phone for this station, the way the admin panel claims its
+      // own. Without it device_tokens.station_id stays null and every owner
+      // reminder ever written has nobody to reach — which is exactly what had
+      // happened: 114 devices, none linked.
+      const deviceToken = localStorage.getItem('device-token');
+      if (deviceToken) {
+        await supabase.rpc('claim_owner_device', {
+          p_token: deviceToken,
+          p_station_id: st.id,
+        });
+      }
       const { data: pr } = await supabase
         .from('station_products')
         .select('*')
