@@ -39,6 +39,8 @@ export function AdminHealth() {
   const [busy, setBusy] = useState(true);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewNote, setPreviewNote] = useState<string | null>(null);
 
   const [title, setTitle] = useState('⛽ المحطة التقنية');
   const [text, setText] = useState('');
@@ -100,6 +102,71 @@ export function AdminHealth() {
     } finally {
       setTesting(false);
     }
+  }
+
+  /** Sends the notice that is WAITING to go out, to this phone only.
+   *
+   *  The panel could show the text on screen, but a notification is not text —
+   *  it is a title truncated by the lock screen, a body wrapped by the OS, a
+   *  sound, and an icon. The only way to see what people will see is to receive
+   *  it. This borrows test-push, which addresses one device directly, so it
+   *  needs no audience and touches nobody else.
+   *
+   *  It reads the device token straight from storage rather than the is_admin
+   *  flag: that flag is written only when the panel is opened inside the
+   *  installed app, and in a browser it is never set at all. */
+  async function previewPending() {
+    setPreviewNote(null);
+    const deviceToken = localStorage.getItem('device-token');
+    if (!deviceToken) {
+      setPreviewNote(
+        'لا يوجد رمز لهذا الجهاز. افتح لوحة الإدارة من داخل التطبيق المثبّت لا من المتصفح.'
+      );
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('announcements')
+      .select('title, body, cities')
+      .is('sent_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) {
+      setPreviewNote(error ? `تعذّرت القراءة: ${error.message}` : 'لا يوجد خبر مجدول بانتظار الإرسال.');
+      return;
+    }
+
+    setPreviewing(true);
+    const cities = (data.cities ?? []) as string[];
+    let ok = 0;
+    for (const city of cities) {
+      // the same line-per-city split the scheduled send performs
+      const line = (data.body as string).split(String.fromCharCode(10)).find((l) => l.includes(city));
+      const body = line ? line.replace(/^[•\-\s]+/, '').replace(`${city}:`, '').trim() : (data.body as string);
+      const r = await fetch(`${FN}/test-push`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        },
+        body: JSON.stringify({
+          deviceToken,
+          title: `${data.title} — ${city}`.slice(0, 64),
+          body: body.slice(0, 178),
+        }),
+      }).catch(() => null);
+      if (r?.ok) ok++;
+      // a small gap so three notifications arrive as three, not one stack
+      await new Promise((res) => setTimeout(res, 1200));
+    }
+    setPreviewing(false);
+    setPreviewNote(
+      ok === cities.length
+        ? `أُرسلت ${ok} إشعارات إلى هذا الجهاز — تحقّق من شاشة القفل.`
+        : `أُرسل ${ok} من ${cities.length}. الباقي لم يصل.`
+    );
   }
 
   async function callAnnounce(dryRun: boolean) {
@@ -234,6 +301,27 @@ export function AdminHealth() {
             {testResult}
           </p>
         )}
+
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <p className="text-xs font-bold text-slate-700">معاينة الخبر المجدول</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-400">
+            يرسل إشعار كل مدينة إلى هذا الجهاز وحده، بنصّه الحقيقي — فترى ما سيراه الناس
+            قبل أن يصلهم. لا يُرسل لأحد غيرك ولا يُلغي الموعد.
+          </p>
+          <button
+            type="button"
+            onClick={previewPending}
+            disabled={previewing}
+            className="btn-ghost mt-3 w-full disabled:opacity-60"
+          >
+            {previewing ? <SpinnerIcon className="mx-auto h-5 w-5" /> : 'أرسل معاينة إلى هاتفي'}
+          </button>
+          {previewNote && (
+            <p className="mt-2 rounded-xl bg-brand-50 p-3 text-xs leading-relaxed text-brand-700">
+              {previewNote}
+            </p>
+          )}
+        </div>
       </section>
 
       <section className="card p-5">
