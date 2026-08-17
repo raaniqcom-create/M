@@ -57,7 +57,7 @@ export function StationLinkCard({
     if (next === slug) return;
 
     if (next.length < 3) {
-      setError('الرابط يجب أن يكون ٣ أحرف إنجليزية أو أكثر.');
+      setError('الرابط يجب أن يكون 3 أحرف إنجليزية أو أكثر.');
       return;
     }
     if (RESERVED.has(next)) {

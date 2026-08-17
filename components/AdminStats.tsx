@@ -6,6 +6,14 @@ import { isFresh, isOpenNow } from '@/lib/hours';
 import { SpinnerIcon } from './icons';
 import type { Station } from '@/types/database';
 
+interface CityRow {
+  city: string;
+  people: number;
+  ios: number;
+  android: number;
+  web: number;
+}
+
 interface Row extends Station {
   station_products: { updated_at: string | null }[];
 }
@@ -23,6 +31,7 @@ export function AdminStats() {
   const [devices, setDevices] = useState<Record<string, number> | null>(null);
   const [listeners, setListeners] = useState<Record<string, number> | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [byCity, setByCity] = useState<CityRow[]>([]);
   const [failed, setFailed] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -54,9 +63,14 @@ export function AdminStats() {
       setDevices({});
       setListeners({});
     } else {
-      const v = stats.data as { devices: Record<string, number>; listeners: Record<string, number> };
+      const v = stats.data as {
+        devices: Record<string, number>;
+        listeners: Record<string, number>;
+        byCity?: CityRow[];
+      };
       setDevices(v?.devices ?? {});
       setListeners(v?.listeners ?? {});
+      setByCity(v?.byCity ?? []);
     }
     setRows((s.data as Row[]) ?? []);
   }, []);
@@ -120,6 +134,44 @@ export function AdminStats() {
           )}
         </p>
       </section>
+
+      {byCity.length > 0 && (
+        <section className="card p-5">
+          <h2 className="text-sm font-bold">المشتركون حسب المدينة</h2>
+          <p className="mt-1 text-xs text-slate-400">
+            من فعّل التنبيهات في كل مدينة — وهؤلاء من يصلهم إشعارها
+          </p>
+
+          {/* الشخص الواحد له صفّ لكل (مدينة، منتج)، فالعدّ بالعناوين المتمايزة
+              لا بالصفوف — وإلا تضاعف الرقم أضعافاً بلا معنى. */}
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-slate-400">
+                  <th className="pb-2 text-start font-semibold">المدينة</th>
+                  <th className="pb-2 text-center font-semibold">الكل</th>
+                  <th className="pb-2 text-center font-semibold">آيفون</th>
+                  <th className="pb-2 text-center font-semibold">أندرويد</th>
+                  <th className="pb-2 text-center font-semibold">متصفح</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byCity.map((c) => (
+                  <tr key={c.city} className="border-t border-slate-100">
+                    <td className="py-2 font-bold text-slate-700">{c.city}</td>
+                    <td className="py-2 text-center text-base font-extrabold text-brand-700" dir="ltr">
+                      {c.people}
+                    </td>
+                    <td className="py-2 text-center text-slate-600" dir="ltr">{c.ios}</td>
+                    <td className="py-2 text-center text-slate-600" dir="ltr">{c.android}</td>
+                    <td className="py-2 text-center text-slate-600" dir="ltr">{c.web}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section className="card p-5">
         <h2 className="text-sm font-bold">المحطات</h2>

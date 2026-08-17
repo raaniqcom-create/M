@@ -16,6 +16,11 @@ const db = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 );
 
+// every fuel the app knows, for an announcement that names no product
+const ALL_PRODUCTS = [
+  'gasoline_regular','gasoline_premium','gasoline_super','kerosene','gas','lpg','white_oil',
+];
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -102,29 +107,80 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
   const jwt = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
-  const { data: auth } = await db.auth.getUser(jwt);
-  if (!auth.user) return json({ error: 'unauthorized' }, 401);
-  const { data: profile } = await db
-    .from('profiles').select('role').eq('id', auth.user.id).maybeSingle();
-  if (profile?.role !== 'admin') return json({ error: 'forbidden' }, 403);
+  // A scheduled send has no person behind it to hold a session. notify-favorites
+  // already solved this with a shared x-cron-secret header, so this uses the
+  // same one rather than inventing a second door.
+  //
+  // Not the service role key: the project's signing key was rotated to ES256
+  // and Supabase now hands the function a different-format key than the one in
+  // .env.local, so comparing the two strings could never match. A purpose-made
+  // secret also fails safe — leaked, it sends a notification; the master key
+  // would hand over the database.
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  const isCron = !!cronSecret && req.headers.get('x-cron-secret') === cronSecret;
+  if (!isCron) {
+    const { data: auth } = await db.auth.getUser(jwt);
+    if (!auth.user) return json({ error: 'unauthorized' }, 401);
+    const { data: profile } = await db
+      .from('profiles').select('role').eq('id', auth.user.id).maybeSingle();
+    if (profile?.role !== 'admin') return json({ error: 'forbidden' }, 403);
+  }
 
   const body = await req.json().catch(() => null);
   const title = String(body?.title ?? '').trim().slice(0, 64);
   const text = String(body?.body ?? '').trim().slice(0, 178);
   const dryRun = body?.dryRun === true;
+  // Where the tap lands. Defaults to the home page, as before.
+  const url = typeof body?.url === 'string' && body.url.startsWith('/') ? body.url : '/';
+  // Optional targeting. Without it this stays the broadcast it has always been.
+  const cities: string[] = Array.isArray(body?.cities)
+    ? body.cities.filter((c: unknown) => typeof c === 'string' && c.trim()).slice(0, 40)
+    : [];
+  const products: string[] = Array.isArray(body?.products)
+    ? body.products.filter((p: unknown) => typeof p === 'string').slice(0, 10)
+    : [];
   if (!title || !text) return json({ error: 'العنوان والنص مطلوبان' }, 400);
 
-  const [{ data: devices }, { data: alerts }] = await Promise.all([
-    db.from('device_tokens').select('token, platform'),
-    db.from('alerts').select('channel, address, keys').eq('channel', 'web'),
-  ]);
-
+  // Two audiences, one shape.
+  //
+  // Untargeted, this reaches every registered device — the broadcast it has
+  // always been. Given cities, it asks alerts_for() instead, which is the same
+  // routing a real station announcement uses: it honours each person's chosen
+  // city and fuel, returns one row per person, and (when it stamps) skips
+  // anyone already notified in the last 45 minutes. That last rule is why two
+  // stations in one city cannot be sent as two messages — the second would
+  // reach nobody.
+  let devices: { token: string; platform: string }[] = [];
   const web = new Map<string, { p256dh?: string; auth?: string }>();
-  for (const a of alerts ?? []) if (!web.has(a.address)) web.set(a.address, a.keys ?? {});
+
+  if (cities.length) {
+    const seen = new Set<string>();
+    for (const city of cities) {
+      const { data: rows, error } = await db.rpc('alerts_for', {
+        p_city: city,
+        p_products: products.length ? products : ALL_PRODUCTS,
+        p_stamp: !dryRun,
+      });
+      if (error) return json({ error: `alerts_for: ${error.message}` }, 500);
+      for (const r of rows ?? []) {
+        if (seen.has(r.address)) continue;
+        seen.add(r.address);
+        if (r.channel === 'web') web.set(r.address, r.keys ?? {});
+        else devices.push({ token: r.address, platform: r.channel });
+      }
+    }
+  } else {
+    const [{ data: d }, { data: alerts }] = await Promise.all([
+      db.from('device_tokens').select('token, platform'),
+      db.from('alerts').select('channel, address, keys').eq('channel', 'web'),
+    ]);
+    devices = d ?? [];
+    for (const a of alerts ?? []) if (!web.has(a.address)) web.set(a.address, a.keys ?? {});
+  }
 
   const audience = {
-    ios: (devices ?? []).filter((d) => d.platform === 'ios').length,
-    android: (devices ?? []).filter((d) => d.platform === 'android').length,
+    ios: devices.filter((d) => d.platform === 'ios').length,
+    android: devices.filter((d) => d.platform === 'android').length,
     web: web.size,
   };
   // Counting without sending: an announcement cannot be recalled, so the panel
@@ -147,7 +203,7 @@ Deno.serve(async (req) => {
   }
 
   await Promise.allSettled(
-    (devices ?? []).map(async (d) => {
+    devices.map(async (d) => {
       try {
         if (d.platform === 'ios') {
           if (!jwtApns) throw new Error('APNs secrets missing');
@@ -165,7 +221,7 @@ Deno.serve(async (req) => {
                 sound: 'alert.caf',
                 'interruption-level': 'time-sensitive',
               },
-              url: '/',
+              url,
             }),
           });
           if (r.status === 410) {
@@ -185,7 +241,7 @@ Deno.serve(async (req) => {
             message: {
               token: d.token,
               notification: { title, body: text },
-              data: { url: '/' },
+              data: { url },
               android: { priority: 'HIGH', notification: { channel_id: 'muhta_alerts', sound: 'alert' } },
             },
           }),
@@ -209,7 +265,7 @@ Deno.serve(async (req) => {
       Deno.env.get('VAPID_PUBLIC_KEY')!,
       Deno.env.get('VAPID_PRIVATE_KEY')!
     );
-    const payload = JSON.stringify({ title, body: text, url: '/' });
+    const payload = JSON.stringify({ title, body: text, url });
     await Promise.allSettled(
       [...web.entries()].map(async ([endpoint, keys]) => {
         try {

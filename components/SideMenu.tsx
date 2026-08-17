@@ -166,7 +166,7 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                     <VolumeIcon className="h-4 w-4 text-brand" />
                     نغمة التنبيه ·{' '}
                     <span className="font-normal text-slate-500">
-                      النغمة {tone === '1' ? '١' : '٢'}
+                      النغمة {tone === '1' ? '1' : '2'}
                     </span>
                   </p>
                   <button
@@ -193,12 +193,12 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                               : 'border-slate-200 text-slate-600'
                           }`}
                         >
-                          النغمة {t === '1' ? '١' : '٢'}
+                          النغمة {t === '1' ? '1' : '2'}
                         </button>
                       ))}
                     </div>
                     <p className="mt-2 text-[11px] text-slate-400">
-                      اضغط لتسمعها. إن لم تغيّرها تبقى النغمة ٢.
+                      اضغط لتسمعها. إن لم تغيّرها تبقى النغمة 2.
                     </p>
                   </>
                 )}

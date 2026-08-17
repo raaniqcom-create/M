@@ -21,9 +21,57 @@ const PRODUCT_LABELS: Record<string, string> = {
   white_oil: 'نفط أبيض',
 };
 
+
+/** Pulls one city's line out of the notice body.
+ *
+ *  The body lists every city, one per line, because the news page shows the
+ *  whole notice. A notification must not: someone in Falluja does not need to
+ *  read about Karma to learn their own petrol arrived. */
+function cityLine(body: string, city: string): string | null {
+  const line = body.split(/\r?\n/).find((l) => l.includes(city));
+  if (!line) return null;
+  return line.replace(/^[•\-\s]+/, '').replace(`${city}:`, '').trim().slice(0, 178);
+}
+
 Deno.serve(async (req) => {
   if (req.headers.get('x-cron-secret') !== CRON_SECRET) {
     return new Response('forbidden', { status: 403 });
+  }
+
+  // ---- official notices waiting for their hour ----
+  //
+  // This runs every two minutes and already holds the cron secret, so a
+  // scheduled announcement rides along rather than needing a second cron job.
+  //
+  // The row is CLAIMED first — an update guarded by `sent_at is null`, so if a
+  // run overlaps the next one only one of them wins the row. A notification
+  // cannot be recalled, so a missed send is recoverable and a doubled one is not.
+  const { data: due } = await db
+    .from('announcements')
+    .update({ sent_at: new Date().toISOString() })
+    .lte('send_at', new Date().toISOString())
+    .is('sent_at', null)
+    .eq('active', true)
+    .select('id, title, body, cities, product');
+
+  for (const a of due ?? []) {
+    for (const city of (a.cities ?? []) as string[]) {
+      try {
+        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/announce`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
+          body: JSON.stringify({
+            title: `${a.title} — ${city}`.slice(0, 64),
+            body: cityLine(a.body as string, city) ?? (a.body as string),
+            cities: [city],
+            products: a.product ? [a.product] : [],
+            url: '/news',
+          }),
+        });
+      } catch (e) {
+        console.error('announce', city, String(e).slice(0, 90));
+      }
+    }
   }
 
   // Anything switched on in the last while is a candidate; product_alerts_sent

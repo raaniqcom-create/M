@@ -92,7 +92,7 @@ export function ResetForm() {
         <>
           {sent && (
             <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700">
-              أرسلنا رمزاً من ٦ أرقام إلى <span dir="ltr">{phone}</span>. صالح لعشر دقائق.
+              أرسلنا رمزاً من 6 أرقام إلى <span dir="ltr">{phone}</span>. صالح لعشر دقائق.
             </p>
           )}
 
@@ -122,7 +122,7 @@ export function ResetForm() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="٦ أحرف على الأقل"
+              placeholder="6 أحرف على الأقل"
               className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3 text-base"
             />
           </div>

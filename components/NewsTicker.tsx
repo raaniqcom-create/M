@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { isOpenNow } from '@/lib/hours';
 import type { StationWithStatus } from '@/types/database';
@@ -30,13 +32,45 @@ function headlines(stations: StationWithStatus[]): string[] {
     items.push(`محطة جديدة على المنصة: ${s.name}`);
   }
 
-  return items.length ? items : ['لا توجد تحديثات جديدة حالياً'];
+  return items;
 }
 
 const URGENT_COUNT = 3;
 
 export function NewsTicker({ stations }: { stations: StationWithStatus[] }) {
-  const items = headlines(stations);
+  // Official notices ride ahead of the derived headlines. They are the only
+  // lines here that are not inferred from station data, so they carry the
+  // platform's name — the reader should know who is speaking.
+  const [notices, setNotices] = useState<string[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    supabase
+      .from('announcements')
+      .select('ticker, expires_at, active')
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(5)
+      .then(({ data }) => {
+        if (!alive) return;
+        const now = Date.now();
+        const lines = (data ?? [])
+          // expiry is enforced by the read policy too; re-checked here because
+          // a tab left open all morning would otherwise keep showing a notice
+          // that ran out at one o'clock
+          .filter((a) => !a.expires_at || new Date(a.expires_at).getTime() > now)
+          .flatMap((a) => (a.ticker ?? []) as string[])
+          .filter(Boolean);
+        setNotices(lines);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const derived = headlines(stations);
+  const all = [...notices, ...derived];
+  const items = all.length ? all : ['لا توجد تحديثات جديدة حالياً'];
 
   // The track holds the list twice and slides exactly one copy's width (-50%).
   // At the end the second copy sits where the first started, so the loop is

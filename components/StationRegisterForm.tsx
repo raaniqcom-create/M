@@ -68,7 +68,7 @@ export function StationRegisterForm() {
       setError(
         signUpError?.message.includes('already')
           ? 'ALREADY'
-          : 'تعذّر إنشاء الحساب. تأكد أن كلمة المرور ٦ أحرف على الأقل وحاول مجدداً.'
+          : 'تعذّر إنشاء الحساب. تأكد أن كلمة المرور 6 أحرف على الأقل وحاول مجدداً.'
       );
       return;
     }
@@ -172,7 +172,7 @@ export function StationRegisterForm() {
             {showPassword ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
           </button>
         </div>
-        <p className="mt-1 text-xs text-slate-400">٦ أحرف أو أرقام على الأقل — احفظها جيداً</p>
+        <p className="mt-1 text-xs text-slate-400">6 أحرف أو أرقام على الأقل — احفظها جيداً</p>
       </div>
 
       <div>

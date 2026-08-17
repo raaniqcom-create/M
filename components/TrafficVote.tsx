@@ -86,7 +86,7 @@ export function TrafficVote({
           {voted ? 'شكراً، تم تسجيل تقييمك' : 'كيف الازدحام الآن؟'}
         </span>
         {traffic && traffic.total_votes > 0 && (
-          <span className="text-xs text-slate-400">{traffic.total_votes} تقييم / ٣٠ دقيقة</span>
+          <span className="text-xs text-slate-400">{traffic.total_votes} تقييم / 30 دقيقة</span>
         )}
       </div>
 

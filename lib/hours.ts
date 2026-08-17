@@ -68,7 +68,7 @@ export function hoursLabel(station: {
   opens_at: string;
   closes_at: string;
 }): string {
-  if (station.is_24h) return 'مفتوحة ٢٤ ساعة';
+  if (station.is_24h) return 'مفتوحة 24 ساعة';
   return `${formatTime(station.opens_at)} — ${formatTime(station.closes_at)}`;
 }
 

@@ -53,7 +53,7 @@ export function WorkingHours({
           onChange={(e) => save({ is_24h: e.target.checked })}
           className="h-4 w-4 accent-[#16a34a]"
         />
-        <span className="text-sm font-medium">مفتوحة ٢٤ ساعة</span>
+        <span className="text-sm font-medium">مفتوحة 24 ساعة</span>
       </label>
 
       {!station.is_24h && (

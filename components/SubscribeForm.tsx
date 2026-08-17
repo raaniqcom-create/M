@@ -140,7 +140,7 @@ export function SubscribeForm() {
       ) : (
         <>
           <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700">
-            أرسلنا رمزاً من ٦ أرقام إلى <span dir="ltr">{phone}</span>. صالح لعشر دقائق.
+            أرسلنا رمزاً من 6 أرقام إلى <span dir="ltr">{phone}</span>. صالح لعشر دقائق.
           </p>
           <input
             type="text"

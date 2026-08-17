@@ -39,7 +39,7 @@ export function OwnerReminders({ stationId }: { stationId: string }) {
       <section className="card p-5">
         <h3 className="text-sm font-bold">تذكير تحديث الحالة</h3>
         <p className="mt-1 text-xs leading-relaxed text-slate-500">
-          مُفعّل عبر إشعارات التطبيق. يصلك تنبيه كل ٣٠ دقيقة أثناء ساعات عملك لتحديث التوفر.
+          مُفعّل عبر إشعارات التطبيق. يصلك تنبيه كل 30 دقيقة أثناء ساعات عملك لتحديث التوفر.
           لإيقافه، أوقف إشعارات التطبيق من إعدادات هاتفك.
         </p>
       </section>
@@ -52,7 +52,7 @@ export function OwnerReminders({ stationId }: { stationId: string }) {
         <div className="min-w-0">
           <h3 className="text-sm font-bold">تذكير تحديث الحالة</h3>
           <p className="mt-1 text-xs text-slate-500">
-            يصلك تنبيه على هاتفك كل ٣٠ دقيقة أثناء ساعات عملك — حتى والتطبيق مغلق — لتحديث
+            يصلك تنبيه على هاتفك كل 30 دقيقة أثناء ساعات عملك — حتى والتطبيق مغلق — لتحديث
             توفر المنتجات وحالة الازدحام.
           </p>
         </div>

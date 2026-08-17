@@ -278,7 +278,7 @@ export function FirstRun() {
                         : 'border-slate-200 bg-white text-slate-600'
                     }`}
                   >
-                    النغمة {t === '1' ? '١' : '٢'}
+                    النغمة {t === '1' ? '1' : '2'}
                   </button>
                 ))}
               </div>

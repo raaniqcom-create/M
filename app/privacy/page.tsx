@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 // policy must match what the app actually does — so this describes the real
 // behaviour rather than boilerplate.
 export default function PrivacyPage() {
-  const updated = '٨ آب ٢٠٢٦';
+  const updated = '8 آب 2026';
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">
@@ -116,7 +116,7 @@ export default function PrivacyPage() {
           <a className="font-bold text-brand" href="mailto:iq.raan.app@gmail.com">
             iq.raan.app@gmail.com
           </a>{' '}
-          ويُنفَّذ خلال ٤٨ ساعة.
+          ويُنفَّذ خلال 48 ساعة.
         </p>
       </section>
 
@@ -124,7 +124,7 @@ export default function PrivacyPage() {
         <h2 className="text-lg font-bold">الأطفال</h2>
         <p className="text-sm leading-relaxed text-slate-700">
           المنصة موجهة للمستخدمين وأصحاب المحطات، ولا تجمع عمداً أي بيانات عن الأطفال دون
-          سن ١٣.
+          سن 13.
         </p>
       </section>
 
