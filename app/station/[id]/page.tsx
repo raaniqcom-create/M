@@ -75,7 +75,9 @@ export async function generateMetadata({
   const products = available.length
     ? available.map((p) => PRODUCT_LABELS[p]).join(' · ')
     : 'لا يوجد وقود متوفر حالياً';
-  const description = `المتوفر: ${products}${level ? ` — الازدحام: ${TRAFFIC_LABELS[level]}` : ''}`;
+  // بلا ازدحام: الصفحة ملف ثابت، فالحالة تُكتب لحظة البناء وتبقى أياماً —
+  // و«الازدحام: خفيف» في معاينة المشاركة قد تكون كذباً عمره ثلاثة أيام.
+  const description = `المتوفر: ${products}`;
 
   return {
     title: station.name,

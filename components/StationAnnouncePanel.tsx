@@ -96,12 +96,18 @@ export function StationAnnouncePanel() {
     const { error } = await supabase.from('announcements').insert({
       title,
       // one line per city, so the sweep can hand each city its own sentence
-      body: audience.map((c) => `• ${c}: ${template.line({ ...input, city: c })}`).join('\n'),
+      // المدينة في السطر مدينة المستلم، لا مدينة المحطة. تمرير مدينة الجمهور
+      // إلى القالب كان يكتب «محطة الأوائل — الفلوجة» لمحطة في الرمادي — خبر
+      // كاذب عن موقعها.
+      body: audience.map((c) => `• ${c}: ${template.line(input)}`).join('\n'),
       note: 'هذه المحطة لم تسجّل في التطبيق بعد. ننشر الخبر لأن وصول المعلومة إليكم أهمّ من انتظارها. وإن كنت صاحب محطة أو تعرف صاحبها فالتسجيل مجاني، ويجعل خبر محطتك يصل أهل مدينتك بنفسه لحظة تعلنه.',
       source: 'إدارة المحطة التقنية',
       product,
       cities: audience,
-      ticker: audience.map((c) => template.ticker({ ...input, city: c })),
+      // سطر واحد بمدينة المحطة الحقيقية، لا سطر لكل مدينة جمهور: خمس مدن
+      // كانت تعني خمسة أسطر متطابقة إلا في آخر كلمة، تزحم الشريط وتطرد
+      // أخبار المحطات المسجّلة منه.
+      ticker: [template.ticker(input)],
       send_at: sendAt.toISOString(),
       expires_at: new Date(sendAt.getTime() + hours * 3600_000).toISOString(),
       active: true,

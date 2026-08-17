@@ -340,7 +340,7 @@ export default function HomePage() {
         </button>
 
         <div className="mt-4">
-          {failed && (
+          {failed && stations === null && (
             <div className="card p-8 text-center" role="alert">
               <p className="text-sm font-medium text-slate-600">
                 تعذّر تحميل المحطات. تحقق من اتصالك بالإنترنت.
@@ -361,11 +361,11 @@ export default function HomePage() {
             </div>
           )}
 
-          {!failed && visible && view === 'map' && (
+          {visible && view === 'map' && (
             <StationMap stations={visible} onSelect={(id) => router.push(`/station/${id}`)} />
           )}
 
-          {!failed && visible && view === 'list' && (
+          {visible && view === 'list' && (
             <div className="space-y-3">
               {visible.length === 0 && (
                 <div className="card p-8 text-center">

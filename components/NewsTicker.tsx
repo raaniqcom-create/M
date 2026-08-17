@@ -103,7 +103,9 @@ export function NewsTicker({ stations }: { stations: StationWithStatus[] }) {
           >
             {track.map((text, i) => {
               // the three freshest updates in each copy carry the breaking flag
-              const urgent = i % items.length < URGENT_COUNT;
+              // لا شارة على نصّ الفراغ: «عاجل: لا توجد تحديثات» تُقرأ مرة
+              // فيتعلّم القارئ تجاهل اللون الأحمر
+              const urgent = all.length > 0 && i % items.length < URGENT_COUNT;
               return (
                 <span key={i} dir="rtl" className="flex shrink-0 items-center">
                   {urgent && (

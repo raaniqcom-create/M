@@ -164,7 +164,9 @@ export default function OwnerPage() {
 
   async function setTraffic(level: TrafficLevel) {
     if (!station) return;
-    const next = station.manual_traffic_level === level ? null : level;
+    // بالصلاحية لا بالحقل: الانتهاء يُقرأ ولا يُكتب، فالحقل يبقى محمّلاً بعد
+    // الثلاثين دقيقة بينما لا زرّ مضيء — وضغط الزر نفسه كان يمسحه بدل ضبطه.
+    const next = activeTrafficLevel(station) === level ? null : level;
     const now = new Date().toISOString();
     setStation({ ...station, manual_traffic_level: next, manual_traffic_set_at: now });
 

@@ -33,11 +33,21 @@ export function useSession(): Session {
       const user = data.session?.user;
       if (!alive) return;
       if (!user) return setSession({ signedIn: false, role: null, ready: true });
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', user.id)
         .maybeSingle();
+
+      // A failed read is not an owner. signedIn is now decided from storage
+      // without a network call while role still needs one, so an offline moment
+      // used to classify an admin as 'owner' — and the home page then redirected
+      // them to an owner panel with no station. Stay unresolved instead: no
+      // redirect fires until the role is actually known.
+      if (error) {
+        if (alive) setSession({ signedIn: true, role: null, ready: true });
+        return;
+      }
       if (alive) {
         setSession({
           signedIn: true,

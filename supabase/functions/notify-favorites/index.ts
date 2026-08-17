@@ -65,13 +65,18 @@ Deno.serve(async (req) => {
   // The row is CLAIMED first — an update guarded by `sent_at is null`, so if a
   // run overlaps the next one only one of them wins the row. A notification
   // cannot be recalled, so a missed send is recoverable and a doubled one is not.
-  const { data: due } = await db
+  const { data: due, error: claimError } = await db
     .from('announcements')
     .update({ sent_at: new Date().toISOString() })
     .lte('send_at', new Date().toISOString())
     .is('sent_at', null)
     .eq('active', true)
     .select('id, title, body, cities, product');
+
+  // A discarded error here is the worst possible failure: `due` comes back
+  // null, the loop runs zero times, and the function reports success. The
+  // announcement never sends and nothing anywhere says so.
+  if (claimError) console.error('announce claim failed:', claimError.message);
 
   for (const a of due ?? []) {
     const cities = (a.cities ?? []) as string[];
@@ -95,8 +100,15 @@ Deno.serve(async (req) => {
       ? (cityLine(a.body as string, cities[0]) ?? (a.body as string))
       : summarise(a.body as string, cities);
 
+    // The row was claimed before this call, so a failure here would leave it
+    // marked sent forever: visible on /news, delivered to nobody, with no
+    // record. fetch only rejects on a network fault — every HTTP error status
+    // resolves normally — so the status has to be read explicitly, and the
+    // claim released so the next tick two minutes from now tries again.
+    let ok = false;
+    let why = '';
     try {
-      await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/announce`, {
+      const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/announce`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
         body: JSON.stringify({
@@ -107,8 +119,15 @@ Deno.serve(async (req) => {
           url: '/news',
         }),
       });
+      ok = res.ok;
+      if (!ok) why = `${res.status} ${(await res.text()).slice(0, 120)}`;
     } catch (e) {
-      console.error('announce', String(e).slice(0, 90));
+      why = String(e).slice(0, 120);
+    }
+
+    if (!ok) {
+      console.error('announce failed, releasing claim:', a.id, why);
+      await db.from('announcements').update({ sent_at: null }).eq('id', a.id);
     }
   }
 
