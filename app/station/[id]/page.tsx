@@ -13,6 +13,7 @@ import { MapPinIcon, PhoneIcon } from '@/components/icons';
 import { RouteButton } from '@/components/RouteButton';
 import { ComplaintButton } from '@/components/ComplaintButton';
 import { TrafficVote } from '@/components/TrafficVote';
+import { StationLive } from '@/components/StationLive';
 import type { Station, StationProduct, TrafficLevel } from '@/types/database';
 
 // server-side anon client: same RLS rules, but usable during SSR for OG tags
@@ -91,10 +92,11 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
   const result = await getStation(id);
   if (!result) notFound();
 
-  const { station, rows, level } = result;
-  const byProduct = new Map(rows.map((r) => [r.product, r]));
-  const open = isOpenNow(station);
-  // an availability claim older than a day is listed, never promised
+  // Products and the open/closed line moved into StationLive: both were
+  // computed here at build time, and both are wrong by the time anyone reads
+  // the page — availability because the owner changes it, hours because
+  // isOpenNow() reads the clock.
+  const { station, rows } = result;
 
   return (
     <main className="mx-auto max-w-md px-4 pb-16 pt-6">
@@ -114,39 +116,7 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
           />
         </div>
 
-        <h2 className="mt-5 text-sm font-bold">المنتجات</h2>
-        <ul className="mt-2 divide-y divide-slate-100">
-          {PRODUCT_ORDER.map((product) => {
-            const row = byProduct.get(product);
-            const inStock = row?.is_available ?? false;
-            const expected = row?.expected_at ?? null;
-
-            return (
-              <li key={product} className="flex items-center justify-between gap-2 py-2.5 text-sm">
-                <span>{PRODUCT_LABELS[product]}</span>
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                    inStock
-                      ? 'bg-brand-100 text-brand'
-                      : expected
-                        ? 'bg-amber-50 text-amber-700'
-                        : 'bg-slate-100 text-slate-400'
-                  }`}
-                >
-                  {inStock
-                    ? 'متوفر'
-                    : expected
-                      ? `${expectedLabel(expected)}${row?.expected_period ? ` ${PERIOD_LABELS[row.expected_period]}` : ''}`
-                      : 'غير متوفر'}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-
-        <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
-          {open ? `مفتوحة الآن · ${hoursLabel(station)}` : `مغلقة الآن · أوقات العمل ${hoursLabel(station)}`}
-        </p>
+        <StationLive station={station} initial={rows} />
 
         <div className="mt-5 grid grid-cols-2 gap-2">
           <a href={`tel:${station.phone}`} className="btn-ghost">
