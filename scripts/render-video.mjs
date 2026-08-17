@@ -20,14 +20,17 @@ import { pathToFileURL } from 'node:url';
 const CHROME = process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const PORT = 9455;
 const FPS = 30;
-const PAGE = resolve('docs/promo/explainer.html');
-const AUDIO = resolve('docs/promo/voice.mp3');
-const CUES = resolve('docs/promo/cues.json');
+// which video: the ad (default) or the owner guide. Both are the same stage,
+// the same renderer and the same cue-table contract — only the page differs.
+const GUIDE = process.argv.includes('guide');
+const PAGE = resolve(GUIDE ? 'docs/promo/guide.html' : 'docs/promo/explainer.html');
+const AUDIO = resolve(GUIDE ? 'docs/promo/guide-audio.mp3' : 'docs/promo/voice.mp3');
+const CUES = resolve(GUIDE ? 'docs/promo/guide-cues.json' : 'docs/promo/cues.json');
 const OUTDIR = resolve('docs/promo');
 
 const MODES = {
-  wide: { w: 1920, h: 1080, vertical: false, out: 'muhta-wide-1920x1080.mp4' },
-  story: { w: 1080, h: 1920, vertical: true, out: 'muhta-story-1080x1920.mp4' },
+  wide: { w: 1920, h: 1080, vertical: false, out: GUIDE ? 'muhta-guide-1920x1080.mp4' : 'muhta-wide-1920x1080.mp4' },
+  story: { w: 1080, h: 1920, vertical: true, out: GUIDE ? 'muhta-guide-1080x1920.mp4' : 'muhta-story-1080x1920.mp4' },
 };
 
 const want = process.argv.slice(2).filter((a) => MODES[a]);

@@ -56,7 +56,7 @@ const delays = cues
 const mixVoice = cues.map((_, i) => `[v${i}]`).join('') + `amix=inputs=${CLIPS.length}:normalize=0[voice]`;
 // the bed is shorter than a guide this long, so it loops rather than stopping
 const bedChain =
-  `[${CLIPS.length}:a]volume=0.15,aloop=loop=-1:size=2e9,atrim=0:${total.toFixed(2)},` +
+  `[${CLIPS.length}:a]volume=0.10,aloop=loop=-1:size=2e9,atrim=0:${total.toFixed(2)},` +
   `afade=t=in:st=0:d=1.5,afade=t=out:st=${(total - 2).toFixed(2)}:d=2[bg]`;
 const filter = `${delays};${mixVoice};${bedChain};[voice][bg]amix=inputs=2:normalize=0:duration=first[out]`;
 
