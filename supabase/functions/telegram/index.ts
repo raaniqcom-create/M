@@ -5,6 +5,9 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
 const SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')!;
+// سطر جديد بلا هروب: التحريرات الآلية على هذا الملف أكلت 
+ مراراً
+const NL = String.fromCharCode(10);
 const SITE = 'https://muhta.online';
 // Telegram ids allowed to approve stations, set as a project secret so it can
 // change without a redeploy.
@@ -613,6 +616,44 @@ async function wizardText(chat: number, userId: number, step: string, d: Draft, 
       if (v.startsWith('✅')) return void (await createStation(chat, userId, d));
       return void (await reject('اضغط «تقديم الطلب» أو «إلغاء».'));
 
+    // Renaming rides the same draft mechanism as registration, so an admin
+    // mid-rename has the next thing they type captured — exactly as the
+    // registration wizard already does. A parallel path would have been a
+    // second place for a half-finished edit to get lost.
+    case 'rename': {
+      if (v.length < 3) return void (await reject('الاسم قصير جداً.'));
+      const id = d.rename_id;
+      if (!id) {
+        await clearDraft(userId);
+        return void (await reject('انتهت الجلسة. أعد /rename.'));
+      }
+      const { error } = await db.from('stations').update({ name: v }).eq('id', id);
+      await clearDraft(userId);
+      if (error) return void (await reject(`تعذّر الحفظ: ${error.message}`));
+
+      // The site is a static export: without a rebuild the station's own page
+      // keeps the old name. Failure is reported, not swallowed.
+      let built = true;
+      try {
+        const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/rebuild`, {
+          method: 'POST',
+          headers: { 'x-cron-secret': Deno.env.get('CRON_SECRET') ?? '' },
+        });
+        built = r.ok;
+      } catch {
+        built = false;
+      }
+      return void (await send(
+        chat,
+        `✅ صار الاسم: <b>${v}</b>` + NL +
+          (built
+            ? 'ويُحدَّث على الموقع خلال دقيقتين.'
+            : '⚠️ لكن تحديث الموقع فشل — الصفحة تحمل الاسم القديم حتى البناء التالي.') +
+          NL + NL + 'الرابط لم يتغيّر، فما شاركه صاحب المحطة يظلّ يعمل.',
+        { reply_markup: await mainMenu(userId) }
+      ));
+    }
+
     default:
       return void (await reject('اختر من الأزرار أعلاه.'));
   }
@@ -1147,6 +1188,30 @@ Deno.serve(async (req) => {
       } else if (data === 'tone') {
         await answer(cb.id);
         await showTone(chat);
+      } else if (data.startsWith('rn:')) {
+        const id = data.slice(3);
+        if (!isAdmin(from)) {
+          await send(chat, 'هذا الأمر للإدارة فقط.');
+        } else {
+          const { data: st } = await db
+            .from('stations')
+            .select('name, slug')
+            .eq('id', id)
+            .maybeSingle();
+          if (!st) {
+            await send(chat, 'المحطة غير موجودة.');
+          } else {
+            await saveDraft(from, chat, 'rename', { rename_id: id } as Draft);
+            await send(
+              chat,
+              `الاسم الحالي: <b>${st.name}</b>
+
+اكتب الاسم الصحيح الآن.
+` +
+                `<i>الرابط muhta.online/${st.slug ?? ''} لا يتغيّر.</i>`
+            );
+          }
+        }
       } else if (data.startsWith('f+:')) {
         await addFavourite(chat, from, data.slice(3), cb.id);
       } else if (data.startsWith('f-:')) {
@@ -1271,6 +1336,27 @@ Deno.serve(async (req) => {
     }
 
     if (isAdmin(from)) {
+      if (text.startsWith('/rename')) {
+        const { data: list } = await db
+          .from('stations')
+          .select('id, name, city')
+          .in('status', ['approved', 'pending', 'suspended'])
+          .order('created_at', { ascending: false })
+          .limit(30);
+        if (!list?.length) {
+          await send(chat, 'لا توجد محطات بعد.');
+          return new Response('ok');
+        }
+        await send(chat, 'اختر المحطة التي تريد تصحيح اسمها:', {
+          reply_markup: {
+            inline_keyboard: list.map((st) => [
+              { text: `${st.name} — ${st.city}`.slice(0, 60), callback_data: `rn:${st.id}` },
+            ]),
+          },
+        });
+        return new Response('ok');
+      }
+
       if (text.startsWith('/addstation') || text.startsWith('/station')) {
         await startWizard(chat, from);
         return new Response('ok');

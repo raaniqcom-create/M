@@ -51,6 +51,8 @@ function Panel() {
   const [newPhone, setNewPhone] = useState('');
   const [phoneNote, setPhoneNote] = useState<string | null>(null);
   const [sentAt, setSentAt] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -63,7 +65,10 @@ function Panel() {
         .eq('station_id', id)
         .order('created_at', { ascending: false }),
     ]);
-    setStation((s.data as Station) ?? null);
+    const st = (s.data as Station) ?? null;
+    setStation(st);
+    // the edit box opens holding the current name, not an empty field
+    if (st) setNameDraft(st.name);
     setProducts((p.data as StationProduct[]) ?? []);
     setComplaints((c.data as Complaint[]) ?? []);
   }, [id]);
@@ -130,6 +135,41 @@ function Panel() {
     }).catch(() => {});
     setSentAt(new Date().toISOString());
     setBusy(null);
+  }
+
+  /** Corrects a name typed wrong at registration.
+   *
+   *  Only the name. The slug stays as generated, so the link the owner may
+   *  already have printed on a sign or sent to their followers keeps working —
+   *  stations_guard() only builds a slug when there is none, never on rename.
+   *
+   *  The site is a static export, so the rebuild is part of the edit rather
+   *  than an afterthought: without it the station's own page keeps showing the
+   *  wrong name until something else triggers a build. */
+  async function saveName(e: React.FormEvent) {
+    e.preventDefault();
+    if (!station) return;
+    const next = nameDraft.trim();
+    if (!next) return setPhoneNote('اكتب اسم المحطة.');
+    if (next === station.name) return setEditingName(false);
+
+    setBusy('name');
+    const { error } = await supabase.from('stations').update({ name: next }).eq('id', station.id);
+    if (error) {
+      setBusy(null);
+      setPhoneNote(`تعذّر الحفظ: ${error.message}`);
+      return;
+    }
+    setStation({ ...station, name: next });
+    setEditingName(false);
+
+    const why = await rebuildSite();
+    setBusy(null);
+    setPhoneNote(
+      why
+        ? `حُفظ الاسم، لكن تحديث الموقع فشل: ${why} — صفحة المحطة ستحمل الاسم القديم حتى البناء التالي.`
+        : 'حُفظ الاسم، ويُحدَّث على الموقع خلال دقيقتين.'
+    );
   }
 
   async function setStatus(status: StationStatus) {
@@ -208,7 +248,52 @@ function Panel() {
     <main className="mx-auto max-w-md space-y-4 px-4 pb-16 pt-6">
       <header>
         <a href="/admin" className="text-xs font-bold text-brand-700">← لوحة الإدارة</a>
-        <h1 className="mt-1 text-lg font-extrabold">{station.name}</h1>
+
+        {editingName ? (
+          <form
+            onSubmit={saveName}
+            className="mt-1 rounded-xl border-2 border-brand bg-white p-3"
+          >
+            <label htmlFor="st-name" className="label">اسم المحطة</label>
+            <input
+              id="st-name"
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              className="field"
+              autoFocus
+            />
+            {/* The slug is generated once, at registration, and never from a
+                later rename — so a corrected name keeps the link its owner has
+                already published. Saying so here stops the admin hesitating. */}
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+              الرابط لا يتغيّر: <span dir="ltr">muhta.online/{station.slug}</span> يبقى كما هو،
+              فما شاركه صاحب المحطة يظلّ يعمل.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button type="submit" disabled={busy === 'name'} className="btn-primary disabled:opacity-60">
+                {busy === 'name' ? <SpinnerIcon className="mx-auto h-5 w-5" /> : 'حفظ'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditingName(false); setNameDraft(station.name); }}
+                className="btn-ghost"
+              >
+                إلغاء
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="mt-1 flex items-start justify-between gap-2">
+            <h1 className="text-lg font-extrabold">{station.name}</h1>
+            <button
+              type="button"
+              onClick={() => setEditingName(true)}
+              className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-bold text-brand-700"
+            >
+              تعديل الاسم
+            </button>
+          </div>
+        )}
         <p className="text-sm text-slate-500">{station.city} — {station.address}</p>
         <p className="mt-1 text-xs font-bold text-slate-600">
           {STATUS_LABEL[station.status] ?? station.status} · ☎️ {station.phone}

@@ -27,15 +27,23 @@ const json = (b: unknown, s = 200) =>
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   try {
-    const jwt = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-    if (!jwt) return json({ error: 'غير مصرّح' }, 401);
+    // Two callers, both trusted, neither able to use the other's credential:
+    // the admin panel holds a session, and the Telegram bot holds the shared
+    // cron secret because a bot has no session to hold.
+    const secret = Deno.env.get('CRON_SECRET');
+    const isCron = !!secret && req.headers.get('x-cron-secret') === secret;
 
-    const { data: auth } = await db.auth.getUser(jwt);
-    if (!auth?.user) return json({ error: 'غير مصرّح' }, 401);
+    if (!isCron) {
+      const jwt = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+      if (!jwt) return json({ error: 'غير مصرّح' }, 401);
 
-    const { data: profile } = await db
-      .from('profiles').select('role').eq('id', auth.user.id).maybeSingle();
-    if (profile?.role !== 'admin') return json({ error: 'غير مصرّح' }, 403);
+      const { data: auth } = await db.auth.getUser(jwt);
+      if (!auth?.user) return json({ error: 'غير مصرّح' }, 401);
+
+      const { data: profile } = await db
+        .from('profiles').select('role').eq('id', auth.user.id).maybeSingle();
+      if (profile?.role !== 'admin') return json({ error: 'غير مصرّح' }, 403);
+    }
 
     const token = Deno.env.get('GH_DISPATCH_TOKEN');
     if (!token) return json({ error: 'GH_DISPATCH_TOKEN غير مضبوط' }, 500);
