@@ -126,6 +126,12 @@ export function StationRegisterForm() {
           اسم المحطة <span className="text-traffic-red">*</span>
         </label>
         <input id="name" name="name" required className="field" placeholder="محطة الرمادي المركزية" />
+        {/* Two of the first twelve registrations were people's own names. The
+            field says "station name" but the person filling it in believed they
+            were subscribing, so the label alone did not reach them. */}
+        <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+          اسم المحطة كما هو معروف عند الناس — لا اسمك الشخصي.
+        </p>
       </div>
 
       <div>

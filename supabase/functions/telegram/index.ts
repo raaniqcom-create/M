@@ -5,8 +5,9 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
 const SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')!;
-// سطر جديد بلا هروب: التحريرات الآلية على هذا الملف أكلت 
- مراراً
+// A newline constant instead of an escape. Automated edits to this file
+// have eaten the backslash-n twice, once leaving a comment cut in half so
+// the word after it parsed as code and every update crashed on boot.
 const NL = String.fromCharCode(10);
 const SITE = 'https://muhta.online';
 // Telegram ids allowed to approve stations, set as a project secret so it can
