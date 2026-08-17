@@ -27,6 +27,25 @@ const PRODUCT_LABELS: Record<string, string> = {
  *  The body lists every city, one per line, because the news page shows the
  *  whole notice. A notification must not: someone in Falluja does not need to
  *  read about Karma to learn their own petrol arrived. */
+const SPLIT = String.fromCharCode(10);
+const BULLET = String.fromCharCode(0x2022);
+
+/** One sentence for an announcement spanning several cities.
+ *
+ *  It must fit 178 characters, and the full list rarely does — today's notice
+ *  is six stations across three cities, about two hundred. So it names the
+ *  scale and the places, and sends the reader to the page that holds the rest.
+ *  A truncated list is worse than a short one: it stops mid-station-name. */
+function summarise(body: string, cities: string[]): string {
+  // كل محطة تبدأ بكلمة «محطة» في المتن، فالعدّ عليها لا على أسطر المدن —
+  // ثلاث مدن قد تحمل ستّ محطات، والرقم هو ما يجعل الخبر يستحق الفتح.
+  const stations = (body.match(/محطة/g) ?? []).length;
+  // ' و' لا ' و ': الواو تتصل بما بعدها، وفصلها يقرأ كخطأ إملائي
+  const places = cities.join(' و');
+  const count = stations > 1 ? `${stations} محطات` : 'محطة';
+  return `${count} في ${places} — اضغط لعرض الأسماء والمواقع`.slice(0, 178);
+}
+
 function cityLine(body: string, city: string): string | null {
   const line = body.split(/\r?\n/).find((l) => l.includes(city));
   if (!line) return null;
@@ -55,22 +74,41 @@ Deno.serve(async (req) => {
     .select('id, title, body, cities, product');
 
   for (const a of due ?? []) {
-    for (const city of (a.cities ?? []) as string[]) {
-      try {
-        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/announce`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
-          body: JSON.stringify({
-            title: `${a.title} — ${city}`.slice(0, 64),
-            body: cityLine(a.body as string, city) ?? (a.body as string),
-            cities: [city],
-            products: a.product ? [a.product] : [],
-            url: '/news',
-          }),
-        });
-      } catch (e) {
-        console.error('announce', city, String(e).slice(0, 90));
-      }
+    const cities = (a.cities ?? []) as string[];
+    if (!cities.length) continue;
+
+    // ONE call, never one per city.
+    //
+    // The 45-minute cooldown is per person, so whoever is reached by the first
+    // city is silent for the rest. Sending city by city therefore does not just
+    // deduplicate — it decides, by loop order, which city's text a person gets.
+    // Measured on the live list: Ramadi first took 69 people, leaving Falluja 1
+    // and Karma 0, because almost everyone watching those two also watches
+    // Ramadi. They would have been told about Ramadi's stations and never about
+    // their own.
+    //
+    // So one message goes to everyone across all the cities — announce already
+    // deduplicates addresses across them — and the per-city detail lives one tap
+    // away on /news, which is the screen built for exactly that.
+    const single = cities.length === 1;
+    const body = single
+      ? (cityLine(a.body as string, cities[0]) ?? (a.body as string))
+      : summarise(a.body as string, cities);
+
+    try {
+      await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/announce`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
+        body: JSON.stringify({
+          title: single ? `${a.title} — ${cities[0]}`.slice(0, 64) : String(a.title).slice(0, 64),
+          body,
+          cities,
+          products: a.product ? [a.product] : [],
+          url: '/news',
+        }),
+      });
+    } catch (e) {
+      console.error('announce', String(e).slice(0, 90));
     }
   }
 
