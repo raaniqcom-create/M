@@ -363,20 +363,63 @@ async function showPeople(chat: number, userId: number, messageId: number) {
   });
 }
 
+/** The queue: every pending request at once, as a list to choose from.
+ *
+ *  It used to fetch limit(1) and show that one request with approve/reject —
+ *  so five registrations for the same station meant deciding on the first
+ *  before the second could even be seen. But the decision on any one of them
+ *  depends on the others: which of five «الرحاب» rows is the real owner is a
+ *  question you answer by looking at all five. */
 async function showRequests(chat: number, userId: number, messageId: number) {
+  if (!isAdmin(userId)) return;
+
+  const { data: list } = await db
+    .from('stations')
+    .select('id, name, city, created_at')
+    .eq('status', 'pending')
+    .order('created_at')
+    .limit(30);
+
+  if (!list?.length) {
+    await edit(chat, messageId, '✅ لا توجد طلبات معلّقة.', {
+      reply_markup: { inline_keyboard: [[{ text: '⬅️ رجوع', callback_data: 'admin' }]] },
+    });
+    return;
+  }
+
+  await edit(
+    chat,
+    messageId,
+    `📋 <b>الطلبات المعلّقة (${list.length})</b>` + NL + NL +
+      'اختر طلباً لمراجعته. لا شيء يُحسم قبل أن تختاره.',
+    {
+      reply_markup: {
+        inline_keyboard: [
+          ...list.map((st) => [
+            { text: `${st.name} — ${st.city}`.slice(0, 60), callback_data: `rq:${st.id}` },
+          ]),
+          [{ text: '⬅️ رجوع', callback_data: 'admin' }],
+        ],
+      },
+    }
+  );
+}
+
+/** One request, opened from the queue. */
+async function showRequest(chat: number, userId: number, messageId: number, id: string) {
   if (!isAdmin(userId)) return;
 
   const { data } = await db
     .from('stations')
     .select('id, name, city, address, phone, contact_name, kind')
+    .eq('id', id)
     .eq('status', 'pending')
-    .order('created_at')
     .limit(1);
 
   const station = data?.[0];
   if (!station) {
-    await edit(chat, messageId, '✅ لا توجد طلبات معلّقة.', {
-      reply_markup: { inline_keyboard: [[{ text: '⬅️ رجوع', callback_data: 'admin' }]] },
+    await edit(chat, messageId, 'هذا الطلب لم يعد معلّقاً.', {
+      reply_markup: { inline_keyboard: [[{ text: '📋 الطلبات', callback_data: 'req' }]] },
     });
     return;
   }
@@ -396,7 +439,11 @@ async function showRequests(chat: number, userId: number, messageId: number) {
             { text: '✅ موافقة', callback_data: `ok:${station.id}` },
             { text: '❌ رفض', callback_data: `no:${station.id}` },
           ],
-          [{ text: '⬅️ رجوع', callback_data: 'admin' }],
+          // Between approving a wrong name and rejecting a real station there
+          // was nothing. A registration typed in a hurry is not a bad
+          // registration, and rejecting it costs a station the platform wants.
+          [{ text: '✏️ تعديل الاسم', callback_data: `rn:${station.id}` }],
+          [{ text: '⬅️ باقي الطلبات', callback_data: 'req' }],
         ],
       },
     }
@@ -644,6 +691,13 @@ async function wizardText(chat: number, userId: number, step: string, d: Draft, 
       } catch {
         built = false;
       }
+      // Straight back to the pending queue: the admin renamed in order to
+      // approve, so making them go and find the request again would be a step
+      // invented by the software, not by the task.
+      const { data: still } = await db
+        .from('stations').select('status').eq('id', id).maybeSingle();
+      const backToQueue = still?.status === 'pending';
+
       return void (await send(
         chat,
         `✅ صار الاسم: <b>${v}</b>` + NL +
@@ -651,7 +705,13 @@ async function wizardText(chat: number, userId: number, step: string, d: Draft, 
             ? 'ويُحدَّث على الموقع خلال دقيقتين.'
             : '⚠️ لكن تحديث الموقع فشل — الصفحة تحمل الاسم القديم حتى البناء التالي.') +
           NL + NL + 'الرابط لم يتغيّر، فما شاركه صاحب المحطة يظلّ يعمل.',
-        { reply_markup: await mainMenu(userId) }
+        backToQueue
+          ? {
+              reply_markup: {
+                inline_keyboard: [[{ text: '📋 عودة إلى الطلبات', callback_data: 'req' }]],
+              },
+            }
+          : { reply_markup: await mainMenu(userId) }
       ));
     }
 
@@ -1238,6 +1298,8 @@ Deno.serve(async (req) => {
         await approveOne(chat, from, data.slice(4), cb.id);
       } else if (data.startsWith('gov:')) {
         await setGovernment(chat, from, data.slice(4), cb.id);
+      } else if (data.startsWith('rq:')) {
+        await showRequest(chat, from, messageId, data.slice(3));
       } else if (data.startsWith('ok:')) {
         await decideStation(chat, messageId, from, data.slice(3), 'approved', cb.id);
       } else if (data.startsWith('no:')) {
