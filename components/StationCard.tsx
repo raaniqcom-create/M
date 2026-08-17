@@ -2,6 +2,7 @@ import {
   PRODUCT_LABELS,
   PRODUCT_ORDER,
   activeTrafficLevel,
+  trafficSource,
   TRAFFIC_COLORS,
   TRAFFIC_LABELS,
   expectedLabel,
@@ -62,7 +63,10 @@ export function StationCard({
               >
                 <span className={`h-2 w-2 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
                 {TRAFFIC_LABELS[level]}
-                {station.manual_traffic_level
+                {/* the label must name whichever source actually won, not
+                    whichever column happens to be non-null — an expired owner
+                    reading was being credited for a crowd vote */}
+                {trafficSource(station, station.traffic) === 'station'
                   ? ' · من المحطة'
                   : agoLabel(station.traffic?.last_vote_at) && ` · ${agoLabel(station.traffic?.last_vote_at)}`}
               </span>

@@ -107,12 +107,46 @@ export function activeTrafficLevel(
     manual_traffic_level?: TrafficLevel | null;
     manual_traffic_set_at?: string | null;
   },
-  votes?: { majority_level?: TrafficLevel | null } | null
+  votes?: { majority_level?: TrafficLevel | null; last_vote_at?: string | null } | null
 ): TrafficLevel | null {
   const setAt = station.manual_traffic_set_at
     ? new Date(station.manual_traffic_set_at).getTime()
     : 0;
   const stillFresh = setAt > 0 && Date.now() - setAt < MANUAL_TRAFFIC_MINUTES * 60_000;
-  if (stillFresh && station.manual_traffic_level) return station.manual_traffic_level;
+  const voteAt = votes?.last_vote_at ? new Date(votes.last_vote_at).getTime() : 0;
+
+  // The most recent observation wins.
+  //
+  // The owner used to outrank the crowd outright while their reading was
+  // fresh. That is wrong when the crowd is both newer and larger: four people
+  // standing in the queue voted «مزدحم» after the owner had marked «متوسط»,
+  // and the page kept showing متوسط. The owner is one observer who was right
+  // twenty minutes ago; the people in the forecourt are many and are there now.
+  //
+  // Not a vote count contest — recency alone. An owner who taps a level after
+  // the last vote is making the newest observation and should win, exactly as
+  // the crowd wins when it speaks last.
+  if (stillFresh && station.manual_traffic_level) {
+    if (voteAt > setAt && votes?.majority_level) return votes.majority_level;
+    return station.manual_traffic_level;
+  }
   return votes?.majority_level ?? null;
+}
+
+/** Which source the shown level came from, so the label can say so honestly. */
+export function trafficSource(
+  station: {
+    manual_traffic_level?: TrafficLevel | null;
+    manual_traffic_set_at?: string | null;
+  },
+  votes?: { majority_level?: TrafficLevel | null; last_vote_at?: string | null } | null
+): 'station' | 'people' | null {
+  const level = activeTrafficLevel(station, votes);
+  if (!level) return null;
+  const setAt = station.manual_traffic_set_at
+    ? new Date(station.manual_traffic_set_at).getTime()
+    : 0;
+  const stillFresh = setAt > 0 && Date.now() - setAt < MANUAL_TRAFFIC_MINUTES * 60_000;
+  const voteAt = votes?.last_vote_at ? new Date(votes.last_vote_at).getTime() : 0;
+  return stillFresh && station.manual_traffic_level && voteAt <= setAt ? 'station' : 'people';
 }

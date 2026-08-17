@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { activeTrafficLevel, TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
+import { activeTrafficLevel, trafficSource, TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
 import type { StationTrafficAvg, TrafficLevel } from '@/types/database';
 
 const LEVELS: TrafficLevel[] = ['green', 'yellow', 'red'];
@@ -78,6 +78,14 @@ export function TrafficVote({
         >
           <span className={`h-2 w-2 rounded-full ${TRAFFIC_COLORS[active].dot}`} />
           الازدحام الآن: {TRAFFIC_LABELS[active]}
+          <span className="font-normal opacity-70">
+            {trafficSource({ manual_traffic_level: manualLevel, manual_traffic_set_at: manualSetAt }, traffic) ===
+            'station'
+              ? ' · من المحطة'
+              : traffic?.total_votes
+                ? ` · ${traffic.total_votes} تقييم`
+                : ''}
+          </span>
         </span>
       )}
 
