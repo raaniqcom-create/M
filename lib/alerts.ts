@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { getPushSubscription } from './push';
 import type { FuelProduct } from '@/types/database';
@@ -258,4 +259,139 @@ export async function unfollowStation(stationId: string): Promise<boolean> {
   localStorage.removeItem(FOLLOW(stationId));
   announceChange();
   return true;
+}
+
+/** Every station this device follows, read from the same mirrors isFollowing
+ *  uses. There is no server list to ask — `alerts` grants no SELECT. */
+export function followedIds(): string[] {
+  try {
+    return Object.keys(localStorage)
+      .filter((k) => k.startsWith('follow:'))
+      .map((k) => k.slice('follow:'.length));
+  } catch {
+    return [];
+  }
+}
+
+/** The star on a station card.
+ *
+ *  It used to be a separate feature: a list in localStorage that sorted the
+ *  station to the top and played a sound *while the home page was open*, and
+ *  did nothing at all once the app was closed. A star beside a petrol station
+ *  reads as "tell me when this one has fuel", so people starred stations and
+ *  waited for a notification that was never coming. Now the star is the
+ *  follow — one concept, and the promise it makes is the one it keeps.
+ *
+ *  The cost is deliberate and visible: tapping a star now asks for
+ *  notification permission, where before it asked nothing. That is the honest
+ *  price of the star meaning what people already thought it meant. */
+export function useFollowedStations() {
+  const [ids, setIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const sync = () => setIds(followedIds());
+    sync();
+    window.addEventListener(ALERTS_CHANGED, sync);
+    return () => window.removeEventListener(ALERTS_CHANGED, sync);
+  }, []);
+
+  const isFollowed = useCallback((id: string) => ids.includes(id), [ids]);
+
+  /** 'ok' when now following, 'off' when unfollowed, otherwise why it failed. */
+  const toggle = useCallback(async (id: string): Promise<SaveResult | 'off'> => {
+    if (followedIds().includes(id)) {
+      await unfollowStation(id);
+      return 'off';
+    }
+    return followStation(id);
+  }, []);
+
+  return { followed: ids, isFollowed, toggle };
+}
+
+/** ------------------------------------------------------------------------
+ *  When this person is willing to be interrupted.
+ *
+ *  From a complaint: "I already filled my tank — there should be hours for
+ *  receiving notifications, not one every day." Two separate answers, and the
+ *  complaint contains both: a daily window for when a phone may ring at all,
+ *  and a temporary stop for the week you do not need fuel.
+ *
+ *  Kept on the address, not on the alert rows: a person holds one row per
+ *  (city, product) and one per followed station, so a preference copied onto
+ *  rows would be missing from the next row they create — and the phone would
+ *  ring inside the hours its owner had closed.
+ *  --------------------------------------------------------------------- */
+
+const PREFS_KEY = "alerts-prefs";
+
+export interface AlertPrefs {
+  /** minutes past midnight, Baghdad. null = no restriction. */
+  from: number | null;
+  to: number | null;
+  /** ISO timestamp; null = not paused. */
+  pausedUntil: string | null;
+}
+
+export const NO_PREFS: AlertPrefs = { from: null, to: null, pausedUntil: null };
+
+export function readPrefs(): AlertPrefs {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return NO_PREFS;
+    const p = JSON.parse(raw) as AlertPrefs;
+    return {
+      from: typeof p.from === "number" ? p.from : null,
+      to: typeof p.to === "number" ? p.to : null,
+      pausedUntil: typeof p.pausedUntil === "string" ? p.pausedUntil : null,
+    };
+  } catch {
+    return NO_PREFS;
+  }
+}
+
+/** The push address this device already has, without asking for anything.
+ *  Reading it from the mirrors means changing your quiet hours never raises a
+ *  permission prompt — the same reason clearChoice avoids currentTarget(). */
+function knownAddress(): string | null {
+  const saved = readChoice()?.address;
+  if (saved) return saved;
+  try {
+    const k = Object.keys(localStorage).find((x) => x.startsWith("follow:"));
+    return k ? localStorage.getItem(k) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function savePrefs(prefs: AlertPrefs): Promise<boolean> {
+  const address = knownAddress();
+  // Nothing to scope the preference to yet. Store it anyway so the screen
+  // reflects the choice, and it lands server-side with the first subscription.
+  if (!address) {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    } catch {}
+    announceChange();
+    return true;
+  }
+
+  const { error } = await supabase.rpc("alerts_set_prefs", {
+    p_address: address,
+    p_from: prefs.from,
+    p_to: prefs.to,
+    p_paused: prefs.pausedUntil,
+  });
+  if (error) return false;
+
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch {}
+  announceChange();
+  return true;
+}
+
+/** Pause for a whole number of days from now. */
+export function pausedFor(days: number): string {
+  return new Date(Date.now() + days * 86400_000).toISOString();
 }

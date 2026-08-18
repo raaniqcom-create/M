@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { distanceKm, loadStations } from '@/lib/stations';
 import { useSiteStats } from '@/lib/useSiteStats';
-import { useFavorites } from '@/lib/favorites';
 import { useNativeApp } from '@/lib/useNativeApp';
 import { homeFor, useSession } from '@/lib/useSession';
 import { playAlert, unlockAudio } from '@/lib/alertSound';
@@ -18,6 +17,7 @@ import { CITY_NAMES } from '@/lib/cities';
 import { StationCard } from '@/components/StationCard';
 import { PromoStrip } from '@/components/PromoStrip';
 import { AlertsPrompt } from '@/components/AlertsPrompt';
+import { useFollowedStations } from '@/lib/alerts';
 import { TripAsk } from '@/components/TripAsk';
 import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
@@ -57,7 +57,24 @@ export default function HomePage() {
   const [view, setView] = useState<'list' | 'map'>('list');
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const { visits, online } = useSiteStats();
-  const { toggle: toggleFavorite, isFavorite } = useFavorites();
+  // The star is the follow now — see useFollowedStations in lib/alerts.ts.
+  const { isFollowed, toggle: toggleFollow } = useFollowedStations();
+  const [followNote, setFollowNote] = useState<string | null>(null);
+
+  async function onStar(id: string) {
+    const r = await toggleFollow(id);
+    setFollowNote(
+      r === 'ok' || r === 'off'
+        ? null
+        : r === 'denied'
+          ? 'الإشعارات ممنوعة لهذا التطبيق. فعّلها من إعدادات هاتفك، فالنجمة تعني أن يصلك خبرها.'
+          : r === 'unsupported'
+            ? 'هذا المتصفح لا يدعم الإشعارات — حمّل التطبيق لتصلك أخبار محطاتك.'
+            : r === 'pending'
+              ? 'التسجيل لم يكتمل بعد. انتظر لحظة وأعد المحاولة.'
+              : 'تعذّر حفظ المتابعة. تأكد من الاتصال وأعد المحاولة.'
+    );
+  }
   const native = useNativeApp();
   const { signedIn, role, ready } = useSession();
 
@@ -73,8 +90,8 @@ export default function HomePage() {
 
   // the realtime handler is registered once; read favourites through a ref so
   // it always sees the current set instead of the one captured on mount
-  const favoriteRef = useRef(isFavorite);
-  favoriteRef.current = isFavorite;
+  const favoriteRef = useRef(isFollowed);
+  favoriteRef.current = isFollowed;
 
   // browsers block audio until the page has been interacted with
   useEffect(() => {
@@ -187,10 +204,10 @@ export default function HomePage() {
 
     return [...rows].sort(
       (a, b) =>
-        Number(isFavorite(b.id)) - Number(isFavorite(a.id)) ||
+        Number(isFollowed(b.id)) - Number(isFollowed(a.id)) ||
         Number(actionable(b)) - Number(actionable(a))
     );
-  }, [stations, origin, filters, query, isFavorite]);
+  }, [stations, origin, filters, query, isFollowed]);
 
   const cityCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -414,8 +431,8 @@ export default function HomePage() {
                   key={station.id}
                   station={station}
                   tinted={i % 2 === 1}
-                  isFavorite={isFavorite(station.id)}
-                  onToggleFavorite={() => toggleFavorite(station.id)}
+                  isFavorite={isFollowed(station.id)}
+                  onToggleFavorite={() => onStar(station.id)}
                 />
               ))}
             </div>
@@ -427,6 +444,12 @@ export default function HomePage() {
             stations exist that block disappears and this banner takes over —
             which is also when owners start looking. Showing both at once put
             the same green button on screen twice. */}
+        {followNote && (
+          <p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+            {followNote}
+          </p>
+        )}
+
         {/* Above the owner banner, not below it: whoever has not chosen a city
             and a fuel yet is the visitor this platform exists for. */}
         {!signedIn && <AlertsPrompt />}

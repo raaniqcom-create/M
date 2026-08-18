@@ -49,6 +49,9 @@ async function askPermission(): Promise<Permission> {
  *  The order matters. Asking for the notification permission before the driver
  *  has named a city and a fuel is asking him to accept an interruption he has
  *  no reason to want yet. */
+// Second copy of the picker in SideMenu.tsx — keep the two in step.
+const TONE_NAMES: Record<Tone, string> = { '1': 'حادّة', '2': 'واضحة', '3': 'هادئة' };
+
 export function FirstRun() {
   const [show, setShow] = useState(false);
   const [step, setStep] = useState(1);
@@ -229,7 +232,17 @@ export function FirstRun() {
               />
             </div>
 
-            <button type="button" onClick={() => setStep(3)} className="btn-primary mt-4 w-full">
+            {!cities.length && (
+              <p className="mt-4 text-center text-[11px] leading-relaxed text-amber-700">
+                اختر مدينتك للمتابعة — بلا ذلك يصلك خبر كل مدن الأنبار.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => setStep(3)}
+              disabled={!cities.length}
+              className="btn-primary mt-4 w-full disabled:opacity-50"
+            >
               التالي
             </button>
             <button
@@ -250,11 +263,11 @@ export function FirstRun() {
                 <h2 className="text-base font-bold">فعّل الإشعارات</h2>
               </div>
               <p className="mt-2 text-xs leading-relaxed text-slate-500">
-                {cities.length || products.length
-                  ? `سنرسل لك ${products.length ? 'ما اخترته من وقود' : 'كل المنتجات'} في ${
-                      cities.length ? cities.join('، ') : 'كل مدن الأنبار'
-                    } — ولا شيء غير ذلك.`
-                  : 'لم تختر مدينة أو منتجاً، فسيصلك كل جديد في كل مدن الأنبار. يمكنك تضييقه لاحقاً.'}
+                {/* The "you picked nothing, so you get everything" branch is
+                    gone: step 2 no longer lets anyone leave without a city. */}
+                {`سنرسل لك ${products.length ? 'ما اخترته من وقود' : 'كل المنتجات'} في ${
+                  cities.length ? cities.join('، ') : 'مدينتك'
+                } — ولا شيء غير ذلك.`}
               </p>
 
               {permission === 'granted' && (
@@ -265,7 +278,7 @@ export function FirstRun() {
               )}
 
               <p className="mt-4 text-xs font-bold text-slate-700">نغمة التنبيه</p>
-              <div className="mt-2 grid grid-cols-2 gap-2">
+              <div className="mt-2 grid grid-cols-3 gap-2">
                 {TONES.map((t) => (
                   <button
                     key={t}
@@ -278,11 +291,14 @@ export function FirstRun() {
                         : 'border-slate-200 bg-white text-slate-600'
                     }`}
                   >
-                    النغمة {t === '1' ? '1' : '2'}
+                    النغمة {t}
+                    <span className="block text-[10px] font-normal opacity-70">
+                      {TONE_NAMES[t]}
+                    </span>
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-[11px] text-slate-400">اضغط لتسمعها، واختر ما يناسبك.</p>
+              <p className="mt-2 text-[11px] text-slate-400">اضغط لتسمعها، واختر ما يناسبك. النغمة ٣ الأهدأ.</p>
 
               {error && (
                 <div className="mt-4 rounded-xl bg-amber-50 p-3">

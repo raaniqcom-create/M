@@ -31,8 +31,12 @@ export function AlertChips({
 
   return (
     <>
+      {/* «اتركها فارغة = كل المدن» was an invitation, and 52 people took it —
+          then heard about fuel in towns they will never drive to. A person who
+          wants everything can still pick several cities; nobody needs sixteen.
+          Fuel type stays optional: that one is a genuine "any is fine". */}
       <p className="mt-4 text-xs font-bold text-slate-700">
-        المدينة <span className="font-normal text-slate-400">(اتركها فارغة = كل المدن)</span>
+        المدينة <span className="font-normal text-traffic-red">— مطلوبة</span>
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         {CITY_NAMES.map((c) => (

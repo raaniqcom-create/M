@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AlertSetup } from '@/components/AlertSetup';
+import { AlertTiming } from '@/components/AlertTiming';
 
 export const metadata: Metadata = {
   title: 'نبّهني عند توفر الوقود',
@@ -17,6 +18,7 @@ export default function AlertsPage() {
 
       <div className="mt-5">
         <AlertSetup />
+        <AlertTiming />
       </div>
 
       <a href="/" className="btn-ghost mt-4 w-full">

@@ -82,7 +82,11 @@ export function StationCard({
               type="button"
               onClick={onToggleFavorite}
               aria-pressed={isFavorite}
-              aria-label={isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة'}
+              // The star subscribes to this station's alerts now, so the label
+              // says so: «إضافة للمفضلة» described a private bookmark, which is
+              // what it used to be and is no longer.
+              aria-label={isFavorite ? 'إلغاء متابعة هذه المحطة' : 'تابع هذه المحطة ليصلك إشعارها'}
+              title={isFavorite ? 'تتابعها — يصلك إشعارها' : 'تابعها ليصلك إشعار توفّر الوقود'}
               className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-colors duration-200 ${
                 isFavorite
                   ? 'border-amber-400 bg-amber-50 text-amber-500'

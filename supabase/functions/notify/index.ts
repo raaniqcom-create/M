@@ -36,6 +36,10 @@ function placeline(stationName: string, city: string): string {
 
 const TELEGRAM_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
 const SITE = 'https://muhta.online';
+// A newline constant rather than an escape: automated edits to this repo have
+// eaten backslash-n before, and a half-eaten comment once crashed a function
+// on every boot.
+const NL = String.fromCharCode(10);
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -116,6 +120,61 @@ async function ownerDevices(stationId: string): Promise<Listener[]> {
     .select('token, platform')
     .eq('station_id', stationId);
   return (data ?? []).map((d) => ({ channel: d.platform, address: d.token, keys: null }));
+}
+
+// ---------- WhatsApp ----------
+
+/** whatsapp_favorites has been written since the bot shipped and read by
+ *  nothing: people tapped «أضف للمفضلة», were told they were following, and no
+ *  code anywhere ever sent them a word. This is that promise, finally kept.
+ *
+ *  Honest limit: WhatsApp only permits a free-form message inside 24 hours of
+ *  the person's last message. Outside it Meta rejects the send unless it uses
+ *  an approved template, which this platform does not have yet. So this reaches
+ *  people who used the bot recently, and the rest are counted as failures in
+ *  the log rather than quietly dropped — the number is the argument for
+ *  applying for a template.  ponytail: template approval when the miss rate
+ *  justifies the paperwork. */
+async function notifyWhatsapp(stationId: string, stationName: string, products: string[]) {
+  if (!products.length) return;
+  const token = Deno.env.get('WHATSAPP_TOKEN');
+  const phoneId = Deno.env.get('WHATSAPP_PHONE_ID');
+  if (!token || !phoneId) return;
+
+  const [{ data: favs }, { data: st }] = await Promise.all([
+    db.from('whatsapp_favorites').select('wa_id').eq('station_id', stationId),
+    db.from('stations').select('city').eq('id', stationId).maybeSingle(),
+  ]);
+  if (!favs?.length) return;
+
+  const body =
+    headline(products) + NL + NL +
+    stationName + NL + (st?.city ?? '') + NL + NL +
+    SITE + '/station/' + stationId;
+
+  let sent = 0;
+  let outsideWindow = 0;
+  await Promise.allSettled(
+    favs.map(async (f) => {
+      const r = await fetch('https://graph.facebook.com/v25.0/' + phoneId + '/messages', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + token,
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: f.wa_id,
+          type: 'text',
+          text: { body, preview_url: false },
+        }),
+      });
+      if (r.ok) sent++;
+      else if (r.status === 400) outsideWindow++;
+      else console.error('whatsapp notify', r.status, await r.text());
+    })
+  );
+  console.log('whatsapp favourites: ' + sent + ' sent, ' + outsideWindow + ' outside the 24h window');
 }
 
 // ---------- Telegram ----------
@@ -536,6 +595,27 @@ Deno.serve(async (req) => {
     ? await ownerDevices(stationId)
     : await audienceFor(station.city, live, true, stationId);
 
+  // One row per person told. Until now the only record was alerts.last_sent_at,
+  // which holds the latest send and overwrites everything before it — so when a
+  // user complained he was getting one every day, there was no way to check.
+  // A complaint that cannot be measured is answered by guesswork.
+  //
+  // Fire-and-forget on purpose: a logging failure must never be the reason
+  // somebody does not hear that fuel arrived.
+  if (listeners.length) {
+    db.from('notification_log')
+      .insert(
+        listeners.map((l) => ({
+          address: l.address,
+          kind: isNewStation ? 'approved' : 'fuel',
+          station_id: stationId,
+        }))
+      )
+      .then(({ error }) => {
+        if (error) console.error('notification_log', error.message);
+      });
+  }
+
   // The admin asked to be told too, and their working channel is Telegram —
   // no device on the platform carries is_admin today. admin-alert already
   // owns both, so this reuses it rather than repeating the fan-out here.
@@ -556,6 +636,7 @@ Deno.serve(async (req) => {
   // soon as the response returns, dropping an in-flight request.
   const [tg, fcm, apns] = await Promise.allSettled([
     notifyTelegram(stationId, station.name, isNewStation ? [] : live),
+    notifyWhatsapp(stationId, station.name, isNewStation ? [] : live),
     notifyAndroidApps(stationId, alertTitle, alertBody, alertUrl, pick('android').map((l) => l.address)),
     notifyIosApps(stationId, alertTitle, alertBody, alertUrl, pick('ios').map((l) => l.address)),
   ]);

@@ -283,8 +283,9 @@ async function showTone(chat: number) {
   // Telegram accepts custom chat tones up to 5s / 300KB; both files fit,
   // so they can be saved straight from this chat.
   for (const [n, title] of [
-    ['1', 'المحطة التقنية — نغمة ١'],
-    ['2', 'المحطة التقنية — نغمة ٢'],
+    ['1', 'المحطة التقنية — نغمة ١ (حادّة)'],
+    ['2', 'المحطة التقنية — نغمة ٢ (واضحة)'],
+    ['3', 'المحطة التقنية — نغمة ٣ (هادئة)'],
   ]) {
     await call('sendAudio', {
       chat_id: chat,

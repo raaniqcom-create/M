@@ -29,6 +29,9 @@ import {
   XIcon,
 } from './icons';
 
+// Named, not numbered: «النغمة ٣» tells nobody what they are about to hear.
+const TONE_NAMES: Record<Tone, string> = { '1': 'حادّة', '2': 'واضحة', '3': 'هادئة' };
+
 type Icon = ComponentType<{ className?: string }>;
 
 /** The drawer, grouped by whose question each row answers.
@@ -165,7 +168,7 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                     <VolumeIcon className="h-4 w-4 text-brand" />
                     نغمة التنبيه ·{' '}
                     <span className="font-normal text-slate-500">
-                      النغمة {tone === '1' ? '1' : '2'}
+                      النغمة {tone} · {TONE_NAMES[tone]}
                     </span>
                   </p>
                   <button
@@ -179,7 +182,7 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
 
                 {picking && (
                   <>
-                    <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div className="mt-2 grid grid-cols-3 gap-2">
                       {TONES.map((t) => (
                         <button
                           key={t}
@@ -192,12 +195,15 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                               : 'border-slate-200 text-slate-600'
                           }`}
                         >
-                          النغمة {t === '1' ? '1' : '2'}
+                          النغمة {t}
+                          <span className="block text-[10px] font-normal opacity-70">
+                            {TONE_NAMES[t]}
+                          </span>
                         </button>
                       ))}
                     </div>
                     <p className="mt-2 text-[11px] text-slate-400">
-                      اضغط لتسمعها. إن لم تغيّرها تبقى النغمة 2.
+                      اضغط لتسمعها. النغمة ٣ الأهدأ. إن لم تغيّرها تبقى النغمة ٢.
                     </p>
                   </>
                 )}

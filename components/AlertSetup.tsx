@@ -137,10 +137,16 @@ export function AlertSetup({
         </div>
       )}
 
+      {!cities.length && (
+        <p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+          اختر مدينتك أولاً — الإشعار الذي لا يخصّ مدينتك إزعاج، لا خدمة.
+        </p>
+      )}
+
       <button
         type="button"
         onClick={save}
-        disabled={busy}
+        disabled={busy || !cities.length}
         className="btn-primary mt-5 w-full disabled:opacity-60"
       >
         {busy ? (
