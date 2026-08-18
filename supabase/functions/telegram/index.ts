@@ -358,6 +358,10 @@ async function showPeople(chat: number, userId: number, messageId: number) {
   const { data } = await db
     .from('stations')
     .select('name, city, phone, contact_name, status, created_at')
+    // A rejected request is a decision already made. Leaving them in the list
+    // buried the stations that still need something from the admin, and put a
+    // «راسل» button beside people there is nothing left to say to.
+    .neq('status', 'rejected')
     .order('created_at', { ascending: false })
     .limit(30);
 
@@ -410,7 +414,15 @@ async function showPeople(chat: number, userId: number, messageId: number) {
     // a station with no usable number would give <a href=""> — a 400 in the
     // text version, and a button Telegram refuses to render in this one
     .filter((r) => r.url)
-    .map((r) => [{ text: `💬 ${r.s.contact_name || r.s.name}`.slice(0, 40), url: r.url }]);
+    .map((r) => {
+      // A row of bare personal names does not say who is who. The station is
+      // the thing the admin recognises, so it rides along — and the person's
+      // name is what gets kept whole when the two do not fit.
+      const who = r.s.contact_name || 'المسؤول';
+      const room = 56 - who.length;
+      const where = room > 6 ? ` · ${r.s.name.trim().slice(0, room)}` : '';
+      return [{ text: `💬 ${who}${where}`, url: r.url }];
+    });
 
   await edit(chat, messageId, text, {
     reply_markup: {
