@@ -10,6 +10,25 @@ const SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')!;
 // the word after it parsed as code and every update crashed on boot.
 const NL = String.fromCharCode(10);
 const SITE = 'https://muhta.online';
+
+// Telegram parses these messages as HTML, and both station names and contact
+// names are typed by the public. A single unescaped < makes the whole message
+// fail to send with a 400 — and the admin then sees nothing at all, which is
+// worse than a mangled name.
+const esc = (v: string | null | undefined) =>
+  (v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// A WhatsApp chat with the greeting already written, so reaching an owner is
+// one tap from the list instead of copying the number into another app.
+// wa.me wants the international form: country code, no plus, no leading zero.
+const waLink = (phone: string, name?: string | null) => {
+  let d = (phone ?? '').replace(/\D/g, '').replace(/^00/, '');
+  if (d.startsWith('964')) d = d.slice(3);
+  d = d.replace(/^0+/, '');
+  if (!d) return '';
+  const text = `السلام عليكم ${(name ?? '').trim()}${NL}أنا من إدارة المحطة التقنية: `;
+  return `https://wa.me/964${d}?text=${encodeURIComponent(text)}`;
+};
 // Telegram ids allowed to approve stations, set as a project secret so it can
 // change without a redeploy.
 const ADMIN_IDS = new Set(
@@ -359,8 +378,8 @@ async function showPeople(chat: number, userId: number, messageId: number) {
       hour12: false,
     }).format(new Date(s.created_at));
     return (
-      `${i + 1}. <b>${s.name}</b> — ${s.city}\n` +
-      `   👤 ${s.contact_name || 'غير محدد'}\n` +
+      `${i + 1}. <b>${esc(s.name)}</b> — ${esc(s.city)}\n` +
+      `   👤 <a href="${waLink(s.phone, s.contact_name)}">${esc(s.contact_name || 'راسل على واتساب')}</a>\n` +
       `   ☎️ <code>${s.phone}</code>\n` +
       `   ${STATUS_LABELS[s.status] ?? s.status} · ${when}`
     );
@@ -445,10 +464,10 @@ async function showRequest(chat: number, userId: number, messageId: number, id: 
     chat,
     messageId,
     `📋 <b>طلب تسجيل</b>\n\n` +
-      `<b>${station.name}</b>\n` +
-      `${station.city} — ${station.address}\n` +
+      `<b>${esc(station.name)}</b>\n` +
+      `${esc(station.city)} — ${esc(station.address)}\n` +
       `☎️ ${station.phone}\n` +
-      `المسؤول: ${station.contact_name || 'غير محدد'}`,
+      `المسؤول: <a href="${waLink(station.phone, station.contact_name)}">${esc(station.contact_name || 'راسل على واتساب')}</a>`,
     {
       reply_markup: {
         inline_keyboard: [

@@ -24,3 +24,17 @@ export function displayPhone(input: string): string {
   const n = normalizePhone(input);
   return n ? `0${n}` : '';
 }
+
+// A WhatsApp chat with the greeting already typed, so reaching a station owner
+// is one tap from wherever their name is shown instead of copy, switch app,
+// paste, and write the same opening line again.
+//
+// wa.me wants the full international form: country code, no plus, no leading
+// zero — which is exactly what normalizePhone leaves behind.
+export function whatsappLink(phone: string, name?: string | null): string {
+  const n = normalizePhone(phone);
+  if (!n) return '';
+  const who = (name ?? '').trim();
+  const text = `السلام عليكم ${who}\nأنا من إدارة المحطة التقنية: `;
+  return `https://wa.me/964${n}?text=${encodeURIComponent(text)}`;
+}

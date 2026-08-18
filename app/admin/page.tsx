@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { CheckIcon, LogOutIcon, MapPinIcon, SpinnerIcon, XIcon } from '@/components/icons';
+import { CheckIcon, LogOutIcon, MapPinIcon, SpinnerIcon, WhatsappIcon, XIcon } from '@/components/icons';
+import { whatsappLink } from '@/lib/phone';
 import { AdminStationForm } from '@/components/AdminStationForm';
 import { BroadcastPanel } from '@/components/BroadcastPanel';
 import { ReviewsPanel } from '@/components/ReviewsPanel';
@@ -341,6 +342,24 @@ export default function AdminPage() {
                       {s.city} — {s.address}
                     </p>
                   </a>
+                  {/* The whole reason a contact name is collected: reaching
+                      that person. Tapping it opens WhatsApp with the greeting
+                      already written, so following up on a station is one tap
+                      rather than copy, switch app, paste, retype. */}
+                  {s.contact_name && (
+                    <a
+                      href={whatsappLink(s.phone, s.contact_name)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex min-h-[44px] items-center gap-1.5 pt-1 text-xs font-semibold text-brand"
+                    >
+                      <WhatsappIcon className="h-4 w-4" />
+                      {s.contact_name}
+                      <span className="font-normal text-slate-400" dir="ltr">
+                        {s.phone}
+                      </span>
+                    </a>
+                  )}
                   {s.status === 'suspended' && (
                     <p className="mt-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-bold text-traffic-red">
                       ⛔ موقوفة — لا تظهر للمستخدمين
@@ -396,9 +415,18 @@ export default function AdminPage() {
               <p className="mt-0.5 text-sm text-slate-500">
                 {s.city} — {s.address}
               </p>
-              <p className="mt-1 text-sm text-slate-500" dir="ltr">
-                {s.phone}
-              </p>
+              <a
+                href={whatsappLink(s.phone, s.contact_name)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-brand"
+              >
+                <WhatsappIcon className="h-4 w-4" />
+                {s.contact_name || 'راسل المسؤول'}
+                <span className="font-normal text-slate-400" dir="ltr">
+                  {s.phone}
+                </span>
+              </a>
               <a
                 href={`https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`}
                 target="_blank"
