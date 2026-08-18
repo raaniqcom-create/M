@@ -31,19 +31,34 @@ self.addEventListener('fetch', (event) => {
   }
 
   // /_next/static filenames carry a content hash, so a hit is always current
+  //
+  // Retried rather than fetched once. These files are not optional: if the
+  // stylesheet request fails, the whole app renders as raw HTML — bullet
+  // lists, blue links, an icon at its natural size — and nothing on the page
+  // says why. One dropped request is enough, and there are two ways to get
+  // one: a deploy swapping the files out from under a page that is still
+  // loading, and a phone on a weak connection. Both are ordinary here.
   if (url.pathname.startsWith('/_next/static/')) {
     event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ??
-          fetch(request).then((response) => {
+      caches.match(request).then(async (cached) => {
+        if (cached) return cached;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const response = await fetch(request);
             if (response.ok) {
               const copy = response.clone();
               caches.open(CACHE).then((c) => c.put(request, copy));
+              return response;
             }
-            return response;
-          })
-      )
+            // a 404 means this hash is genuinely gone — retrying cannot help
+            if (response.status === 404) return response;
+          } catch {
+            /* network blip: fall through and try again */
+          }
+          await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+        }
+        return fetch(request);
+      })
     );
     return;
   }
