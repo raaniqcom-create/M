@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { isFresh, isOpenNow } from '@/lib/hours';
 import { SpinnerIcon } from './icons';
+import { KIND_LABELS, KIND_STYLES } from '@/lib/stationMeta';
 import type { Station } from '@/types/database';
 
 interface CityRow {
@@ -79,6 +80,48 @@ export function AdminStats() {
     load();
   }, [load]);
 
+  /** Engagement, measured rather than declared.
+   *
+   *  There is no history table — station_products carries a single updated_at
+   *  per row — so this is recency, and the column says so rather than implying
+   *  a streak it cannot prove. Daily is the job. Every other day is drifting.
+   *  Two days of silence means the station's page is telling people something
+   *  nobody has stood behind since, which is worse than an empty listing.
+   *
+   *  Sorted worst first: an admin opens this to find who needs a phone call,
+   *  not to read an alphabet. */
+  const HOUR = 3600_000;
+  const PULSE_ORDER = { red: 0, amber: 1, green: 2 } as const;
+  const commitment = (rows ?? [])
+    .filter((s) => s.status === 'approved')
+    .map((s) => {
+      const stamps = s.station_products
+        .map((p) => (p.updated_at ? new Date(p.updated_at).getTime() : 0))
+        .filter(Boolean);
+      const last = stamps.length ? Math.max(...stamps) : 0;
+      const hours = last ? (Date.now() - last) / HOUR : Infinity;
+      // The four product rows are seeded at registration and carry that
+      // moment, so "added products" is not "has rows" — it is the owner
+      // coming back and touching them afterwards.
+      const added = last > new Date(s.created_at).getTime() + 5 * 60_000;
+      const pulse: 'green' | 'amber' | 'red' = !added
+        ? 'red'
+        : hours <= 24
+          ? 'green'
+          : hours <= 48
+            ? 'amber'
+            : 'red';
+      return { s, added, hours, pulse };
+    })
+    .sort(
+      (a, b) =>
+        PULSE_ORDER[a.pulse] - PULSE_ORDER[b.pulse] ||
+        a.s.city.localeCompare(b.s.city, 'ar')
+    );
+
+  const since = (h: number) =>
+    h === Infinity ? 'لم يُلمس' : h < 1 ? 'الآن' : h < 24 ? `${Math.round(h)} ساعة` : `${Math.floor(h / 24)} يوم`;
+
   if (!rows || !devices || !listeners) {
     return (
       <div className="card flex justify-center p-8">
@@ -134,6 +177,71 @@ export function AdminStats() {
           )}
         </p>
       </section>
+
+      {commitment.length > 0 && (
+        <section className="card p-5">
+          <h2 className="text-sm font-bold">المحطات المعتمدة والتزامها</h2>
+          <p className="mt-1 text-xs text-slate-400">
+            الأحوج إلى متابعة أولاً — التفاعل يُقاس بآخر تحديث للمنتجات
+          </p>
+
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-slate-400">
+                  <th className="pb-2 text-start font-semibold">المحطة</th>
+                  <th className="pb-2 text-start font-semibold">المدينة</th>
+                  <th className="pb-2 text-center font-semibold">النوع</th>
+                  <th className="pb-2 text-center font-semibold">المنتجات</th>
+                  <th className="pb-2 text-start font-semibold">التفاعل</th>
+                </tr>
+              </thead>
+              <tbody>
+                {commitment.map(({ s, added, hours, pulse }) => (
+                  <tr key={s.id} className="border-t border-slate-100">
+                    <td className="py-2 pe-2 font-bold text-slate-700">{s.name}</td>
+                    <td className="py-2 pe-2 text-slate-500">{s.city}</td>
+                    <td className="py-2 text-center">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${KIND_STYLES[s.kind]}`}
+                      >
+                        {KIND_LABELS[s.kind]}
+                      </span>
+                    </td>
+                    <td className="py-2 text-center">
+                      {added ? (
+                        <span className="font-bold text-traffic-green">✓</span>
+                      ) : (
+                        <span className="font-bold text-traffic-red">✗</span>
+                      )}
+                    </td>
+                    <td className="py-2">
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                            pulse === 'green'
+                              ? 'bg-traffic-green'
+                              : pulse === 'amber'
+                                ? 'bg-traffic-yellow'
+                                : 'bg-traffic-red'
+                          }`}
+                        />
+                        <span className="text-slate-500">{since(hours)}</span>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
+            <span className="font-bold text-traffic-green">●</span> حدّث خلال يوم ·{' '}
+            <span className="font-bold text-traffic-yellow">●</span> يوم ويوم ·{' '}
+            <span className="font-bold text-traffic-red">●</span> يومان فأكثر أو لم يضف منتجاته
+          </p>
+        </section>
+      )}
 
       {byCity.length > 0 && (
         <section className="card p-5">
