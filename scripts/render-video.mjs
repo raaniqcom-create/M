@@ -78,6 +78,14 @@ const chrome = spawn(CHROME, [
   '--force-device-scale-factor=1',
   '--allow-file-access-from-files',
   '--autoplay-policy=no-user-gesture-required',
+  // Deterministic capture. Without these the compositor can answer a
+  // screenshot request with the previous frame still on screen, which showed
+  // up as the guide flickering back to the previous scene for single frames.
+  '--run-all-compositor-stages-before-draw',
+  '--disable-new-content-rendering-timeout',
+  '--disable-threaded-animation',
+  '--disable-threaded-scrolling',
+  '--disable-checker-imaging',
   `--remote-debugging-port=${PORT}`,
   `--user-data-dir=${process.env.TEMP}/chrome-video`,
   'about:blank',
@@ -131,19 +139,32 @@ for (const name of modes) {
   // Strip the operator controls, freeze every animation, and confirm the
   // stage really is the full frame before a single frame is written.
   const geom = await evalIn(`(() => {
-    document.getElementById('bar')?.remove();
-    document.getElementById('note')?.remove();
-    document.getElementById('hud')?.remove();
+    // Every piece of operator chrome, by id. This was a hand-written list of
+    // three, and the guide's progress bar is #prog — so it was never removed:
+    // an 8px green bar crept one pixel along the bottom of the frame for all
+    // 4279 frames, the only moving thing in otherwise still scenes.
+    for (const id of ['bar', 'note', 'hud', 'prog', 'rec', 'reclabel', 'hiderec']) {
+      document.getElementById(id)?.remove();
+    }
     const st = document.getElementById('stage');
     st.style.transform = 'translate(-50%, -50%) scale(1)';
     for (const a of document.getAnimations()) { try { a.pause(); a.currentTime = 0; } catch {} }
     const r = st.getBoundingClientRect();
+    // Anything still animating outside the stage is operator chrome that the
+    // removal list missed, and it will be baked into every frame. Naming it
+    // here costs one check; finding it afterwards costs a whole re-render.
+    const strays = [...new Set(document.getAnimations()
+      .map((a) => a.effect?.target)
+      .filter((t) => t && !st.contains(t))
+      .map((t) => t.id || t.className || t.tagName))];
     return JSON.stringify({ w: st.offsetWidth, h: st.offsetHeight,
-                            left: Math.round(r.left), top: Math.round(r.top) });
+                            left: Math.round(r.left), top: Math.round(r.top),
+                            strays });
   })()`);
   const g = JSON.parse(geom);
   if (g.w !== w || g.h !== h) throw new Error(`${name}: stage is ${g.w}x${g.h}, expected ${w}x${h}`);
   if (g.left !== 0 || g.top !== 0) throw new Error(`${name}: stage offset ${g.left},${g.top} — frame would be cropped`);
+  if (g.strays.length) throw new Error(`${name}: animating outside the stage: ${g.strays.join(', ')} — add it to the removal list above`);
 
   // length comes from the cue table the soundtrack was built from —
   // a hard-coded number here would silently clip or pad the video
@@ -151,9 +172,22 @@ for (const name of modes) {
   const total = Math.round(seconds * FPS);
   process.stdout.write(`${name} ${w}x${h}  ${total} frames  `);
 
-  for (let n = 0; n < total; n++) {
+  // A range, for checking a suspected glitch without re-rendering 4000 frames:
+  //   FROM=395 TO=410 node scripts/render-video.mjs guide wide
+  const from = Number(process.env.FROM ?? 0);
+  const to = Number(process.env.TO ?? total - 1);
+
+  for (let n = from; n <= to; n++) {
     const ms = (n / FPS) * 1000;
-    await evalIn(`(() => { for (const a of document.getAnimations()) { try { a.currentTime = ${ms}; } catch {} } return 1; })()`);
+    // Scrub, then wait for the frame to actually be presented. Setting
+    // currentTime only queues the change: the old code screenshotted straight
+    // afterwards and sometimes got the previous frame back, so at every scene
+    // change the video jumped back a scene for one or two frames. Two
+    // requestAnimationFrames is the guarantee that a render pass has run.
+    await evalIn(`new Promise((resolve) => {
+      for (const a of document.getAnimations()) { try { a.currentTime = ${ms}; } catch {} }
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve(1)));
+    })`);
     const { data } = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     writeFileSync(join(frames, String(n).padStart(5, '0') + '.png'), Buffer.from(data, 'base64'));
     if (n % 300 === 0) process.stdout.write('.');
@@ -164,6 +198,7 @@ for (const name of modes) {
   await ffmpeg([
     '-y', '-loglevel', 'error',
     '-framerate', String(FPS),
+    '-start_number', String(from),
     '-i', join(frames, '%05d.png'),
     '-i', AUDIO,
     '-c:v', 'libx264',
