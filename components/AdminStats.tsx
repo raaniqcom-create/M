@@ -40,12 +40,29 @@ export function AdminStats() {
     // browser returned [] and the whole panel showed zeros. The counts come
     // from a security-definer function that hands back numbers only: the admin
     // never needs a device token or a push endpoint, so nobody gets one.
+    // Retried, because one dropped request used to blank the whole panel.
+    // «TypeError: Load failed» is a fetch that never arrived, not a rejection
+    // by the database — and on a weak connection it is ordinary. Reporting it
+    // as zeros is worse than the failure: nothing on screen distinguishes
+    // "nobody has subscribed" from "the answer never came back".
+    const attempt = async <T,>(run: () => PromiseLike<T>): Promise<T> => {
+      let last: T | undefined;
+      for (let i = 0; i < 3; i++) {
+        last = await run();
+        if (!(last as { error?: unknown }).error) return last;
+        await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+      }
+      return last as T;
+    };
+
     const [stats, s] = await Promise.all([
-      supabase.rpc('admin_stats'),
-      supabase
-        .from('stations')
-        .select('*, station_products(updated_at)')
-        .in('status', ['approved', 'suspended']),
+      attempt(() => supabase.rpc('admin_stats')),
+      attempt(() =>
+        supabase
+          .from('stations')
+          .select('*, station_products(updated_at)')
+          .in('status', ['approved', 'suspended'])
+      ),
     ]);
 
     if (stats.error) {
@@ -59,6 +76,8 @@ export function AdminStats() {
           ? 'قاعدة البيانات رفضت الطلب لهذا الحساب (42501). سجّل الخروج ثم الدخول من جديد.'
           : e.code === 'PGRST202'
             ? 'دالة الإحصائيات غير موجودة على الخادم (admin_stats).'
+            : e.message?.includes('Load failed') || e.message?.includes('Failed to fetch')
+            ? 'لم يصل الطلب إلى الخادم. تحقّق من الاتصال ثم أعد المحاولة — الأرقام أدناه غير صحيحة.'
             : `تعذّرت قراءة الأرقام — ${e.code ?? 'خطأ'}: ${e.message ?? 'سبب غير معروف'}`
       );
       setDevices({});
@@ -69,6 +88,7 @@ export function AdminStats() {
         listeners: Record<string, number>;
         byCity?: CityRow[];
       };
+      setFailed(null);
       setDevices(v?.devices ?? {});
       setListeners(v?.listeners ?? {});
       setByCity(v?.byCity ?? []);
@@ -153,9 +173,12 @@ export function AdminStats() {
   return (
     <div className="space-y-4">
       {failed && (
-        <p className="card p-4 text-xs leading-relaxed text-traffic-red">
-          {failed}
-        </p>
+        <div className="card p-4">
+          <p className="text-xs leading-relaxed text-traffic-red">{failed}</p>
+          <button type="button" onClick={load} className="btn-ghost mt-3 w-full text-xs">
+            إعادة المحاولة
+          </button>
+        </div>
       )}
 
       <section className="card p-5">
