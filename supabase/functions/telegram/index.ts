@@ -379,19 +379,43 @@ async function showPeople(chat: number, userId: number, messageId: number) {
     }).format(new Date(s.created_at));
     return (
       `${i + 1}. <b>${esc(s.name)}</b> — ${esc(s.city)}\n` +
-      `   👤 <a href="${waLink(s.phone, s.contact_name)}">${esc(s.contact_name || 'راسل على واتساب')}</a>\n` +
+      `   👤 ${esc(s.contact_name || 'غير محدد')}\n` +
       `   ☎️ <code>${s.phone}</code>\n` +
       `   ${STATUS_LABELS[s.status] ?? s.status} · ${when}`
     );
   });
 
-  // Telegram caps a message at 4096 chars; trim rather than fail to send
-  let text = `🏬 <b>المحطات المسجلة</b> (${data.length})\n\n${lines.join('\n\n')}`;
-  if (text.length > 3900) text = text.slice(0, 3900) + '\n\n… والبقية في لوحة الموقع';
+  // The WhatsApp links live in buttons, not in the text, and that is not a
+  // style choice. Each wa.me link is ~336 characters once the Arabic greeting
+  // is percent-encoded, so thirteen stations alone pushed this message past
+  // Telegram's 4096-character ceiling — and the old blind slice(0, 3900) then
+  // cut through an open tag, so Telegram rejected the whole thing with a 400
+  // and the button simply appeared dead. Button URLs do not count against the
+  // text limit at all.
+  const header = `🏬 <b>المحطات المسجلة</b> (${data.length})`;
+  // whole entries only: never leave a tag half-written
+  const kept: number[] = [];
+  let used = header.length + 2;
+  for (let i = 0; i < lines.length; i++) {
+    if (used + lines[i].length + 2 > 3600) break;
+    used += lines[i].length + 2;
+    kept.push(i);
+  }
+  let text = header + '\n\n' + kept.map((i) => lines[i]).join('\n\n');
+  if (kept.length < lines.length)
+    text += `\n\n… و${lines.length - kept.length} أخرى، افتحها من لوحة الموقع`;
+
+  const waRows = kept
+    .map((i) => ({ s: data[i], url: waLink(data[i].phone, data[i].contact_name) }))
+    // a station with no usable number would give <a href=""> — a 400 in the
+    // text version, and a button Telegram refuses to render in this one
+    .filter((r) => r.url)
+    .map((r) => [{ text: `💬 ${r.s.contact_name || r.s.name}`.slice(0, 40), url: r.url }]);
 
   await edit(chat, messageId, text, {
     reply_markup: {
       inline_keyboard: [
+        ...waRows,
         [{ text: '🔄 تحديث', callback_data: 'people' }],
         [{ text: '⬅️ رجوع', callback_data: 'admin' }],
       ],
@@ -467,10 +491,22 @@ async function showRequest(chat: number, userId: number, messageId: number, id: 
       `<b>${esc(station.name)}</b>\n` +
       `${esc(station.city)} — ${esc(station.address)}\n` +
       `☎️ ${station.phone}\n` +
-      `المسؤول: <a href="${waLink(station.phone, station.contact_name)}">${esc(station.contact_name || 'راسل على واتساب')}</a>`,
+      `المسؤول: ${esc(station.contact_name || 'غير محدد')}`,
     {
       reply_markup: {
         inline_keyboard: [
+          // The number is right there; reaching the person should not mean
+          // copying it into another app and retyping the same opening line.
+          ...(waLink(station.phone, station.contact_name)
+            ? [
+                [
+                  {
+                    text: `💬 راسل ${station.contact_name || 'المسؤول'}`.slice(0, 40),
+                    url: waLink(station.phone, station.contact_name),
+                  },
+                ],
+              ]
+            : []),
           [
             { text: '✅ موافقة', callback_data: `ok:${station.id}` },
             { text: '❌ رفض', callback_data: `no:${station.id}` },
