@@ -184,6 +184,9 @@ Deno.serve(async (req) => {
     } else if (event === 'registration') {
       title = '🏪 طلب تسجيل محطة';
       body = `${station.name} — ${station.city}`;
+    } else if (event === 'approved') {
+      title = '✅ محطة اعتُمدت';
+      body = `${station.name} — ${station.city}`;
     } else {
       return json({ error: 'unknown event' }, 400);
     }

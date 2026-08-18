@@ -7,12 +7,14 @@ import { callFn } from './fn';
  *  pushes a commit, and the owner has already been handed that link. Takes
  *  about two minutes to land. Failure is deliberately quiet — the approval
  *  itself succeeded, and a rebuild also happens on the next push. */
-/** Tells everyone watching this city that a station just joined it.
+/** Tells the station's owner that their station is live, and the admin that it
+ *  was approved.
  *
- *  This is the promise the platform makes to a driver who subscribed while the
- *  map was still empty, so it fires on approval rather than waiting for the
- *  owner's first availability update — which may be days away. Quiet on
- *  failure: the approval stands either way. */
+ *  It used to tell the whole city. That was the wrong audience: a station that
+ *  has just joined has no fuel to report, and someone who subscribed to
+ *  «بانزين محسن في الرمادي» was pulled out of their day for an event they can
+ *  do nothing with. Citizens hear from a station when it announces fuel.
+ *  Quiet on failure: the approval stands either way. */
 export async function announceStation(stationId: string): Promise<void> {
   try {
     const { data } = await supabase.auth.getSession();

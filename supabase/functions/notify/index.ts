@@ -102,6 +102,22 @@ async function audienceFor(
   return (legacy ?? []) as Listener[];
 }
 
+/** The devices belonging to the station itself.
+ *
+ *  A station joining is not news to a citizen. Someone who asked to hear about
+ *  «بانزين محسن في الرمادي» has no use for "a station joined" — it has no fuel
+ *  to report yet, and the message used to go to every subscriber in that city
+ *  whatever fuel they had picked. The people it is genuinely news to are the
+ *  owner, who can now start publishing, and the admin, who is told separately.
+ *  Citizens hear from a station when it has something to say. */
+async function ownerDevices(stationId: string): Promise<Listener[]> {
+  const { data } = await db
+    .from('device_tokens')
+    .select('token, platform')
+    .eq('station_id', stationId);
+  return (data ?? []).map((d) => ({ channel: d.platform, address: d.token, keys: null }));
+}
+
 // ---------- Telegram ----------
 
 /** Fires the bot alert immediately rather than waiting for the scheduled
@@ -490,8 +506,6 @@ Deno.serve(async (req) => {
 
   // only announce fuel that is genuinely in stock right now, so a forged call
   // cannot tell drivers to drive to an empty station
-  // Anyone watching this city, whatever fuel they picked, is owed this one.
-  const allProducts = Object.keys(PRODUCT_LABELS);
   const { data: rows } = await db
     .from('station_products')
     .select('product')
@@ -505,19 +519,36 @@ Deno.serve(async (req) => {
     rows?.some((r) => r.product === p)
   );
   if (!isNewStation && !live.length) return json({ error: 'product not available' }, 409);
-  const alertTitle = isNewStation ? `⛽ محطة جديدة` : headline(live);
-  const alertBody = placeline(station.name, station.city);
-  // An approval fires while the static export containing the station's
-  // page is still building — about two minutes of 404 for anyone who
-  // taps. Send those somewhere that already exists.
-  const alertUrl = isNewStation ? '/' : `/station/${stationId}`;
+  // The approval message is written for its reader. It used to say «محطة
+  // جديدة» to a whole city; it now tells the one person who can act on it
+  // what to do next.
+  const alertTitle = isNewStation ? 'تمّت الموافقة على محطتك' : headline(live);
+  const alertBody = isNewStation
+    ? 'حدّث توفّر الوقود من لوحتك ليصل الخبر إلى أهل مدينتك'
+    : placeline(station.name, station.city);
+  // An approval fires while the static export containing the station's own
+  // page is still building — about two minutes of 404 for anyone who taps.
+  // /owner is part of the shell and always exists, and it is where the owner
+  // has to go anyway.
+  const alertUrl = isNewStation ? '/owner' : `/station/${stationId}`;
 
-  const listeners = await audienceFor(
-    station.city,
-    isNewStation ? allProducts : live,
-    !isNewStation,
-    stationId
-  );
+  const listeners = isNewStation
+    ? await ownerDevices(stationId)
+    : await audienceFor(station.city, live, true, stationId);
+
+  // The admin asked to be told too, and their working channel is Telegram —
+  // no device on the platform carries is_admin today. admin-alert already
+  // owns both, so this reuses it rather than repeating the fan-out here.
+  if (isNewStation) {
+    fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/admin-alert`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      },
+      body: JSON.stringify({ event: 'approved', stationId }),
+    }).catch(() => {});
+  }
   const pick = (c: string) => listeners.filter((l) => l.channel === c);
   const webListeners = pick('web');
 
