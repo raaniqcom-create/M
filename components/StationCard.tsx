@@ -7,7 +7,7 @@ import {
   TRAFFIC_LABELS,
   expectedLabel,
 } from '@/lib/products';
-import { closedLabel, isFresh, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
+import { isFresh, isOpenNow, PERIOD_LABELS, statusNote } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
 import { RouteButton } from './RouteButton';
@@ -42,6 +42,11 @@ export function StationCard({
   const byProduct = new Map(station.products.map((p) => [p.product, p]));
   const open = isOpenNow(station);
   const level = activeTrafficLevel(station, station.traffic);
+  // Says something in both directions now. It used to appear only when the
+  // station was shut, so the line vanished exactly when the station was worth
+  // driving to — and «تغلق بعد 20 دقيقة» is the one fact that changes a
+  // decision at the end of the day.
+  const status = statusNote(station);
 
   // Three states the old card collapsed into one sentence, and got wrong in
   // both directions: it printed «لم تُحدَّث حالة الوقود بعد» for a *closed*
@@ -161,11 +166,17 @@ export function StationCard({
         </div>
       )}
 
-      {!open && (
-        <p className="mt-3 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-600">
-          {closedLabel(station)}
-        </p>
-      )}
+      <p
+        className={`mt-3 rounded-lg px-2.5 py-1.5 text-[11px] font-medium ${
+          status.tone === 'closed'
+            ? 'bg-slate-100 text-slate-600'
+            : status.tone === 'soon'
+              ? 'bg-amber-50 font-bold text-amber-800'
+              : 'bg-brand-50 text-brand-900'
+        }`}
+      >
+        {status.text}
+      </p>
 
       <p className="sr-only">
         المتوفر:{' '}

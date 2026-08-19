@@ -72,23 +72,58 @@ export function hoursLabel(station: {
   return `${formatTime(station.opens_at)} — ${formatTime(station.closes_at)}`;
 }
 
-/** Why a station is shut, and when that ends — one line, for a card.
+/** Where this station stands right now, in one line, in both directions.
  *
  *  The card used to print «المحطة مغلقة الآن · أوقات العمل 6:00 صباحاً — 7:00 مساءً»
- *  next to a «مغلقة» pill driven by the same boolean: the state twice, and a
- *  timetable where the reader wanted an answer. Two states it got wrong
- *  outright: a temporarily-shut station printed its normal hours as if they
- *  explained the closure, and a 24-hour station shut by its owner printed
- *  «مغلقة الآن · أوقات العمل مفتوحة 24 ساعة», which contradicts itself. */
-export function closedLabel(station: {
+ *  beside a «مغلقة» pill driven by the same boolean — the state twice, and a
+ *  timetable where the reader wanted an answer — and printed nothing at all
+ *  while open, so the line simply vanished exactly when the station was worth
+ *  driving to.
+ *
+ *  Three tones, because the useful sentence differs:
+ *    closed  — when it opens. The reader is deciding whether to wait.
+ *    soon    — how long is left. At 18:45 «تغلق 7:00 مساءً» is a timetable;
+ *              «تغلق بعد 15 دقيقة» is a decision. This is the one a driver
+ *              needs and the old card never had.
+ *    open    — when it closes, so the trip can be planned against it.
+ *
+ *  Two states the old line got wrong outright and this does not: a temporarily
+ *  shut station printed its normal hours as if they explained the closure, and
+ *  a 24-hour station shut by its owner printed «مغلقة الآن · أوقات العمل
+ *  مفتوحة 24 ساعة», a sentence that contradicts itself. */
+export const CLOSING_SOON_MINUTES = 60;
+
+/** Arabic counts its nouns differently at 1, 2, 3-10 and 11+. «بعد 1 دقيقة»
+ *  is what a template produces; it is not what a person writes. */
+function minutesLabel(n: number): string {
+  if (n <= 1) return 'دقيقة';
+  if (n === 2) return 'دقيقتين';
+  if (n <= 10) return `${n} دقائق`;
+  return `${n} دقيقة`;
+}
+
+export function statusNote(station: {
   is_24h: boolean;
   opens_at: string;
   closes_at: string;
   temp_closed?: boolean;
-}): string {
-  if (station.temp_closed) return 'مغلقة مؤقتاً';
-  if (station.is_24h) return 'مغلقة الآن';
-  return `مغلقة · تفتح ${formatTime(station.opens_at)}`;
+}): { text: string; tone: 'open' | 'soon' | 'closed' } {
+  if (station.temp_closed) return { text: 'مغلقة مؤقتاً', tone: 'closed' };
+  if (station.is_24h) return { text: 'مفتوحة 24 ساعة', tone: 'open' };
+
+  const now = baghdadMinutesNow();
+  const opens = timeToMinutes(station.opens_at);
+  const closes = timeToMinutes(station.closes_at);
+  const open =
+    closes > opens ? now >= opens && now < closes : now >= opens || now < closes;
+
+  if (!open) return { text: `مغلقة · تفتح ${formatTime(station.opens_at)}`, tone: 'closed' };
+
+  // Wrap-aware: a station closing at 01:00 is 90 minutes away at 23:30, not
+  // minus 1350.
+  const left = (closes - now + 1440) % 1440;
+  if (left <= CLOSING_SOON_MINUTES) return { text: `تغلق بعد ${minutesLabel(left)}`, tone: 'soon' };
+  return { text: `مفتوحة · تغلق ${formatTime(station.closes_at)}`, tone: 'open' };
 }
 
 /**
