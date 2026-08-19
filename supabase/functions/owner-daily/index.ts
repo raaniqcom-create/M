@@ -112,23 +112,36 @@ function justPassed(moment: number, now: number): boolean {
 
 interface Msg { title: string; body: string }
 
-const MESSAGES: Record<string, (name: string) => Msg> = {
-  opening_first: (name) => ({
+/** The audience is named as a count of people, and the count is real — read
+ *  from `alerts`. An invented one was asked for; the true figure is larger than
+ *  the example that was suggested, and a number caught being invented would
+ *  cost the platform every other number it prints. */
+const MESSAGES: Record<string, (name: string, n: number, city: string) => Msg> = {
+  opening_first: (name, n, city) => ({
     title: `${name} — ابدأ يومك`,
-    body: 'محطتك مسجّلة وظاهرة للناس. يبقى أن تحدّد ما يتوفر عندك اليوم بضغطة، فيصل خبرها إلى أهل مدينتك في اللحظة نفسها.',
+    body: n
+      ? `${n} مشتركاً في ${city} ينتظرون خبر الوقود اليوم. حدّد ما يتوفّر عندك بضغطة، فيصلهم في اللحظة نفسها.`
+      : 'محطتك مسجّلة وظاهرة للناس. يبقى أن تحدّد ما يتوفر عندك اليوم بضغطة، فيصل خبرها إلى أهل مدينتك في اللحظة نفسها.',
   }),
-  opening_again: (name) => ({
+  opening_again: (name, n, city) => ({
     title: `${name} — صباح الخير`,
-    body: 'حدّث توفّر اليوم ليصل الخبر إلى من ينتظره. تحديثٌ واحد في الصباح يكفي، وما نُشر أمس لا يصف اليوم.',
+    body: n
+      ? `${n} مشتركاً في ${city} ينتظرون. حدّث توفّر اليوم — تحديثٌ واحد يكفي، وما نُشر أمس لا يصف اليوم.`
+      : 'حدّث توفّر اليوم ليصل الخبر إلى من ينتظره. تحديثٌ واحد في الصباح يكفي، وما نُشر أمس لا يصف اليوم.',
   }),
-  closing_thanks: (name) => ({
+  // The closing message used to only say thank you. A thank-you is the moment
+  // the owner is least busy and most willing — so it now asks for tomorrow,
+  // which is the one update that is ready before the customers arrive.
+  closing_thanks: (name, n, city) => ({
     title: `${name} — شكراً لالتزامك`,
-    body: 'نشرتَ اليوم فوصل خبرك إلى أهل مدينتك. نوصيك بالنشر غداً، أو جدوِله الآن من لوحة محطتك فيُرسل تلقائياً. كل الاحترام والتقدير.',
+    body: n
+      ? `نشرتَ اليوم فوصل خبرك إلى ${n} مشتركاً في ${city}. حدّد الآن ما تتوقّع توفّره غداً، فتفتح وأنت جاهز لاستقبال زبائنك ويصلهم الخبر قبل أن يخرجوا.`
+      : 'نشرتَ اليوم فوصل خبرك إلى أهل مدينتك. حدّد الآن ما تتوقّع توفّره غداً، فتفتح وأنت جاهز لاستقبال زبائنك.',
   }),
   // Asked, not told. The crowd's reading has just expired, and the owner is
   // the one person standing in the forecourt who can say what replaced it —
   // so the platform asks him rather than showing nothing.
-  traffic_confirm: (name) => ({
+  traffic_confirm: (name, _n, _city) => ({
     title: `${name} — كيف الازدحام الآن؟`,
     body: 'انتهى آخر تقييم من الناس، فلم يعد أحد يعرف حال الطابور عندك. أكّد الحالة بضغطة ليراها من يقصدك.',
   }),
@@ -143,14 +156,14 @@ Deno.serve(async (req) => {
 
   const { data: stations } = await db
     .from('stations')
-    .select('id, name, owner_id, is_24h, opens_at, closes_at, temp_closed, manual_traffic_level, manual_traffic_set_at')
+    .select('id, name, city, owner_id, is_24h, opens_at, closes_at, temp_closed, manual_traffic_level, manual_traffic_set_at')
     .eq('status', 'approved')
     .eq('is_demo', false);
 
   if (!stations?.length) return new Response('no stations');
 
   const ids = stations.map((s) => s.id);
-  const [{ data: products }, { data: pinged }, { data: votes }] = await Promise.all([
+  const [{ data: products }, { data: pinged }, { data: votes }, { data: watchRows }] = await Promise.all([
     db.from('station_products').select('station_id, updated_at').in('station_id', ids),
     db.from('owner_pings').select('station_id, kind').eq('day', day),
     // Only the tail matters: a vote older than 45 minutes lapsed long ago and
@@ -160,9 +173,29 @@ Deno.serve(async (req) => {
       .select('station_id, created_at')
       .in('station_id', ids)
       .gte('created_at', new Date(Date.now() - 45 * 60_000).toISOString()),
+    // Whose phone rings for a city. A null city means "anywhere in Anbar", so
+    // those people count for every station — telling an owner in Rutba that
+    // only Rutba's subscribers are listening would understate his audience.
+    db.from('alerts').select('city, address').is('station_id', null),
   ]);
 
   const already = new Set((pinged ?? []).map((p) => `${p.station_id}:${p.kind}`));
+
+  // distinct addresses, not rows: one person holds a row per (city, product),
+  // so counting rows would inflate the figure several times over — and an
+  // inflated number in a message about trust is the same mistake as inventing
+  // one, arrived at by accident.
+  const anyCity = new Set<string>();
+  const byCity = new Map<string, Set<string>>();
+  for (const r of watchRows ?? []) {
+    if (!r.city) anyCity.add(r.address);
+    else {
+      if (!byCity.has(r.city)) byCity.set(r.city, new Set());
+      byCity.get(r.city)!.add(r.address);
+    }
+  }
+  const watchersFor = (city: string) =>
+    new Set([...(byCity.get(city) ?? []), ...anyCity]).size;
 
   // Newest vote per station, and whether it lapsed inside the last 15 minutes —
   // the window between "the reading expired" and "asking is stale news".
@@ -255,7 +288,7 @@ Deno.serve(async (req) => {
     // noon should not receive this morning's greeting when they arrive.
     if (!targets.length) { marks.push({ station_id: station.id, kind, day }); continue; }
 
-    const { title, body } = MESSAGES[kind](station.name);
+    const { title, body } = MESSAGES[kind](station.name, watchersFor(station.city), station.city);
 
     for (const t of targets) {
       try {

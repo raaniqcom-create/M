@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { rebuildSite } from '@/lib/rebuild';
+import { AudienceBanner } from '@/components/AudienceBanner';
 import { cancelTrafficReminder, scheduleTrafficReminder } from '@/lib/trafficReminder';
 import {
   PRODUCT_LABELS,
@@ -274,6 +275,14 @@ export default function OwnerPage() {
           <LogOutIcon />
         </button>
       </header>
+
+      {/* At the very top, above the panel itself: the point of the whole
+          platform stated as a number of people, not as a nag. */}
+      {station && (
+        <div className="mt-4">
+          <AudienceBanner station={station} products={products} />
+        </div>
+      )}
 
       <div className="mt-5">
         {!station && (
