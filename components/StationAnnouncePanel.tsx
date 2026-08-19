@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { isAborted, readFailure } from '@/lib/fn';
 import { ANBAR_CITIES } from '@/lib/cities';
 import { PRODUCT_LABELS, PRODUCT_ORDER } from '@/lib/products';
 import { ANNOUNCE_TEMPLATES, tooLong, type TemplateInput } from '@/lib/announceTemplates';
@@ -66,11 +67,14 @@ export function StationAnnouncePanel() {
         p_cities: audience,
         p_product: product,
       });
-      if (error) throw new Error(error.message);
+      // كانت تُعرض رسالة المكتبة كما هي، فقرأ المدير «AbortError: Fetch is
+      // aborted» — إنجليزيةً، وداخليةً، ولا تقول له ماذا يفعل. والعدّ قراءة
+      // لا كتابة، فإعادة المحاولة بلا ثمن.
+      if (error) return setErr(readFailure(error));
       const r = (data ?? {}) as { ios?: number; android?: number; web?: number };
       setReach({ ios: r.ios ?? 0, android: r.android ?? 0, web: r.web ?? 0 });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'تعذّر حساب العدد');
+      setErr(readFailure(e));
     } finally {
       setBusy(false);
     }
@@ -114,7 +118,17 @@ export function StationAnnouncePanel() {
     });
     setBusy(false);
 
-    if (error) return setErr(`تعذّر الحفظ: ${error.message}`);
+    // والكتابة ليست كالقراءة: طلبٌ يُجهَض لا يعني أنه لم يقع. الإدراج قد يكون
+    // وصل القاعدة والتزم بينما تخلّى المتصفح عن انتظار الجواب — فمن يقرأ
+    // «تعذّر الحفظ» يُعيد الضغط، فيُجدول الخبر مرتين ويصل الناس مرتين، وإشعارٌ
+    // أُرسل لا يُستردّ. فيُقال الحقّ: لا نعرف، فافحص قبل أن تُعيد.
+    if (error) {
+      return setErr(
+        isAborted(error)
+          ? 'انقطع الطلب قبل أن يصل الجواب، وقد يكون الخبر حُفظ فعلاً. افحص «الخبر المنتظر» في لوحة الفحص قبل إعادة الجدولة — إشعارٌ أُرسل لا يُستردّ.'
+          : `تعذّر الحفظ: ${error.message}`
+      );
+    }
     setNote(
       when === 'now'
         ? 'حُفظ. يُرسل خلال دقيقتين ويظهر في الشريط عند إرساله.'

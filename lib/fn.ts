@@ -19,6 +19,33 @@ import { supabase } from './supabase';
  *
  *  So: keep the status, name the cause, and never blame the account for
  *  something the account did not do. */
+/** هل انقطع الطلب قبل أن يصل الجواب؟
+ *
+ *  الفرق ليس تجميلياً. الخطأ من القاعدة يعني أن شيئاً لم يقع؛ أما الانقطاع
+ *  فلا يقول شيئاً عن الخادم — الطلب قد يكون وصل والتزم بينما تخلّى المتصفح
+ *  عن انتظار الجواب. فمن يُعامل الانقطاع كفشلٍ يُعيد المحاولة، ويُنشئ خبراً
+ *  ثانياً لا يُستردّ بعد إرساله.
+ *
+ *  ويُفحص الاسم والنصّ معاً: AbortSignal.timeout يعطي TimeoutError، والبديل
+ *  القديم على iOS يعطي AbortError برسالة «Fetch is aborted». وsupabase-js لا
+ *  يرمي الخطأ بل يردّه كائناً، فيضيع الاسم ولا يبقى إلا النصّ. */
+export function isAborted(e: unknown): boolean {
+  const name = (e as { name?: string } | null)?.name ?? '';
+  const msg = (e as { message?: string } | null)?.message ?? String(e ?? '');
+  return (
+    name === 'TimeoutError' ||
+    name === 'AbortError' ||
+    /abort|timeout|signal is aborted/i.test(msg)
+  );
+}
+
+/** ما يُقال للإنسان حين يفشل نداء لا كتابة فيه — فإعادة المحاولة بلا ضرر. */
+export function readFailure(e: unknown): string {
+  return isAborted(e)
+    ? 'انقطع الطلب قبل أن يصل الجواب — الشبكة بطيئة. أعد المحاولة.'
+    : 'تعذّر الاتصال بالخادم. تحقّق من الإنترنت.';
+}
+
 export interface FnResult<T> {
   ok: boolean;
   status: number;
