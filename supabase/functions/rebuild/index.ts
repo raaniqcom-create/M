@@ -42,7 +42,22 @@ Deno.serve(async (req) => {
 
       const { data: profile } = await db
         .from('profiles').select('role').eq('id', auth.user.id).maybeSingle();
-      if (profile?.role !== 'admin') return json({ error: 'غير مصرّح' }, 403);
+
+      // الإدارة، أو صاحب محطة معتمدة. وكان الشرط «إدارة» وحدها، وهو ما جعل
+      // إخفاء الرقم كذبةً على صاحبه: يقلب المفتاح في لوحته، فيُحدَّث الجدول
+      // ويُطلق هذا النداء فيردّ 403، والنداء بلا await ونتيجته مُهمَلة — فلا
+      // يُبنى شيء، ورقمه يبقى مقروءاً في الصفحة المنشورة إلى الأبد بينما
+      // لوحته تقول له إنه مخفيّ.
+      if (profile?.role !== 'admin') {
+        const { count } = await db
+          .from('stations')
+          .select('id', { count: 'exact', head: true })
+          .eq('owner_id', auth.user.id)
+          .eq('status', 'approved');
+        // والباب يبقى مغلقاً على من سواهما: ستّة ملّاك لا يُغرقون CI، وحاملُ
+        // المفتاح المنشور وحده لا يزال بلا مدخل.
+        if (!count) return json({ error: 'غير مصرّح' }, 403);
+      }
     }
 
     const token = Deno.env.get('GH_DISPATCH_TOKEN');

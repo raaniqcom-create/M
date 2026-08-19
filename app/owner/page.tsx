@@ -39,6 +39,7 @@ export default function OwnerPage() {
   const [savingProduct, setSavingProduct] = useState<FuelProduct | null>(null);
   const [view, setView] = useState<'main' | 'info' | 'data'>('main');
   const [trafficNote, setTrafficNote] = useState<string | null>(null);
+  const [phoneNote, setPhoneNote] = useState<string | null>(null);
 
   const load = useCallback(async (uid: string) => {
     // maybeSingle() errors outright when an owner holds more than one station,
@@ -190,8 +191,18 @@ export default function OwnerPage() {
       return;
     }
     // The number is baked into the prerendered pages; without this it stays
-    // readable on the published site however the toggle looks here.
-    rebuildSite();
+    // readable on the published site however the toggle looks here. Awaited and
+    // reported: a silent failure here is the worst kind, because the switch
+    // still moves and the owner walks away believing their number is gone.
+    setPhoneNote(next ? 'يختفي رقمك من الصفحة المنشورة خلال دقيقتين…' : null);
+    const failed = await rebuildSite();
+    setPhoneNote(
+      failed
+        ? 'تعذّر تحديث الصفحة المنشورة. رقمك ما يزال ظاهراً فيها — أبلِغ الإدارة.'
+        : next
+          ? 'تمّ. رقمك لم يعد يظهر في صفحة محطتك.'
+          : null
+    );
   }
 
   async function toggleTempClose() {
@@ -528,6 +539,18 @@ export default function OwnerPage() {
                         </span>
                       </span>
                     </label>
+
+                    {phoneNote && (
+                      <p
+                        className={`mt-2 rounded-lg p-2.5 text-xs leading-relaxed ${
+                          phoneNote.startsWith('تعذّر')
+                            ? 'bg-red-50 font-bold text-red-700'
+                            : 'bg-brand-50 text-brand-900'
+                        }`}
+                      >
+                        {phoneNote}
+                      </p>
+                    )}
                   </div>
 
                   {/* The name, phone and location are what drivers navigate
