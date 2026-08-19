@@ -38,6 +38,10 @@ interface Ask {
 export function TripAsk({ stations }: { stations: StationWithStatus[] | null }) {
   const [ask, setAsk] = useState<Ask | null>(null);
   const [product, setProduct] = useState<FuelProduct | null>(null);
+  // Separate from `product` because «غير ذلك» is a real answer whose value is
+  // null — gating the next step on the value itself left that choice stuck on
+  // a screen with no way forward.
+  const [chose, setChose] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -99,15 +103,22 @@ export function TripAsk({ stations }: { stations: StationWithStatus[] | null }) 
     };
   }, [stations]);
 
-  // What this station actually sells right now, from the list already loaded.
+  // What the station reports carrying — in stock, or announced as coming.
+  //
+  // Not `is_available` alone, which is what it was: that asked a returning
+  // driver about the present, so someone who took the last of the regular was
+  // offered a single option, because their own fill had emptied the pump they
+  // were being asked about. And not every row either — all seven are seeded at
+  // registration, so «everything» means «every fuel that exists», which is a
+  // list about the product catalogue rather than about this forecourt.
   const askProducts = ask
     ? ((stations ?? []).find((s) => s.id === ask.id)?.products ?? [])
-        .filter((p) => p.is_available)
+        .filter((p) => p.is_available || p.expected_at)
         .map((p) => p.product)
     : [];
 
   async function answer(level: TrafficLevel) {
-    if (!ask || !product) return;
+    if (!ask || !chose) return;
     localStorage.removeItem(KEY);
     // the pump, not the forecourt: a vote without it cannot be shown on the
     // chip the next driver is actually looking at
@@ -147,32 +158,48 @@ export function TripAsk({ stations }: { stations: StationWithStatus[] | null }) 
         <p className="text-sm font-bold">
           {ask.here
             ? `أنت قرب ${ask.name || 'المحطة'} — شلون الازدحام؟`
-            : `شلون كان الطابور بـ${ask.name || 'المحطة'}؟`}
+            : `شلون الازدحام بـ${ask.name || 'المحطة'}؟`}
         </p>
         <button type="button" onClick={dismiss} aria-label="إخفاء" className="text-xs text-slate-400">
           ✕
         </button>
       </div>
       <p className="mt-0.5 text-xs text-slate-500">
-        {product ? `طابور ${PRODUCT_LABELS[product]}` : 'أي منتج عبّيت؟'}
+        {chose ? (product ? `ازدحام ${PRODUCT_LABELS[product]}` : 'ازدحام الساحة') : 'أي منتج عبّيت؟'}
       </p>
 
       {/* The station's own products, not a fixed three. It used to offer
           premium/regular/kerosene to every station, so people were asked about
           fuel the forecourt does not sell — and the list is already in memory
           on this page. */}
-      {!product && (
+      {!chose && (
         <div className="mt-3 grid grid-cols-3 gap-2">
           {askProducts.map((p) => (
             <button
               key={p}
               type="button"
-              onClick={() => setProduct(p)}
+              onClick={() => {
+                setProduct(p);
+                setChose(true);
+              }}
               className="min-h-[44px] rounded-xl border border-slate-200 text-xs font-semibold text-slate-700"
             >
               {PRODUCT_LABELS[p]}
             </button>
           ))}
+          {/* Nobody should be stuck because the pump they used is not listed.
+              TrafficVote has had this escape from the start; this screen has
+              been asking a closed question. */}
+          <button
+            type="button"
+            onClick={() => {
+              setProduct(null);
+              setChose(true);
+            }}
+            className="min-h-[44px] rounded-xl border border-slate-200 text-xs font-semibold text-slate-500"
+          >
+            غير ذلك
+          </button>
         </div>
       )}
 
@@ -182,7 +209,7 @@ export function TripAsk({ stations }: { stations: StationWithStatus[] | null }) 
         </p>
       )}
 
-      <div className={`mt-3 grid grid-cols-3 gap-2 ${product ? '' : 'hidden'}`}>
+      <div className={`mt-3 grid grid-cols-3 gap-2 ${chose ? '' : 'hidden'}`}>
         {LEVELS.map((l) => (
           <button
             key={l}
