@@ -8,6 +8,7 @@ import { StationLinkCard } from '@/components/StationLinkCard';
 import { StationPoster } from '@/components/StationPoster';
 import { AvailabilityPoster } from '@/components/AvailabilityPoster';
 import { SpinnerIcon } from '@/components/icons';
+import { OwnerMessagePreview } from '@/components/OwnerMessagePreview';
 import { LocationField } from '@/components/LocationField';
 import { WorkingHours } from '@/components/WorkingHours';
 import { ANBAR_CITIES } from '@/lib/cities';
@@ -395,6 +396,8 @@ function Panel() {
           )}
         </div>
       </section>
+
+      <OwnerMessagePreview stationId={station.id} />
 
       {/* Full station editing, for the admin only.
        *
