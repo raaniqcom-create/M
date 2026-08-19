@@ -36,7 +36,10 @@ alter table device_tokens add constraint device_tokens_platform_check
 -- 'web' افتراضاً لكُتب فوق android/ios لكل مالك يفتح لوحته — فيسقط الدفع
 -- الأصلي عن كل من يعمل اليوم. ولذلك يبقى المسار الأصلي تحديثاً بحتاً كما كان،
 -- ولا يُنشئ صفّاً ولا يمسّ المنصة. والإدراج للويب وحده، حيث الصفّ يولد هنا.
+-- وتُحذف الصيغتان معاً لا القديمة وحدها: إعادة تشغيل الملف بعد نجاحه تصطدم
+-- بـ42723 «الدالة موجودة بنفس المعاملات»، فيبدو الأمر عطلاً وليس إلا تكراراً.
 drop function if exists public.claim_owner_device(text, uuid);
+drop function if exists public.claim_owner_device(text, uuid, text, jsonb);
 
 create function public.claim_owner_device(
   p_token      text,
