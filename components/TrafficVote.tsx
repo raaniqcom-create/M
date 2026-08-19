@@ -36,6 +36,8 @@ export function TrafficVote({
   manualLevel = null,
   manualSetAt = null,
   hours,
+  compact = false,
+  products,
 }: {
   stationId: string;
   traffic?: StationTrafficAvg | null;
@@ -47,12 +49,24 @@ export function TrafficVote({
    *  showed a queue level for a shut forecourt and let people vote on one —
    *  which is where the stale readings came from in the first place. */
   hours: { is_24h: boolean; opens_at: string; closes_at: string; temp_closed?: boolean };
+  /** On a station card in the list, where the badge and the per-product lanes
+   *  are already drawn by the card itself — so this renders the question and
+   *  nothing else.
+   *
+   *  It also fetches nothing. The full screen refreshes because a station page
+   *  is a static file whose build-time counts are stale; a card in the list was
+   *  loaded seconds ago and already holds all three tables. Mounting the
+   *  fetching version on seven cards would fire twenty-one queries to redraw
+   *  data that is already on screen. */
+  compact?: boolean;
+  /** Required in compact mode: what the station is selling, from the card. */
+  products?: FuelProduct[];
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [traffic, setTraffic] = useState<StationTrafficAvg | null>(initial);
   const [lanes, setLanes] = useState<ProductTraffic[]>([]);
-  const [available, setAvailable] = useState<FuelProduct[]>([]);
+  const [available, setAvailable] = useState<FuelProduct[]>(compact ? (products ?? []) : []);
   // set when a level is tapped; the vote is not cast until a product is picked
   const [pending, setPending] = useState<TrafficLevel | null>(null);
   const [voted, setVoted] = useState<string[]>([]);
@@ -89,9 +103,9 @@ export function TrafficVote({
       if (Date.now() - last < VOTE_WINDOW_MS) done.push(p ?? 'all');
     }
     setVoted(done);
-    refresh();
+    if (!compact) refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stationId, refresh]);
+  }, [stationId, refresh, compact]);
 
   async function vote(level: TrafficLevel, product: FuelProduct | null) {
     // Guarded here, not only by hiding the buttons: a vote cast on a shut
@@ -127,6 +141,9 @@ export function TrafficVote({
   // Closed: no badge, no per-product list, no buttons. The screen says why
   // instead of leaving a silent gap — a missing control reads as a bug.
   if (!open) {
+    // The card already prints «مغلقة · تفتح …» right below; saying it twice is
+    // the duplication that made the card crowded in the first place.
+    if (compact) return null;
     return (
       <p className="rounded-xl bg-slate-100 px-3 py-2.5 text-xs font-medium text-slate-600">
         المحطة مغلقة الآن — لا ازدحام يُقاس.
@@ -136,7 +153,7 @@ export function TrafficVote({
 
   return (
     <div>
-      {active && (
+      {!compact && active && (
         <span
           className={`mb-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${TRAFFIC_COLORS[active].bg} ${TRAFFIC_COLORS[active].text}`}
         >
@@ -152,7 +169,7 @@ export function TrafficVote({
         </span>
       )}
 
-      {rated.length > 0 && (
+      {!compact && rated.length > 0 && (
         <ul className="mb-3 space-y-1.5 rounded-xl bg-slate-50 p-3">
           {rated.map(([p, l]) => (
             <li key={p} className="flex items-center gap-2 text-xs">

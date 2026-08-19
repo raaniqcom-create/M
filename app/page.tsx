@@ -234,7 +234,7 @@ export default function HomePage() {
               <SoundToggle />
             </div>
           </div>
-          <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — نبدأ من الرمادي</p>
+          <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — في كل مدن الأنبار</p>
 
           {/* An empty list is only a disappointment if nothing is offered in
               its place. Tell the visitor what to do right now instead of what

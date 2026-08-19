@@ -11,6 +11,7 @@ import { isFresh, isOpenNow, PERIOD_LABELS, statusNote } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
 import { RouteButton } from './RouteButton';
+import { TrafficVote } from './TrafficVote';
 import { StarIcon } from './icons';
 import { PhoneIcon } from './icons';
 
@@ -177,6 +178,29 @@ export function StationCard({
       >
         {status.text}
       </p>
+
+      {/* The platform's whole crowd-sourcing loop lived on the station detail
+          page, which almost nobody opens: people scan the list and leave. So
+          the one thing we ask of a citizen was invisible to citizens.
+          Fetch-free here — the card already holds every table it needs. */}
+      {open && (
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          <TrafficVote
+            compact
+            stationId={station.id}
+            traffic={station.traffic}
+            manualLevel={station.manual_traffic_level}
+            manualSetAt={station.manual_traffic_set_at}
+            products={station.products.filter((p) => p.is_available).map((p) => p.product)}
+            hours={{
+              is_24h: station.is_24h,
+              opens_at: station.opens_at,
+              closes_at: station.closes_at,
+              temp_closed: station.temp_closed,
+            }}
+          />
+        </div>
+      )}
 
       <p className="sr-only">
         المتوفر:{' '}
