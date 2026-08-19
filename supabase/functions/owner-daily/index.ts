@@ -241,6 +241,19 @@ async function preview(req: Request, stationId: string): Promise<Response> {
 }
 
 Deno.serve(async (req) => {
+  // This function was cron-only, so it never answered a preflight — and the
+  // browser asks before it sends. Without this the panel reported a network
+  // failure and blamed the admin's connection for a missing CORS header.
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
+    });
+  }
+
   // The admin's preview, before the cron gate: a person asking what a station
   // will hear today has no cron secret and should not need one.
   const url = new URL(req.url);
