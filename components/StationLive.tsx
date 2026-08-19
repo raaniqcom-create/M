@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { PRODUCT_LABELS, PRODUCT_ORDER, expectedLabel } from '@/lib/products';
 import { hoursLabel, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
+import { agoLabel } from '@/lib/freshness';
 import type { Station, StationProduct } from '@/types/database';
 
 /** The two things on a station page that go stale the moment the page is built.
@@ -82,6 +83,13 @@ export function StationLive({
   // before mount, fall back to what the build believed
   const open = now === null ? false : isOpenNow(station);
 
+  // أحدث قراءة، لا أقدمها — والحساب بعد وصول now كي لا يختلف ما يُبنى عمّا يُعرض.
+  const newest = rows.reduce<string | null>(
+    (a, r) => (r.updated_at && (!a || r.updated_at > a) ? r.updated_at : a),
+    null
+  );
+  const lastUpdate = now === null ? null : agoLabel(newest);
+
   return (
     <>
       <h2 className="mt-5 text-sm font-bold">المنتجات</h2>
@@ -114,7 +122,20 @@ export function StationLive({
         })}
       </ul>
 
-      <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+      {/* عمر الخبر، مكتوباً.
+       *
+       *  كانت الصفحة تعرض الحالة بلا وقتها، والثغرة تسدّها جملة «اتصل بالمحطة
+       *  قبل أن تتحرك». وأكثر أصحاب المحطات يوقفون أرقامهم ليكون المنشور هو
+       *  المرجع — وهو غرض المنصة — فلم يبقَ ما يسدّها. ومن يقف أمام قرار
+       *  السفر إلى محطة يحتاج أن يعرف: هل هذا خبر هذه الساعة أم خبر أمس؟
+       *
+       *  ويُقاس بأحدث قراءة لا بأقدمها: المالك يضغط منتجاً واحداً حين يصله،
+       *  فالأقدم يصف منتجاً لم يتغيّر لا خبراً مهملاً. */}
+      {lastUpdate && (
+        <p className="mt-3 text-xs text-slate-500">آخر تحديث للحالة {lastUpdate}</p>
+      )}
+
+      <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
         {now === null
           ? `أوقات العمل ${hoursLabel(station)}`
           : open

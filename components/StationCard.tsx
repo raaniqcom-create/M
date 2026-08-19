@@ -133,14 +133,24 @@ export function StationCard({
         </ul>
       )}
 
-      {/* Said once, and only when it is the actual state of things. */}
+      {/* Said once, and only when it is the actual state of things.
+       *
+       *  The stale line used to end «اتصل بالمحطة قبل أن تتحرك» for every
+       *  station. Most owners are turning their number off — they want the
+       *  published state to be what people go by, which is the whole point of
+       *  the platform — and telling a reader to call a station that has no
+       *  number is advice they cannot follow. So the sentence now depends on
+       *  whether there is a number to call: an offer when there is one, and
+       *  the plain age of the reading when there is not. */}
       {open && !shown.length && (
         <p className="mt-3 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-medium text-slate-500">
           {!everReported
             ? 'لم تُحدَّث حالة الوقود بعد'
             : anyFresh
               ? 'لا يوجد وقود متوفر الآن'
-              : 'آخر تحديث قديم — اتصل بالمحطة قبل أن تتحرك'}
+              : station.phone
+                ? 'آخر تحديث قديم — يمكنك الاتصال للتأكّد'
+                : 'آخر تحديث قديم — قد لا يمثّل وضعها الآن'}
         </p>
       )}
 

@@ -254,7 +254,7 @@ export default function HomePage() {
               اختر <b>مدينتك</b> و<b>نوع الوقود</b> الذي يهمك، وانتظر — أول ما تسجّل محطة
               ويتوفر المنتج، يصلك إشعار. <b className="underline">اختر الآن ←</b>
               <br />
-              المحطات تُضاف تباعاً. واتصل بالمحطة قبل أن تتحرك.
+              المحطات تُضاف تباعاً. وكل حالة يُكتب معها وقتها.
             </span>
           </a>
           {/* Both of these speak to someone browsing the site. Inside the app

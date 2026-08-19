@@ -4,8 +4,26 @@
     {
       "name": "promo",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["--yes", "serve", "docs/promo", "-l", "4173", "--no-clipboard"],
+      "runtimeArgs": [
+        "--yes",
+        "serve",
+        "docs/promo",
+        "-l",
+        "4173",
+        "--no-clipboard"
+      ],
       "port": 4173
+    },
+    {
+      "name": "muhta",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "next",
+        "dev",
+        "-p",
+        "3210"
+      ],
+      "port": 3210
     }
   ]
 }
