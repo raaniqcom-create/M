@@ -169,8 +169,15 @@ export default function OwnerPage() {
   async function toggleTempClose() {
     if (!station) return;
     const next = !station.temp_closed;
-    setStation({ ...station, temp_closed: next });
-    await supabase.from('stations').update({ temp_closed: next }).eq('id', station.id);
+    // Closing clears the queue reading, because there is no queue. The panel
+    // has always told the owner it «تُمسح تلقائياً»; nothing ever cleared it —
+    // the 30-minute expiry is read-side only and the column kept its value
+    // forever. Now the sentence is true for the one case the owner controls.
+    const patch = next
+      ? { temp_closed: true, manual_traffic_level: null, manual_traffic_set_at: null }
+      : { temp_closed: false };
+    setStation({ ...station, ...patch });
+    await supabase.from('stations').update(patch).eq('id', station.id);
   }
 
   async function setTraffic(level: TrafficLevel) {
@@ -415,7 +422,10 @@ export default function OwnerPage() {
               stationId={station.id}
               name={station.name}
               available={products.filter((p) => p.is_available).map((p) => p.product)}
-              traffic={station.manual_traffic_level}
+              /* activeTrafficLevel, not the raw column: the raw value survives
+                 both the 30-minute expiry and closing time, so «الازدحام: خفيف»
+                 could be shared hours after it stopped being true. */
+              traffic={activeTrafficLevel(station)}
             />
               </>
             )}

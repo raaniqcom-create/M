@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS, TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
 import { distanceKm } from '@/lib/stations';
 import { TRAFFIC_PRODUCTS } from '@/types/database';
@@ -75,7 +76,11 @@ export function TripAsk({ stations }: { stations: StationWithStatus[] | null }) 
             .filter((s) => s.lat != null && s.lng != null)
             .map((s) => ({ s, d: distanceKm({ lat: latitude, lng: longitude }, { lat: s.lat!, lng: s.lng! }) }))
             .sort((a, b) => a.d - b.d)[0];
-          if (near && near.d <= NEAR_KM) {
+          // Standing next to a shut station is not standing in its queue. This
+          // is the second unguarded vote path — it fires on proximity alone,
+          // and a 4am «خفيف» here is exactly the stale badge people complained
+          // about seeing on a closed card.
+          if (near && near.d <= NEAR_KM && isOpenNow(near.s)) {
             setAsk({ id: near.s.id, name: near.s.name, here: true });
           }
         },

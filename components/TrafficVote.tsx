@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { isOpenNow } from '@/lib/hours';
 import {
   activeTrafficLevel,
   trafficSource,
@@ -34,6 +35,7 @@ export function TrafficVote({
   traffic: initial = null,
   manualLevel = null,
   manualSetAt = null,
+  hours,
 }: {
   stationId: string;
   traffic?: StationTrafficAvg | null;
@@ -41,6 +43,10 @@ export function TrafficVote({
    *  because this page is a static file and a build-time clock would freeze it */
   manualLevel?: TrafficLevel | null;
   manualSetAt?: string | null;
+  /** Required. This screen used to know nothing about opening hours, so it
+   *  showed a queue level for a shut forecourt and let people vote on one —
+   *  which is where the stale readings came from in the first place. */
+  hours: { is_24h: boolean; opens_at: string; closes_at: string; temp_closed?: boolean };
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +94,9 @@ export function TrafficVote({
   }, [stationId, refresh]);
 
   async function vote(level: TrafficLevel, product: FuelProduct | null) {
-    if (busy) return;
+    // Guarded here, not only by hiding the buttons: a vote cast on a shut
+    // station is what produces the stale badge this whole change is about.
+    if (busy || !open) return;
     setBusy(true);
     setError(null);
     const { error: e } = await supabase
@@ -108,12 +116,23 @@ export function TrafficVote({
   }
 
   // مقيسة هنا لا في البناء: الصفحة ملف ثابت، وساعة البناء كانت ستُجمّد الصلاحية
-  const station = { manual_traffic_level: manualLevel, manual_traffic_set_at: manualSetAt };
+  const station = { manual_traffic_level: manualLevel, manual_traffic_set_at: manualSetAt, ...hours };
+  const open = isOpenNow(station);
   const active = activeTrafficLevel(station, traffic);
   const source = trafficSource(station, traffic);
   const rated = available
     .map((p) => [p, lanes.find((l) => l.product === p)] as const)
     .filter((pair): pair is [FuelProduct, ProductTraffic] => !!pair[1]?.majority_level);
+
+  // Closed: no badge, no per-product list, no buttons. The screen says why
+  // instead of leaving a silent gap — a missing control reads as a bug.
+  if (!open) {
+    return (
+      <p className="rounded-xl bg-slate-100 px-3 py-2.5 text-xs font-medium text-slate-600">
+        المحطة مغلقة الآن — لا ازدحام يُقاس.
+      </p>
+    );
+  }
 
   return (
     <div>

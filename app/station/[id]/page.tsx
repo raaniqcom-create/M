@@ -15,7 +15,7 @@ import { ComplaintButton } from '@/components/ComplaintButton';
 import { TrafficVote } from '@/components/TrafficVote';
 import { StationLive } from '@/components/StationLive';
 import { FollowStation } from '@/components/FollowStation';
-import type { Station, StationProduct, TrafficLevel } from '@/types/database';
+import type { Station, StationProduct } from '@/types/database';
 
 // server-side anon client: same RLS rules, but usable during SSR for OG tags
 const db = createClient(
@@ -58,10 +58,13 @@ async function getStation(id: string) {
   const rows = (products ?? []) as StationProduct[];
   const available = rows.filter((p) => p.is_available).map((p) => p.product);
 
-  const level: TrafficLevel | null =
-    station.manual_traffic_level ?? (traffic?.majority_level as TrafficLevel | null) ?? null;
+  // No traffic here at all. This read was `manual ?? majority` — raw, skipping
+  // both the 30-minute expiry and the closed-station guard — and its only
+  // consumer (the share description) stopped using it when traffic was pulled
+  // out of the preview. A raw traffic read left lying around is the next bug.
+  void traffic;
 
-  return { station, available, rows, level };
+  return { station, available, rows };
 }
 
 export async function generateMetadata({
@@ -73,7 +76,7 @@ export async function generateMetadata({
   const result = await getStation(id);
   if (!result) return { title: 'المحطة غير موجودة' };
 
-  const { station, available, level } = result;
+  const { station, available } = result;
   const products = available.length
     ? available.map((p) => PRODUCT_LABELS[p]).join(' · ')
     : 'لا يوجد وقود متوفر حالياً';
@@ -118,6 +121,12 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
             stationId={station.id}
             manualLevel={station.manual_traffic_level}
             manualSetAt={station.manual_traffic_set_at}
+            hours={{
+              is_24h: station.is_24h,
+              opens_at: station.opens_at,
+              closes_at: station.closes_at,
+              temp_closed: station.temp_closed,
+            }}
           />
         </div>
 

@@ -10,6 +10,7 @@ import { useNativeApp } from '@/lib/useNativeApp';
 import { homeFor, useSession } from '@/lib/useSession';
 import { playAlert, unlockAudio } from '@/lib/alertSound';
 import { SoundToggle } from '@/components/SoundToggle';
+import { NotificationBell } from '@/components/NotificationBell';
 import { SideMenu } from '@/components/SideMenu';
 import { isFresh, isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS } from '@/lib/products';
@@ -225,7 +226,11 @@ export default function HomePage() {
             <div className="absolute right-0">
               <SideMenu onAvailableOnly={() => setFilters({ ...EMPTY_FILTERS, availableOnly: true })} />
             </div>
-            <div className="absolute left-0">
+            {/* «رجعت لم أعرف أين أجد الإشعارات» — beside the sound control,
+                which is where the user asked for it and where anything about
+                notifications already lives. */}
+            <div className="absolute left-0 flex items-center">
+              <NotificationBell />
               <SoundToggle />
             </div>
           </div>

@@ -7,14 +7,25 @@ import {
   TRAFFIC_LABELS,
   expectedLabel,
 } from '@/lib/products';
-import { ageLabel, hoursLabel, isFresh, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
+import { closedLabel, isFresh, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
-import { KIND_LABELS, KIND_STYLES } from '@/lib/stationMeta';
 import { RouteButton } from './RouteButton';
 import { StarIcon } from './icons';
-import { MapPinIcon, PhoneIcon } from './icons';
+import { PhoneIcon } from './icons';
 
+/** One station in the list.
+ *
+ *  Rebuilt after a user asked whether the card was crowded. It was, and the
+ *  arithmetic said so: on a 390px screen the name row had 270px, of which two
+ *  `shrink-0` pills and their gaps took 112px — 41% — leaving the name about
+ *  158px and making it the only element that could shrink. So the longest
+ *  station names were the ones truncated, while both pills repeated facts
+ *  already on screen: the kind is a search filter, and "closed" was printed
+ *  again three lines below from the same boolean.
+ *
+ *  Now the name owns its line. What a person came to find — the fuel — sits
+ *  directly under it, and everything about opening hours is said once. */
 export function StationCard({
   station,
   isFavorite,
@@ -24,137 +35,135 @@ export function StationCard({
   station: StationWithStatus;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
-  /** Every other card sits on a faint green wash. White-on-white cards in a
-   *  scrolling list read as one long block; the tint gives the eye an edge. */
+  /** Every other card sits on a faint green wash so a long list stays
+   *  readable without drawing a divider between each pair. */
   tinted?: boolean;
 }) {
   const byProduct = new Map(station.products.map((p) => [p.product, p]));
   const open = isOpenNow(station);
-  // an owner's manual setting overrides the crowd average
-  // تحديد المالك يسقط بعد ٣٠ دقيقة كما يسقط تصويت الناس
   const level = activeTrafficLevel(station, station.traffic);
+
+  // Three states the old card collapsed into one sentence, and got wrong in
+  // both directions: it printed «لم تُحدَّث حالة الوقود بعد» for a *closed*
+  // station whose data was minutes old (a false claim about reporting, not
+  // about hours), and printed nothing at all — a silent gap — for an open
+  // station whose data had gone stale. They are separate facts now.
+  const rows = PRODUCT_ORDER.map((p) => byProduct.get(p)).filter(Boolean);
+  const everReported = rows.some((r) => r!.is_available || r!.expected_at);
+  const anyFresh = rows.some((r) => r!.is_available && isFresh(r!.updated_at));
+  const shown = PRODUCT_ORDER.filter((product) => {
+    const row = byProduct.get(product);
+    if (!row) return false;
+    // A five-day-old "available" is not a claim about today.
+    return (row.is_available && open && isFresh(row.updated_at)) || row.expected_at;
+  });
 
   return (
     <article className={`card p-4 ${tinted ? 'border-brand-100 bg-brand-50/60' : ''}`}>
+      {/* The name gets the whole line. Nothing shares it but the star, which
+          is fixed-width — so no station name is truncated to make room for a
+          label the reader did not ask for. */}
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="truncate text-base font-bold">{station.name}</h2>
-            <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${KIND_STYLES[station.kind]}`}
-            >
-              {KIND_LABELS[station.kind]}
-            </span>
-            <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                open ? 'bg-brand-100 text-brand' : 'bg-slate-200 text-slate-600'
-              }`}
-            >
-              {open ? 'مفتوحة' : 'مغلقة'}
-            </span>
-          </div>
+          <h2 className="text-base font-bold leading-snug">{station.name}</h2>
           <p className="mt-0.5 text-sm text-slate-500">
             {station.city} — {station.address}
           </p>
-          <div className="mt-1.5 flex items-center gap-2">
-            {level && (
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${TRAFFIC_COLORS[level].bg} ${TRAFFIC_COLORS[level].text}`}
-              >
-                <span className={`h-2 w-2 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
-                {TRAFFIC_LABELS[level]}
-                {/* the label must name whichever source actually won, not
-                    whichever column happens to be non-null — an expired owner
-                    reading was being credited for a crowd vote */}
-                {trafficSource(station, station.traffic) === 'station'
-                  ? ' · من المحطة'
-                  : agoLabel(station.traffic?.last_vote_at) && ` · ${agoLabel(station.traffic?.last_vote_at)}`}
-              </span>
-            )}
-            {station.distanceKm !== undefined && (
-              <span className="text-xs text-slate-400">{station.distanceKm.toFixed(1)} كم</span>
-            )}
-          </div>
         </div>
-        <div className="flex shrink-0 gap-1.5">
-          {onToggleFavorite && (
-            <button
-              type="button"
-              onClick={onToggleFavorite}
-              aria-pressed={isFavorite}
-              // The star subscribes to this station's alerts now, so the label
-              // says so: «إضافة للمفضلة» described a private bookmark, which is
-              // what it used to be and is no longer.
-              aria-label={isFavorite ? 'إلغاء متابعة هذه المحطة' : 'تابع هذه المحطة ليصلك إشعارها'}
-              title={isFavorite ? 'تتابعها — يصلك إشعارها' : 'تابعها ليصلك إشعار توفّر الوقود'}
-              className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-colors duration-200 ${
-                isFavorite
-                  ? 'border-amber-400 bg-amber-50 text-amber-500'
-                  : 'border-slate-200 bg-white text-slate-400'
-              }`}
-            >
-              <StarIcon filled={isFavorite} />
-            </button>
-          )}
-        </div>
+        {onToggleFavorite && (
+          <button
+            type="button"
+            onClick={onToggleFavorite}
+            aria-pressed={isFavorite}
+            aria-label={isFavorite ? 'إلغاء متابعة هذه المحطة' : 'تابع هذه المحطة ليصلك إشعارها'}
+            title={isFavorite ? 'تتابعها — يصلك إشعارها' : 'تابعها ليصلك إشعار توفّر الوقود'}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition-colors duration-200 ${
+              isFavorite
+                ? 'border-brand bg-brand-50 text-brand'
+                : 'border-slate-200 bg-white text-slate-400'
+            }`}
+          >
+            <StarIcon filled={isFavorite} />
+          </button>
+        )}
       </header>
 
-      {/* Only what a driver can act on: in stock, or announced as arriving.
-          A wall of struck-through "not available" chips is noise. */}
-      <ul className="mt-3 flex flex-wrap gap-1.5">
-        {PRODUCT_ORDER.map((product) => {
-          const row = byProduct.get(product);
-          if (!row) return null;
-          // A five-day-old "available" is not a claim about today.
-          const inStock = row.is_available && open && isFresh(row.updated_at);
-          const expected = row.expected_at;
-          if (!inStock && !expected) return null;
+      {/* The answer people opened the app for. Only what they can act on: in
+          stock, or announced as arriving. A wall of struck-through "not
+          available" chips is noise. */}
+      {shown.length > 0 && (
+        <ul className="mt-3 flex flex-wrap items-center gap-1.5">
+          {shown.map((product) => {
+            const row = byProduct.get(product)!;
+            const inStock = row.is_available && open && isFresh(row.updated_at);
+            const lane = station.productTraffic?.find((t) => t.product === product);
+            // Lane traffic reads majority_level straight off the view and so
+            // never passed through the closed-station guard in
+            // activeTrafficLevel. Closed means no dot, same rule.
+            const laneLevel = open ? lane?.majority_level : null;
 
-          return (
-            <li
-              key={product}
-              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                inStock ? 'bg-brand-100 text-brand' : 'bg-amber-50 text-amber-700'
-              }`}
-            >
-              {/* The queue belongs to the pump, not the forecourt: premium can
-                  be backed up while regular is free, and one colour for the
-                  whole station sends a driver away from a free pump. */}
-              {(() => {
-                const lane = station.productTraffic?.find((t) => t.product === product);
-                return lane?.majority_level ? (
+            return (
+              <li
+                key={product}
+                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                  inStock ? 'bg-brand-100 text-brand' : 'bg-amber-50 text-amber-700'
+                }`}
+              >
+                {laneLevel && (
                   <span
-                    title={`الازدحام: ${TRAFFIC_LABELS[lane.majority_level]}`}
-                    className={`h-2 w-2 shrink-0 rounded-full ${TRAFFIC_COLORS[lane.majority_level].dot}`}
+                    title={`الازدحام: ${TRAFFIC_LABELS[laneLevel]}`}
+                    className={`h-2 w-2 shrink-0 rounded-full ${TRAFFIC_COLORS[laneLevel].dot}`}
                   />
-                ) : null;
-              })()}
-              {PRODUCT_LABELS[product]}
-              {!inStock && expected && (
-                <span className="mr-1 font-bold">
-                  · {expectedLabel(expected)}
-                  {row.expected_period ? ` ${PERIOD_LABELS[row.expected_period]}` : ''}
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+                )}
+                {PRODUCT_LABELS[product]}
+                {!inStock && row.expected_at && (
+                  <span className="mr-1 font-bold">
+                    · {expectedLabel(row.expected_at)}
+                    {row.expected_period ? ` ${PERIOD_LABELS[row.expected_period]}` : ''}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
-      {/* Say plainly that nobody has reported yet, rather than showing a card
-          with a blank gap where the fuel chips belong. */}
-      {!PRODUCT_ORDER.some((p) => {
-        const row = byProduct.get(p);
-        return row && ((row.is_available && open) || row.expected_at);
-      }) && (
+      {/* Said once, and only when it is the actual state of things. */}
+      {open && !shown.length && (
         <p className="mt-3 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-medium text-slate-500">
-          لم تُحدَّث حالة الوقود بعد
+          {!everReported
+            ? 'لم تُحدَّث حالة الوقود بعد'
+            : anyFresh
+              ? 'لا يوجد وقود متوفر الآن'
+              : 'آخر تحديث قديم — اتصل بالمحطة قبل أن تتحرك'}
         </p>
       )}
 
+      {(level || station.distanceKm !== undefined) && (
+        <div className="mt-2 flex items-center gap-2">
+          {level && (
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${TRAFFIC_COLORS[level].bg} ${TRAFFIC_COLORS[level].text}`}
+            >
+              <span className={`h-2 w-2 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
+              {TRAFFIC_LABELS[level]}
+              {trafficSource(station, station.traffic) === 'station'
+                ? ' · من المحطة'
+                : agoLabel(station.traffic?.last_vote_at) &&
+                  ` · ${agoLabel(station.traffic?.last_vote_at)}`}
+            </span>
+          )}
+          {station.distanceKm !== undefined && (
+            <span className="ms-auto text-xs text-slate-400">
+              {station.distanceKm.toFixed(1)} كم
+            </span>
+          )}
+        </div>
+      )}
+
       {!open && (
-        <p className="mt-2 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-600">
-          المحطة مغلقة الآن · أوقات العمل {hoursLabel(station)}
+        <p className="mt-3 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-600">
+          {closedLabel(station)}
         </p>
       )}
 
@@ -165,13 +174,17 @@ export function StationCard({
           .join('، ') || 'لا شيء'}
       </p>
 
-
       <div className="mt-3 grid grid-cols-2 gap-2">
         <a href={`tel:${station.phone}`} className="btn-ghost">
           <PhoneIcon className="h-4 w-4" />
           اتصال
         </a>
-        <RouteButton lat={station.lat} lng={station.lng} stationId={station.id} stationName={station.name} />
+        <RouteButton
+          lat={station.lat}
+          lng={station.lng}
+          stationId={station.id}
+          stationName={station.name}
+        />
       </div>
     </article>
   );

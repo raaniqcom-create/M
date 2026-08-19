@@ -187,6 +187,31 @@ Deno.serve(async (req) => {
   // asks how many it would reach before it reaches them.
   if (dryRun) return json({ dryRun: true, audience });
 
+  // The broadcast never recorded anything. A user asked where the nine
+  // notifications he received had gone, and the fuel path could not have sent
+  // nine — it carries a 45-minute per-person cooldown. Admin broadcasts are the
+  // likelier shape, and they were the one path leaving no trace at all.
+  //
+  // Fire-and-forget, like the sibling insert in notify: a logging failure must
+  // never be why somebody does not hear an announcement.
+  {
+    const addresses = [...web.keys(), ...devices.map((d) => d.token)];
+    if (addresses.length) {
+      db.from('notification_log')
+        .insert(
+          addresses.map((address) => ({
+            address,
+            kind: 'announcement',
+            title,
+            body: text,
+          }))
+        )
+        .then(({ error }) => {
+          if (error) console.error('notification_log', error.message);
+        });
+    }
+  }
+
   const results = { ok: 0, failed: 0, pruned: 0, errors: [] as string[] };
 
   const jwtApns = await apnsJwt();

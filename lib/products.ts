@@ -1,4 +1,5 @@
 import type { FuelProduct, TrafficLevel } from '@/types/database';
+import { isOpenNow } from './hours';
 
 // single source of truth for the 6 fixed products — mirrors the fuel_product
 // enum in supabase/schema.sql
@@ -102,13 +103,29 @@ export const MANUAL_TRAFFIC_MINUTES = 30;
  *  دقيقة، فتحديد المالك يسقط بعدها أيضاً — العدل نفسه للطرفين.
  *
  *  manual_traffic_set_at كان يُكتب ولا يُقرأ في أي موضع. هذه أول قراءة له. */
+export interface TrafficStation {
+  manual_traffic_level?: TrafficLevel | null;
+  manual_traffic_set_at?: string | null;
+  // Required, not optional: an optional hours field is silently absent when a
+  // caller passes a partial object, and the guard below then reads a closed
+  // station as open — which is the exact bug this is here to prevent.
+  is_24h: boolean;
+  opens_at: string;
+  closes_at: string;
+  temp_closed?: boolean;
+}
+
 export function activeTrafficLevel(
-  station: {
-    manual_traffic_level?: TrafficLevel | null;
-    manual_traffic_set_at?: string | null;
-  },
+  station: TrafficStation,
   votes?: { majority_level?: TrafficLevel | null; last_vote_at?: string | null } | null
 ): TrafficLevel | null {
+  // Nobody queues at a shut forecourt. The owner tapped «خفيف» at 04:10 on a
+  // station that opens at 06:00, and the reading rode the 30-minute freshness
+  // window onto a card that also said «مغلقة» — a stale badge inviting a
+  // wasted trip. This function had no idea the station was closed: the hours
+  // were not even in its parameter type.
+  if (!isOpenNow(station)) return null;
+
   const setAt = station.manual_traffic_set_at
     ? new Date(station.manual_traffic_set_at).getTime()
     : 0;
@@ -135,10 +152,7 @@ export function activeTrafficLevel(
 
 /** Which source the shown level came from, so the label can say so honestly. */
 export function trafficSource(
-  station: {
-    manual_traffic_level?: TrafficLevel | null;
-    manual_traffic_set_at?: string | null;
-  },
+  station: TrafficStation,
   votes?: { majority_level?: TrafficLevel | null; last_vote_at?: string | null } | null
 ): 'station' | 'people' | null {
   const level = activeTrafficLevel(station, votes);

@@ -353,7 +353,7 @@ export function readPrefs(): AlertPrefs {
 /** The push address this device already has, without asking for anything.
  *  Reading it from the mirrors means changing your quiet hours never raises a
  *  permission prompt — the same reason clearChoice avoids currentTarget(). */
-function knownAddress(): string | null {
+export function knownAddress(): string | null {
   const saved = readChoice()?.address;
   if (saved) return saved;
   try {
@@ -394,4 +394,31 @@ export async function savePrefs(prefs: AlertPrefs): Promise<boolean> {
 /** Pause for a whole number of days from now. */
 export function pausedFor(days: number): string {
   return new Date(Date.now() + days * 86400_000).toISOString();
+}
+
+export interface SentNotification {
+  title: string | null;
+  body: string | null;
+  station_id: string | null;
+  kind: string;
+  sent_at: string;
+}
+
+/** What was sent to this device, newest first.
+ *
+ *  A user got nine notifications while his phone lay on a table, came back and
+ *  had nowhere to look. The tray had collapsed them — the service worker tags
+ *  a station's notifications so repeats replace each other — and the app kept
+ *  no record at all.
+ *
+ *  Read from the server, not from the device: on iOS nothing client-side ever
+ *  sees an arriving push, and on Android nothing sees it while the app is
+ *  backgrounded, which is exactly the case being complained about. A history
+ *  that works on one platform of three teaches people not to trust it. */
+export async function readNotifications(): Promise<SentNotification[] | null> {
+  const address = knownAddress();
+  if (!address) return [];
+  const { data, error } = await supabase.rpc('notifications_for', { p_address: address });
+  if (error) return null;
+  return (data ?? []) as SentNotification[];
 }

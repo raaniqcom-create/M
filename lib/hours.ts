@@ -72,6 +72,25 @@ export function hoursLabel(station: {
   return `${formatTime(station.opens_at)} — ${formatTime(station.closes_at)}`;
 }
 
+/** Why a station is shut, and when that ends — one line, for a card.
+ *
+ *  The card used to print «المحطة مغلقة الآن · أوقات العمل 6:00 صباحاً — 7:00 مساءً»
+ *  next to a «مغلقة» pill driven by the same boolean: the state twice, and a
+ *  timetable where the reader wanted an answer. Two states it got wrong
+ *  outright: a temporarily-shut station printed its normal hours as if they
+ *  explained the closure, and a 24-hour station shut by its owner printed
+ *  «مغلقة الآن · أوقات العمل مفتوحة 24 ساعة», which contradicts itself. */
+export function closedLabel(station: {
+  is_24h: boolean;
+  opens_at: string;
+  closes_at: string;
+  temp_closed?: boolean;
+}): string {
+  if (station.temp_closed) return 'مغلقة مؤقتاً';
+  if (station.is_24h) return 'مغلقة الآن';
+  return `مغلقة · تفتح ${formatTime(station.opens_at)}`;
+}
+
 /**
  * 12-hour selection -> "HH:MM". Midnight and noon are the two cases that break
  * naive conversions: 12 صباحاً is hour 0, 12 مساءً is hour 12.

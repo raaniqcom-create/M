@@ -609,6 +609,11 @@ Deno.serve(async (req) => {
           address: l.address,
           kind: isNewStation ? 'approved' : 'fuel',
           station_id: stationId,
+          // The words, not just the fact. Without them a history row can say
+          // "something about station X at 14:32" and no more — `kind` carries
+          // no product, and the product is the entire content of the title.
+          title: alertTitle,
+          body: alertBody,
         }))
       )
       .then(({ error }) => {
