@@ -345,6 +345,30 @@ function Panel() {
           إلى الرقم الجديد.
         </p>
         <p className="mt-2 text-xs font-bold text-slate-600" dir="ltr">{station.phone}</p>
+
+        {/* The admin can override either way: an owner who hid the number and
+            then asks for it back by phone should not have to find the toggle. */}
+        <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+          <input
+            type="checkbox"
+            checked={!!station.phone_hidden}
+            onChange={async () => {
+              const next = !station.phone_hidden;
+              setStation({ ...station, phone_hidden: next });
+              await supabase.from('stations').update({ phone_hidden: next }).eq('id', station.id);
+              // baked into the prerendered pages; without this it stays readable
+              rebuildSite();
+            }}
+            className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
+          />
+          <span className="text-xs leading-relaxed text-slate-600">
+            <b>مخفي عن الناس</b>
+            <span className="mt-1 block text-slate-500">
+              يختفي زر الاتصال من التطبيق والبوتات، ويبقى الرقم هنا وفي كل شاشات
+              الإدارة. لا يتغيّر اسم دخول المالك.
+            </span>
+          </span>
+        </label>
         <input
           type="tel"
           inputMode="numeric"

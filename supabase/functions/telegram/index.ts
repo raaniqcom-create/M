@@ -1042,7 +1042,10 @@ function stationLine(s: {
     `<b>${s.name}</b>${dist}\n` +
     `${s.city} — ${s.address}\n` +
     `المتوفر: ${items}\n` +
-    `☎️ ${s.phone}` +
+    // Some owners publish their station but not their number. The bots run on
+    // the service key, so no RLS or column grant protects them — the check has
+    // to be here, explicitly.
+    (s.phone ? `☎️ ${s.phone}` : '') +
     (s.slug ? `\n${SITE}/${s.slug}` : '')
   );
 }
@@ -1107,7 +1110,7 @@ async function showProducts(chat: number, messageId?: number) {
 
 async function showStationsWithProduct(chat: number, messageId: number, product: string) {
   const { data } = await db
-    .from('stations')
+    .from('stations_public')
     .select('name, city, address, phone, slug, is_24h, opens_at, closes_at, station_products!inner(product, is_available)')
     .eq('status', 'approved')
     .eq('station_products.product', product)
@@ -1561,7 +1564,7 @@ Deno.serve(async (req) => {
     const q = text.trim();
     if (q.length >= 2) {
       const { data } = await db
-        .from('stations')
+        .from('stations_public')
         .select('id, name, city, address, phone, slug, is_24h, opens_at, closes_at, station_products(product, is_available)')
         .eq('status', 'approved')
         .or(`name.ilike.%${q}%,city.ilike.%${q}%,address.ilike.%${q}%`)

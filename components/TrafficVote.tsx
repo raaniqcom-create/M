@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { isOpenNow } from '@/lib/hours';
+import { castVote, quietPosition, VOTE_MESSAGES } from '@/lib/vote';
+import { distanceKm } from '@/lib/stations';
 import {
   activeTrafficLevel,
   trafficSource,
@@ -36,8 +38,8 @@ export function TrafficVote({
   manualLevel = null,
   manualSetAt = null,
   hours,
-  compact = false,
-  products,
+  lat = null,
+  lng = null,
 }: {
   stationId: string;
   traffic?: StationTrafficAvg | null;
@@ -49,27 +51,25 @@ export function TrafficVote({
    *  showed a queue level for a shut forecourt and let people vote on one —
    *  which is where the stale readings came from in the first place. */
   hours: { is_24h: boolean; opens_at: string; closes_at: string; temp_closed?: boolean };
-  /** On a station card in the list, where the badge and the per-product lanes
-   *  are already drawn by the card itself — so this renders the question and
-   *  nothing else.
-   *
-   *  It also fetches nothing. The full screen refreshes because a station page
-   *  is a static file whose build-time counts are stale; a card in the list was
-   *  loaded seconds ago and already holds all three tables. Mounting the
-   *  fetching version on seven cards would fire twenty-one queries to redraw
-   *  data that is already on screen. */
-  compact?: boolean;
-  /** Required in compact mode: what the station is selling, from the card. */
-  products?: FuelProduct[];
+  /** Needed to judge «I am here» before offering the buttons. */
+  lat?: number | null;
+  lng?: number | null;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [traffic, setTraffic] = useState<StationTrafficAvg | null>(initial);
   const [lanes, setLanes] = useState<ProductTraffic[]>([]);
-  const [available, setAvailable] = useState<FuelProduct[]>(compact ? (products ?? []) : []);
+  const [available, setAvailable] = useState<FuelProduct[]>([]);
   // set when a level is tapped; the vote is not cast until a product is picked
   const [pending, setPending] = useState<TrafficLevel | null>(null);
   const [voted, setVoted] = useState<string[]>([]);
+  // Who may rate: somebody standing at the forecourt, or somebody coming back
+  // from a trip they started here. Everyone else sees the reading and no
+  // buttons — a rating from a person who was never there is not information,
+  // it is a claim, and with two or three votes deciding a station's colour it
+  // is the cheapest possible sabotage.
+  const [allowed, setAllowed] = useState<'here' | 'trip' | null>(null);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const key = (p: FuelProduct | null) => `voted:${stationId}:${p ?? 'all'}`;
 
@@ -103,9 +103,37 @@ export function TrafficVote({
       if (Date.now() - last < VOTE_WINDOW_MS) done.push(p ?? 'all');
     }
     setVoted(done);
-    if (!compact) refresh();
+    refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stationId, refresh, compact]);
+  }, [stationId, refresh]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // A trip started at this station, still inside the window TripAsk uses.
+      try {
+        const raw = localStorage.getItem('trip');
+        if (raw) {
+          const t = JSON.parse(raw) as { id: string; at: number };
+          if (t.id === stationId && Date.now() - t.at < 3 * 60 * 60_000) {
+            if (!cancelled) setAllowed('trip');
+            return;
+          }
+        }
+      } catch {}
+
+      const pos = await quietPosition();
+      if (cancelled || !pos) return;
+      if (lat == null || lng == null) return;
+      if (distanceKm(pos, { lat, lng }) <= 0.5) {
+        setCoords(pos);
+        setAllowed('here');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [stationId, lat, lng]);
 
   async function vote(level: TrafficLevel, product: FuelProduct | null) {
     // Guarded here, not only by hiding the buttons: a vote cast on a shut
@@ -113,9 +141,14 @@ export function TrafficVote({
     if (busy || !open) return;
     setBusy(true);
     setError(null);
-    const { error: e } = await supabase
-      .from('traffic_votes')
-      .insert({ station_id: stationId, level, product });
+    const outcome = await castVote({
+      stationId,
+      level,
+      product,
+      source: allowed ?? 'trip',
+      coords,
+    });
+    const e = outcome === 'ok' ? null : { message: VOTE_MESSAGES[outcome] };
     setBusy(false);
     if (e) {
       // a rejected vote used to leave the button silently unchanged, so the
@@ -141,9 +174,6 @@ export function TrafficVote({
   // Closed: no badge, no per-product list, no buttons. The screen says why
   // instead of leaving a silent gap — a missing control reads as a bug.
   if (!open) {
-    // The card already prints «مغلقة · تفتح …» right below; saying it twice is
-    // the duplication that made the card crowded in the first place.
-    if (compact) return null;
     return (
       <p className="rounded-xl bg-slate-100 px-3 py-2.5 text-xs font-medium text-slate-600">
         المحطة مغلقة الآن — لا ازدحام يُقاس.
@@ -153,7 +183,7 @@ export function TrafficVote({
 
   return (
     <div>
-      {!compact && active && (
+      {active && (
         <span
           className={`mb-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${TRAFFIC_COLORS[active].bg} ${TRAFFIC_COLORS[active].text}`}
         >
@@ -169,7 +199,7 @@ export function TrafficVote({
         </span>
       )}
 
-      {!compact && rated.length > 0 && (
+      {rated.length > 0 && (
         <ul className="mb-3 space-y-1.5 rounded-xl bg-slate-50 p-3">
           {rated.map(([p, l]) => (
             <li key={p} className="flex items-center gap-2 text-xs">
@@ -188,77 +218,91 @@ export function TrafficVote({
         </ul>
       )}
 
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-slate-500">
-          {pending ? `${TRAFFIC_LABELS[pending]} — على أي منتج؟` : 'كيف الازدحام الآن؟'}
-        </span>
-        {traffic && traffic.total_votes > 0 && !pending && (
-          <span className="text-xs text-slate-400">{traffic.total_votes} تقييم / 30 دقيقة</span>
-        )}
-      </div>
-
-      {!pending ? (
-        <div className="mt-2 grid grid-cols-3 gap-2" role="group" aria-label="تقييم الازدحام">
-          {LEVELS.map((level) => (
-            <button
-              key={level}
-              type="button"
-              disabled={busy}
-              onClick={() => setPending(level)}
-              aria-label={`الازدحام ${TRAFFIC_LABELS[level]}`}
-              className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border text-sm font-semibold transition-colors duration-200 disabled:opacity-45 ${
-                traffic?.majority_level === level
-                  ? `${TRAFFIC_COLORS[level].bg} ${TRAFFIC_COLORS[level].text} ${TRAFFIC_COLORS[level].border}`
-                  : 'border-slate-200 bg-white text-slate-600 active:bg-slate-50'
-              }`}
-            >
-              <span className={`h-2.5 w-2.5 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
-              {TRAFFIC_LABELS[level]}
-            </button>
-          ))}
-        </div>
+      {/* Rating is for people who were there. A vote from someone who never
+          left home is not information about a queue — it is a claim, and with
+          two or three votes deciding a station colour it is the cheapest
+          sabotage on the platform. */}
+      {!allowed ? (
+        <p className="rounded-xl bg-slate-50 px-3 py-2.5 text-xs leading-relaxed text-slate-500">
+          التقييم لمن يصل المحطة. اضغط «الطريق» وتوجّه إليها، أو قيّمها وأنت
+          عندها — فيكون ما يقرؤه الناس وصفاً لطابور رآه أحد.
+        </p>
       ) : (
         <>
-          {/* Only what the station says it is selling. Rating the queue for a
-              product that is not being pumped is noise, and the list would
-              otherwise be seven rows of mostly nothing. */}
-          <div className="mt-2 flex flex-wrap gap-2">
-            {available.map((p) => {
-              const done = voted.includes(p);
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  disabled={busy || done}
-                  onClick={() => vote(pending, p)}
-                  className={`min-h-[44px] rounded-xl border px-3 text-sm font-bold disabled:opacity-40 ${TRAFFIC_COLORS[pending].border} ${TRAFFIC_COLORS[pending].bg} ${TRAFFIC_COLORS[pending].text}`}
-                >
-                  {PRODUCT_LABELS[p]}
-                  {done ? ' ✓' : ''}
-                </button>
-              );
-            })}
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-slate-500">
+            {pending ? `${TRAFFIC_LABELS[pending]} — على أي منتج؟` : 'كيف الازدحام الآن؟'}
+          </span>
+          {traffic && traffic.total_votes > 0 && !pending && (
+            <span className="text-xs text-slate-400">{traffic.total_votes} تقييم / 30 دقيقة</span>
+          )}
+        </div>
 
-            {/* A station with one pump, or a queue that is not about any one
-                product, still needs a way to answer. */}
+        {!pending ? (
+          <div className="mt-2 grid grid-cols-3 gap-2" role="group" aria-label="تقييم الازدحام">
+            {LEVELS.map((level) => (
+              <button
+                key={level}
+                type="button"
+                disabled={busy}
+                onClick={() => setPending(level)}
+                aria-label={`الازدحام ${TRAFFIC_LABELS[level]}`}
+                className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border text-sm font-semibold transition-colors duration-200 disabled:opacity-45 ${
+                  traffic?.majority_level === level
+                    ? `${TRAFFIC_COLORS[level].bg} ${TRAFFIC_COLORS[level].text} ${TRAFFIC_COLORS[level].border}`
+                    : 'border-slate-200 bg-white text-slate-600 active:bg-slate-50'
+                }`}
+              >
+                <span className={`h-2.5 w-2.5 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
+                {TRAFFIC_LABELS[level]}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <>
+            {/* Only what the station says it is selling. Rating the queue for a
+                product that is not being pumped is noise, and the list would
+                otherwise be seven rows of mostly nothing. */}
+            <div className="mt-2 flex flex-wrap gap-2">
+              {available.map((p) => {
+                const done = voted.includes(p);
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    disabled={busy || done}
+                    onClick={() => vote(pending, p)}
+                    className={`min-h-[44px] rounded-xl border px-3 text-sm font-bold disabled:opacity-40 ${TRAFFIC_COLORS[pending].border} ${TRAFFIC_COLORS[pending].bg} ${TRAFFIC_COLORS[pending].text}`}
+                  >
+                    {PRODUCT_LABELS[p]}
+                    {done ? ' ✓' : ''}
+                  </button>
+                );
+              })}
+
+              {/* A station with one pump, or a queue that is not about any one
+                  product, still needs a way to answer. */}
+              <button
+                type="button"
+                disabled={busy || voted.includes('all')}
+                onClick={() => vote(pending, null)}
+                className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 disabled:opacity-40"
+              >
+                الساحة كلها
+                {voted.includes('all') ? ' ✓' : ''}
+              </button>
+            </div>
+
             <button
               type="button"
-              disabled={busy || voted.includes('all')}
-              onClick={() => vote(pending, null)}
-              className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 disabled:opacity-40"
+              onClick={() => setPending(null)}
+              className="mt-2 w-full py-1.5 text-xs font-semibold text-slate-500 underline"
             >
-              الساحة كلها
-              {voted.includes('all') ? ' ✓' : ''}
+              رجوع
             </button>
-          </div>
+          </>
+        )}
 
-          <button
-            type="button"
-            onClick={() => setPending(null)}
-            className="mt-2 w-full py-1.5 text-xs font-semibold text-slate-500 underline"
-          >
-            رجوع
-          </button>
         </>
       )}
 

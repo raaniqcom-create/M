@@ -41,12 +41,12 @@ export async function generateStaticParams() {
 }
 
 async function getStation(id: string) {
-  const { data: station } = await db
-    .from('stations')
-    .select('*')
-    .eq('id', id)
-    .eq('status', 'approved')
-    .maybeSingle<Station>();
+  // stations_public nulls a hidden phone; the table is the fallback until the
+  // view exists, so a build never produces pages with no station on them.
+  const pick = (from: string) =>
+    db.from(from).select('*').eq('id', id).eq('status', 'approved').maybeSingle<Station>();
+  let { data: station } = await pick('stations_public');
+  if (!station) ({ data: station } = await pick('stations'));
 
   if (!station) return null;
 
@@ -121,6 +121,8 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
             stationId={station.id}
             manualLevel={station.manual_traffic_level}
             manualSetAt={station.manual_traffic_set_at}
+            lat={station.lat}
+            lng={station.lng}
             hours={{
               is_24h: station.is_24h,
               opens_at: station.opens_at,
@@ -132,11 +134,13 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
 
         <StationLive station={station} initial={rows} />
 
-        <div className="mt-5 grid grid-cols-2 gap-2">
-          <a href={`tel:${station.phone}`} className="btn-ghost">
-            <PhoneIcon className="h-4 w-4" />
-            اتصال
-          </a>
+        <div className={`mt-5 grid gap-2 ${station.phone ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {station.phone && (
+            <a href={`tel:${station.phone}`} className="btn-ghost">
+              <PhoneIcon className="h-4 w-4" />
+              اتصال
+            </a>
+          )}
           <RouteButton lat={station.lat} lng={station.lng} stationId={station.id} stationName={station.name} />
         </div>
 

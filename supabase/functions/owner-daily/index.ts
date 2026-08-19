@@ -125,6 +125,13 @@ const MESSAGES: Record<string, (name: string) => Msg> = {
     title: `${name} — شكراً لالتزامك`,
     body: 'نشرتَ اليوم فوصل خبرك إلى أهل مدينتك. نوصيك بالنشر غداً، أو جدوِله الآن من لوحة محطتك فيُرسل تلقائياً. كل الاحترام والتقدير.',
   }),
+  // Asked, not told. The crowd's reading has just expired, and the owner is
+  // the one person standing in the forecourt who can say what replaced it —
+  // so the platform asks him rather than showing nothing.
+  traffic_confirm: (name) => ({
+    title: `${name} — كيف الازدحام الآن؟`,
+    body: 'انتهى آخر تقييم من الناس، فلم يعد أحد يعرف حال الطابور عندك. أكّد الحالة بضغطة ليراها من يقصدك.',
+  }),
 };
 
 Deno.serve(async (req) => {
@@ -136,19 +143,46 @@ Deno.serve(async (req) => {
 
   const { data: stations } = await db
     .from('stations')
-    .select('id, name, owner_id, is_24h, opens_at, closes_at')
+    .select('id, name, owner_id, is_24h, opens_at, closes_at, temp_closed, manual_traffic_level, manual_traffic_set_at')
     .eq('status', 'approved')
     .eq('is_demo', false);
 
   if (!stations?.length) return new Response('no stations');
 
   const ids = stations.map((s) => s.id);
-  const [{ data: products }, { data: pinged }] = await Promise.all([
+  const [{ data: products }, { data: pinged }, { data: votes }] = await Promise.all([
     db.from('station_products').select('station_id, updated_at').in('station_id', ids),
     db.from('owner_pings').select('station_id, kind').eq('day', day),
+    // Only the tail matters: a vote older than 45 minutes lapsed long ago and
+    // asking about it now is late, not helpful.
+    db
+      .from('traffic_votes')
+      .select('station_id, created_at')
+      .in('station_id', ids)
+      .gte('created_at', new Date(Date.now() - 45 * 60_000).toISOString()),
   ]);
 
   const already = new Set((pinged ?? []).map((p) => `${p.station_id}:${p.kind}`));
+
+  // Newest vote per station, and whether it lapsed inside the last 15 minutes —
+  // the window between "the reading expired" and "asking is stale news".
+  const newestVote = new Map<string, number>();
+  for (const v of votes ?? []) {
+    const t = new Date(v.created_at).getTime();
+    if (t > (newestVote.get(v.station_id) ?? 0)) newestVote.set(v.station_id, t);
+  }
+  const lapsedJustNow = new Set<string>();
+  for (const [id, t] of newestVote) {
+    const age = Date.now() - t;
+    if (age >= 30 * 60_000 && age < 45 * 60_000) lapsedJustNow.add(id);
+  }
+
+  // The owner's own reading counts as an answer: do not ask someone to confirm
+  // what they told us ten minutes ago.
+  const activeManual = (s: { manual_traffic_level?: string | null; manual_traffic_set_at?: string | null }) =>
+    !!s.manual_traffic_level &&
+    !!s.manual_traffic_set_at &&
+    Date.now() - new Date(s.manual_traffic_set_at).getTime() < 30 * 60_000;
   const lastUpdate = new Map<string, string>();
   for (const p of products ?? []) {
     const cur = lastUpdate.get(p.station_id);
@@ -172,6 +206,19 @@ Deno.serve(async (req) => {
       kind = everPublished ? 'opening_again' : 'opening_first';
     } else if (justPassed(close, minutes) && publishedToday) {
       kind = 'closing_thanks';
+    } else if (
+      // The crowd said something, and that something has just gone stale: the
+      // newest vote is past the 30-minute window the views read, but still
+      // inside 45 — so it lapsed within the last quarter hour and the station
+      // is open right now. Nobody knows the queue at this moment, and the owner
+      // is standing in it.
+      minutes >= open &&
+      minutes < close &&
+      !s.temp_closed &&
+      !activeManual(s) &&
+      lapsedJustNow.has(s.id)
+    ) {
+      kind = 'traffic_confirm';
     }
     if (kind && !already.has(`${s.id}:${kind}`)) due.push({ station: s, kind });
   }

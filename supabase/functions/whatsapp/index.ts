@@ -54,6 +54,8 @@ interface Station {
   city: string;
   address: string | null;
   phone: string | null;
+  /** Owner asked for the number to reach the admin only. */
+  phone_hidden?: boolean | null;
   lat: number | null;
   lng: number | null;
   slug: string | null;
@@ -219,7 +221,7 @@ async function say(to: string, key: string, wantsVoice: boolean | null): Promise
 async function stations(): Promise<Station[]> {
   const { data } = await db
     .from('stations')
-    .select('id, name, city, address, phone, lat, lng, slug')
+    .select('id, name, city, address, phone, phone_hidden, lat, lng, slug')
     .eq('status', 'approved')
     .eq('is_demo', false)
     .order('city');
@@ -383,7 +385,11 @@ async function screenStation(to: string, id: string) {
     '',
     f ? `✅ المتوفر الآن: ${f}` : '⛔ لا يوجد وقود متوفر الآن',
   ];
-  if (s.phone) lines.push(`📞 ${s.phone}`);
+  // Deliberately not filtered out of stations() above: ownedStation() matches
+  // an owner's WhatsApp number against this column, so stripping it there
+  // would silently log every station owner out of the bot. Hidden here, at the
+  // one place a stranger reads it.
+  if (s.phone && !s.phone_hidden) lines.push(`📞 ${s.phone}`);
   if (s.slug) lines.push('', `🔗 ${SITE}/${s.slug}`);
 
   await sendText(to, lines.join('\n'));

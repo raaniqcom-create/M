@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS, TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
 import { distanceKm } from '@/lib/stations';
-import { TRAFFIC_PRODUCTS } from '@/types/database';
+import { castVote, quietPosition, VOTE_MESSAGES } from '@/lib/vote';
 import type { FuelProduct, StationWithStatus, TrafficLevel } from '@/types/database';
 
 const LEVELS: TrafficLevel[] = ['green', 'yellow', 'red'];
@@ -38,6 +38,8 @@ interface Ask {
 export function TripAsk({ stations }: { stations: StationWithStatus[] | null }) {
   const [ask, setAsk] = useState<Ask | null>(null);
   const [product, setProduct] = useState<FuelProduct | null>(null);
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
   // path 1: the remembered intention
@@ -81,6 +83,9 @@ export function TripAsk({ stations }: { stations: StationWithStatus[] | null }) 
           // and a 4am «خفيف» here is exactly the stale badge people complained
           // about seeing on a closed card.
           if (near && near.d <= NEAR_KM && isOpenNow(near.s)) {
+            // Kept so the database can check the claim itself. A distance the
+            // browser computes and sends is not proof, it is an assertion.
+            setCoords({ lat: latitude, lng: longitude });
             setAsk({ id: near.s.id, name: near.s.name, here: true });
           }
         },
@@ -94,13 +99,31 @@ export function TripAsk({ stations }: { stations: StationWithStatus[] | null }) 
     };
   }, [stations]);
 
+  // What this station actually sells right now, from the list already loaded.
+  const askProducts = ask
+    ? ((stations ?? []).find((s) => s.id === ask.id)?.products ?? [])
+        .filter((p) => p.is_available)
+        .map((p) => p.product)
+    : [];
+
   async function answer(level: TrafficLevel) {
     if (!ask || !product) return;
     localStorage.removeItem(KEY);
-    setDone(true);
     // the pump, not the forecourt: a vote without it cannot be shown on the
     // chip the next driver is actually looking at
-    await supabase.from('traffic_votes').insert({ station_id: ask.id, level, product });
+    const outcome = await castVote({
+      stationId: ask.id,
+      level,
+      product,
+      // «here» is checked against the station's coordinates in the database;
+      // a trip is trusted on its own record.
+      source: ask.here ? 'here' : 'trip',
+      coords,
+    });
+    if (outcome === 'ok') return setDone(true);
+    // Said rather than swallowed. This used to be a bare insert whose failure
+    // nobody saw — the card closed and the vote was simply gone.
+    setNote(VOTE_MESSAGES[outcome]);
   }
 
   function dismiss() {
@@ -134,9 +157,13 @@ export function TripAsk({ stations }: { stations: StationWithStatus[] | null }) 
         {product ? `طابور ${PRODUCT_LABELS[product]}` : 'أي منتج عبّيت؟'}
       </p>
 
+      {/* The station's own products, not a fixed three. It used to offer
+          premium/regular/kerosene to every station, so people were asked about
+          fuel the forecourt does not sell — and the list is already in memory
+          on this page. */}
       {!product && (
         <div className="mt-3 grid grid-cols-3 gap-2">
-          {TRAFFIC_PRODUCTS.map((p) => (
+          {askProducts.map((p) => (
             <button
               key={p}
               type="button"
@@ -147,6 +174,12 @@ export function TripAsk({ stations }: { stations: StationWithStatus[] | null }) 
             </button>
           ))}
         </div>
+      )}
+
+      {note && (
+        <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+          {note}
+        </p>
       )}
 
       <div className={`mt-3 grid grid-cols-3 gap-2 ${product ? '' : 'hidden'}`}>

@@ -19,6 +19,9 @@ export interface Station {
   city: string;
   kind: StationKind;
   contact_name: string;
+  /** Hidden means the public reads null for `phone` — the value itself is
+   *  never cleared, because it is also the login username. */
+  phone_hidden?: boolean;
   phone: string;
   lat: number;
   lng: number;

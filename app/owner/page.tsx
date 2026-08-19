@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { rebuildSite } from '@/lib/rebuild';
 import { cancelTrafficReminder, scheduleTrafficReminder } from '@/lib/trafficReminder';
 import {
   PRODUCT_LABELS,
@@ -164,6 +165,31 @@ export default function OwnerPage() {
     }
 
     posterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /** Show the station's number to the public, or keep it for the admin only.
+   *
+   *  Owners asked for this. The number is never cleared — it is also the login
+   *  username (p<digits>@muhta.app), so clearing it would lock the owner out of
+   *  their own account and break both bots. This hides it; it does not delete
+   *  it. And the site is a static export, so the already-published pages carry
+   *  the old value until the next build — hence the rebuild, and hence the copy
+   *  says "within two minutes" rather than "now". */
+  async function togglePhoneHidden() {
+    if (!station) return;
+    const next = !station.phone_hidden;
+    setStation({ ...station, phone_hidden: next });
+    const { error } = await supabase
+      .from('stations')
+      .update({ phone_hidden: next })
+      .eq('id', station.id);
+    if (error) {
+      setStation({ ...station, phone_hidden: !next });
+      return;
+    }
+    // The number is baked into the prerendered pages; without this it stays
+    // readable on the published site however the toggle looks here.
+    rebuildSite();
   }
 
   async function toggleTempClose() {
@@ -472,6 +498,26 @@ export default function OwnerPage() {
                       <dd className="max-w-[60%] text-left font-bold">{station.address}</dd>
                     </div>
                   </dl>
+
+                  <div className="mt-4 rounded-xl border border-slate-200 p-3">
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={!!station.phone_hidden}
+                        onChange={togglePhoneHidden}
+                        className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
+                      />
+                      <span className="text-xs leading-relaxed text-slate-600">
+                        <b>أخفِ رقم المحطة عن الناس</b>
+                        <span className="mt-1 block text-slate-500">
+                          يبقى الرقم عند الإدارة وحدها، ويختفي زر الاتصال من التطبيق
+                          والبوتات. ولا يتغيّر دخولك — الرقم نفسه يبقى اسم المستخدم.
+                          يستغرق ظهور التغيير على الموقع نحو دقيقتين.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+
                   {/* The name, phone and location are what drivers navigate
                       by, so they change through the admin after a check —
                       not silently from the phone in someone's pocket. */}
