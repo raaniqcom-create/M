@@ -1,6 +1,6 @@
 // Hand-written service worker. Replaced next-pwa/workbox: that pulled ~500
 // packages and 7 high-severity advisories to generate what these ~70 lines do.
-const CACHE = 'mahatta-v4';
+const CACHE = 'mahatta-v5';
 const OFFLINE_URL = '/offline';
 
 self.addEventListener('install', (event) => {
@@ -25,8 +25,20 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return; // never cache Supabase calls
 
   // navigations: network-first, fall back to the offline page
+  //
+  // و'no-cache' لا زينةً: الصفحة تُخدَم بـmax-age=600، فمتصفّحٌ يستجيب من
+  // ذاكرته دون أن يسأل الخادم يبقى عشر دقائق على بناءٍ قديم — وHTML القديم
+  // يشير إلى حزم قديمة، فيبقى الخطأ المُصلَح ظاهراً بعد نشر إصلاحه. وقع هذا:
+  // شُحن إصلاح، وبقيت اللوحة تعرض رسالة النسخة السابقة.
+  //
+  // و'no-cache' لا يعني 'no-store': النسخة المخبّأة تبقى، ويُسأل الخادم عنها
+  // فيردّ 304 في الغالب — تحقّقٌ رخيص، لا تنزيلٌ كامل.
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)));
+    event.respondWith(
+      fetch(request, { cache: 'no-cache' })
+        .catch(() => fetch(request))
+        .catch(() => caches.match(OFFLINE_URL))
+    );
     return;
   }
 
