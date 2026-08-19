@@ -117,9 +117,13 @@ async function audienceFor(
 async function ownerDevices(stationId: string): Promise<Listener[]> {
   const { data } = await db
     .from('device_tokens')
-    .select('token, platform')
+    .select('token, platform, keys')
     .eq('station_id', stationId);
-  return (data ?? []).map((d) => ({ channel: d.platform, address: d.token, keys: null }));
+  // المفاتيح تُقرأ ولا تُصفَّر: منذ صار المالك يربط جهازه من المتصفح، صفّه هنا
+  // عنوانُ دفعٍ لا يُرسَل إليه إلا بـp256dh وauth. وتصفيرها كان يجعل web-push
+  // يرفض قبل أن يمسّ الشبكة، ورفضُه بلا statusCode فلا يُحذف ولا يُعدّ فاشلاً —
+  // فيقرأ السجلّ «أُرسل إلى مستمع واحد» ولا يصل أحداً.
+  return (data ?? []).map((d) => ({ channel: d.platform, address: d.token, keys: d.keys }));
 }
 
 // ---------- WhatsApp ----------
@@ -694,7 +698,12 @@ Deno.serve(async (req) => {
     )
     .filter(Boolean) as string[];
 
-  if (dead.length) await db.from('alerts').delete().in('address', dead);
+  // ومن الجدولين معاً: المستمع قد يكون مواطناً في alerts أو مالكاً في
+  // device_tokens، وعنوانٌ ميت لا يُحذف يُعاد إليه كل مرة إلى الأبد.
+  if (dead.length) {
+    await db.from('alerts').delete().in('address', dead);
+    await db.from('device_tokens').delete().in('token', dead);
+  }
 
   return json({
     sent: results.filter((r) => r.status === 'fulfilled').length,

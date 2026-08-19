@@ -171,10 +171,14 @@ Deno.serve(async (req) => {
     }
   } else {
     const [{ data: d }, { data: alerts }] = await Promise.all([
-      db.from('device_tokens').select('token, platform'),
+      db.from('device_tokens').select('token, platform, keys'),
       db.from('alerts').select('channel, address, keys').eq('channel', 'web'),
     ]);
-    devices = d ?? [];
+    // صفوف المتصفح تُفرَز عن الأصلية: ما دون ios يسقط إلى FCM أدناه، وعنوانُ
+    // دفعٍ يُرسَل إلى FCM كرمز جهاز يردّ 400 لا 404 — فلا يُحذف، ويُعاد إليه
+    // في كل إعلان بعده. ولا يظهر في عدّ الجمهور أصلاً، فيبقى العطل صامتاً.
+    devices = (d ?? []).filter((r) => r.platform !== 'web');
+    for (const r of d ?? []) if (r.platform === 'web') web.set(r.token, r.keys ?? {});
     for (const a of alerts ?? []) if (!web.has(a.address)) web.set(a.address, a.keys ?? {});
   }
 
@@ -300,6 +304,7 @@ Deno.serve(async (req) => {
           const code = (e as { statusCode?: number })?.statusCode ?? 0;
           if (code === 404 || code === 410) {
             await db.from('alerts').delete().eq('address', endpoint);
+            await db.from('device_tokens').delete().eq('token', endpoint);
             results.pruned++;
           } else {
             results.failed++;
