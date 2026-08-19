@@ -9,7 +9,7 @@ const REQUEST_TIMEOUT_MS = 12000;
 // below threw before the request was ever made, so every query failed at once
 // — and the one screen that has no error state for it, the station list, sat
 // on a spinner. This falls back to the controller that has always existed.
-function timeoutSignal(ms: number): AbortSignal | undefined {
+export function timeoutSignal(ms: number): AbortSignal | undefined {
   if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
     return AbortSignal.timeout(ms);
   }

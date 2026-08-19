@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useMemo, useRef, useState } from 'react';
+import { supabase, timeoutSignal } from '@/lib/supabase';
 import { isAborted, readFailure } from '@/lib/fn';
 import { ANBAR_CITIES } from '@/lib/cities';
 import { PRODUCT_LABELS, PRODUCT_ORDER } from '@/lib/products';
@@ -36,6 +36,9 @@ export function StationAnnouncePanel() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // يبقى بين الضغطات ولا يُمسح إلا بعد حفظٍ مؤكَّد، فإعادة المحاولة — تلقائية
+  // كانت أو بيد المدير — تحمل المفتاح نفسه ولا تُنشئ خبراً ثانياً.
+  const keyRef = useRef<string | null>(null);
 
   const template = ANNOUNCE_TEMPLATES.find((t) => t.id === templateId)!;
   const input: TemplateInput = { station: station.trim() || '…', city, product };
@@ -97,7 +100,20 @@ export function StationAnnouncePanel() {
     }
 
     setBusy(true);
-    const { error } = await supabase.from('announcements').insert({
+
+    // مفتاحٌ واحد لكل ضغطة، يُعاد به في كل محاولة. فإن كانت محاولةٌ سابقة قد
+    // وصلت القاعدة والتزمت قبل أن ينقطع الجواب، ترتدّ التالية على الفهرس
+    // الفريد (23505) بدل أن تُنشئ خبراً ثانياً — والخبر الثاني يصل الناس ولا
+    // يُستردّ. وبهذا صارت إعادة المحاولة آمنة، فصارت تلقائية.
+    if (!keyRef.current) {
+      keyRef.current =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+    const key = keyRef.current;
+
+    const row = {
       title,
       // one line per city, so the sweep can hand each city its own sentence
       // المدينة في السطر مدينة المستلم، لا مدينة المحطة. تمرير مدينة الجمهور
@@ -115,7 +131,27 @@ export function StationAnnouncePanel() {
       send_at: sendAt.toISOString(),
       expires_at: new Date(sendAt.getTime() + hours * 3600_000).toISOString(),
       active: true,
-    });
+      client_key: key,
+    };
+
+    // ثلاث محاولات، ومهلةٌ ثلاثون ثانية لا اثنتا عشرة: هذه كتابةٌ يقصدها
+    // إنسان ضغط زرّاً وينتظر، لا قراءةً في خلفية شاشة. والمهلة القصيرة كافية
+    // لقائمة المحطات، وليست كافية لهاتفٍ على 4G ضعيف في الثانية صباحاً.
+    let error: { code?: string; message: string } | null = null;
+    let landed = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const r = await supabase
+        .from('announcements')
+        .insert(row)
+        .abortSignal(timeoutSignal(30_000) as AbortSignal);
+      error = r.error;
+      if (!error) break;
+      // سبقتْ محاولةٌ ووصلت. الخبر مجدول، والانقطاع كان في الجواب لا في الطلب.
+      if (error.code === '23505') { error = null; landed = true; break; }
+      // خطأٌ من القاعدة لا انقطاع — إعادته لن تغيّر جوابها.
+      if (!isAborted(error)) break;
+      if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 1500));
+    }
     setBusy(false);
 
     // والكتابة ليست كالقراءة: طلبٌ يُجهَض لا يعني أنه لم يقع. الإدراج قد يكون
@@ -125,15 +161,33 @@ export function StationAnnouncePanel() {
     if (error) {
       return setErr(
         isAborted(error)
-          ? 'انقطع الطلب قبل أن يصل الجواب، وقد يكون الخبر حُفظ فعلاً. افحص «الخبر المنتظر» في لوحة الفحص قبل إعادة الجدولة — إشعارٌ أُرسل لا يُستردّ.'
+          ? 'انقطع الاتصال في المحاولات الثلاث. أعد الضغط حين تتحسّن الشبكة — وإن كانت إحداها قد وصلت فلن يتكرّر الخبر، سنقول لك ذلك.'
           : `تعذّر الحفظ: ${error.message}`
       );
     }
-    setNote(
-      when === 'now'
-        ? 'حُفظ. يُرسل خلال دقيقتين ويظهر في الشريط عند إرساله.'
-        : `حُفظ. يُرسل ${sendAt.toLocaleString('ar-IQ')} ويظهر في الشريط عندها.`
-    );
+    keyRef.current = null;
+
+    if (landed) {
+      // وصلت محاولةٌ سابقة. ولا نؤكّد نصّاً لم نكتبه: يُقرأ الصفّ المحفوظ
+      // ويُقال وقته كما هو في القاعدة — فلو كان المدير قد عدّل شيئاً بعد
+      // الانقطاع، عرف أن المحفوظ هو الأول لا ما بين يديه الآن.
+      const { data: saved } = await supabase
+        .from('announcements')
+        .select('send_at')
+        .eq('client_key', key)
+        .maybeSingle();
+      setNote(
+        saved?.send_at
+          ? `كان قد حُفظ في محاولة سابقة — يُرسل ${new Date(saved.send_at).toLocaleString('ar-IQ')}. لم يتكرّر.`
+          : 'كان قد حُفظ في محاولة سابقة. لم يتكرّر.'
+      );
+    } else {
+      setNote(
+        when === 'now'
+          ? 'حُفظ. يُرسل خلال دقيقتين ويظهر في الشريط عند إرساله.'
+          : `حُفظ. يُرسل ${sendAt.toLocaleString('ar-IQ')} ويظهر في الشريط عندها.`
+      );
+    }
     setStation('');
     setReach(null);
   }
