@@ -43,7 +43,10 @@ export function StationRegisterForm() {
       setTwin(null);
       return;
     }
-    const { data } = await supabase.from('stations').select('id, name, city, phone').eq('city', city);
+    // No phone here. The sentinel below means findSimilar never matches on the
+    // number anyway, and pulling every phone in a city to an anonymous visitor
+    // is a bulk disclosure that the duplicate check does not need.
+    const { data } = await supabase.from('stations_public').select('id, name, city').eq('city', city);
     if (!data) return;
     // a sentinel rather than '': core('') would equal core(null) and match any
     // station whose phone is missing, flagging an unrelated row as a twin
@@ -83,12 +86,13 @@ export function StationRegisterForm() {
       if (signUpError?.message.includes('already')) {
         // public read: an approved station's name and address are already
         // visible to every driver, so nothing new is disclosed here
-        const { data: row } = await supabase
-          .from('stations')
-          .select('name, city, address, phone')
-          .eq('phone', displayPhone(loginPhone))
-          .maybeSingle();
-        setExisting(row ?? null);
+        // Through a function: anon no longer reads the phone column, and this
+        // returns none — only the name, city and address, all already public.
+        const { data: rows } = await supabase.rpc('station_by_phone', {
+          p_phone: displayPhone(loginPhone),
+        });
+        const row = Array.isArray(rows) ? rows[0] : null;
+        setExisting(row ? { ...row, phone: displayPhone(loginPhone) } : null);
       }
       setError(
         signUpError?.message.includes('already')

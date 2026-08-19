@@ -25,19 +25,12 @@ export function distanceKm(
 /** The public station list.
  *
  *  Reads `stations_public`, the view that returns null for a phone its owner
- *  chose to hide. Falls back to the table if that view has not been created
- *  yet: the view arrives with a migration, and shipping a client that hard-
- *  depends on it would blank the whole station list — every card, for
- *  everyone — during the minutes between deploying this and running that.
- *  The deploy order is not something a person opening the app should pay for. */
+ *  chose to hide and that filters to approved stations itself. There is no
+ *  fallback to the table: anon no longer holds SELECT on it, so a fallback
+ *  would only turn one error into two. */
 export async function loadStations(): Promise<StationWithStatus[]> {
-  const publicRows = () =>
-    supabase.from('stations_public').select('*').eq('status', 'approved').eq('is_demo', false).order('name');
-  const tableRows = () =>
-    supabase.from('stations').select('*').eq('status', 'approved').eq('is_demo', false).order('name');
-
   const [stationsRes, productsRes, trafficRes, laneRes] = await Promise.all([
-    publicRows().then((r) => (r.error ? tableRows() : r)),
+    supabase.from('stations_public').select('*').eq('is_demo', false).order('name'),
     supabase.from('station_products').select('*'),
     supabase.from('station_traffic_avg').select('*'),
     supabase.from('station_product_traffic').select('*'),

@@ -8,6 +8,10 @@ import { StationLinkCard } from '@/components/StationLinkCard';
 import { StationPoster } from '@/components/StationPoster';
 import { AvailabilityPoster } from '@/components/AvailabilityPoster';
 import { SpinnerIcon } from '@/components/icons';
+import { LocationField } from '@/components/LocationField';
+import { WorkingHours } from '@/components/WorkingHours';
+import { ANBAR_CITIES } from '@/lib/cities';
+import { KIND_LABELS, KINDS } from '@/lib/stationMeta';
 import { announceStation, rebuildSite } from '@/lib/rebuild';
 import type { FuelProduct, Station, StationProduct, StationStatus } from '@/types/database';
 
@@ -45,6 +49,27 @@ function Panel() {
   const id = useSearchParams().get('id');
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [station, setStation] = useState<Station | null>(null);
+  const [edit, setEdit] = useState({
+    address: '',
+    city: '',
+    kind: 'private' as Station['kind'],
+    lat: null as number | null,
+    lng: null as number | null,
+  });
+  const [editNote, setEditNote] = useState<string | null>(null);
+
+  // Filled from the row, not kept in sync with it: an admin who half-edits a
+  // field and then a realtime refresh lands should not lose what they typed.
+  useEffect(() => {
+    if (!station) return;
+    setEdit({
+      address: station.address ?? '',
+      city: station.city ?? '',
+      kind: station.kind,
+      lat: station.lat ?? null,
+      lng: station.lng ?? null,
+    });
+  }, [station?.id]);
   const [products, setProducts] = useState<StationProduct[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -189,6 +214,39 @@ function Panel() {
 
   /** Hands the station to its real owner's number. Approval happens after you
    *  have spoken to them, so this is deliberately a separate, explicit act. */
+  async function saveEdit() {
+    if (!station) return;
+    // A station without a pin is a station nobody can drive to, and the type
+    // says so. Refuse rather than write a half-station.
+    if (edit.lat == null || edit.lng == null) {
+      return setEditNote('حدّد موقع المحطة على الخريطة قبل الحفظ.');
+    }
+    if (!edit.address.trim()) {
+      return setEditNote('العنوان مطلوب.');
+    }
+    setBusy('edit');
+    setEditNote(null);
+    const patch = {
+      address: edit.address.trim(),
+      city: edit.city,
+      kind: edit.kind,
+      lat: edit.lat,
+      lng: edit.lng,
+    };
+    const { error } = await supabase.from('stations').update(patch).eq('id', station.id);
+    setBusy(null);
+    if (error) return setEditNote('تعذّر الحفظ: ' + error.message);
+    setStation({ ...station, ...patch });
+    // The station's page is a prerendered file carrying its address and pin;
+    // without this the correction is only visible to whoever made it.
+    const why = await rebuildSite();
+    setEditNote(
+      why
+        ? 'حُفظت البيانات، لكن إعادة بناء الموقع تعذّرت: ' + why
+        : 'حُفظت. تظهر على الموقع خلال نحو دقيقتين.'
+    );
+  }
+
   async function movePhone() {
     if (!station) return;
     setBusy('phone');
@@ -335,6 +393,92 @@ function Panel() {
                 : 'اضبط رابطاً مختصراً في الأسفل لتظهر صفحتها العامة.'}
             </p>
           )}
+        </div>
+      </section>
+
+      {/* Full station editing, for the admin only.
+       *
+       *  A station rang to say its pin was in the wrong place and there was
+       *  nothing anyone could do about it: the admin could rename a station and
+       *  move it to another phone, but not correct its address, its city, its
+       *  hours, or the map pin drivers actually navigate by. The owner cannot
+       *  either — that is deliberate, since these are the fields people drive
+       *  on — so a wrong pin had no route to being fixed at all. */}
+      <section className="card mt-4 p-5">
+        <h2 className="text-sm font-bold">تعديل بيانات المحطة</h2>
+        <p className="mt-1 text-xs text-slate-400">
+          العنوان والمدينة والموقع وأوقات العمل. الموقع هو ما يقود الناس إليها،
+          فتغييره يُعيد بناء الموقع تلقائياً.
+        </p>
+
+        <label className="mt-4 block">
+          <span className="text-xs font-bold text-slate-600">العنوان</span>
+          <input
+            value={edit.address}
+            onChange={(e) => setEdit({ ...edit, address: e.target.value })}
+            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base"
+          />
+        </label>
+
+        <label className="mt-3 block">
+          <span className="text-xs font-bold text-slate-600">المدينة</span>
+          <select
+            value={edit.city}
+            onChange={(e) => setEdit({ ...edit, city: e.target.value })}
+            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base"
+          >
+            {ANBAR_CITIES.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <p className="mt-3 text-xs font-bold text-slate-600">النوع</p>
+        <div className="mt-1 flex gap-2">
+          {KINDS.map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setEdit({ ...edit, kind: k })}
+              aria-pressed={edit.kind === k}
+              className={`min-h-[40px] flex-1 rounded-xl border text-xs font-bold ${
+                edit.kind === k
+                  ? 'border-brand bg-brand-50 text-brand'
+                  : 'border-slate-200 bg-white text-slate-600'
+              }`}
+            >
+              {KIND_LABELS[k]}
+            </button>
+          ))}
+        </div>
+
+        <p className="mt-4 text-xs font-bold text-slate-600">موقع المحطة على الخريطة</p>
+        <LocationField
+          coords={edit.lat != null && edit.lng != null ? { lat: edit.lat, lng: edit.lng } : null}
+          onChange={(c) => setEdit({ ...edit, lat: c?.lat ?? null, lng: c?.lng ?? null })}
+          city={edit.city}
+        />
+
+        <button
+          type="button"
+          disabled={busy === 'edit'}
+          onClick={saveEdit}
+          className="btn-primary mt-4 w-full"
+        >
+          {busy === 'edit' && <SpinnerIcon className="h-4 w-4" />}
+          حفظ التعديلات
+        </button>
+        {editNote && (
+          <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+            {editNote}
+          </p>
+        )}
+
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <p className="text-xs font-bold text-slate-600">أوقات العمل</p>
+          <WorkingHours station={station} onChange={(patch) => setStation({ ...station, ...patch })} />
         </div>
       </section>
 

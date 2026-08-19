@@ -41,12 +41,13 @@ export async function generateStaticParams() {
 }
 
 async function getStation(id: string) {
-  // stations_public nulls a hidden phone; the table is the fallback until the
-  // view exists, so a build never produces pages with no station on them.
-  const pick = (from: string) =>
-    db.from(from).select('*').eq('id', id).eq('status', 'approved').maybeSingle<Station>();
-  let { data: station } = await pick('stations_public');
-  if (!station) ({ data: station } = await pick('stations'));
+  // The view nulls a hidden phone and filters to approved itself, so the
+  // number never reaches the prerendered HTML for a station that hid it.
+  const { data: station } = await db
+    .from('stations_public')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle<Station>();
 
   if (!station) return null;
 
