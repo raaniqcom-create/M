@@ -191,7 +191,7 @@ async function preview(req: Request, stationId: string): Promise<Response> {
     await Promise.all([
       db.from('station_products').select('updated_at').eq('station_id', st.id),
       db.from('owner_pings').select('kind, sent_at').eq('station_id', st.id).eq('day', day),
-      db.from('alerts').select('city, address').is('station_id', null),
+      db.rpc('watchers_by_city', { p_cities: [st.city] }),
       db.from('device_tokens').select('token').eq('station_id', st.id),
     ]);
 
@@ -203,9 +203,7 @@ async function preview(req: Request, stationId: string): Promise<Response> {
   const publishedToday = !!last && last.slice(0, 10) === day;
   const everPublished = !!last;
 
-  const seen = new Set<string>();
-  for (const r of watchRows ?? []) if (!r.city || r.city === st.city) seen.add(r.address);
-  const n = seen.size;
+  const n = ((watchRows ?? []) as { city: string; watchers: number }[])[0]?.watchers ?? 0;
 
   const openingKind = everPublished ? 'opening_again' : 'opening_first';
   const sentKinds = new Set((pinged ?? []).map((p) => p.kind));
@@ -287,29 +285,21 @@ Deno.serve(async (req) => {
       .select('station_id, created_at')
       .in('station_id', ids)
       .gte('created_at', new Date(Date.now() - 45 * 60_000).toISOString()),
-    // Whose phone rings for a city. A null city means "anywhere in Anbar", so
-    // those people count for every station — telling an owner in Rutba that
-    // only Rutba's subscribers are listening would understate his audience.
-    db.from('alerts').select('city, address').is('station_id', null),
+    // Counted in the database, not here. Fetching the rows and counting them
+    // in JS looked identical and was wrong: PostgREST caps a response at 1000
+    // rows and the table holds 4437, so the count ran over the first 22% of
+    // the data — 175 instead of 619 for Ramadi. Silently: no error, no
+    // warning, just a smaller number that looked plausible, inside a message
+    // whose entire argument is that its numbers are real.
+    db.rpc('watchers_by_city', { p_cities: [...new Set((stations ?? []).map((s) => s.city))] }),
   ]);
 
   const already = new Set((pinged ?? []).map((p) => `${p.station_id}:${p.kind}`));
 
-  // distinct addresses, not rows: one person holds a row per (city, product),
-  // so counting rows would inflate the figure several times over — and an
-  // inflated number in a message about trust is the same mistake as inventing
-  // one, arrived at by accident.
-  const anyCity = new Set<string>();
-  const byCity = new Map<string, Set<string>>();
-  for (const r of watchRows ?? []) {
-    if (!r.city) anyCity.add(r.address);
-    else {
-      if (!byCity.has(r.city)) byCity.set(r.city, new Set());
-      byCity.get(r.city)!.add(r.address);
-    }
-  }
-  const watchersFor = (city: string) =>
-    new Set([...(byCity.get(city) ?? []), ...anyCity]).size;
+  const counts = new Map<string, number>(
+    ((watchRows ?? []) as { city: string; watchers: number }[]).map((r) => [r.city, r.watchers])
+  );
+  const watchersFor = (city: string) => counts.get(city) ?? 0;
 
   // Newest vote per station, and whether it lapsed inside the last 15 minutes —
   // the window between "the reading expired" and "asking is stale news".
