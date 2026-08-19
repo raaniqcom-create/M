@@ -64,7 +64,9 @@ export function OwnerMessagePreview({ stationId }: { stationId: string }) {
           {data.devices === 0 && (
             <p className="mt-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
               <b>لا جهاز مربوط بهذه المحطة</b> — فلن يصلها أي إشعار مهما كان نصّه.
-              يربط صاحبها جهازه بفتح لوحة محطته من التطبيق وهو داخل بحسابه.
+              يظهر لصاحبها الآن في لوحته زرّ «فعّل تنبيهات محطتي»، ويكفي أن يفتح
+              اللوحة ويضغطه. وقبل هذا كان الربط لا يقع إلا من التطبيق المثبَّت،
+              فمن يدير محطته من المتصفح يبقى غير مربوط مهما نشر وحدّث.
             </p>
           )}
 

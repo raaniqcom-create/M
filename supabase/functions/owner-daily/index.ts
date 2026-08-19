@@ -15,6 +15,7 @@
 // Times are the station's own opens_at/closes_at in Baghdad, so a station that
 // opens at 5am is greeted at 5am and one that opens at 8 is greeted at 8.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import webpush from 'npm:web-push@3.6.7';
 
 const CRON_SECRET = Deno.env.get('CRON_SECRET')!;
 
@@ -364,14 +365,23 @@ Deno.serve(async (req) => {
 
   const { data: devices } = await db
     .from('device_tokens')
-    .select('token, platform, station_id')
+    .select('token, platform, station_id, keys')
     .in('station_id', due.map((d) => d.station.id));
 
-  const byStation = new Map<string, { token: string; platform: string }[]>();
+  const byStation = new Map<
+    string,
+    { token: string; platform: string; keys?: { p256dh?: string; auth?: string } | null }[]
+  >();
   for (const d of devices ?? []) {
     if (!d.station_id) continue;
     byStation.set(d.station_id, [...(byStation.get(d.station_id) ?? []), d]);
   }
+
+  webpush.setVapidDetails(
+    'mailto:admin@muhta.online',
+    Deno.env.get('VAPID_PUBLIC_KEY')!,
+    Deno.env.get('VAPID_PRIVATE_KEY')!
+  );
 
   const jwt = await apnsJwt();
   const topic = Deno.env.get('APNS_TOPIC') ?? 'online.muhta.app';
@@ -414,6 +424,24 @@ Deno.serve(async (req) => {
           if (r.status === 410) await db.from('device_tokens').delete().eq('token', t.token);
           else if (r.ok) sent++;
           else failed++;
+        } else if (t.platform === 'web') {
+          // A browser subscription, not a device token. This is the branch that
+          // did not exist — which is why an owner who runs their station from
+          // the browser was counted as «لا جهاز مربوط» and heard nothing.
+          try {
+            await webpush.sendNotification(
+              { endpoint: t.token, keys: { p256dh: t.keys?.p256dh, auth: t.keys?.auth } },
+              JSON.stringify({ title, body, url: '/owner' })
+            );
+            sent++;
+          } catch (e) {
+            // The browser dropped it — the owner cleared site data or revoked
+            // permission. Keeping it would fail every morning, silently.
+            const code = (e as { statusCode?: number })?.statusCode ?? 0;
+            if ([404, 410].includes(code)) {
+              await db.from('device_tokens').delete().eq('token', t.token);
+            } else failed++;
+          }
         } else {
           if (!access || !sa) throw new Error('fcm');
           const r = await fetch(

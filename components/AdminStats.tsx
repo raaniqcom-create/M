@@ -10,6 +10,7 @@ import type { Station } from '@/types/database';
 interface CityRow {
   city: string;
   people: number;
+  explicit: number;
   ios: number;
   android: number;
   web: number;
@@ -33,6 +34,7 @@ export function AdminStats() {
   const [listeners, setListeners] = useState<Record<string, number> | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [byCity, setByCity] = useState<CityRow[]>([]);
+  const [reach, setReach] = useState<{ people: number; allCities: number } | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -87,11 +89,14 @@ export function AdminStats() {
         devices: Record<string, number>;
         listeners: Record<string, number>;
         byCity?: CityRow[];
+        cityPeople?: number;
+        allCities?: number;
       };
       setFailed(null);
       setDevices(v?.devices ?? {});
       setListeners(v?.listeners ?? {});
       setByCity(v?.byCity ?? []);
+      setReach({ people: v?.cityPeople ?? 0, allCities: v?.allCities ?? 0 });
     }
     setRows((s.data as Row[]) ?? []);
   }, []);
@@ -270,17 +275,34 @@ export function AdminStats() {
         <section className="card p-5">
           <h2 className="text-sm font-bold">المشتركون حسب المدينة</h2>
           <p className="mt-1 text-xs text-slate-400">
-            من فعّل التنبيهات في كل مدينة — وهؤلاء من يصلهم إشعارها
+            من يصله إشعار كل مدينة — وهو الرقم نفسه الذي تراه المحطة في لوحتها
           </p>
 
           {/* الشخص الواحد له صفّ لكل (مدينة، منتج)، فالعدّ بالعناوين المتمايزة
-              لا بالصفوف — وإلا تضاعف الرقم أضعافاً بلا معنى. */}
+              لا بالصفوف — وإلا تضاعف الرقم أضعافاً بلا معنى.
+
+              وعمود «الكل» يشمل من اختار «كل المدن»، فمجموع العمود أكبر من عدد
+              الأشخاص. وهذا ليس خطأً بل معنى العمود: هو اشتراكات لا رؤوس. */}
+          {reach && (
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+              <span className="rounded-full bg-brand-50 px-2.5 py-1 font-bold text-brand-900">
+                {reach.people.toLocaleString('en-US')} شخصاً — العدد الحقيقي بلا تكرار
+              </span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 font-bold text-slate-600">
+                {byCity.reduce((n, c) => n + c.people, 0).toLocaleString('en-US')} اشتراكاً بالمدن
+              </span>
+              <span className="rounded-full bg-amber-50 px-2.5 py-1 font-bold text-amber-800">
+                {reach.allCities.toLocaleString('en-US')} اختاروا كل المدن
+              </span>
+            </div>
+          )}
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-slate-400">
                   <th className="pb-2 text-start font-semibold">المدينة</th>
                   <th className="pb-2 text-center font-semibold">الكل</th>
+                  <th className="pb-2 text-center font-semibold">اختار المدينة</th>
                   <th className="pb-2 text-center font-semibold">آيفون</th>
                   <th className="pb-2 text-center font-semibold">أندرويد</th>
                   <th className="pb-2 text-center font-semibold">متصفح</th>
@@ -293,6 +315,7 @@ export function AdminStats() {
                     <td className="py-2 text-center text-base font-extrabold text-brand-700" dir="ltr">
                       {c.people}
                     </td>
+                    <td className="py-2 text-center text-slate-600" dir="ltr">{c.explicit}</td>
                     <td className="py-2 text-center text-slate-600" dir="ltr">{c.ios}</td>
                     <td className="py-2 text-center text-slate-600" dir="ltr">{c.android}</td>
                     <td className="py-2 text-center text-slate-600" dir="ltr">{c.web}</td>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { rebuildSite } from '@/lib/rebuild';
 import { AudienceBanner } from '@/components/AudienceBanner';
+import { OwnerDeviceLink } from '@/components/OwnerDeviceLink';
 import { cancelTrafficReminder, scheduleTrafficReminder } from '@/lib/trafficReminder';
 import {
   PRODUCT_LABELS,
@@ -280,6 +281,8 @@ export default function OwnerPage() {
           platform stated as a number of people, not as a nag. */}
       {station && (
         <div className="mt-4">
+          <OwnerDeviceLink stationId={station.id} />
+
           <AudienceBanner station={station} products={products} />
         </div>
       )}
