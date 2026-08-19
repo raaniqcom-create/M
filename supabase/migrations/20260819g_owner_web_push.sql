@@ -26,9 +26,19 @@ alter table device_tokens drop constraint if exists device_tokens_platform_check
 alter table device_tokens add constraint device_tokens_platform_check
   check (platform in ('android', 'ios', 'web'));
 
--- الربط صار يقبل المنصة والمفاتيح، ويُدرج الصفّ إن لم يكن موجوداً: الأصلي
--- يُدرَج عند تسجيل الجهاز (NativePush)، أما اشتراك الويب فيولد هنا أول مرة.
-create or replace function public.claim_owner_device(
+-- الربط صار يقبل المنصة والمفاتيح. وفخّان هنا كِلاهما صامت:
+--
+-- الأول: create or replace مع معاملين جديدين لا يستبدل الدالة بل يخلق حِملاً
+-- زائداً بجانبها، فتبقى ذات المعاملين قائمة وتصير المناداة بمعاملين غامضة —
+-- PGRST203، فيسقط الربط كلّه. فتُحذف القديمة صراحةً.
+--
+-- والثاني: المسار الأصلي (لوحة المالك في التطبيق) لا يمرّر منصة، فلو وُضع
+-- 'web' افتراضاً لكُتب فوق android/ios لكل مالك يفتح لوحته — فيسقط الدفع
+-- الأصلي عن كل من يعمل اليوم. ولذلك يبقى المسار الأصلي تحديثاً بحتاً كما كان،
+-- ولا يُنشئ صفّاً ولا يمسّ المنصة. والإدراج للويب وحده، حيث الصفّ يولد هنا.
+drop function if exists public.claim_owner_device(text, uuid);
+
+create function public.claim_owner_device(
   p_token      text,
   p_station_id uuid,
   p_platform   text default null,
@@ -48,11 +58,17 @@ begin
     raise exception 'forbidden' using errcode = '42501';
   end if;
 
+  if p_platform is null then
+    -- الرمز مُدرَج سلفاً من تسجيل الجهاز الأصلي؛ هنا يُنسب إلى محطته فقط.
+    update device_tokens set station_id = p_station_id where token = p_token;
+    return;
+  end if;
+
   insert into device_tokens (token, platform, station_id, keys)
-  values (p_token, coalesce(p_platform, 'web'), p_station_id, p_keys)
+  values (p_token, p_platform, p_station_id, p_keys)
   on conflict (token) do update
+     -- والمنصة لا تُمسّ بعد الإدراج: عنوانٌ واحد لا ينتقل من متصفح إلى APNs.
      set station_id = excluded.station_id,
-         platform   = coalesce(excluded.platform, device_tokens.platform),
          keys       = coalesce(excluded.keys, device_tokens.keys);
 end
 $fn$;
