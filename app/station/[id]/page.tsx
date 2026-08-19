@@ -47,6 +47,7 @@ async function getStation(id: string) {
     .from('stations_public')
     .select('*')
     .eq('id', id)
+    .eq('status', 'approved')
     .maybeSingle<Station>();
 
   if (!station) return null;

@@ -30,7 +30,16 @@ export function distanceKm(
  *  would only turn one error into two. */
 export async function loadStations(): Promise<StationWithStatus[]> {
   const [stationsRes, productsRes, trafficRes, laneRes] = await Promise.all([
-    supabase.from('stations_public').select('*').eq('is_demo', false).order('name'),
+    // Belt and braces on the status filter. Dropping it here because "the view
+    // filters it" put every rejected and suspended station on the public list
+    // the moment the view shipped without that WHERE — a live, visible fault.
+    // Two cheap filters beat one clever assumption.
+    supabase
+      .from('stations_public')
+      .select('*')
+      .eq('status', 'approved')
+      .eq('is_demo', false)
+      .order('name'),
     supabase.from('station_products').select('*'),
     supabase.from('station_traffic_avg').select('*'),
     supabase.from('station_product_traffic').select('*'),
