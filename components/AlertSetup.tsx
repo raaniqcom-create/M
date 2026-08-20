@@ -12,6 +12,7 @@ import {
 } from '@/lib/alerts';
 import { BellIcon, CheckIcon, SpinnerIcon } from '@/components/icons';
 import { detectPlatform, storeUrl } from '@/lib/stores';
+import { PermissionHelp } from './PermissionHelp';
 import type { FuelProduct } from '@/types/database';
 
 /** The promise the platform can keep on day one, before a single station has
@@ -31,6 +32,7 @@ export function AlertSetup({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unsupported, setUnsupported] = useState(false);
+  const [denied, setDenied] = useState(false);
   const [store, setStore] = useState<string | null>(null);
 
   useEffect(() => {
@@ -49,6 +51,9 @@ export function AlertSetup({
   }, []);
 
   async function save() {
+    // العودة من الإعدادات تستدعي هذه، وتبديل النوافذ يقع مراراً —
+    // فمحاولةٌ جارية لا تُقاطَع بأخرى.
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -62,9 +67,10 @@ export function AlertSetup({
       // with it — the two used to render stacked, contradicting each other.
       setSaved(null);
       setUnsupported(result === 'unsupported');
+      setDenied(result === 'denied');
       setError(
         result === 'denied'
-          ? 'الإشعارات ممنوعة لهذا التطبيق. فعّلها من إعدادات هاتفك ثم أعد المحاولة.'
+          ? 'الإشعارات موقوفة لهذا التطبيق على جهازك، فلا يصلك شيء حتى تُعاد.'
           : result === 'unsupported'
             ? 'هذا المتصفح لا يدعم الإشعارات — حمّل التطبيق لتصلك التنبيهات.'
             : result === 'pending'
@@ -121,6 +127,7 @@ export function AlertSetup({
       {error && (
         <div className="mt-4 rounded-xl bg-red-50 p-3">
           <p className="text-xs leading-relaxed text-red-700">{error}</p>
+          {denied && <PermissionHelp onReturn={save} />}
           {/* Safari on iPhone has no Web Push outside an installed app, so the
               only honest next step is the store — not a retry that cannot
               succeed however many times it is tapped. */}

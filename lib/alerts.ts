@@ -83,7 +83,20 @@ async function currentTarget(): Promise<Target | 'denied' | 'unsupported' | 'pen
     // later is the worst version of this screen.
     try {
       const { PushNotifications } = await import('@capacitor/push-notifications');
-      const status = await PushNotifications.checkPermissions();
+      let status = await PushNotifications.checkPermissions();
+
+      // يُسأل قبل أن يُلام.
+      //
+      // كان الفرع يفحص ولا يطلب، بينما فرع الويب تحته يطلب صراحةً. وقيمة
+      // 'prompt' تعني «لم يُسأل بعد» لا «رفض» — فمن أغلق نافذة أندرويد ١٣ أو
+      // لم تظهر له أصلاً كان يُقال له «الإشعارات ممنوعة، فعّلها من إعدادات
+      // هاتفك»، وهي رحلةٌ طويلة إلى شاشةٍ سيجدها مفتوحة. والصواب أن يُسأل.
+      if (status.receive === 'prompt' || status.receive === 'prompt-with-rationale') {
+        status = await PushNotifications.requestPermissions();
+        // والتسجيل بعد المنح مباشرةً: NativePush يسجّل عند الإقلاع، وقد مضى.
+        if (status.receive === 'granted') await PushNotifications.register();
+      }
+
       if (status.receive !== 'granted') return 'denied';
     } catch {
       return 'unsupported';

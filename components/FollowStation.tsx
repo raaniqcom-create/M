@@ -1,5 +1,6 @@
 'use client';
 
+import { PermissionHelp } from './PermissionHelp';
 import { useEffect, useState } from 'react';
 import {
   ALERTS_CHANGED,
@@ -25,6 +26,7 @@ export function FollowStation({ stationId, city }: { stationId: string; city: st
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unsupported, setUnsupported] = useState(false);
+  const [denied, setDenied] = useState(false);
   const [store, setStore] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,6 +40,9 @@ export function FollowStation({ stationId, city }: { stationId: string; city: st
   }, [stationId]);
 
   async function toggle() {
+    // العودة من الإعدادات تستدعي هذه، وتبديل النوافذ يقع مراراً —
+    // فمحاولةٌ جارية لا تُقاطَع بأخرى.
+    if (busy) return;
     setBusy(true);
     setError(null);
     setUnsupported(false);
@@ -57,9 +62,10 @@ export function FollowStation({ stationId, city }: { stationId: string; city: st
         return;
       }
       setUnsupported(result === 'unsupported');
+      setDenied(result === 'denied');
       setError(
         result === 'denied'
-          ? 'الإشعارات ممنوعة لهذا التطبيق. فعّلها من إعدادات هاتفك ثم أعد المحاولة.'
+          ? 'الإشعارات موقوفة لهذا التطبيق على جهازك، فلا يصلك شيء حتى تُعاد.'
           : result === 'unsupported'
             ? 'هذا المتصفح لا يدعم الإشعارات — حمّل التطبيق لتصلك التنبيهات.'
             : result === 'pending'
@@ -125,6 +131,7 @@ export function FollowStation({ stationId, city }: { stationId: string; city: st
       {error && (
         <div className="mt-2 rounded-xl bg-red-50 p-3">
           <p className="text-xs leading-relaxed text-red-700">{error}</p>
+          {denied && <PermissionHelp onReturn={toggle} />}
           {unsupported && store && (
             <a
               href={store}
