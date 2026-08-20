@@ -100,8 +100,15 @@ async function audienceFor(
     p_stamp: stamp,
   });
   if (legacyError) {
+    // يُرمى ولا يُبتلع.
+    //
+    // كانت تردّ [] هنا، فتمضي notify إلى نهايتها وتردّ HTTP 200 وقد أرسلت
+    // صفراً. وهذا ما أخفى توقّف الإشعارات تسعاً وثلاثين ساعة: alerts_for كانت
+    // ترمي 42702 في كل نداء بالختم، فيسقط النداء إلى صيغةٍ قديمة لا وجود لها،
+    // فتفشل هي الأخرى — وصاحب المحطة يرى «نُشر»، ولا شاشة تقول إن أحداً لم
+    // يُخطَر. خطأٌ يُعلَن أرحم من نجاحٍ كاذب.
     console.error('alerts_for', error, legacyError);
-    return [];
+    throw new Error(`alerts_for: ${error?.message ?? legacyError.message}`);
   }
   return (legacy ?? []) as Listener[];
 }
@@ -595,9 +602,15 @@ Deno.serve(async (req) => {
   // has to go anyway.
   const alertUrl = isNewStation ? '/owner' : `/station/${stationId}`;
 
-  const listeners = isNewStation
-    ? await ownerDevices(stationId)
-    : await audienceFor(station.city, live, true, stationId);
+  let listeners: Listener[];
+  try {
+    listeners = isNewStation
+      ? await ownerDevices(stationId)
+      : await audienceFor(station.city, live, true, stationId);
+  } catch (e) {
+    // 502 لا 200: النشر وقع في القاعدة، والإخطار لم يقع. واللوحة تعرض الفرق.
+    return json({ error: `تعذّر تحديد المستقبِلين: ${(e as Error).message}` }, 502);
+  }
 
   // One row per person told. Until now the only record was alerts.last_sent_at,
   // which holds the latest send and overwrites everything before it — so when a

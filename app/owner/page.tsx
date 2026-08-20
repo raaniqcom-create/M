@@ -139,6 +139,7 @@ export default function OwnerPage() {
    *  otherwise the poster carries a date that makes fresh stock look stale. */
   const posterRef = useRef<HTMLDivElement>(null);
   const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
+  const [notifyNote, setNotifyNote] = useState<string | null>(null);
 
   async function confirmAvailability() {
     if (!station) return;
@@ -148,6 +149,7 @@ export default function OwnerPage() {
       .update({ updated_at: now })
       .eq('station_id', station.id);
     setConfirmedAt(now);
+    setNotifyNote(null);
 
     // One message for everything that is in stock, sent when the owner says
     // the board is right — not on every tap while they are still deciding.
@@ -156,6 +158,9 @@ export default function OwnerPage() {
       // notify only speaks for a station on its owner's or an admin's word, so
       // the session token rides along — the endpoint used to answer anyone.
       const { data: sess } = await supabase.auth.getSession();
+      // الجواب يُقرأ ولا يُهمَل: fetch لا ترمي على 401 ولا 502، فـ.catch وحدها
+      // تترك كل رفضٍ من الخادم صامتاً — وهكذا مرّت تسع وثلاثون ساعة بلا إشعار
+      // واحد بينما كل مالك يرى «نُشر».
       fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/notify`, {
         method: 'POST',
         headers: {
@@ -164,7 +169,13 @@ export default function OwnerPage() {
           Authorization: `Bearer ${sess.session?.access_token ?? ''}`,
         },
         body: JSON.stringify({ stationId: station.id, products: available }),
-      }).catch(() => {});
+      })
+        .then((r) => {
+          if (!r.ok) setNotifyNote('حُفظت الحالة، لكن تعذّر إرسال الإشعار للمشتركين. أبلِغ الإدارة.');
+        })
+        .catch(() =>
+          setNotifyNote('حُفظت الحالة، ولم نتأكّد من وصول الإشعار — تحقّق من اتصالك.')
+        );
     }
 
     posterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -441,6 +452,11 @@ export default function OwnerPage() {
                 بعد ضبط المنتجات أعلاه، أكّد القائمة: يُختم الوقت، ويصل للمستخدمين إشعار
                 واحد يجمع كل المنتجات المتوفرة، ويجهز المنشور للنشر.
               </p>
+              {notifyNote && (
+                <p className="mt-3 rounded-lg bg-red-50 p-2.5 text-xs font-bold leading-relaxed text-red-700">
+                  {notifyNote}
+                </p>
+              )}
               <button type="button" onClick={confirmAvailability} className="btn-primary mt-3 w-full">
                 ✅ تأكيد ونشر التوفّر
               </button>
