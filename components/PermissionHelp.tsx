@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
 import { detectPlatform } from '@/lib/stores';
 import { useNativeApp } from '@/lib/useNativeApp';
 
@@ -11,19 +10,10 @@ import { useNativeApp } from '@/lib/useNativeApp';
  *  تفعيل التنبيهات؟» هو الدليل. والمسار يختلف بين أندرويد وiOS، وبين التطبيق
  *  والمتصفّح — فيُعرض المسار الذي يخصّ هذا الجهاز وحده.
  *
- *  ولا يُطلب منه أن يعود ويضغط: العودة نفسها تُعيد الفحص. */
-export function PermissionHelp({ onReturn }: { onReturn?: () => void }) {
+ *  ولا يُطلب منه أن يعود ويضغط: الأب يراقب العودة ويُعيد المحاولة وحده. */
+export function PermissionHelp() {
   const native = useNativeApp();
   const platform = detectPlatform();
-
-  // من يذهب إلى الإعدادات يغيب عن الصفحة ثم يعود. وأن نطلب منه ضغطة أخرى بعد
-  // رحلةٍ نحن أرسلناه إليها هو آخر ما يحتمله من فقد إشعاراته أصلاً.
-  useEffect(() => {
-    if (!onReturn) return;
-    const back = () => document.visibilityState === 'visible' && onReturn();
-    document.addEventListener('visibilitychange', back);
-    return () => document.removeEventListener('visibilitychange', back);
-  }, [onReturn]);
 
   const steps = native
     ? platform === 'ios'

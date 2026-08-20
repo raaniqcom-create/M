@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { AlertChips } from './AlertChips';
 import {
@@ -33,6 +33,7 @@ export function AlertSetup({
   const [error, setError] = useState<string | null>(null);
   const [unsupported, setUnsupported] = useState(false);
   const [denied, setDenied] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const [store, setStore] = useState<string | null>(null);
 
   useEffect(() => {
@@ -50,6 +51,25 @@ export function AlertSetup({
     return () => window.removeEventListener(ALERTS_CHANGED, sync);
   }, []);
 
+
+  // العودة من الإعدادات تُعيد المحاولة وحدها.
+  //
+  // وتغطّي 'pending' لا 'denied' وحدها: أول رمز دفع على جهاز لم يسجّل قطّ قد
+  // يتأخّر عن انتظارنا، و'pending' كانت تُنهي المراقبة فيبقى المشترك أمام
+  // «انتظر لحظة وأعد المحاولة» بلا أن يعيد أحدٌ المحاولة.
+  //
+  // والمستمع يُنادي عبر مرجع لا عبر الدالة مباشرةً: الدالة تُبنى من جديد مع
+  // كل رسم، فربطها في الاعتماديات يعيد التركيب بلا نهاية، وحذفها منها يجمّد
+  // إغلاقها على مدنٍ اختارها المشترك قبل أن يغيّرها.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => {
+    if (!waiting) return;
+    const back = () => document.visibilityState === 'visible' && void saveRef.current();
+    document.addEventListener('visibilitychange', back);
+    return () => document.removeEventListener('visibilitychange', back);
+  }, [waiting]);
+
   async function save() {
     // العودة من الإعدادات تستدعي هذه، وتبديل النوافذ يقع مراراً —
     // فمحاولةٌ جارية لا تُقاطَع بأخرى.
@@ -59,6 +79,8 @@ export function AlertSetup({
     try {
       const result = await saveChoice({ cities, products });
       if (result === 'ok') {
+        setDenied(false);
+        setWaiting(false);
         setSaved({ cities, products });
         onSaved?.();
         return;
@@ -68,6 +90,7 @@ export function AlertSetup({
       setSaved(null);
       setUnsupported(result === 'unsupported');
       setDenied(result === 'denied');
+      setWaiting(result === 'denied' || result === 'pending');
       setError(
         result === 'denied'
           ? 'الإشعارات موقوفة لهذا التطبيق على جهازك، فلا يصلك شيء حتى تُعاد.'
@@ -127,7 +150,7 @@ export function AlertSetup({
       {error && (
         <div className="mt-4 rounded-xl bg-red-50 p-3">
           <p className="text-xs leading-relaxed text-red-700">{error}</p>
-          {denied && <PermissionHelp onReturn={save} />}
+          {denied && <PermissionHelp />}
           {/* Safari on iPhone has no Web Push outside an installed app, so the
               only honest next step is the store — not a retry that cannot
               succeed however many times it is tapped. */}

@@ -1,7 +1,7 @@
 'use client';
 
 import { PermissionHelp } from './PermissionHelp';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ALERTS_CHANGED,
   followStation,
@@ -27,6 +27,7 @@ export function FollowStation({ stationId, city }: { stationId: string; city: st
   const [error, setError] = useState<string | null>(null);
   const [unsupported, setUnsupported] = useState(false);
   const [denied, setDenied] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const [store, setStore] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,6 +39,25 @@ export function FollowStation({ stationId, city }: { stationId: string; city: st
     window.addEventListener(ALERTS_CHANGED, sync);
     return () => window.removeEventListener(ALERTS_CHANGED, sync);
   }, [stationId]);
+
+
+  // العودة من الإعدادات تُعيد المحاولة وحدها.
+  //
+  // وتغطّي 'pending' لا 'denied' وحدها: أول رمز دفع على جهاز لم يسجّل قطّ قد
+  // يتأخّر عن انتظارنا، و'pending' كانت تُنهي المراقبة فيبقى المشترك أمام
+  // «انتظر لحظة وأعد المحاولة» بلا أن يعيد أحدٌ المحاولة.
+  //
+  // والمستمع يُنادي عبر مرجع لا عبر الدالة مباشرةً: الدالة تُبنى من جديد مع
+  // كل رسم، فربطها في الاعتماديات يعيد التركيب بلا نهاية، وحذفها منها يجمّد
+  // إغلاقها على مدنٍ اختارها المشترك قبل أن يغيّرها.
+  const toggleRef = useRef(toggle);
+  toggleRef.current = toggle;
+  useEffect(() => {
+    if (!waiting) return;
+    const back = () => document.visibilityState === 'visible' && void toggleRef.current();
+    document.addEventListener('visibilitychange', back);
+    return () => document.removeEventListener('visibilitychange', back);
+  }, [waiting]);
 
   async function toggle() {
     // العودة من الإعدادات تستدعي هذه، وتبديل النوافذ يقع مراراً —
@@ -58,11 +78,14 @@ export function FollowStation({ stationId, city }: { stationId: string; city: st
 
       const result = await followStation(stationId);
       if (result === 'ok') {
+        setDenied(false);
+        setWaiting(false);
         setOn(true);
         return;
       }
       setUnsupported(result === 'unsupported');
       setDenied(result === 'denied');
+      setWaiting(result === 'denied' || result === 'pending');
       setError(
         result === 'denied'
           ? 'الإشعارات موقوفة لهذا التطبيق على جهازك، فلا يصلك شيء حتى تُعاد.'
@@ -131,7 +154,7 @@ export function FollowStation({ stationId, city }: { stationId: string; city: st
       {error && (
         <div className="mt-2 rounded-xl bg-red-50 p-3">
           <p className="text-xs leading-relaxed text-red-700">{error}</p>
-          {denied && <PermissionHelp onReturn={toggle} />}
+          {denied && <PermissionHelp />}
           {unsupported && store && (
             <a
               href={store}

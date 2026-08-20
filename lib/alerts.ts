@@ -77,6 +77,8 @@ async function currentTarget(): Promise<Target | 'denied' | 'unsupported' | 'pen
     }
   ).Capacitor;
 
+  let justRegistered = false;
+
   if (isNative()) {
     // Ask the OS before waiting on anything: a denied device will never
     // produce a token, and polling for one just to blame the user ten seconds
@@ -93,19 +95,37 @@ async function currentTarget(): Promise<Target | 'denied' | 'unsupported' | 'pen
       // هاتفك»، وهي رحلةٌ طويلة إلى شاشةٍ سيجدها مفتوحة. والصواب أن يُسأل.
       if (status.receive === 'prompt' || status.receive === 'prompt-with-rationale') {
         status = await PushNotifications.requestPermissions();
-        // والتسجيل بعد المنح مباشرةً: NativePush يسجّل عند الإقلاع، وقد مضى.
-        if (status.receive === 'granted') await PushNotifications.register();
       }
 
       if (status.receive !== 'granted') return 'denied';
+
+      // والتسجيل متى غاب الرمز، لا بعد السؤال وحده.
+      //
+      // وضعتُه أولاً داخل فرع السؤال، وهو أسوأ موضع له: من مُنع ثم فعّل
+      // الإشعارات من إعدادات هاتفه يعود فيجد checkPermissions تقول 'granted'،
+      // فيُتخطّى الفرع كلّه ولا يُسجَّل أحد. وNativePush لا يُنقذه: يفحص عند
+      // الإقلاع ويخرج قبل register إن لم يكن الإذن ممنوحاً حينها، والعودة من
+      // الإعدادات لا تُعيد تركيبه. فيبقى بلا رمز، ويردّ الفحص 'pending' أبداً
+      // — ومع 'pending' يُرفع denied فتختفي بطاقة الخطوات ومعها إعادة الفحص
+      // التلقائي. أي أن المشترك يفعل كل ما طُلب منه ولا يصله شيء، ولا يبقى
+      // أمامه إلا قتل التطبيق وفتحه.
+      //
+      // والمستمعون مربوطون في NativePush قبل خروجه المبكر، فالرمز يجد من
+      // يلتقطه متى نادينا هنا.
+      if (!localStorage.getItem('device-token')) {
+        await PushNotifications.register();
+        justRegistered = true;
+      }
     } catch {
       return 'unsupported';
     }
 
     // Registration may still be in flight on a first launch, so wait — but
     // briefly, and report waiting as its own state rather than as a failure.
+    // وتُمدّ المهلة إن كنّا نحن من طلب التسجيل للتوّ: أول رمز من FCM/APNs على
+    // جهاز لم يسجّل قطّ أبطأ من رمزٍ خبّأه النظام منذ إقلاع سابق.
     let token = localStorage.getItem('device-token');
-    for (let i = 0; !token && i < 6; i++) {
+    for (let i = 0; !token && i < (justRegistered ? 16 : 6); i++) {
       await new Promise((r) => setTimeout(r, 500));
       token = localStorage.getItem('device-token');
     }
