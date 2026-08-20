@@ -17,6 +17,7 @@ interface Check {
 interface Report {
   checks: Check[];
   counts: { stations: number; subscribers: number; devices: number };
+  countsError?: string | null;
   at: string;
 }
 interface Row extends Station {
@@ -225,12 +226,22 @@ export function AdminHealth() {
       <section className={`card p-5 ${report && !allOk ? 'border-traffic-red' : ''}`}>
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold">حالة النظام</h2>
-          <button type="button" onClick={load} className="text-[11px] font-bold text-brand-700">
-            إعادة الفحص
+          {/* الزرّ يقول إنه عمل.
+           *
+           *  كان بلا حالة انشغال ولا وقت، فضغطةٌ ناجحة تعود بالأرقام نفسها لا
+           *  تُميَّز عن زرٍّ ميت — وقد بُلّغ عنه ميتاً وهو يعمل. */}
+          <button
+            type="button"
+            onClick={load}
+            disabled={busy}
+            className="text-[11px] font-bold text-brand-700 disabled:opacity-50"
+          >
+            {busy ? 'جارٍ الفحص…' : 'إعادة الفحص'}
           </button>
         </div>
         <p className="mt-1 text-xs text-slate-400">
           كل سطر نتيجة سؤال حقيقي للطرف الآخر، لا قراءة إعداد محفوظ
+          {report?.at ? ` · فُحص ${new Date(report.at).toLocaleTimeString('ar-IQ')}` : ''}
         </p>
 
         {error && (
@@ -272,6 +283,12 @@ export function AdminHealth() {
             </li>
           )}
         </ul>
+
+        {report?.countsError && (
+          <p className="mt-3 rounded-xl bg-red-50 p-3 text-xs leading-relaxed text-traffic-red">
+            تعذّر عدّ المشتركين والأجهزة: {report.countsError} — الأرقام أدناه غير صحيحة.
+          </p>
+        )}
 
         {report && (
           <div className="mt-3 grid grid-cols-3 gap-2">

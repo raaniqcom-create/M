@@ -181,19 +181,23 @@ Deno.serve(async (req) => {
     checkFcm(), checkApns(), checkSite(), checkTelegram(),
   ]);
 
-  const [stations, alerts, devices] = await Promise.all([
-    db.from('stations').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
-    db.from('alerts').select('address'),
-    db.from('device_tokens').select('platform'),
-  ]);
+  // العدّ في القاعدة لا في الذاكرة.
+  //
+  // كان يجلب صفوف alerts وdevice_tokens ثم يعدّها هنا، وواجهة PostgREST تقصّ
+  // الردّ عند ألف صفّ. فالمشتركون كانوا ٣٣٢ والصحيح ١٠٤٥، والأجهزة عالقة عند
+  // ١٠٠٠ بالضبط مهما بلغت — رقمٌ لا يتحرّك، فيبدو زرّ إعادة الفحص معطّلاً وهو
+  // يعمل في كل ضغطة.
+  const { data: counts, error: countsError } = await db.rpc('health_counts');
 
   return json({
     checks: [site, apns, fcm, telegram],
-    counts: {
-      stations: stations.count ?? 0,
-      subscribers: new Set((alerts.data ?? []).map((r) => r.address)).size,
-      devices: (devices.data ?? []).length,
+    counts: (counts as { stations: number; subscribers: number; devices: number } | null) ?? {
+      stations: 0,
+      subscribers: 0,
+      devices: 0,
     },
+    // ولا يُكتَم فشل العدّ: صفرٌ صامت يُقرأ كحقيقة، وقد قُرئ.
+    countsError: countsError?.message ?? null,
     at: new Date().toISOString(),
   });
 });
