@@ -1,9 +1,10 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { PRODUCT_LABELS, PRODUCT_ORDER } from '@/lib/products';
 import { KIND_LABELS, KINDS } from '@/lib/stationMeta';
 import { CITY_NAMES } from '@/lib/cities';
+import { useAlertChoice } from '@/lib/alerts';
 import { SearchIcon, SlidersIcon, XIcon } from './icons';
 import type { FuelProduct, StationKind } from '@/types/database';
 
@@ -37,10 +38,13 @@ function Chip({
   active,
   onClick,
   children,
+  /** مدينةٌ خارج اشتراك المستخدم: متاحة، لكنها لا تنافس مدنه على انتباهه. */
+  dim = false,
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  dim?: boolean;
 }) {
   return (
     <button
@@ -48,7 +52,11 @@ function Chip({
       aria-pressed={active}
       onClick={onClick}
       className={`min-h-[38px] shrink-0 rounded-full px-3.5 text-[13px] font-semibold transition-colors duration-200 ${
-        active ? 'bg-brand text-white' : 'bg-white text-brand-700 ring-1 ring-brand-100'
+        active
+          ? 'bg-brand text-white'
+          : dim
+            ? 'bg-white text-slate-400 ring-1 ring-slate-200'
+            : 'bg-white text-brand-700 ring-1 ring-brand-100'
       }`}
     >
       {children}
@@ -71,6 +79,16 @@ export function SearchBar({
 }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLInputElement>(null);
+  const { choice } = useAlertChoice();
+
+  // مدن المشترك التي فيها محطات فعلاً، ثم ما عداها بالترتيب المعتاد.
+  const { mine, ordered } = useMemo(() => {
+    const shown = (CITY_NAMES as readonly string[]).filter(
+      (c) => (cityCounts.get(c) ?? 0) > 0 || filters.city === c
+    );
+    const picked = (choice?.cities ?? []).filter((c) => shown.includes(c));
+    return { mine: picked, ordered: [...picked, ...shown.filter((c) => !picked.includes(c))] };
+  }, [choice, cityCounts, filters.city]);
 
   /** The keyboard covers the lower half of the screen, and the results live
    *  below the field — so on focus, pull the field to the top of the viewport
@@ -169,21 +187,25 @@ export function SearchBar({
 
           <div>
             <p className="mb-1.5 text-xs font-semibold text-slate-500">المدينة أو المنطقة</p>
+            {/* مدن المشترك أولاً، ثم البقية خلف فاصل.
+              *
+              *  من اختار مدينتين لا يبحث في ست عشرة. ولا تُحذف البقية — قد
+              *  يسافر، وقد يسأل عن مدينة أخيه — لكنها لا تزاحم مدنه على أول
+              *  الشريط، وهو كل ما يراه قبل أن يمرّر. */}
             <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4">
               <Chip active={filters.city === null} onClick={() => set({ city: null })}>
-                كل الأنبار
+                {mine.length ? 'كل مدني' : 'كل الأنبار'}
               </Chip>
-              {CITY_NAMES.filter((c) => (cityCounts.get(c) ?? 0) > 0 || filters.city === c).map(
-                (c) => (
-                  <Chip
-                    key={c}
-                    active={filters.city === c}
-                    onClick={() => set({ city: filters.city === c ? null : c })}
-                  >
-                    {c} ({cityCounts.get(c) ?? 0})
-                  </Chip>
-                )
-              )}
+              {ordered.map((c, i) => (
+                <Chip
+                  key={c}
+                  active={filters.city === c}
+                  onClick={() => set({ city: filters.city === c ? null : c })}
+                  dim={mine.length > 0 && i >= mine.length}
+                >
+                  {c} ({cityCounts.get(c) ?? 0})
+                </Chip>
+              ))}
             </div>
           </div>
 
