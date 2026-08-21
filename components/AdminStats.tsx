@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { isFresh, isOpenNow } from '@/lib/hours';
-import { SpinnerIcon } from './icons';
+import { whatsappLink } from '@/lib/phone';
+import { PRODUCT_LABELS } from '@/lib/products';
+import { SpinnerIcon, WhatsappIcon } from './icons';
 import { KIND_LABELS, KIND_STYLES } from '@/lib/stationMeta';
-import type { Station } from '@/types/database';
+import type { FuelProduct, Station } from '@/types/database';
 
 interface CityRow {
   city: string;
@@ -17,7 +19,7 @@ interface CityRow {
 }
 
 interface Row extends Station {
-  station_products: { updated_at: string | null; is_available: boolean | null }[];
+  station_products: { updated_at: string | null; is_available: boolean | null; product: FuelProduct }[];
 }
 
 /** What the admin needs to know before deciding anything: who is out there,
@@ -29,6 +31,34 @@ interface Row extends Station {
  *  has stood behind since last week. So the number that matters is: is it open
  *  right now by its own hours, and has anyone updated it inside the freshness
  *  window the app itself uses to decide what to show. */
+/** الاسم وحده. بوت تيليجرام يحشر «الاسم — الرقم» في contact_name لأنه لا عمود
+ *  له، فتحيةٌ تقول «السلام عليكم أحمد — 0770…» تُقرأ آلية لا إنسانية. */
+function ownerName(contact: string | null | undefined): string {
+  return (contact ?? '').split(' — ')[0].trim();
+}
+
+/** رسالة تذكير جاهزة، بلا كتابة ولا تذكّر لما نفد. */
+function reminderLink(
+  s: { phone: string; contact_name?: string | null },
+  products: string[]
+): string {
+  const who = ownerName(s.contact_name);
+  const when = new Intl.DateTimeFormat('ar-IQ', {
+    timeZone: 'Asia/Baghdad',
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+  }).format(new Date(Date.now()));
+  const text =
+    `السلام عليكم${who ? ` السيد ${who}` : ''}
+` +
+    `لقد حدّثتم المنتجات «${products.join(' و')}» آخر مرة قبل أكثر من يوم، ` +
+    `وما زالت معروضة للناس على أنها متوفرة.
+` +
+    `نرجو الدخول إلى لوحة محطتكم وتحديث البيانات — ${when}.`;
+  return `${whatsappLink(s.phone, who).split('?')[0]}?text=${encodeURIComponent(text)}`;
+}
+
 export function AdminStats() {
   const [devices, setDevices] = useState<Record<string, number> | null>(null);
   const [listeners, setListeners] = useState<Record<string, number> | null>(null);
@@ -62,7 +92,7 @@ export function AdminStats() {
       attempt(() =>
         supabase
           .from('stations')
-          .select('*, station_products(updated_at, is_available)')
+          .select('*, station_products(updated_at, is_available, product)')
           .in('status', ['approved', 'suspended'])
       ),
     ]);
@@ -138,11 +168,17 @@ export function AdminStats() {
       // أبطأهم، ويرفعهما مقلوبين إلى رأس قائمة «من يحتاج اتصالاً».
       const hasStock = s.station_products.some((p) => p.is_available);
 
+      // ما تعلنه المحطة بخبرٍ فات عمره — وهو وحده ما يستحقّ مراسلة صاحبها.
+      // محطةٌ بلا وقود لا شيء لديها لتحدّثه؛ ومحطةٌ حدّثت اليوم لا تحتاج تذكيراً.
+      const staleProducts = s.station_products
+        .filter((p) => p.is_available && !isFresh(p.updated_at))
+        .map((p) => PRODUCT_LABELS[p.product]);
+
       // والنقطة للحداثة وحدها. كانت تُصبغ حمراء من added، فتصير محطةٌ حدّثت
       // قبل أربع ساعات «متأخّرة يومين».
       const pulse: 'green' | 'amber' | 'red' =
         hours <= 24 ? 'green' : hours <= 48 ? 'amber' : 'red';
-      return { s, hasStock, hours, pulse };
+      return { s, hasStock, staleProducts, hours, pulse };
     })
     .sort(
       (a, b) =>
@@ -228,10 +264,11 @@ export function AdminStats() {
                   <th className="pb-2 text-center font-semibold">النوع</th>
                   <th className="pb-2 text-center font-semibold">المنتجات</th>
                   <th className="pb-2 text-start font-semibold">التفاعل</th>
+                  <th className="pb-2 text-center font-semibold">تذكير</th>
                 </tr>
               </thead>
               <tbody>
-                {commitment.map(({ s, hasStock, hours, pulse }) => (
+                {commitment.map(({ s, hasStock, staleProducts, hours, pulse }) => (
                   <tr key={s.id} className="border-t border-slate-100">
                     <td className="py-2 pe-2 font-bold text-slate-700">{s.name}</td>
                     <td className="py-2 pe-2 text-slate-500">{s.city}</td>
@@ -266,6 +303,24 @@ export function AdminStats() {
                         />
                         <span className="text-slate-500">{since(hours)}</span>
                       </span>
+                    </td>
+                    <td className="py-2 text-center">
+                      {/* يظهر للمحطة التي تعلن وقوداً بخبرٍ فات عمره وحدها.
+                          زرٌّ على كل صفّ يصير أثاثاً يُتجاهَل؛ وزرٌّ يظهر حين
+                          يلزم يُقرأ على أنه طلب. */}
+                      {staleProducts.length > 0 && s.phone ? (
+                        <a
+                          href={reminderLink(s, staleProducts)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`ذكّر ${ownerName(s.contact_name)} بتحديث ${staleProducts.join(' و')}`}
+                          className="inline-flex min-h-[32px] items-center justify-center text-brand"
+                        >
+                          <WhatsappIcon className="h-4 w-4" />
+                        </a>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}

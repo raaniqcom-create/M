@@ -8,6 +8,7 @@ import { whatsappLink } from '@/lib/phone';
 import { AdminStationForm } from '@/components/AdminStationForm';
 import { BroadcastPanel } from '@/components/BroadcastPanel';
 import { ReviewsPanel } from '@/components/ReviewsPanel';
+import { AvailabilityBoard } from '@/components/AvailabilityBoard';
 import { AdminStats } from '@/components/AdminStats';
 import { AdminHealth } from '@/components/AdminHealth';
 import { StationAnnouncePanel } from '@/components/StationAnnouncePanel';
@@ -298,7 +299,9 @@ export default function AdminPage() {
       )}
 
       {tab === 'stats' && (
-        <div className="mt-4">
+        <div className="mt-4 space-y-4">
+          {/* الجدول أولاً: هو ما يُفتح ليُنشر، والإحصائيات تُقرأ ولا تُصوَّر. */}
+          <AvailabilityBoard />
           <AdminStats />
         </div>
       )}
