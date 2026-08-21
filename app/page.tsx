@@ -66,6 +66,16 @@ export default function HomePage() {
   // «اعرض الباقي» — لحظيّ لا محفوظ: من وسّع مرةً لا يعني أنه غيّر اشتراكه.
   const [showAll, setShowAll] = useState(false);
   const { choice } = useAlertChoice();
+
+  // خمس مدن فأكثر: النطاق كل الأنبار ابتداءً.
+  //
+  // ليس اختصاراً في النصّ بل صدقاً فيه — سردُ خمسة أسماء لا يُقرأ على زرّ،
+  // وكتابة «كل الأنبار» فوق تصفيةٍ تحجب إحدى عشرة مدينة كذبٌ صريح. ومن اختار
+  // هذا العدد يبحث في المحافظة أصلاً، والزرّ يبقى ليقصره على مدنه متى شاء.
+  const wideChoice = (choice?.cities?.length ?? 0) > 4;
+  useEffect(() => {
+    if (wideChoice) setShowAll(true);
+  }, [wideChoice]);
   // نداء واحد يغذّي اللوحة الحمراء ولوحة المنتجات معاً.
   const { announcements, reload: reloadAnnouncements } = useOpenAnnouncements();
   const { visits, online } = useSiteStats();
@@ -276,9 +286,11 @@ export default function HomePage() {
   const scopeLabel = useMemo(() => {
     const mine = choice?.cities?.length ? choice.cities : null;
     if (!mine || filters.city) return null;
-    if (showAll) return 'كل الأنبار';
+    if (showAll) return 'محطات كل الأنبار';
     if (!hiddenElsewhere) return null;
-    return mine.length === 1 ? `محطات ${mine[0]}` : `محطات مدني (${mine.length})`;
+    // الأسماء صريحة: «محطات الرمادي، الفلوجة» أوضح من «محطات مدني (2)» —
+    // القارئ يرى نطاقه بلا أن يفتح إعداداته ليتذكّره.
+    return `محطات ${mine.join('، ')}`;
   }, [choice, showAll, filters.city, hiddenElsewhere]);
 
   const cityCounts = useMemo(() => {
@@ -432,39 +444,43 @@ export default function HomePage() {
           <PromoStrip />
         </div>
 
-        <div className="grid grid-cols-2 gap-2 rounded-xl bg-brand-50 p-1">
-          {(['list', 'map'] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              aria-pressed={view === v}
-              className={`flex min-h-[42px] items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-colors duration-200 ${
-                view === v ? 'bg-white text-brand shadow-soft' : 'text-brand-700'
-              }`}
-            >
-              {v === 'list' ? <ListIcon className="h-4 w-4" /> : <MapPinIcon className="h-4 w-4" />}
-              {v === 'list' ? 'قائمة' : 'خريطة'}
-            </button>
-          ))}
+        {/* حقلٌ واحد بثلاثة أوجه، لا زرّان متراكمان.
+          *
+          *  «قريبة لي» كان زرّاً منفصلاً بعرض الشاشة يوحي بأنه إجراء آخر، وهو
+          *  وجهٌ ثالث لنفس السؤال: كيف أرى المحطات؟ وضمُّه إلى الصفّ يجعل
+          *  الحالة الفعّالة واحدةً ظاهرة بدل حالتين متجاورتين. */}
+        <div className="grid grid-cols-3 gap-2 rounded-xl bg-brand-50 p-1">
+          {(['list', 'map', 'near'] as const).map((v) => {
+            const active = v === 'near' ? !!origin : view === v && !origin;
+            return (
+              <button
+                key={v}
+                type="button"
+                onClick={() => {
+                  if (v === 'near') return locate();
+                  // العودة إلى قائمة أو خريطة تُنهي ترتيب القُرب، وإلا بقي
+                  // القسم الثالث مُضاءً بينما المستخدم يظنّ أنه خرج منه.
+                  setOrigin(null);
+                  setView(v);
+                }}
+                aria-pressed={active}
+                className={`flex min-h-[42px] items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-colors duration-200 ${
+                  active ? 'bg-white text-brand shadow-soft' : 'text-brand-700'
+                }`}
+              >
+                {v === 'list' ? <ListIcon className="h-4 w-4" /> : <MapPinIcon className="h-4 w-4" />}
+                {v === 'list' ? 'قائمة' : v === 'map' ? 'خريطة' : 'قريبة لي'}
+              </button>
+            );
+          })}
         </div>
 
-        <button type="button" onClick={locate} className={`btn-ghost mt-3 w-full ${origin ? 'text-brand' : ''}`}>
-          <MapPinIcon className="h-4 w-4" />
-          {origin ? 'مرتّبة حسب الأقرب إليك' : 'رتّب حسب الأقرب إليّ'}
-        </button>
-
-        {/* النطاق بجانب الترتيب، لا في ذيل القائمة.
-          *
-          *  كان زرّ التوسيع أسفل المحطات كلها — أي أن من يريد رؤية مدينة
-          *  مجاورة عليه أن يمرّ بكل محطات مدينته أولاً ليكتشف أن ثمّة مزيداً.
-          *  والزرّان صارا واحداً يقول ما يعرضه الآن، لا ما سيفعله إن ضُغط:
-          *  «محطات الرمادي» يعني أنك تراها، وضغطةٌ تنقلك إلى «كل الأنبار». */}
+        {/* الحقل الثاني: النطاق. يقول ما يُعرض الآن لا ما سيفعله إن ضُغط. */}
         {scopeLabel && (
           <button
             type="button"
             onClick={() => setShowAll((v) => !v)}
-            className={`btn-ghost mt-2 w-full ${showAll ? '' : 'text-brand'}`}
+            className="btn-ghost mt-2 w-full text-brand"
           >
             <ListIcon className="h-4 w-4" />
             {scopeLabel}
