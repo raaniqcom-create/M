@@ -21,6 +21,7 @@ import { PromoStrip } from '@/components/PromoStrip';
 import { AlertsPrompt } from '@/components/AlertsPrompt';
 import { useAlertChoice, useFollowedStations } from '@/lib/alerts';
 import { TripAsk } from '@/components/TripAsk';
+import { UnregisteredBoard } from '@/components/UnregisteredBoard';
 import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
 import { InstallPrompt } from '@/components/InstallPrompt';
@@ -450,7 +451,11 @@ export default function HomePage() {
 
           {visible && view === 'list' && (
             <div className="space-y-3">
-              {visible.length === 0 && (
+              {/* فوق القائمة: خبرٌ عاجل عن محطة لا نملك عنها إلا لحظة واحدة —
+              فمكانه قبل المحطات التي نعرف عنها كل شيء. */}
+          <UnregisteredBoard />
+
+          {visible.length === 0 && (
                 <div className="card p-8 text-center">
                   <FuelIcon className="mx-auto h-8 w-8 text-brand-200" />
                   {/* The list is empty by design while the first stations
