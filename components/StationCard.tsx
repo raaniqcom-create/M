@@ -1,12 +1,4 @@
-import {
-  PRODUCT_LABELS,
-  PRODUCT_ORDER,
-  activeTrafficLevel,
-  trafficSource,
-  TRAFFIC_COLORS,
-  TRAFFIC_LABELS,
-  expectedLabel,
-} from '@/lib/products';
+import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, expectedLabel, isOffered, isStaleOffer, trafficSource } from '@/lib/products';
 import { StationActions } from './StationActions';
 import { isFresh, isOpenNow, PERIOD_LABELS, statusNote } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
@@ -113,8 +105,8 @@ export function StationCard({
         <ul className="mt-3 flex flex-wrap items-center gap-1.5">
           {shown.map((product) => {
             const row = byProduct.get(product)!;
-            const inStock = row.is_available && open && isFresh(row.updated_at);
-            const stale = row.is_available && !isFresh(row.updated_at);
+            const inStock = isOffered(station, row);
+            const stale = isStaleOffer(row);
             const lane = station.productTraffic?.find((t) => t.product === product);
             // Lane traffic reads majority_level straight off the view and so
             // never passed through the closed-station guard in

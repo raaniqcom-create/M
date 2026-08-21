@@ -4,13 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { loadStations } from '@/lib/stations';
 import { formatTime, isFresh, isOpenNow } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
-import {
-  PRODUCT_LABELS,
-  PRODUCT_ORDER,
-  TRAFFIC_COLORS,
-  TRAFFIC_LABELS,
-  activeTrafficLevel,
-} from '@/lib/products';
+import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, isOffered, isStaleOffer } from '@/lib/products';
 import { CITY_NAMES } from '@/lib/cities';
 import { SpinnerIcon } from './icons';
 import type { StationWithStatus } from '@/types/database';
@@ -60,8 +54,7 @@ export function AvailabilityBoard() {
         const open = isOpenNow(s);
         // نفس شرط بطاقة المستخدم حرفاً: متوفر، وحديث، والمحطة مفتوحة.
         const available = PRODUCT_ORDER.filter((p) => {
-          const row = s.products.find((r) => r.product === p);
-          return !!row?.is_available && isFresh(row.updated_at) && open;
+          return isOffered(s, s.products.find((r) => r.product === p));
         });
         // والمعلن القديم يُذكر بعمره لا يُطوى.
         //
@@ -71,7 +64,7 @@ export function AvailabilityBoard() {
         // أخضرَ يُرسل الناس إلى وقود قد نفد. فيُذكر ومعه عمره، والقارئ يقرّر.
         const stale = open
           ? PRODUCT_ORDER.map((p) => s.products.find((r) => r.product === p))
-              .filter((r) => !!r?.is_available && !isFresh(r.updated_at))
+              .filter((r) => isStaleOffer(r))
               .map((r) => ({ product: r!.product, age: agoLabel(r!.updated_at) }))
           : [];
         const newest = s.products.reduce<string | null>(

@@ -1,5 +1,5 @@
 import type { FuelProduct, TrafficLevel } from '@/types/database';
-import { isOpenNow } from './hours';
+import { isFresh, isOpenNow } from './hours';
 
 // single source of truth for the 6 fixed products — mirrors the fuel_product
 // enum in supabase/schema.sql
@@ -163,4 +163,31 @@ export function trafficSource(
   const stillFresh = setAt > 0 && Date.now() - setAt < MANUAL_TRAFFIC_MINUTES * 60_000;
   const voteAt = votes?.last_vote_at ? new Date(votes.last_vote_at).getTime() : 0;
   return stillFresh && station.manual_traffic_level && voteAt <= setAt ? 'station' : 'people';
+}
+
+/** هل هذا المنتج متوفّرٌ الآن فعلاً — المقياس الوحيد في المنصّة كلها.
+ *
+ *  ثلاثة شروط لا واحد: أعلنته المحطة، وأعلنته خلال نافذة الحداثة، وهي مفتوحة
+ *  الآن. وكان يُكتب بيد في ستّة مواضع، فدرجت النسخ:
+ *
+ *  · StationLive نسي الحداثة، فعرض «متوفر» أخضرَ على خبر عمره ٧٠ ساعة.
+ *  · ProductsDashboard نسيها أيضاً، فعدّ «بانزين محسن: ١» بينما القائمة تفحصها
+ *    فلا تجد شيئاً — والمستخدم يضغط الرقم فيُقال له «لا توجد محطة». عطلٌ يبدو
+ *    عبثاً بالمنصّة، وهو اختلاف سطرٍ بين ملفّين.
+ *
+ *  فمن أراد تغيير المعنى — نافذةً أطول، أو عرضاً للمغلقة — يغيّره هنا مرة،
+ *  ويتحرّك كل سطح معه. */
+export function isOffered(
+  station: { is_24h: boolean; opens_at: string; closes_at: string; temp_closed?: boolean },
+  row: { is_available?: boolean | null; updated_at?: string | null } | undefined | null
+): boolean {
+  return !!row?.is_available && isFresh(row.updated_at) && isOpenNow(station);
+}
+
+/** أُعلن متوفّراً، وفات عمر إعلانه. يُعرض بالرمادي مع عمره: لا يُخفى فتضيع
+ *  المعلومة، ولا يُعرض أخضرَ فيُرسل الناس إلى وقود نفد. */
+export function isStaleOffer(
+  row: { is_available?: boolean | null; updated_at?: string | null } | undefined | null
+): boolean {
+  return !!row?.is_available && !isFresh(row.updated_at);
 }

@@ -14,7 +14,7 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { SideMenu } from '@/components/SideMenu';
 import { isFresh, isOpenNow } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
-import { PRODUCT_LABELS } from '@/lib/products';
+import { PRODUCT_LABELS, isOffered } from '@/lib/products';
 import { CITY_NAMES } from '@/lib/cities';
 import { StationCard } from '@/components/StationCard';
 import { PromoStrip } from '@/components/PromoStrip';
@@ -222,7 +222,7 @@ export default function HomePage() {
     if (filters.kind) rows = rows.filter((s) => s.kind === filters.kind);
     if (filters.availableOnly) {
       rows = rows.filter(
-        (s) => isOpenNow(s) && s.products.some((p) => p.is_available && isFresh(p.updated_at))
+        (s) => s.products.some((p) => isOffered(s, p))
       );
     }
     if (filters.product) {
@@ -231,8 +231,8 @@ export default function HomePage() {
           (p) =>
             p.product === filters.product &&
             (filters.availableOnly
-              ? p.is_available && isFresh(p.updated_at) && isOpenNow(s)
-              : (p.is_available && isFresh(p.updated_at)) || p.expected_at)
+              ? isOffered(s, p)
+              : isOffered(s, p) || !!p.expected_at)
         )
       );
     }
@@ -246,7 +246,7 @@ export default function HomePage() {
     // instead: pinned first, then anything a driver can act on now.
     const actionable = (s: StationWithStatus) =>
       s.products.some(
-        (p) => (p.is_available && isFresh(p.updated_at) && isOpenNow(s)) || p.expected_at
+        (p) => isOffered(s, p) || !!p.expected_at
       );
 
     return [...rows].sort(
@@ -262,6 +262,18 @@ export default function HomePage() {
     if (!mine || showAll || filters.city) return 0;
     return (stations ?? []).filter((s) => !mine.includes(s.city)).length;
   }, [stations, choice, showAll, filters.city]);
+
+  // ما يُعرض الآن، لا ما سيحدث عند الضغط.
+  //
+  // ولا يظهر أصلاً لمن لا اشتراك له أو لمن لا محطات خارج مدنه: زرٌّ لا يغيّر
+  // شيئاً هو أثاثٌ يُشغل مكاناً ويُعلَّم أنه بلا فائدة.
+  const scopeLabel = useMemo(() => {
+    const mine = choice?.cities?.length ? choice.cities : null;
+    if (!mine || filters.city) return null;
+    if (showAll) return 'كل الأنبار';
+    if (!hiddenElsewhere) return null;
+    return mine.length === 1 ? `محطات ${mine[0]}` : `محطات مدني (${mine.length})`;
+  }, [choice, showAll, filters.city, hiddenElsewhere]);
 
   const cityCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -423,6 +435,23 @@ export default function HomePage() {
           {origin ? 'مرتّبة حسب الأقرب إليك' : 'رتّب حسب الأقرب إليّ'}
         </button>
 
+        {/* النطاق بجانب الترتيب، لا في ذيل القائمة.
+          *
+          *  كان زرّ التوسيع أسفل المحطات كلها — أي أن من يريد رؤية مدينة
+          *  مجاورة عليه أن يمرّ بكل محطات مدينته أولاً ليكتشف أن ثمّة مزيداً.
+          *  والزرّان صارا واحداً يقول ما يعرضه الآن، لا ما سيفعله إن ضُغط:
+          *  «محطات الرمادي» يعني أنك تراها، وضغطةٌ تنقلك إلى «كل الأنبار». */}
+        {scopeLabel && (
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className={`btn-ghost mt-2 w-full ${showAll ? '' : 'text-brand'}`}
+          >
+            <ListIcon className="h-4 w-4" />
+            {scopeLabel}
+          </button>
+        )}
+
         <div className="mt-4">
           {failed && stations === null && (
             <div className="card p-8 text-center" role="alert">
@@ -498,33 +527,6 @@ export default function HomePage() {
                 />
               ))}
 
-              {/* ما خارج مدنه — معلوم العدد، وعلى بُعد ضغطة.
-                *
-                *  التصفية تخدم السبعين بالمئة، وهذا السطر يمنعها من أن تصير
-                *  حجباً: القارئ يعرف أن ثمّة مزيداً، وكم هو، ويفتحه متى شاء. */}
-              {hiddenElsewhere > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAll(true)}
-                  className="btn-ghost mt-1 w-full text-xs"
-                >
-                  {hiddenElsewhere === 1
-                    ? 'محطة واحدة في مدينة أخرى — اعرضها'
-                    : hiddenElsewhere === 2
-                      ? 'محطتان في مدن أخرى — اعرضهما'
-                      : `${plural(hiddenElsewhere, 'محطة', 'محطتان', 'محطات', 'محطة')} في مدن أخرى — اعرضها`}
-                </button>
-              )}
-
-              {showAll && choice?.cities?.length ? (
-                <button
-                  type="button"
-                  onClick={() => setShowAll(false)}
-                  className="btn-ghost mt-1 w-full text-xs"
-                >
-                  اقتصر على مدني
-                </button>
-              ) : null}
             </div>
           )}
         </div>

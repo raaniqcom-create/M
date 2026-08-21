@@ -1,6 +1,6 @@
 'use client';
 
-import { PRODUCT_LABELS, PRODUCT_ORDER } from '@/lib/products';
+import { PRODUCT_LABELS, PRODUCT_ORDER, isOffered } from '@/lib/products';
 import { isOpenNow } from '@/lib/hours';
 import type { FuelProduct, StationWithStatus } from '@/types/database';
 
@@ -16,10 +16,14 @@ export function ProductsDashboard({
   // "available now" must mean collectable now — a closed station holding fuel
   // is not a place to send a driver
   const counts = new Map<FuelProduct, number>();
+  // isOffered لا is_available وحدها.
+  //
+  // كان العدّ يتجاهل عمر الإعلان، فيقول «بانزين محسن: ١» عن خبرٍ عمره ٢٨ ساعة
+  // بينما القائمة تفحص الحداثة فلا تجد شيئاً. فيضغط المستخدم الرقم ويُقال له
+  // «لا توجد محطة يتوفر فيها بانزين محسن» — رقمٌ يناقض نفسه بضغطة واحدة.
   for (const s of stations) {
-    if (!isOpenNow(s)) continue;
     for (const p of s.products) {
-      if (p.is_available) counts.set(p.product, (counts.get(p.product) ?? 0) + 1);
+      if (isOffered(s, p)) counts.set(p.product, (counts.get(p.product) ?? 0) + 1);
     }
   }
 

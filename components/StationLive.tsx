@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { PRODUCT_LABELS, PRODUCT_ORDER, expectedLabel } from '@/lib/products';
+import { PRODUCT_LABELS, PRODUCT_ORDER, expectedLabel, isOffered, isStaleOffer } from '@/lib/products';
 import { hoursLabel, isFresh, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { Station, StationProduct } from '@/types/database';
@@ -107,10 +107,8 @@ export function StationLive({
           //
           // ولا يُحذف المعلن القديم كما تفعل البطاقة: حذفه يُضيّع خبراً قد ينفع،
           // وعرضه أخضرَ يخدع. فيُقال ما أُعلن ومتى — والقارئ يقرّر.
-          const claimed = row?.is_available ?? false;
-          const fresh = claimed && isFresh(row?.updated_at);
-          const inStock = fresh && open;
-          const stale = claimed && !fresh;
+          const inStock = isOffered(station, row);
+          const stale = isStaleOffer(row);
           const staleAge = stale ? agoLabel(row?.updated_at) : null;
 
           return (
