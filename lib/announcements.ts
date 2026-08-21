@@ -13,6 +13,9 @@ export interface OpenAnnouncement {
   send_at: string;
   yes_votes: number;
   no_votes: number;
+  /** قرار الإدارة القائم، إن كان — يسبق التصويت نصف ساعة. */
+  admin_verdict: 'available' | 'gone' | null;
+  admin_until: string | null;
 }
 
 /** أخبار اليوم عن محطات لم تنضمّ — يقرؤها سطحان، فتُجلب مرة.

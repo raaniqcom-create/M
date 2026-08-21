@@ -108,11 +108,13 @@ export function UnregisteredBoard({
             {/* الأصوات الحاكمة، ومدّتها مكتوبة — وإلا قرأ الناس «٧» بعد أن
                 رأوا «٢٠» وظنّوا أن أصواتاً ضاعت. */}
             <p className="mt-1 text-[11px] text-slate-400">
-              {r.yes_votes + r.no_votes === 0
-                ? 'لا تصويت في آخر نصف ساعة — كن أوّل من يخبر'
-                : r.yes_votes - r.no_votes >= 4
-                  ? `أكّده ${r.yes_votes} في آخر نصف ساعة`
-                  : 'تصويت آخر نصف ساعة'}
+              {r.admin_verdict === 'available'
+                ? 'أكّدته إدارة المنصّة بعد التواصل مع المحطة'
+                : r.yes_votes + r.no_votes === 0
+                  ? 'لا تصويت في آخر نصف ساعة — كن أوّل من يخبر'
+                  : r.yes_votes - r.no_votes >= 4
+                    ? `أكّده ${r.yes_votes} في آخر نصف ساعة`
+                    : 'تصويت آخر نصف ساعة'}
             </p>
 
             <div className="mt-2 grid grid-cols-2 gap-2">

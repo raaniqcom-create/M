@@ -12,6 +12,7 @@ import { AvailabilityBoard } from '@/components/AvailabilityBoard';
 import { AdminStats } from '@/components/AdminStats';
 import { AdminHealth } from '@/components/AdminHealth';
 import { StationAnnouncePanel } from '@/components/StationAnnouncePanel';
+import { UnregisteredAdmin } from '@/components/UnregisteredAdmin';
 import { findSimilar } from '@/lib/similar';
 import { announceStation, rebuildSite } from '@/lib/rebuild';
 import { KIND_LABELS, KIND_STYLES, KINDS } from '@/lib/stationMeta';
@@ -290,7 +291,14 @@ export default function AdminPage() {
         </div>
       )}
 
-      {tab === 'announce' && <StationAnnouncePanel />}
+      {tab === 'announce' && (
+        <div className="space-y-4">
+          <StationAnnouncePanel />
+          {/* الإدارة تحت الإنشاء: من أرسل خبراً هو من يتلقّى مكالمة المحطة
+              بشأنه، فالشاشتان واحدة. */}
+          <UnregisteredAdmin />
+        </div>
+      )}
 
       {tab === 'system' && (
         <div className="mt-4">
