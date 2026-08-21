@@ -40,9 +40,12 @@ export async function loadStations(): Promise<StationWithStatus[]> {
       .eq('status', 'approved')
       .eq('is_demo', false)
       .order('name'),
-    supabase.from('station_products').select('*'),
-    supabase.from('station_traffic_avg').select('*'),
-    supabase.from('station_product_traffic').select('*'),
+    // سبعة صفوف لكل محطة، فالسقف يقع عند ١٤٣ محطة — وعندها تظهر محطاتٌ
+    // للجمهور بلا وقود إطلاقاً، بلا خطأ في أي مكان، وأيّها يفرغ غير محدَّد
+    // لأن الترتيب غير مضمون. هذه أخطر نسخة من العطل: تصيب الصفحة الرئيسة.
+    supabase.from('station_products').select('*').range(0, 99_999),
+    supabase.from('station_traffic_avg').select('*').range(0, 99_999),
+    supabase.from('station_product_traffic').select('*').range(0, 99_999),
   ]);
 
   // supabase-js resolves with an error object instead of rejecting — without

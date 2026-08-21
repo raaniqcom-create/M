@@ -656,13 +656,22 @@ Deno.serve(async (req) => {
 
   // Awaited, not fire-and-forget: the runtime may tear the function down as
   // soon as the response returns, dropping an in-flight request.
-  const [tg, fcm, apns] = await Promise.allSettled([
+  // أربعة وعود وأربعة متغيّرات.
+  //
+  // كانت ثلاثة: أُضيف واتساب في الموضع الثاني بلا توسيع التفكيك، فصار fcm هو
+  // واتساب، وapns هو أندرويد، وتقرير آيفون يسقط كلّه. أي أن ٥١٢ جهاز آيفون
+  // بلا أي تقرير عن أعطالها، واللوحة تعرض أندرويد تحت اسم APNs.
+  //
+  // وهذا يُعيد فتح العمى نفسه الذي أخفى انقطاع مفتاح APNs ستة أيام، وهو
+  // السبب الذي كُتبت من أجله هذه التقارير أصلاً.
+  const [tg, wa, fcm, apns] = await Promise.allSettled([
     notifyTelegram(stationId, station.name, isNewStation ? [] : live),
     notifyWhatsapp(stationId, station.name, isNewStation ? [] : live),
     notifyAndroidApps(stationId, alertTitle, alertBody, alertUrl, pick('android').map((l) => l.address)),
     notifyIosApps(stationId, alertTitle, alertBody, alertUrl, pick('ios').map((l) => l.address)),
   ]);
   if (tg.status === 'rejected') console.error('telegram', tg.reason);
+  if (wa.status === 'rejected') console.error('whatsapp', wa.reason);
   if (fcm.status === 'rejected') console.error('fcm', fcm.reason);
   if (apns.status === 'rejected') console.error('apns', apns.reason);
 

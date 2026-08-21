@@ -171,8 +171,11 @@ Deno.serve(async (req) => {
     }
   } else {
     const [{ data: d }, { data: alerts }] = await Promise.all([
-      db.from('device_tokens').select('token, platform, keys'),
-      db.from('alerts').select('channel, address, keys').eq('channel', 'web'),
+      // .range صريح: واجهة PostgREST تقصّ الردّ عند ألف صفّ افتراضياً، وجدول
+      // device_tokens فيه ١٣٧٤ صفّاً اليوم. فالبثّ العامّ كان يصل ٧٣٪ من
+      // الأجهزة، ولوحة المعاينة تؤكّد الرقم المقصوص على أنه الجمهور كلّه.
+      db.from('device_tokens').select('token, platform, keys').range(0, 99_999),
+      db.from('alerts').select('channel, address, keys').eq('channel', 'web').range(0, 99_999),
     ]);
     // صفوف المتصفح تُفرَز عن الأصلية: ما دون ios يسقط إلى FCM أدناه، وعنوانُ
     // دفعٍ يُرسَل إلى FCM كرمز جهاز يردّ 400 لا 404 — فلا يُحذف، ويُعاد إليه

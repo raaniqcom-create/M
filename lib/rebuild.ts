@@ -15,10 +15,10 @@ import { callFn } from './fn';
  *  «بانزين محسن في الرمادي» was pulled out of their day for an event they can
  *  do nothing with. Citizens hear from a station when it announces fuel.
  *  Quiet on failure: the approval stands either way. */
-export async function announceStation(stationId: string): Promise<void> {
+export async function announceStation(stationId: string): Promise<string | null> {
   try {
     const { data } = await supabase.auth.getSession();
-    await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/notify`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/notify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -27,8 +27,17 @@ export async function announceStation(stationId: string): Promise<void> {
       },
       body: JSON.stringify({ stationId, newStation: true }),
     });
+    // الجواب يُقرأ.
+    //
+    // كان النداء كلّه في catch فارغ وبلا فحص حالة، فصاحب محطة قد لا يُخبَر
+    // باعتمادها أبداً ولا أثر لذلك في أي شاشة. وnotify صارت تردّ 502 حين
+    // يتعذّر تحديد المستقبِلين — وهو الردّ الذي كُتب ليُرى، فابتلاعه هنا
+    // يُبطل الإصلاح كلّه.
+    if (res.ok) return null;
+    const said = (await res.json().catch(() => null)) as { error?: string } | null;
+    return said?.error ?? `تعذّر إبلاغ صاحب المحطة (${res.status}).`;
   } catch {
-    /* the driver misses one announcement; the station is still approved */
+    return 'تعذّر إبلاغ صاحب المحطة — انقطع الاتصال.';
   }
 }
 

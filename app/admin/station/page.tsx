@@ -158,8 +158,22 @@ function Panel() {
         Authorization: `Bearer ${sess.session?.access_token ?? ''}`,
       },
       body: JSON.stringify({ stationId: station.id, products: available }),
-    }).catch(() => {});
-    setSentAt(new Date().toISOString());
+    })
+      // الحالة تُفحص قبل أن يُختم «أُرسل».
+      //
+      // كان .catch وحده، وfetch لا ترمي على 401 ولا 409 ولا 502 — فاللوحة
+      // كانت تختم الإرسال على كل رفضٍ من الخادم، بما فيه الـ502 التي أُضيفت
+      // خصّيصاً لتقول «لم يصل أحد». أي أن اللوحة كانت عمياء عن العطل نفسه
+      // الذي استغرق البحث عنه تسعاً وثلاثين ساعة.
+      .then(async (r) => {
+        if (r.ok) {
+          setSentAt(new Date().toISOString());
+          return;
+        }
+        const said = (await r.json().catch(() => null)) as { error?: string } | null;
+        setPhoneNote(said?.error ?? `تعذّر إرسال الإشعار (${r.status}). لم يصل المشتركين.`);
+      })
+      .catch(() => setPhoneNote('انقطع الاتصال — لم نتأكّد من وصول الإشعار.'));
     setBusy(null);
   }
 
@@ -207,7 +221,10 @@ function Panel() {
     if (status === 'approved') {
       const why = await rebuildSite();
       if (why) setPhoneNote(`المحطة اعتُمدت، لكن تحديث الموقع فشل: ${why} — لم يُرسل الإشعار بعد.`);
-      else await announceStation(station.id);
+      else {
+        const failed = await announceStation(station.id);
+        if (failed) setPhoneNote(`المحطة اعتُمدت والموقع حُدّث، لكن ${failed}`);
+      }
     }
     setStation({ ...station, status });
     setBusy(null);

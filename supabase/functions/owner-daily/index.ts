@@ -277,8 +277,11 @@ Deno.serve(async (req) => {
 
   const ids = stations.map((s) => s.id);
   const [{ data: products }, { data: pinged }, { data: votes }, { data: watchRows }] = await Promise.all([
-    db.from('station_products').select('station_id, updated_at').in('station_id', ids),
-    db.from('owner_pings').select('station_id, kind').eq('day', day),
+    // سبعة صفوف لكل محطة: بلا حدّ صريح تُقرأ المحطات بعد القطع «لم تنشر قطّ»،
+    // فتُرحَّب بها يومياً ولا يصلها شكر الإغلاق أبداً.
+    db.from('station_products').select('station_id, updated_at').in('station_id', ids).range(0, 99_999),
+    // وعلامات اليوم: ضياعها يعني رسالةً مكرّرة لكل مالك.
+    db.from('owner_pings').select('station_id, kind').eq('day', day).in('station_id', ids).range(0, 99_999),
     // Only the tail matters: a vote older than 45 minutes lapsed long ago and
     // asking about it now is late, not helpful.
     db

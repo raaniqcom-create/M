@@ -144,9 +144,19 @@ Deno.serve(async (req) => {
 
   if (!fresh?.length) return new Response('nothing new');
 
-  const { data: alreadySent } = await db
+  // بلا حدّ صريح يقع القصّ عند ١٤٣ محطة، فتضيع علامات «أُرسل» للمحطات بعد
+  // القطع — وتُعاد إشعاراتها كل دقيقتين إلى الأبد، بلا خطأ في أي سجلّ.
+  const { data: alreadySent, error: sentErr } = await db
     .from('product_alerts_sent')
-    .select('station_id, product, sent_at');
+    .select('station_id, product, sent_at')
+    .range(0, 99_999);
+
+  // ويُرمى الفشل ولا يُبتلع: قائمةٌ فارغة هنا تعني «لم يُرسل شيء قطّ»، فتُعاد
+  // كل الإشعارات على كل المشتركين دفعةً واحدة.
+  if (sentErr) {
+    console.error('product_alerts_sent', sentErr.message);
+    return new Response(`product_alerts_sent: ${sentErr.message}`, { status: 500 });
+  }
 
   const sentKey = new Map(
     (alreadySent ?? []).map((r) => [`${r.station_id}:${r.product}`, r.sent_at])

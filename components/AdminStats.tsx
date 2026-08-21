@@ -17,7 +17,7 @@ interface CityRow {
 }
 
 interface Row extends Station {
-  station_products: { updated_at: string | null }[];
+  station_products: { updated_at: string | null; is_available: boolean | null }[];
 }
 
 /** What the admin needs to know before deciding anything: who is out there,
@@ -62,7 +62,7 @@ export function AdminStats() {
       attempt(() =>
         supabase
           .from('stations')
-          .select('*, station_products(updated_at)')
+          .select('*, station_products(updated_at, is_available)')
           .in('status', ['approved', 'suspended'])
       ),
     ]);
@@ -125,18 +125,24 @@ export function AdminStats() {
         .filter(Boolean);
       const last = stamps.length ? Math.max(...stamps) : 0;
       const hours = last ? (Date.now() - last) / HOUR : Infinity;
-      // The four product rows are seeded at registration and carry that
-      // moment, so "added products" is not "has rows" — it is the owner
-      // coming back and touching them afterwards.
-      const added = last > new Date(s.created_at).getTime() + 5 * 60_000;
-      const pulse: 'green' | 'amber' | 'red' = !added
-        ? 'red'
-        : hours <= 24
-          ? 'green'
-          : hours <= 48
-            ? 'amber'
-            : 'red';
-      return { s, added, hours, pulse };
+
+      // العمود يقول ما تعلنه المحطة الآن، لا متى وُلدت.
+      //
+      // كان: added = last > created_at + 5 دقائق. والصفوف السبعة تُزرع عند
+      // التسجيل بختم اللحظة، فأردتُ التفريق بين الزرع والنشر الحقيقي —
+      // وافترضتُ أن المالك يعود بعد حين. وهو يعود بعد دقيقتين.
+      //
+      // فمحطة بوابة الرمادي سجّلت ٢٣:٥٩ ونشرت ٠٠:٠١ ومعها خمسة منتجات متوفرة —
+      // أغنى محطة على المنصّة — وعُلّمت ✗ «لم يضف منتجاته». والتل الأخضر بصفر
+      // وقود عُلّمت ✓. أي أن المقياس كان يعاقب أسرع الملّاك استجابةً ويكافئ
+      // أبطأهم، ويرفعهما مقلوبين إلى رأس قائمة «من يحتاج اتصالاً».
+      const hasStock = s.station_products.some((p) => p.is_available);
+
+      // والنقطة للحداثة وحدها. كانت تُصبغ حمراء من added، فتصير محطةٌ حدّثت
+      // قبل أربع ساعات «متأخّرة يومين».
+      const pulse: 'green' | 'amber' | 'red' =
+        hours <= 24 ? 'green' : hours <= 48 ? 'amber' : 'red';
+      return { s, hasStock, hours, pulse };
     })
     .sort(
       (a, b) =>
@@ -225,7 +231,7 @@ export function AdminStats() {
                 </tr>
               </thead>
               <tbody>
-                {commitment.map(({ s, added, hours, pulse }) => (
+                {commitment.map(({ s, hasStock, hours, pulse }) => (
                   <tr key={s.id} className="border-t border-slate-100">
                     <td className="py-2 pe-2 font-bold text-slate-700">{s.name}</td>
                     <td className="py-2 pe-2 text-slate-500">{s.city}</td>
@@ -237,10 +243,14 @@ export function AdminStats() {
                       </span>
                     </td>
                     <td className="py-2 text-center">
-                      {added ? (
-                        <span className="font-bold text-traffic-green">✓</span>
+                      {hasStock ? (
+                        <span title="تعلن وقوداً متوفراً" className="font-bold text-traffic-green">
+                          ✓
+                        </span>
                       ) : (
-                        <span className="font-bold text-traffic-red">✗</span>
+                        <span title="لا وقود متوفر لديها الآن" className="font-bold text-slate-400">
+                          —
+                        </span>
                       )}
                     </td>
                     <td className="py-2">
@@ -266,7 +276,11 @@ export function AdminStats() {
           <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
             <span className="font-bold text-traffic-green">●</span> حدّث خلال يوم ·{' '}
             <span className="font-bold text-traffic-yellow">●</span> يوم ويوم ·{' '}
-            <span className="font-bold text-traffic-red">●</span> يومان فأكثر أو لم يضف منتجاته
+            <span className="font-bold text-traffic-red">●</span> يومان فأكثر
+            <br />
+            وعمود <b>المنتجات</b>: <span className="font-bold text-traffic-green">✓</span> تعلن
+            وقوداً متوفراً · <span className="font-bold text-slate-400">—</span> لا وقود لديها
+            الآن، وهو خبرٌ صحيح لا تقصير.
           </p>
         </section>
       )}

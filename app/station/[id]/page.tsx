@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { StationActions } from '@/components/StationActions';
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import {
@@ -136,15 +137,19 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
 
         <StationLive station={station} initial={rows} />
 
-        <div className={`mt-5 grid gap-2 ${station.phone ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          {station.phone && (
-            <a href={`tel:${station.phone}`} className="btn-ghost">
-              <PhoneIcon className="h-4 w-4" />
-              اتصال
-            </a>
-          )}
-          <RouteButton lat={station.lat} lng={station.lng} stationId={station.id} stationName={station.name} />
-        </div>
+        <StationActions
+          phone={station.phone}
+          hours={{
+            is_24h: station.is_24h,
+            opens_at: station.opens_at,
+            closes_at: station.closes_at,
+            temp_closed: station.temp_closed,
+          }}
+          lat={station.lat}
+          lng={station.lng}
+          stationId={station.id}
+          stationName={station.name}
+        />
 
         <ComplaintButton stationId={station.id} />
       </article>

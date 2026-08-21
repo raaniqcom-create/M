@@ -7,6 +7,7 @@ import {
   TRAFFIC_LABELS,
   expectedLabel,
 } from '@/lib/products';
+import { StationActions } from './StationActions';
 import { isFresh, isOpenNow, PERIOD_LABELS, statusNote } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
@@ -195,23 +196,19 @@ export function StationCard({
           .join('، ') || 'لا شيء'}
       </p>
 
-      {/* Some owners asked for their number to reach the admin only. A button
-          that promises a call it cannot place is worse than no button, so it
-          goes and the route button takes the full width. */}
-      <div className={`mt-3 grid gap-2 ${station.phone ? 'grid-cols-2' : 'grid-cols-1'}`}>
-        {station.phone && (
-          <a href={`tel:${station.phone}`} className="btn-ghost">
-            <PhoneIcon className="h-4 w-4" />
-            اتصال
-          </a>
-        )}
-        <RouteButton
-          lat={station.lat}
-          lng={station.lng}
-          stationId={station.id}
-          stationName={station.name}
-        />
-      </div>
+      <StationActions
+        phone={station.phone}
+        hours={{
+          is_24h: station.is_24h,
+          opens_at: station.opens_at,
+          closes_at: station.closes_at,
+          temp_closed: station.temp_closed,
+        }}
+        lat={station.lat}
+        lng={station.lng}
+        stationId={station.id}
+        stationName={station.name}
+      />
     </article>
   );
 }

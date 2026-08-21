@@ -100,7 +100,10 @@ export default function AdminPage() {
       if (why) {
         setNotice(`المحطة اعتُمدت، لكن تحديث الموقع فشل: ${why} — لم يُرسل الإشعار بعد.`);
       } else {
-        await announceStation(id);
+        // ونتيجة الإبلاغ تُقرأ: كانت تُبتلع، فصاحب محطة قد لا يعلم باعتمادها
+        // وأنت لا تعلم أنه لا يعلم.
+        const failed = await announceStation(id);
+        if (failed) setNotice(`المحطة اعتُمدت والموقع حُدّث، لكن ${failed}`);
       }
     }
     load();
