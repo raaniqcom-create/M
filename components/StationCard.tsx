@@ -55,13 +55,25 @@ export function StationCard({
   // about hours), and printed nothing at all — a silent gap — for an open
   // station whose data had gone stale. They are separate facts now.
   const rows = PRODUCT_ORDER.map((p) => byProduct.get(p)).filter(Boolean);
-  const everReported = rows.some((r) => r!.is_available || r!.expected_at);
-  const anyFresh = rows.some((r) => r!.is_available && isFresh(r!.updated_at));
+  // أحدث لمسة على اللوح — لا «هل لديه ما يُعلن».
+  //
+  // كان المقياس everReported = ثمّة متوفر أو متوقع، فمحطةٌ حدّثت قبل أربع ساعات
+  // وأفرغت منتجاتها تُقال لها «لم تُحدَّث حالة الوقود بعد». وهي حدّثت، وأخبرت
+  // بالصدق أن لا شيء لديها — فعوقبت على صدقها بنصٍّ يتّهمها بالإهمال.
+  const newest = rows.reduce<string | null>(
+    (a, r) => (r!.updated_at && (!a || r!.updated_at > a) ? r!.updated_at : a),
+    null
+  );
+  // المعلن القديم يُقال ولا يُحذف.
+  //
+  // كان يُسقَط من العرض تماماً، فتضيع المعلومة كلها ويظهر بدلها سطرٌ عامّ «آخر
+  // تحديث قديم». وصفحة المحطة كانت تعرضه أخضرَ كأنه اليوم — فالسطحان يقولان
+  // شيئين مختلفين عن المحطة نفسها. والصواب بينهما: يُعرض ما أُعلن مع عمره
+  // صريحاً، فلا يُخدع القارئ ولا يُحرَم خبراً قد ينفعه.
   const shown = PRODUCT_ORDER.filter((product) => {
     const row = byProduct.get(product);
     if (!row) return false;
-    // A five-day-old "available" is not a claim about today.
-    return (row.is_available && open && isFresh(row.updated_at)) || row.expected_at;
+    return row.is_available || !!row.expected_at;
   });
 
   return (
@@ -102,6 +114,7 @@ export function StationCard({
           {shown.map((product) => {
             const row = byProduct.get(product)!;
             const inStock = row.is_available && open && isFresh(row.updated_at);
+            const stale = row.is_available && !isFresh(row.updated_at);
             const lane = station.productTraffic?.find((t) => t.product === product);
             // Lane traffic reads majority_level straight off the view and so
             // never passed through the closed-station guard in
@@ -112,7 +125,11 @@ export function StationCard({
               <li
                 key={product}
                 className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  inStock ? 'bg-brand-100 text-brand' : 'bg-amber-50 text-amber-700'
+                  inStock
+                    ? 'bg-brand-100 text-brand'
+                    : stale
+                      ? 'bg-slate-100 text-slate-500'
+                      : 'bg-amber-50 text-amber-700'
                 }`}
               >
                 {laneLevel && (
@@ -122,6 +139,9 @@ export function StationCard({
                   />
                 )}
                 {PRODUCT_LABELS[product]}
+                {stale && !row.expected_at && (
+                  <span className="mr-1 font-normal">· {agoLabel(row.updated_at)}</span>
+                )}
                 {!inStock && row.expected_at && (
                   <span className="mr-1 font-bold">
                     · {expectedLabel(row.expected_at)}
@@ -134,24 +154,19 @@ export function StationCard({
         </ul>
       )}
 
-      {/* Said once, and only when it is the actual state of things.
+      {/* Said once، وفرعان لا أربعة.
        *
-       *  The stale line used to end «اتصل بالمحطة قبل أن تتحرك» for every
-       *  station. Most owners are turning their number off — they want the
-       *  published state to be what people go by, which is the whole point of
-       *  the platform — and telling a reader to call a station that has no
-       *  number is advice they cannot follow. So the sentence now depends on
-       *  whether there is a number to call: an offer when there is one, and
-       *  the plain age of the reading when there is not. */}
+       *  كانت ثمّة حالة «آخر تحديث قديم» بصيغتين حسب وجود الرقم — وقد صارت
+       *  الشارات نفسها تحمل عمرها («بانزين عادي · قبل ٣ أيام»)، فتكرارها هنا
+       *  حشوٌ يقول ما قيل. ولم يبقَ إلا حالتان صادقتان: لم تنشر قطّ، أو نشرت
+       *  ولا شيء لديها. */}
       {open && !shown.length && (
         <p className="mt-3 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-medium text-slate-500">
-          {!everReported
+          {!newest
             ? 'لم تُحدَّث حالة الوقود بعد'
-            : anyFresh
+            : isFresh(newest)
               ? 'لا يوجد وقود متوفر الآن'
-              : station.phone
-                ? 'آخر تحديث قديم — يمكنك الاتصال للتأكّد'
-                : 'آخر تحديث قديم — قد لا يمثّل وضعها الآن'}
+              : `لا وقود معلن · آخر تحديث ${agoLabel(newest)}`}
         </p>
       )}
 

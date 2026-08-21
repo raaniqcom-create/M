@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { PRODUCT_LABELS, PRODUCT_ORDER, expectedLabel } from '@/lib/products';
-import { hoursLabel, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
+import { hoursLabel, isFresh, isOpenNow, PERIOD_LABELS } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { Station, StationProduct } from '@/types/database';
 
@@ -96,8 +96,22 @@ export function StationLive({
       <ul className="mt-2 divide-y divide-slate-100">
         {PRODUCT_ORDER.map((product) => {
           const row = byProduct.get(product);
-          const inStock = row?.is_available ?? false;
           const expected = row?.expected_at ?? null;
+
+          // حارس الحداثة — لم يكن هنا إطلاقاً.
+          //
+          // كان السطر `row?.is_available ?? false` بلا أي فحص لعمر الخبر، فصفحة
+          // المحطة تعرض «متوفر» أخضرَ على إعلانٍ عمره ثلاثة أيام. والبطاقة في
+          // الصفحة الرئيسة تحرسه منذ البداية — فالسطحان كانا يقولان شيئين
+          // مختلفين عن المحطة نفسها، وأحدهما يكذب.
+          //
+          // ولا يُحذف المعلن القديم كما تفعل البطاقة: حذفه يُضيّع خبراً قد ينفع،
+          // وعرضه أخضرَ يخدع. فيُقال ما أُعلن ومتى — والقارئ يقرّر.
+          const claimed = row?.is_available ?? false;
+          const fresh = claimed && isFresh(row?.updated_at);
+          const inStock = fresh && open;
+          const stale = claimed && !fresh;
+          const staleAge = stale ? agoLabel(row?.updated_at) : null;
 
           return (
             <li key={product} className="flex items-center justify-between gap-2 py-2.5 text-sm">
@@ -108,14 +122,18 @@ export function StationLive({
                     ? 'bg-brand-100 text-brand'
                     : expected
                       ? 'bg-amber-50 text-amber-700'
-                      : 'bg-slate-100 text-slate-400'
+                      : stale
+                        ? 'bg-slate-100 text-slate-500'
+                        : 'bg-slate-100 text-slate-400'
                 }`}
               >
                 {inStock
                   ? 'متوفر'
                   : expected
                     ? `${expectedLabel(expected)}${row?.expected_period ? ` ${PERIOD_LABELS[row.expected_period]}` : ''}`
-                    : 'غير متوفر'}
+                    : stale
+                      ? `آخر إعلان ${staleAge}`
+                      : 'غير متوفر'}
               </span>
             </li>
           );

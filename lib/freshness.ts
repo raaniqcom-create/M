@@ -25,7 +25,7 @@ export function agoLabel(iso: string | null | undefined): string | null {
 }
 
 /** العربية تعدّ على أربعة وجوه: واحد، واثنان، وثلاثة إلى عشرة، وما فوقها. */
-function plural(n: number, one: string, two: string, few: string, many: string): string {
+export function plural(n: number, one: string, two: string, few: string, many: string): string {
   if (n === 1) return one;
   if (n === 2) return two;
   if (n <= 10) return `${n} ${few}`;

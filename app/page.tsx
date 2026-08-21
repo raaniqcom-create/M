@@ -13,12 +13,13 @@ import { SoundToggle } from '@/components/SoundToggle';
 import { NotificationBell } from '@/components/NotificationBell';
 import { SideMenu } from '@/components/SideMenu';
 import { isFresh, isOpenNow } from '@/lib/hours';
+import { plural } from '@/lib/freshness';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { CITY_NAMES } from '@/lib/cities';
 import { StationCard } from '@/components/StationCard';
 import { PromoStrip } from '@/components/PromoStrip';
 import { AlertsPrompt } from '@/components/AlertsPrompt';
-import { useFollowedStations } from '@/lib/alerts';
+import { useAlertChoice, useFollowedStations } from '@/lib/alerts';
 import { TripAsk } from '@/components/TripAsk';
 import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
@@ -57,6 +58,9 @@ export default function HomePage() {
   const [query, setQuery] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  // «اعرض الباقي» — لحظيّ لا محفوظ: من وسّع مرةً لا يعني أنه غيّر اشتراكه.
+  const [showAll, setShowAll] = useState(false);
+  const { choice } = useAlertChoice();
   const { visits, online } = useSiteStats();
   // The star is the follow now — see useFollowedStations in lib/alerts.ts.
   const { isFollowed, toggle: toggleFollow } = useFollowedStations();
@@ -163,6 +167,36 @@ export default function HomePage() {
     );
   }
 
+  // موقعٌ بلا استئذان، لمن أذن سابقاً.
+  //
+  // TripAsk يحسب هذا الموقع نفسه على هذه الصفحة منذ البداية — يفحص الإذن أولاً
+  // ولا يطلب شيئاً إن لم يكن ممنوحاً — ثم يرميه بعد أن يقرّر قُربه من محطة.
+  // فالحساب واقعٌ أصلاً، وكل ما ينقص أن يُستفاد منه في الترتيب.
+  //
+  // وقاعدة المشروع تبقى كما هي: لا نافذة إذن تظهر لأحد لم يطلبها. من لم يأذن
+  // يرى الترتيب المعتاد، وزرّ «رتّب حسب الأقرب إليّ» في مكانه.
+  useEffect(() => {
+    if (origin || !navigator.geolocation) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const st = await navigator.permissions?.query({ name: 'geolocation' as PermissionName });
+        if (st && st.state !== 'granted') return;
+      } catch {
+        return; // بلا واجهة أذونات: الصمت أسلم من مخاطرة نافذة
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) =>
+          !cancelled && setOrigin({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {},
+        { maximumAge: 60_000, timeout: 8_000 }
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [origin]);
+
   const visible = useMemo(() => {
     if (!stations) return null;
     let rows = origin
@@ -170,6 +204,17 @@ export default function HomePage() {
           .map((s) => ({ ...s, distanceKm: distanceKm(origin, s) }))
           .sort((a, b) => a.distanceKm - b.distanceKm)
       : stations;
+
+    // مدن المستخدم أولاً، وما عداها خلف زرّ.
+    //
+    // سبعون بالمئة من المشتركين اختاروا مدينة واحدة، وكانوا يرون محطات ستّ عشرة
+    // مدينة. والإخفاء الحازم كان يحجب بانزيناً في الخالدية عمّن اختار الرمادي
+    // وبينهما ربع ساعة — فالتصفية افتراضية لا نهائية، وتحتها عدّ صريح وزرّ.
+    //
+    // ولا تُطبَّق إلا حين يختار المستخدم مدينةً بعينها في شرائح البحث: اختياره
+    // اللحظي أولى من اشتراكه المحفوظ.
+    const mine = choice?.cities?.length ? choice.cities : null;
+    if (mine && !showAll && !filters.city) rows = rows.filter((s) => mine.includes(s.city));
 
     if (filters.openOnly) rows = rows.filter(isOpenNow);
     if (filters.city) rows = rows.filter((s) => s.city === filters.city);
@@ -208,7 +253,14 @@ export default function HomePage() {
         Number(isFollowed(b.id)) - Number(isFollowed(a.id)) ||
         Number(actionable(b)) - Number(actionable(a))
     );
-  }, [stations, origin, filters, query, isFollowed]);
+  }, [stations, origin, filters, query, isFollowed, choice, showAll]);
+
+  // كم محطة تُخفيها التصفية — الرقم نفسه الذي يظهر على الزرّ.
+  const hiddenElsewhere = useMemo(() => {
+    const mine = choice?.cities?.length ? choice.cities : null;
+    if (!mine || showAll || filters.city) return 0;
+    return (stations ?? []).filter((s) => !mine.includes(s.city)).length;
+  }, [stations, choice, showAll, filters.city]);
 
   const cityCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -440,6 +492,34 @@ export default function HomePage() {
                   onToggleFavorite={() => onStar(station.id)}
                 />
               ))}
+
+              {/* ما خارج مدنه — معلوم العدد، وعلى بُعد ضغطة.
+                *
+                *  التصفية تخدم السبعين بالمئة، وهذا السطر يمنعها من أن تصير
+                *  حجباً: القارئ يعرف أن ثمّة مزيداً، وكم هو، ويفتحه متى شاء. */}
+              {hiddenElsewhere > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAll(true)}
+                  className="btn-ghost mt-1 w-full text-xs"
+                >
+                  {hiddenElsewhere === 1
+                    ? 'محطة واحدة في مدينة أخرى — اعرضها'
+                    : hiddenElsewhere === 2
+                      ? 'محطتان في مدن أخرى — اعرضهما'
+                      : `${plural(hiddenElsewhere, 'محطة', 'محطتان', 'محطات', 'محطة')} في مدن أخرى — اعرضها`}
+                </button>
+              )}
+
+              {showAll && choice?.cities?.length ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAll(false)}
+                  className="btn-ghost mt-1 w-full text-xs"
+                >
+                  اقتصر على مدني
+                </button>
+              ) : null}
             </div>
           )}
         </div>

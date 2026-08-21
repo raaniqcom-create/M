@@ -342,6 +342,33 @@ export function useFollowedStations() {
   return { followed: ids, isFollowed, toggle };
 }
 
+/** اختيار المستخدم — مدنه ومنتجاته — مقروءاً في مكان واحد.
+ *
+ *  أربعة مكوّنات كانت تكرّر هذه الأسطر الخمسة حرفاً بحرف: قراءةٌ من التخزين،
+ *  واشتراكٌ في ALERTS_CHANGED، وإلغاؤه عند الإزالة. وتكرار المنطق بأربع نسخ
+ *  يعني أن إصلاح إحداها يترك ثلاثاً — وقد وقع هذا فعلاً في المشروع مرّتين.
+ *
+ *  ويبدأ null ثم يمتلئ بعد التركيب: التصدير ثابت، والخادم لا يعرف تخزين
+ *  المتصفّح — فقيمةٌ أولى غير null تُنتج اختلافاً بين ما بُني وما يُعرض.
+ *
+ *  و`cities` فارغة تعني «كل المدن»، وهي حالة قديمة لم تعد الواجهة تُنتجها. */
+export function useAlertChoice(): { choice: AlertChoice | null; ready: boolean } {
+  const [choice, setChoice] = useState<AlertChoice | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const sync = () => {
+      setChoice(readChoice());
+      setReady(true);
+    };
+    sync();
+    window.addEventListener(ALERTS_CHANGED, sync);
+    return () => window.removeEventListener(ALERTS_CHANGED, sync);
+  }, []);
+
+  return { choice, ready };
+}
+
 /** ------------------------------------------------------------------------
  *  When this person is willing to be interrupted.
  *
