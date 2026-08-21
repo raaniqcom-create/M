@@ -109,7 +109,7 @@ export function UnregisteredBoard({
                 رأوا «٢٠» وظنّوا أن أصواتاً ضاعت. */}
             <p className="mt-1 text-[11px] text-slate-400">
               {r.admin_verdict === 'available'
-                ? 'أكّدته إدارة المنصّة بعد التواصل مع المحطة'
+                ? 'إدارة المحطة التقنية تؤكّد التوفّر'
                 : r.yes_votes + r.no_votes === 0
                   ? 'لا تصويت في آخر نصف ساعة — كن أوّل من يخبر'
                   : r.yes_votes - r.no_votes >= 4
