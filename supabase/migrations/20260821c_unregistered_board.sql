@@ -44,9 +44,13 @@ alter table announcement_votes enable row level security;
 
 -- ما يُعرض للناس، بأصواته.
 --
--- ويُخفى حين يقول أربعةٌ «نفد» — وحين يكونون أكثر ممّن قال «ما زال». الشرط
--- الثاني ليس زينة: بلا مقارنة يكفي أربعة غاضبين لإسقاط خبرٍ أكّده عشرون، وهو
--- باب التلاعب نفسه الذي أُغلق في تقييم الازدحام.
+-- والحكم لآخر ثلاثين دقيقة، وبفارقٍ أربعةٍ صافية بين الكفّتين.
+--
+-- النافذة لأن الصوت يشيخ: قولٌ قيل السابعة صباحاً لا يصف طابور الظهر، والوقود
+-- يتغيّر في ساعة. وهي نافذة تقييم الازدحام نفسها، فلا يتعلّم المستخدم قاعدتين.
+--
+-- والفارق لا العدد المطلق: أربعةٌ مقابل ثلاثة ليست حكماً — فارقُ صوتٍ واحد يقلب
+-- الحال، ويكفي منافسٌ ومعه ثلاثة ليُخفي خبر جاره. وأربعةٌ مقابل صفر حكم.
 create or replace function public.open_announcements()
 returns table(
   id           uuid,
@@ -71,6 +75,7 @@ as $$
              count(*) filter (where verdict = 'no')  no
         from announcement_votes w
        where w.announcement_id = a.id
+         and w.created_at >= now() - interval '30 minutes'
     ) v on true
    where a.active
      and a.station_name is not null
@@ -78,7 +83,7 @@ as $$
      -- طوال اليوم بتوقيت بغداد، لا أربعاً وعشرين ساعة زاحفة: خبر السابعة صباحاً
      -- ينتهي بانتهاء يومه، لا في السابعة من صباح الغد.
      and (a.sent_at at time zone 'Asia/Baghdad')::date = (now() at time zone 'Asia/Baghdad')::date
-     and not (coalesce(v.no, 0) >= 4 and coalesce(v.no, 0) > coalesce(v.yes, 0))
+     and coalesce(v.no, 0) - coalesce(v.yes, 0) < 4
      -- ومحطةٌ سجّلت بعد إعلانها تخرج من اللوحة الحمراء فوراً.
      --
      -- بركة الرحمن أُعلنت وهي غير مسجّلة، ثم انضمّت. وإبقاؤها في لوحة «غير
