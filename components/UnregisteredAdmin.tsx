@@ -18,6 +18,8 @@ interface Row {
   no_votes: number;
   admin_verdict: 'available' | 'gone' | null;
   admin_until: string | null;
+  hidden: boolean;
+  hidden_reason: string | null;
 }
 
 /** إدارة أخبار المحطات غير المسجّلة — حين يخالف التصويتُ ما تعرفه الإدارة.
@@ -37,9 +39,11 @@ interface Row {
  *  وتُعرض هنا الأخبار المخفيّة أيضاً: المخفيّ هو ما يُراجَع غالباً، وحجبه عن
  *  اللوحة التي تديره يجعلها بلا فائدة. */
 export function UnregisteredAdmin() {
-  const [rows, setRows] = useState<(Row & { hidden: boolean })[] | null>(null);
+  const [rows, setRows] = useState<Row[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [closeHm, setCloseHm] = useState('');
+  const [savingHm, setSavingHm] = useState(false);
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.rpc('admin_announcements');
@@ -49,7 +53,9 @@ export function UnregisteredAdmin() {
       return;
     }
     setErr(null);
-    setRows((data ?? []) as (Row & { hidden: boolean })[]);
+    setRows((data ?? []) as Row[]);
+    const { data: hm } = await supabase.rpc('get_unregistered_close');
+    if (typeof hm === 'string') setCloseHm(hm);
   }, []);
 
   useEffect(() => {
@@ -70,6 +76,15 @@ export function UnregisteredAdmin() {
     load();
   }
 
+  async function saveClose(hm: string) {
+    setSavingHm(true);
+    const { error } = await supabase.rpc('set_unregistered_close', { p_hm: hm });
+    setSavingHm(false);
+    if (error) return setErr('وقت غير صالح. اكتبه بصيغة 21:00.');
+    setErr(null);
+    load();
+  }
+
   if (!rows) {
     return (
       <section className="card flex justify-center p-8">
@@ -86,6 +101,31 @@ export function UnregisteredAdmin() {
         بمكالمة من المحطة أو بغيرها — فقرارك هنا يسبق تصويت الناس نصف ساعة، ثم يعود الحكم
         إليهم. ولا يُنسب للناس ما تقرّره أنت: يُعرض باسم إدارة المنصّة صريحاً.
       </p>
+
+      {/* وقتٌ واحد لكل أخبار غير المسجّلة: هي لا تقول دوامها، والمسجّلة تقوله
+          بنفسها. وبعده لا يُعرض خبر مهما أكّدته — ساحةٌ مغلقة لا تبيع. */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-3">
+        <label htmlFor="close-hm" className="text-xs font-bold text-slate-600">
+          تختفي الأخبار الساعة
+        </label>
+        <input
+          id="close-hm"
+          type="time"
+          value={closeHm}
+          onChange={(e) => setCloseHm(e.target.value)}
+          className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold"
+          dir="ltr"
+        />
+        <button
+          type="button"
+          disabled={savingHm || !/^([01]\d|2[0-3]):[0-5]\d$/.test(closeHm)}
+          onClick={() => saveClose(closeHm)}
+          className="rounded-lg bg-brand px-3 py-1 text-xs font-bold text-white disabled:opacity-40"
+        >
+          احفظ
+        </button>
+        <span className="text-[11px] text-slate-400">بتوقيت بغداد · لكل المحطات غير المسجّلة</span>
+      </div>
 
       {err && (
         <p className="mt-3 rounded-xl bg-red-50 p-3 text-xs font-bold leading-relaxed text-traffic-red">
@@ -119,7 +159,7 @@ export function UnregisteredAdmin() {
                     r.hidden ? 'bg-red-50 text-traffic-red' : 'bg-brand-50 text-brand-900'
                   }`}
                 >
-                  {r.hidden ? 'مخفيّ عن الناس' : 'ظاهر للناس'}
+                  {r.hidden ? `مخفيّ — ${r.hidden_reason ?? 'سبب غير معروف'}` : 'ظاهر للناس'}
                 </span>
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 font-bold text-slate-600">
                   آخر نصف ساعة: {r.yes_votes} ما زال · {r.no_votes} نفد
@@ -173,8 +213,10 @@ export function UnregisteredAdmin() {
       </ul>
 
       <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
-        «للناس» يرفع قرارك فوراً ويعيد الحكم إلى التصويت بلا انتظار. وبلا قرار منك، يختفي
-        الخبر حين يسبق «نفد» بأربعة أصوات صافية في آخر نصف ساعة.
+        «للناس» يرفع قرارك فوراً ويعيد الحكم إلى التصويت. وبلا قرار منك يختفي الخبر في
+        ثلاث حالات: أن يسبق «نفد» بأربعة أصوات صافية في آخر نصف ساعة، أو أن يسكن ساعتين
+        بلا تصويت، أو أن يحلّ وقت الإغلاق أعلاه. وتأكيدك يُعيده ويُنعش ساعته — إلا بعد وقت
+        الإغلاق، فهو مطلق.
       </p>
     </section>
   );
