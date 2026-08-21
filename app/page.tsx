@@ -22,6 +22,10 @@ import { AlertsPrompt } from '@/components/AlertsPrompt';
 import { useAlertChoice, useFollowedStations } from '@/lib/alerts';
 import { TripAsk } from '@/components/TripAsk';
 import { UnregisteredBoard } from '@/components/UnregisteredBoard';
+import { forCities, useOpenAnnouncements } from '@/lib/announcements';
+
+/** يربط بطاقة المنتج المعلَن بخبره أسفل الصفحة. */
+const UNREGISTERED_BOARD_ID = 'unregistered-board';
 import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
 import { InstallPrompt } from '@/components/InstallPrompt';
@@ -62,6 +66,8 @@ export default function HomePage() {
   // «اعرض الباقي» — لحظيّ لا محفوظ: من وسّع مرةً لا يعني أنه غيّر اشتراكه.
   const [showAll, setShowAll] = useState(false);
   const { choice } = useAlertChoice();
+  // نداء واحد يغذّي اللوحة الحمراء ولوحة المنتجات معاً.
+  const { announcements, reload: reloadAnnouncements } = useOpenAnnouncements();
   const { visits, online } = useSiteStats();
   // The star is the follow now — see useFollowedStations in lib/alerts.ts.
   const { isFollowed, toggle: toggleFollow } = useFollowedStations();
@@ -401,10 +407,23 @@ export default function HomePage() {
         <TripAsk stations={stations} />
         {stations && (
           <div className="mb-4">
+            {/* onPickAnnounced: منتجٌ لا محطة مسجّلة له — الضغط يقود إلى خبره
+                لا إلى قائمة فارغة. وبمعرّفٍ في DOM لا بمرجع React، لأن اللوحة
+                تُركَّب داخل فرعٍ شرطيّ آخر فقد يكون المرجع فارغاً لحظة الضغط.
+
+                والتعليق هنا لا بين الخصائص: تعليقٌ داخل وسم JSX يبتلع الخاصّية
+                التي تليه صامتاً — تُمرَّر undefined، ويصير `?.()` لا شيء، ولا
+                خطأ في أي مكان. ضاع في تتبّعه وقتٌ يستحقّ هذا السطر. */}
             <ProductsDashboard
               stations={stations}
               filter={filters.product}
               onPick={(product) => setFilters({ ...filters, product })}
+              announced={forCities(announcements, choice?.cities)}
+              onPickAnnounced={() =>
+                document
+                  .getElementById(UNREGISTERED_BOARD_ID)
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }
             />
           </div>
         )}
@@ -482,7 +501,9 @@ export default function HomePage() {
             <div className="space-y-3">
               {/* فوق القائمة: خبرٌ عاجل عن محطة لا نملك عنها إلا لحظة واحدة —
               فمكانه قبل المحطات التي نعرف عنها كل شيء. */}
-          <UnregisteredBoard />
+              <div id={UNREGISTERED_BOARD_ID}>
+                <UnregisteredBoard rows={announcements} onVoted={reloadAnnouncements} />
+              </div>
 
           {visible.length === 0 && (
                 <div className="card p-8 text-center">

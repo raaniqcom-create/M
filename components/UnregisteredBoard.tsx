@@ -1,24 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { deviceId } from '@/lib/vote';
 import { agoLabel } from '@/lib/freshness';
 import { useAlertChoice } from '@/lib/alerts';
+import { forCities, type OpenAnnouncement } from '@/lib/announcements';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { CheckIcon, XIcon } from './icons';
 import type { FuelProduct } from '@/types/database';
-
-interface Row {
-  id: string;
-  station_name: string;
-  origin_city: string | null;
-  product: FuelProduct | null;
-  cities: string[] | null;
-  send_at: string;
-  yes_votes: number;
-  no_votes: number;
-}
 
 const VOTED = 'ann-vote:';
 
@@ -34,20 +24,18 @@ const VOTED = 'ann-vote:';
  *  ومن يُغلقه هم من وقفوا في الطابور: أربعة يقولون «نفد» فيختفي. ولا يُصدَّق
  *  أربعةٌ في وجه عشرين — الشرط في القاعدة يقارن الكفّتين، وإلا صار الزرّ سلاحاً
  *  بيد منافس بدل أن يكون تصحيحاً من مواطن. */
-export function UnregisteredBoard() {
-  const [rows, setRows] = useState<Row[] | null>(null);
+export function UnregisteredBoard({
+  rows,
+  onVoted,
+}: {
+  rows: OpenAnnouncement[];
+  onVoted: () => void;
+}) {
   const [mine, setMine] = useState<Record<string, 'yes' | 'no'>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const { choice } = useAlertChoice();
 
-  const load = useCallback(async () => {
-    const { data, error } = await supabase.rpc('open_announcements');
-    if (error) return setRows([]);
-    setRows((data ?? []) as Row[]);
-  }, []);
-
   useEffect(() => {
-    load();
     // ما صوّته هذا الجهاز — ليُعرض مختاراً بدل أن يبدو الزرّ بلا أثر.
     try {
       const found: Record<string, 'yes' | 'no'> = {};
@@ -62,7 +50,7 @@ export function UnregisteredBoard() {
     } catch {
       /* وضع خاص: الأزرار تعمل، ولا يُتذكّر ما اختير */
     }
-  }, [load]);
+  }, []);
 
   async function vote(id: string, verdict: 'yes' | 'no') {
     setBusy(id);
@@ -80,15 +68,12 @@ export function UnregisteredBoard() {
       /* لا يُتذكّر، والصوت محفوظ في الخادم على أي حال */
     }
     // يُعاد التحميل: صوتُه قد يكون الرابع الذي يُخفي الصفّ.
-    load();
+    onVoted();
   }
 
   // من اختار مدينته لا يعنيه خبرُ مدينة أخرى — ونعتمد جمهور الإشعار نفسه
   // (cities) لا موقع المحطة، لأنه هو من قرّرت الإدارة أن الخبر يعنيه.
-  const picked = choice?.cities?.length ? choice.cities : null;
-  const visible = (rows ?? []).filter(
-    (r) => !picked || !r.cities?.length || r.cities.some((c) => picked.includes(c))
-  );
+  const visible = forCities(rows, choice?.cities);
 
   if (!visible.length) return null;
 
