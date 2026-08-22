@@ -98,14 +98,24 @@ export default function AdminPage() {
     if (status === 'approved') {
       // Rebuild first and only announce if it was accepted. Announcing a
       // station whose page was never generated sends every subscriber to a 404.
-      const why = await rebuildSite();
-      if (why) {
-        setNotice(`المحطة اعتُمدت، لكن تحديث الموقع فشل: ${why} — لم يُرسل الإشعار بعد.`);
-      } else {
-        // ونتيجة الإبلاغ تُقرأ: كانت تُبتلع، فصاحب محطة قد لا يعلم باعتمادها
-        // وأنت لا تعلم أنه لا يعلم.
-        const failed = await announceStation(id);
-        if (failed) setNotice(`المحطة اعتُمدت والموقع حُدّث، لكن ${failed}`);
+      // الإبلاغ لا ينتظر البناء.
+      //
+      // كان مشروطاً بنجاحه خشيةَ أن يُرسَل الناس إلى صفحة محطة لم تُبنَ بعد.
+      // لكن إشعار الاعتماد لا يذهب إلى الناس أصلاً: notify مع newStation يقصر
+      // المستقبِلين على أجهزة المحطة نفسها، ووجهته /owner — وهي جزء من هيكل
+      // التطبيق، موجودة دائماً مبنيةً كانت الصفحة أو لا.
+      //
+      // فربطُهما جعل مفتاح GitHub المعطّل يحجب اثنتي عشرة محطة عن معرفة أنها
+      // اعتُمدت. البناء يفشل فيُقال لك، والمالك يُخبَر على أي حال.
+      const [why, failed] = await Promise.all([rebuildSite(), announceStation(id)]);
+      const parts = [
+        why ? `تحديث الموقع فشل: ${why}` : null,
+        failed ? String(failed) : null,
+      ].filter(Boolean);
+      if (parts.length) {
+        setNotice(
+          `المحطة اعتُمدت وصاحبها ${failed ? 'لم يُخبَر' : 'أُخبِر'}. ${parts.join(' · ')}`
+        );
       }
     }
     load();

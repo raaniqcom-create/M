@@ -166,6 +166,37 @@ async function checkTelegram(): Promise<Check> {
   }
 }
 
+/** مفتاح إطلاق البناء — الفحص الذي كان ناقصاً.
+ *
+ *  ظلّ GH_DISPATCH_TOKEN يحمل سرّاً ست عشرياً ليس مفتاح GitHub أصلاً، فردّ
+ *  GitHub «Bad credentials» اثني عشر يوماً. والأثر لم يكن في البناء وحده:
+ *  اثنتا عشرة محطة اعتُمدت ولم يعلم أصحابها، لأن الإبلاغ كان مشروطاً بنجاحه.
+ *
+ *  ولوحة الحالة تفحص جوجل وأبل وتيليجرام والموقع — ولا تفحص هذا. فأُضيف. */
+async function checkGithub(): Promise<Check> {
+  const t = Deno.env.get('GH_DISPATCH_TOKEN');
+  if (!t) return { key: 'github', label: 'تحديث الموقع', ok: false, detail: 'المفتاح غير مضبوط' };
+  try {
+    const res = await fetch('https://api.github.com/user', {
+      headers: {
+        Authorization: `Bearer ${t}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'muhta-health',
+      },
+    });
+    if (res.status === 401) {
+      return { key: 'github', label: 'تحديث الموقع', ok: false, detail: 'المفتاح مرفوض — أنشئ غيره' };
+    }
+    if (!res.ok) {
+      return { key: 'github', label: 'تحديث الموقع', ok: false, detail: `جيت‌هَب ردّ ${res.status}` };
+    }
+    const who = (await res.json()) as { login?: string };
+    return { key: 'github', label: 'تحديث الموقع', ok: true, detail: `المفتاح مقبول · ${who.login ?? ''}` };
+  } catch {
+    return { key: 'github', label: 'تحديث الموقع', ok: false, detail: 'تعذّر الوصول إلى جيت‌هَب' };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
@@ -177,8 +208,8 @@ Deno.serve(async (req) => {
     .from('profiles').select('role').eq('id', auth.user.id).maybeSingle();
   if (profile?.role !== 'admin') return json({ error: 'forbidden' }, 403);
 
-  const [fcm, apns, site, telegram] = await Promise.all([
-    checkFcm(), checkApns(), checkSite(), checkTelegram(),
+  const [fcm, apns, site, telegram, github] = await Promise.all([
+    checkFcm(), checkApns(), checkSite(), checkTelegram(), checkGithub(),
   ]);
 
   // العدّ في القاعدة لا في الذاكرة.
@@ -190,7 +221,7 @@ Deno.serve(async (req) => {
   const { data: counts, error: countsError } = await db.rpc('health_counts');
 
   return json({
-    checks: [site, apns, fcm, telegram],
+    checks: [site, apns, fcm, telegram, github],
     counts: (counts as { stations: number; subscribers: number; devices: number } | null) ?? {
       stations: 0,
       subscribers: 0,

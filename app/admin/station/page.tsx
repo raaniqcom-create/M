@@ -219,11 +219,24 @@ function Panel() {
     // A newly approved station has no page until the site is rebuilt, so the
     // announcement waits for the rebuild rather than racing it to a 404.
     if (status === 'approved') {
-      const why = await rebuildSite();
-      if (why) setPhoneNote(`المحطة اعتُمدت، لكن تحديث الموقع فشل: ${why} — لم يُرسل الإشعار بعد.`);
-      else {
-        const failed = await announceStation(station.id);
-        if (failed) setPhoneNote(`المحطة اعتُمدت والموقع حُدّث، لكن ${failed}`);
+      // الإبلاغ لا ينتظر البناء.
+      //
+      // كان مشروطاً بنجاحه خشيةَ أن يُرسَل الناس إلى صفحة محطة لم تُبنَ بعد.
+      // لكن إشعار الاعتماد لا يذهب إلى الناس أصلاً: notify مع newStation يقصر
+      // المستقبِلين على أجهزة المحطة نفسها، ووجهته /owner — وهي جزء من هيكل
+      // التطبيق، موجودة دائماً مبنيةً كانت الصفحة أو لا.
+      //
+      // فربطُهما جعل مفتاح GitHub المعطّل يحجب اثنتي عشرة محطة عن معرفة أنها
+      // اعتُمدت. البناء يفشل فيُقال لك، والمالك يُخبَر على أي حال.
+      const [why, failed] = await Promise.all([rebuildSite(), announceStation(station.id)]);
+      const parts = [
+        why ? `تحديث الموقع فشل: ${why}` : null,
+        failed ? String(failed) : null,
+      ].filter(Boolean);
+      if (parts.length) {
+        setPhoneNote(
+          `المحطة اعتُمدت وصاحبها ${failed ? 'لم يُخبَر' : 'أُخبِر'}. ${parts.join(' · ')}`
+        );
       }
     }
     setStation({ ...station, status });
