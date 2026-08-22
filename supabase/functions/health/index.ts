@@ -191,7 +191,45 @@ async function checkGithub(): Promise<Check> {
       return { key: 'github', label: 'تحديث الموقع', ok: false, detail: `جيت‌هَب ردّ ${res.status}` };
     }
     const who = (await res.json()) as { login?: string };
-    return { key: 'github', label: 'تحديث الموقع', ok: true, detail: `المفتاح مقبول · ${who.login ?? ''}` };
+
+    // متى ينتهي المفتاح — قبل أن ينتهي.
+    //
+    // جيت‌هَب يردّ تاريخ انتهاء المفتاح في ترويسة مع كل نداء. وبلا قراءتها لا
+    // نعلم بانتهائه إلا حين يتوقّف كل شيء: هكذا مرّ اثنا عشر يوماً بلا بناء،
+    // وضاعت فيها معرفةُ اثنتي عشرة محطة بأنها اعتُمدت.
+    //
+    // فالتحذير قبل أسبوعين. تنبيهٌ يسبق العطل يُكلّف دقيقة؛ وتنبيهٌ يتلوه يُكلّف
+    // أياماً لا يعلم فيها أحد أن شيئاً انكسر.
+    const exp = res.headers.get('github-authentication-token-expiration');
+    if (exp) {
+      // الترويسة بصيغة «2026-09-21 14:45:43 UTC» — والمسافة لا تُفهم كـISO.
+      const when = new Date(exp.replace(' UTC', 'Z').replace(' ', 'T'));
+      const days = Math.floor((when.getTime() - Date.now()) / 86_400_000);
+      if (!Number.isNaN(days) && days <= 14) {
+        return {
+          key: 'github',
+          label: 'تحديث الموقع',
+          ok: false,
+          detail:
+            days <= 0
+              ? 'انتهى المفتاح — جدّده الآن'
+              : `المفتاح ينتهي بعد ${days} يوماً — جدّده قبل أن يتوقّف البناء`,
+        };
+      }
+      return {
+        key: 'github',
+        label: 'تحديث الموقع',
+        ok: true,
+        detail: `مقبول · ${who.login ?? ''} · ينتهي بعد ${days} يوماً`,
+      };
+    }
+
+    return {
+      key: 'github',
+      label: 'تحديث الموقع',
+      ok: true,
+      detail: `مقبول · ${who.login ?? ''} · بلا تاريخ انتهاء`,
+    };
   } catch {
     return { key: 'github', label: 'تحديث الموقع', ok: false, detail: 'تعذّر الوصول إلى جيت‌هَب' };
   }
