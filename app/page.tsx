@@ -66,6 +66,13 @@ export default function HomePage() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   // «اعرض الباقي» — لحظيّ لا محفوظ: من وسّع مرةً لا يعني أنه غيّر اشتراكه.
   const [showAll, setShowAll] = useState(false);
+  // تناوب الشريط. ثلاث ثوانٍ لكل رسالة — أقلّ منها لا تُقرأ، وأكثر منها يجعل
+  // الثانية تمرّ على أكثر الزوّار بلا أن يروها.
+  const [tick, setTick] = useState(false);
+  useEffect(() => {
+    const t = setInterval(() => setTick((v) => !v), 3000);
+    return () => clearInterval(t);
+  }, []);
   const { choice } = useAlertChoice();
 
   // خمس مدن فأكثر: النطاق كل الأنبار ابتداءً.
@@ -294,6 +301,34 @@ export default function HomePage() {
     return `محطات ${mine.join('، ')}`;
   }, [choice, showAll, filters.city, hiddenElsewhere]);
 
+  // كم محطة يجدها البحث نفسه خارج مدنه.
+  //
+  // لوحة المنتجات تعدّ الأنبار كلها، والقائمة تحتها مقصورة على مدنه. فيقرأ
+  // «بانزين محسن ١» ثم «لا توجد محطة» — رقمان صحيحان يتناقضان في عين القارئ،
+  // لأن أحدهما لا يقول نطاقه. فالحالة الفارغة تقول السبب وتفتح الباب.
+  const elsewhereMatching = useMemo(() => {
+    const mineCities = choice?.cities?.length ? choice.cities : null;
+    if (!stations || !mineCities || showAll || filters.city) return 0;
+    const q = query.trim();
+    return stations.filter((s) => {
+      if (mineCities.includes(s.city)) return false;
+      if (filters.openOnly && !isOpenNow(s)) return false;
+      if (filters.kind && s.kind !== filters.kind) return false;
+      if (filters.availableOnly && !s.products.some((p) => isOffered(s, p))) return false;
+      if (
+        filters.product &&
+        !s.products.some(
+          (p) =>
+            p.product === filters.product &&
+            (filters.availableOnly ? isOffered(s, p) : isOffered(s, p) || !!p.expected_at)
+        )
+      )
+        return false;
+      if (q && !(s.name.includes(q) || s.address.includes(q) || s.city.includes(q))) return false;
+      return true;
+    }).length;
+  }, [stations, choice, showAll, filters, query]);
+
   const cityCounts = useMemo(() => {
     const m = new Map<string, number>();
     for (const s of stations ?? []) m.set(s.city, (m.get(s.city) ?? 0) + 1);
@@ -329,17 +364,37 @@ export default function HomePage() {
               was «سجّل محطتك مجاناً». An instruction with no target sends people
               to the loudest control instead, which is exactly how citizens ended
               up on the owner registration form. */}
+          {/* رسالتان تتناوبان كل ثلاث ثوانٍ.
+            *
+            *  الأولى دعوةٌ إلى الاشتراك، والثانية إسنادٌ صريح: من يكتب حالة
+            *  الوقود ومتى. والقارئ يظنّ المنصّة هي التي تُحصي المحطات وتتفقّدها،
+            *  فإن وجد خبراً قديماً لام المنصّة — واللوم في غير موضعه يُفقده
+            *  الثقة بها كلها. فيُقال له من يُحدّث ومتى، ليعرف أين يسأل.
+            *
+            *  والأحمر مقصود: يقطع اعتياد العين على الأخضر فتُقرأ الجملة مرة
+            *  واحدة على الأقل، ثم يعود اللون فلا يبقى إنذارٌ دائم. */}
           <a
             href="/alerts"
-            className="mt-2 flex items-start gap-2 rounded-lg bg-white/15 px-3 py-2 text-[11px] leading-relaxed text-white"
+            className={`mt-2 flex items-start gap-2 rounded-lg px-3 py-2 text-[11px] leading-relaxed text-white transition-colors duration-500 ${
+              tick ? 'bg-traffic-red/80' : 'bg-white/15'
+            }`}
           >
             <BellIcon className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              اختر <b>مدينتك</b> و<b>نوع الوقود</b> الذي يهمك، وانتظر — أول ما تسجّل محطة
-              ويتوفر المنتج، يصلك إشعار. <b className="underline">اختر الآن ←</b>
-              <br />
-              المحطات تُضاف تباعاً. وكل حالة يُكتب معها وقتها.
-            </span>
+            {tick ? (
+              <span>
+                <b>توفّر المنتجات وتحديثها لحظةً بلحظة من إدارة المحطة نفسها</b> — وهي وحدها
+                من يُعلن ما لديها ومتى نفد.
+                <br />
+                والمنصّة تنقل ما تُعلنه، ومعه وقتُه، فلا تُقرأ حالةٌ قديمة على أنها اليوم.
+              </span>
+            ) : (
+              <span>
+                اختر <b>مدينتك</b> و<b>نوع الوقود</b> الذي يهمك، وانتظر — أول ما تسجّل محطة
+                ويتوفر المنتج، يصلك إشعار. <b className="underline">اختر الآن ←</b>
+                <br />
+                المحطات تُضاف تباعاً. وكل حالة يُكتب معها وقتها.
+              </span>
+            )}
           </a>
           {/* Both of these speak to someone browsing the site. Inside the app
               they are dead weight: the download already happened, and the
@@ -539,10 +594,33 @@ export default function HomePage() {
                       {query
                         ? `لا توجد نتائج لـ «${query}»`
                         : filters.product
-                          ? `لا توجد محطة يتوفر فيها ${PRODUCT_LABELS[filters.product]} حالياً`
+                          ? elsewhereMatching > 0
+                            ? `لا توجد محطة يتوفر فيها ${PRODUCT_LABELS[filters.product]} في مدنك`
+                            : `لا توجد محطة يتوفر فيها ${PRODUCT_LABELS[filters.product]} حالياً`
                           : 'لا توجد محطات متاحة الآن'}
                     </p>
                   )}
+                  {/* السببُ ثم الباب.
+                    *
+                    *  «لا توجد محطة» وحدها تُقرأ نفياً عن الأنبار كلها، بينما
+                    *  اللوحة فوقها تقول «١». فالرقم لا يكذب والقائمة لا تكذب —
+                    *  والناقص أن يقول أحدهما نطاقه. */}
+                  {elsewhereMatching > 0 && (
+                    <>
+                      <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                        ما تراه هنا محطات مدنك وحدها. وثمّة{' '}
+                        <b className="text-brand">{elsewhereMatching}</b> في مدن أخرى من الأنبار.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowAll(true)}
+                        className="btn-primary mt-3 px-6"
+                      >
+                        اعرض كل الأنبار
+                      </button>
+                    </>
+                  )}
+
                   {(countActive(filters) > 0 || query) && (
                     <button
                       type="button"
@@ -550,7 +628,7 @@ export default function HomePage() {
                         setFilters(EMPTY_FILTERS);
                         setQuery('');
                       }}
-                      className="btn-ghost mt-4 px-6"
+                      className="btn-ghost mt-3 px-6"
                     >
                       عرض كل المحطات
                     </button>
