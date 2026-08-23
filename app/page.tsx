@@ -22,6 +22,7 @@ import { AlertsPrompt } from '@/components/AlertsPrompt';
 import { useAlertChoice, useFollowedStations } from '@/lib/alerts';
 import { TripAsk } from '@/components/TripAsk';
 import { UnregisteredBoard } from '@/components/UnregisteredBoard';
+import { AvailabilityPopup } from '@/components/AvailabilityPopup';
 import { forCities, useOpenAnnouncements } from '@/lib/announcements';
 
 /** يربط بطاقة المنتج المعلَن بخبره أسفل الصفحة. */
@@ -519,6 +520,9 @@ export default function HomePage() {
               فمكانه قبل المحطات التي نعرف عنها كل شيء. */}
               <div id={UNREGISTERED_BOARD_ID}>
                 <UnregisteredBoard rows={announcements} onVoted={reloadAnnouncements} />
+                {/* وخبر المسجّلة في شاشته: مسارٌ منفصل تماماً، فلا يظهر اسم
+                    محطة معروفة تحت عنوان ينفي تسجيلها. */}
+                <AvailabilityPopup rows={announcements} />
               </div>
 
           {visible.length === 0 && (
