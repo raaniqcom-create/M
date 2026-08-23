@@ -33,9 +33,12 @@ const VOTED = 'ann-vote:';
 export function UnregisteredBoard({
   rows,
   onVoted,
+  showAll = false,
 }: {
   rows: OpenAnnouncement[];
   onVoted: () => void;
+  /** يتبع زرّ النطاق نفسه الذي يحكم قائمة المحطات — نموذجٌ ذهنيّ واحد. */
+  showAll?: boolean;
 }) {
   const [mine, setMine] = useState<Record<string, 'yes' | 'no'>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -84,7 +87,7 @@ export function UnregisteredBoard({
   // خبرها أقوى سنداً: لوحتها تؤكّده، وصفحتها تحمل دوامها وبقية منتجاتها
   // وتقييم طابورها — والقارئ يستطيع التحقّق بضغطة. أمّا خبر غير المسجّلة فلا
   // نملك خلفه إلا لحظةً مضت. فالأوثق في الأعلى، والترتيب داخل كل قسم بالأحدث.
-  const visible = [...forCities(rows, choice?.cities)].sort(
+  const visible = [...forCities(rows, showAll ? null : choice?.cities)].sort(
     (a, b) =>
       Number(!!b.station_id) - Number(!!a.station_id) ||
       new Date(b.send_at).getTime() - new Date(a.send_at).getTime()

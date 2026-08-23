@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase, timeoutSignal } from '@/lib/supabase';
 import { isAborted, readFailure } from '@/lib/fn';
 import { ANBAR_CITIES } from '@/lib/cities';
@@ -25,6 +25,9 @@ const CITY_NAMES = ANBAR_CITIES.map((c) => c.name);
 export function StationAnnouncePanel() {
   const [templateId, setTemplateId] = useState(ANNOUNCE_TEMPLATES[0].id);
   const [station, setStation] = useState('');
+  // معرّف المحطة المختارة من القائمة. فارغٌ يعني «غير مسجّلة — اكتب اسمها».
+  const [pickedId, setPickedId] = useState('');
+  const [registered, setRegistered] = useState<{ id: string; name: string; city: string }[]>([]);
   const [asPopup, setAsPopup] = useState(false);
   const [product, setProduct] = useState<FuelProduct>('gasoline_premium');
   const [city, setCity] = useState<string>(CITY_NAMES[0]);
@@ -42,6 +45,26 @@ export function StationAnnouncePanel() {
   const keyRef = useRef<string | null>(null);
 
   const template = ANNOUNCE_TEMPLATES.find((t) => t.id === templateId)!;
+  // المسجّلة كلها مرة واحدة، وتُصفّى بالمدينة عند العرض: القائمة ثابتة الحجم
+  // (عشرات لا آلاف)، ونداءٌ لكل تغيير مدينة عملٌ بلا مقابل.
+  useEffect(() => {
+    supabase
+      .from('stations_public')
+      .select('id, name, city')
+      .eq('status', 'approved')
+      .order('name')
+      .then(({ data }) => setRegistered((data ?? []) as { id: string; name: string; city: string }[]));
+  }, []);
+
+  const inCity = registered.filter((r) => r.city === city);
+
+  // تبديل المدينة يُسقط الاختيار: محطةٌ من الرمادي تحت عنوان الفلوجة أسوأ من
+  // خانةٍ فارغة، لأنها تُرسَل ولا يُنتبه لها.
+  useEffect(() => {
+    setPickedId('');
+    setStation('');
+  }, [city]);
+
   const input: TemplateInput = { station: station.trim() || '…', city, product };
 
   // Everyone who will be notified: the station's own city, plus any neighbour
@@ -132,6 +155,7 @@ export function StationAnnouncePanel() {
       // ما يجعل اللوحة الحمراء ممكنة أصلاً.
       station_name: station.trim(),
       origin_city: city,
+      linked_station_id: pickedId || null,
       as_popup: asPopup,
       // سطر واحد بمدينة المحطة الحقيقية، لا سطر لكل مدينة جمهور: خمس مدن
       // كانت تعني خمسة أسطر متطابقة إلا في آخر كلمة، تزحم الشريط وتطرد
@@ -232,16 +256,57 @@ export function StationAnnouncePanel() {
           ))}
         </div>
 
-        <label htmlFor="an-station" className="label mt-4 block">
-          اسم المحطة <span className="text-traffic-red">*</span>
+        {/* الاختيار من قائمة أولاً، والكتابة استثناء.
+          *
+          *  كان الاسم نصّاً حرّاً، والربط بالمحطة يقع بمطابقة ilike في الاتجاهين
+          *  — تخطئ فتربط اسمين متشابهين، وتخطئ فلا تربط اسماً كُتب بصياغة أخرى
+          *  فتظهر محطة مسجّلة في لوحة «غير المسجّلة». والاختيار من القائمة يجعل
+          *  الربط معرّفاً صريحاً لا تخميناً. */}
+        <label htmlFor="an-pick" className="label mt-4 block">
+          المحطة <span className="text-traffic-red">*</span>
         </label>
-        <input
-          id="an-station"
-          value={station}
-          onChange={(e) => setStation(e.target.value)}
-          placeholder="الرمادي القديمة (السينما)"
+        <select
+          id="an-pick"
+          value={pickedId}
+          onChange={(e) => {
+            const v = e.target.value;
+            setPickedId(v);
+            setStation(v ? (inCity.find((r) => r.id === v)?.name ?? '') : '');
+          }}
           className="field"
-        />
+        >
+          <option value="">— محطة غير مسجّلة (اكتب اسمها) —</option>
+          {inCity.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+        </select>
+
+        {!pickedId && (
+          <>
+            <label htmlFor="an-station" className="label mt-3 block">
+              اسم المحطة غير المسجّلة
+            </label>
+            <input
+              id="an-station"
+              value={station}
+              onChange={(e) => setStation(e.target.value)}
+              placeholder="الرمادي القديمة (السينما)"
+              className="field"
+            />
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+              اكتب الاسم وحده بلا وصفٍ زائد — هو ما يُعرض للناس، ويُبحث به إن سجّلت المحطة
+              لاحقاً.
+            </p>
+          </>
+        )}
+
+        {pickedId && (
+          <p className="mt-1 text-[11px] leading-relaxed text-brand-800">
+            محطة مسجّلة — الخبر يُربط بصفحتها، ولا يُعرض إلا ما دامت لوحتها تؤكّد المنتج.
+          </p>
+        )}
 
         {/* المقاطعة تُطلب ولا تقع تلقائياً: انتباه القارئ ينفد، وشاشةٌ تظهر مع
             كل خبر تُعلّمه إغلاقها قبل قراءتها. */}

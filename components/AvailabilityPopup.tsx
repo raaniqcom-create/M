@@ -25,7 +25,13 @@ const SEEN = 'ann-seen:';
  *
  *  ولا تُعرض إلا ما دامت لوحة المحطة تؤكّد الخبر — الشرط في القاعدة، فصاحبها
  *  يرفع المنتج فتسقط الشاشة معه. */
-export function AvailabilityPopup({ rows }: { rows: OpenAnnouncement[] }) {
+export function AvailabilityPopup({
+  rows,
+  showAll = false,
+}: {
+  rows: OpenAnnouncement[];
+  showAll?: boolean;
+}) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [ready, setReady] = useState(false);
   const { choice } = useAlertChoice();
@@ -54,7 +60,7 @@ export function AvailabilityPopup({ rows }: { rows: OpenAnnouncement[] }) {
   }
 
   // ما اختارته الإدارة وحده. والباقي يجد مكانه في اللوحة بلا مقاطعة.
-  const mine = forCities(rows, choice?.cities).filter((r) => r.as_popup);
+  const mine = forCities(rows, showAll ? null : choice?.cities).filter((r) => r.as_popup);
   const one = mine.find((r) => !dismissed.has(r.id));
 
   // لا تُرسم قبل قراءة التخزين: وميضُ شاشة تختفي بعد جزء من الثانية أسوأ من

@@ -482,15 +482,29 @@ export default function HomePage() {
                 والتعليق هنا لا بين الخصائص: تعليقٌ داخل وسم JSX يبتلع الخاصّية
                 التي تليه صامتاً — تُمرَّر undefined، ويصير `?.()` لا شيء، ولا
                 خطأ في أي مكان. ضاع في تتبّعه وقتٌ يستحقّ هذا السطر. */}
+            {/* announced بلا تصفية مدن — كالأرقام التي بجانبها.
+             *
+             *  كانت الشارة تُحسب من مدن الجهاز والأرقام من الأنبار كلها، فصار
+             *  رقمان متجاوران بمقياسين. ولكل جهاز اختيارٌ في تخزينه: ظهرت «+٢»
+             *  على الويب و«+١» على آيفون ولا شيء على أندرويد — ثلاثتها صحيحة
+             *  بمقياسها، وثلاثتها تبدو عطلاً.
+             *
+             *  والوحدة أهمّ من الدقّة هنا: رقمٌ يختلف بين جهازين يُفقد الثقة بكل
+             *  رقم آخر، ولو كان كلٌّ منهما صادقاً في سياقه. */}
             <ProductsDashboard
               stations={stations}
               filter={filters.product}
               onPick={(product) => setFilters({ ...filters, product })}
-              announced={forCities(announcements, choice?.cities)}
-              onPickAnnounced={() =>
+              announced={announcements}
+              onPickAnnounced={() => {
+                // الشارة تعدّ الأنبار كلها، فالضغطة توسّع النطاق لتفي بما وعدت.
+                if (announcements.some((a) => !forCities([a], choice?.cities).length)) {
+                  setShowAll(true);
+                }
                 document
                   .getElementById(UNREGISTERED_BOARD_ID)
-                  ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
               }
             />
           </div>
@@ -574,9 +588,9 @@ export default function HomePage() {
               {/* فوق القائمة: خبرٌ عاجل عن محطة لا نملك عنها إلا لحظة واحدة —
               فمكانه قبل المحطات التي نعرف عنها كل شيء. */}
               <div id={UNREGISTERED_BOARD_ID}>
-                <UnregisteredBoard rows={announcements} onVoted={reloadAnnouncements} />
+                <UnregisteredBoard rows={announcements} onVoted={reloadAnnouncements} showAll={showAll} />
                 {/* وما أُشّر عليه يُقاطِع مرةً واحدة — واللوحة تبقى سجلّه بعدها. */}
-                <AvailabilityPopup rows={announcements} />
+                <AvailabilityPopup rows={announcements} showAll={showAll} />
               </div>
 
           {visible.length === 0 && (
