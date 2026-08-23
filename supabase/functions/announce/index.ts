@@ -156,11 +156,21 @@ Deno.serve(async (req) => {
   if (cities.length) {
     const seen = new Set<string>();
     for (const city of cities) {
-      const { data: rows, error } = await db.rpc('alerts_for', {
-        p_city: city,
-        p_products: products.length ? products : ALL_PRODUCTS,
-        p_stamp: !dryRun,
-      });
+      // .range على نداء الدالة أيضاً.
+      //
+      // ظننتُ السقف يخصّ الجداول، وهو يخصّ كل ردٍّ من PostgREST — والدوالّ منه.
+      // فأُعلن اليوم عن بانزين في الرمادي: المؤهّلون ١٢٣١ ووصل ١٠٠٠، وضاع ٢٣١.
+      //
+      // والأسوأ أن الدالة تختمهم كلّهم في القاعدة قبل أن يُقصّ الردّ: فالـ٢٣١
+      // مسجَّلون «أُشعروا» ولم يصلهم شيء، ويحجبهم حاجز الخمس والأربعين دقيقة
+      // عن أي إشعار تالٍ. أي أن القصّ لا يؤجّلهم بل يُسقطهم.
+      const { data: rows, error } = await db
+        .rpc('alerts_for', {
+          p_city: city,
+          p_products: products.length ? products : ALL_PRODUCTS,
+          p_stamp: !dryRun,
+        })
+        .range(0, 99_999);
       if (error) return json({ error: `alerts_for: ${error.message}` }, 500);
       for (const r of rows ?? []) {
         if (seen.has(r.address)) continue;

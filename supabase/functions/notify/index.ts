@@ -78,6 +78,8 @@ async function audienceFor(
   stamp = true,
   stationId: string | null = null
 ): Promise<Listener[]> {
+  // السقف يخصّ ردود الدوالّ كما يخصّ الجداول — والدالة تختم من تُرجعه في
+  // القاعدة قبل القصّ، فمن سقط منها يُعدّ مُخطَراً ولا يصله شيء.
   const { data, error } = await db.rpc('alerts_for', {
     p_city: city,
     p_products: products,
@@ -86,7 +88,7 @@ async function audienceFor(
     // city, and carries a cooldown of its own — so a neighbouring station
     // announcing first cannot swallow the alert they explicitly asked for.
     p_station: stationId,
-  });
+  }).range(0, 99_999);
   if (!error) return (data ?? []) as Listener[];
 
   // The four-argument form arrives with a migration. If this function is
@@ -94,11 +96,9 @@ async function audienceFor(
   // back to the three-argument call rather than let the deploy order decide
   // whether people hear that fuel arrived. Station followers simply are not
   // matched until the migration lands.
-  const { data: legacy, error: legacyError } = await db.rpc('alerts_for', {
-    p_city: city,
-    p_products: products,
-    p_stamp: stamp,
-  });
+  const { data: legacy, error: legacyError } = await db
+    .rpc('alerts_for', { p_city: city, p_products: products, p_stamp: stamp })
+    .range(0, 99_999);
   if (legacyError) {
     // يُرمى ولا يُبتلع.
     //

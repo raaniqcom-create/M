@@ -16,6 +16,8 @@ export interface OpenAnnouncement {
   /** قرار الإدارة القائم، إن كان — يسبق التصويت نصف ساعة. */
   admin_verdict: 'available' | 'gone' | null;
   admin_until: string | null;
+  /** معرّف المحطة إن كانت مسجّلة — يفرّق اللون والرابط. */
+  station_id: string | null;
 }
 
 /** أخبار اليوم عن محطات لم تنضمّ — يقرؤها سطحان، فتُجلب مرة.

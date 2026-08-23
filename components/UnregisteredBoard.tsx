@@ -85,19 +85,24 @@ export function UnregisteredBoard({
 
   return (
     <section className="mt-4 rounded-2xl border-2 border-traffic-red bg-red-50 p-4">
-      <h2 className="text-sm font-extrabold text-traffic-red">
-        محطات غير مسجّلة لدينا — أعلنت توفّر وقود
-      </h2>
+      <h2 className="text-sm font-extrabold text-traffic-red">وصل الوقود — ساعد بتأكيده</h2>
       <p className="mt-1 text-[11px] leading-relaxed text-red-900/80">
-        وصلنا الخبر وأرسلناه، ولا نعرف أكثر منه: لا متى نفد، ولا الازدحام، ولا أوقات
-        الدوام. أنت من يعرف — أخبِر بقيّة الناس، ويُحتسب تصويت آخر نصف ساعة.
+        أخبارُ اليوم. ما كان من محطة مسجّلة فبيدها تصحيحه، وما كان من غيرها فلا نعرف عنه
+        إلا لحظةً مضت — لا متى نفد ولا الازدحام. أنت من يعرف، ويُحتسب تصويت آخر نصف ساعة.
       </p>
 
       <ul className="mt-3 space-y-2">
         {visible.map((r) => (
-          <li key={r.id} className="rounded-xl bg-white p-3">
+          <li
+            key={r.id}
+            className={`rounded-xl p-3 ${
+              r.station_id ? 'bg-white ring-1 ring-brand-100' : 'bg-white'
+            }`}
+          >
             <p className="text-sm font-bold leading-relaxed text-slate-800">
-              <span className="text-traffic-red">{r.origin_city ?? r.cities?.[0]}</span>
+              <span className={r.station_id ? 'text-brand' : 'text-traffic-red'}>
+                {r.origin_city ?? r.cities?.[0]}
+              </span>
               {' — '}
               {r.product ? PRODUCT_LABELS[r.product] : 'وقود'}
               {' — '}
@@ -105,10 +110,23 @@ export function UnregisteredBoard({
               <span className="font-normal text-slate-400"> ({agoLabel(r.send_at)})</span>
             </p>
 
+            {/* المسجّلة تُفتح صفحتها: هناك دوامها وبقية منتجاتها وتقييم طابورها —
+                وكلّها أوثق ممّا يقوله خبرٌ عابر. */}
+            {r.station_id && (
+              <a
+                href={`/station/${r.station_id}`}
+                className="mt-0.5 inline-block text-[11px] font-bold text-brand underline"
+              >
+                محطة مسجّلة — افتح صفحتها
+              </a>
+            )}
+
             {/* الأصوات الحاكمة، ومدّتها مكتوبة — وإلا قرأ الناس «٧» بعد أن
                 رأوا «٢٠» وظنّوا أن أصواتاً ضاعت. */}
             <p className="mt-1 text-[11px] text-slate-400">
-              {r.admin_verdict === 'available'
+              {r.station_id
+                ? 'المحطة نفسها تؤكّده على لوحتها'
+                : r.admin_verdict === 'available'
                 ? 'إدارة المحطة التقنية تؤكّد التوفّر'
                 : r.yes_votes + r.no_votes === 0
                   ? 'لا تصويت في آخر نصف ساعة — كن أوّل من يخبر'
@@ -152,8 +170,8 @@ export function UnregisteredBoard({
       </ul>
 
       <p className="mt-3 text-[11px] leading-relaxed text-red-900/70">
-        هذه المحطات لم تسجّل بعد، فلا تستطيع تحديث بياناتها بنفسها. المحطة المسجّلة
-        تُعلن ما لديها وأوقات دوامها وتصحّحها لحظةً بلحظة.
+        الأخضر لمحطة مسجّلة — لوحتها تؤكّد الخبر، ويسقط متى رفعتْه. والأحمر لمحطة لم
+        تنضمّ بعد، فلا تملك تصحيح بياناتها ولا نعلم عنها إلا ما وصلنا.
       </p>
     </section>
   );
