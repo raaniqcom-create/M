@@ -18,6 +18,8 @@ export interface OpenAnnouncement {
   admin_until: string | null;
   /** معرّف المحطة إن كانت مسجّلة — يفرّق اللون والرابط. */
   station_id: string | null;
+  /** اختارت الإدارة عرضه كشاشة منبثقة. */
+  as_popup: boolean;
 }
 
 /** أخبار اليوم عن محطات لم تنضمّ — يقرؤها سطحان، فتُجلب مرة.

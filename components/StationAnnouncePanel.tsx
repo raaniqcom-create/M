@@ -25,6 +25,7 @@ const CITY_NAMES = ANBAR_CITIES.map((c) => c.name);
 export function StationAnnouncePanel() {
   const [templateId, setTemplateId] = useState(ANNOUNCE_TEMPLATES[0].id);
   const [station, setStation] = useState('');
+  const [asPopup, setAsPopup] = useState(false);
   const [product, setProduct] = useState<FuelProduct>('gasoline_premium');
   const [city, setCity] = useState<string>(CITY_NAMES[0]);
   const [extraCities, setExtraCities] = useState<string[]>([]);
@@ -131,6 +132,7 @@ export function StationAnnouncePanel() {
       // ما يجعل اللوحة الحمراء ممكنة أصلاً.
       station_name: station.trim(),
       origin_city: city,
+      as_popup: asPopup,
       // سطر واحد بمدينة المحطة الحقيقية، لا سطر لكل مدينة جمهور: خمس مدن
       // كانت تعني خمسة أسطر متطابقة إلا في آخر كلمة، تزحم الشريط وتطرد
       // أخبار المحطات المسجّلة منه.
@@ -240,6 +242,24 @@ export function StationAnnouncePanel() {
           placeholder="الرمادي القديمة (السينما)"
           className="field"
         />
+
+        {/* المقاطعة تُطلب ولا تقع تلقائياً: انتباه القارئ ينفد، وشاشةٌ تظهر مع
+            كل خبر تُعلّمه إغلاقها قبل قراءتها. */}
+        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3">
+          <input
+            type="checkbox"
+            checked={asPopup}
+            onChange={(e) => setAsPopup(e.target.checked)}
+            className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
+          />
+          <span className="text-xs leading-relaxed text-slate-600">
+            <b>اعرضه كشاشة منبثقة</b>
+            <span className="mt-1 block text-slate-500">
+              تظهر لمن يفتح التطبيق مرةً واحدة، وتُغلق ولا تعود. للخبر الاستثنائي وحده —
+              وكثرتها تُفقدها أثرها.
+            </span>
+          </span>
+        </label>
 
         <label htmlFor="an-product" className="label mt-4 block">نوع المنتج</label>
         <select

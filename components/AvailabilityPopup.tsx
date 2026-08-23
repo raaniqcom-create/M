@@ -9,14 +9,14 @@ import { FuelIcon, XIcon } from './icons';
 
 const SEEN = 'ann-seen:';
 
-/** خبر محطة مسجّلة — شاشةٌ واحدة تُغلق ولا تعود.
+/** خبرٌ اختارت الإدارة أن يُقاطَع من أجله.
  *
- *  اللوحة الحمراء عنوانها «محطات غير مسجّلة»، ووضعُ محطة مسجّلة فيها يُناقض
- *  نفسه أمام القارئ: يرى اسم محطة يعرفها ومعه وصفٌ ينفي تسجيلها، فيشكّ في
- *  الاثنين. فالمساران منفصلان: هذه للمسجّلة، وتلك لغيرها.
+ *  اللوحة تحمل أخبار اليوم كلها؛ وهذه للاستثنائي منها — أوّل بانزين محسن في
+ *  المدينة منذ أسبوع. والقرار عند الإنشاء بخانةٍ يؤشّرها المدير، لا تلقائياً:
+ *  شاشةٌ تظهر مع كل خبر تُعلّم الناس إغلاقها قبل قراءتها، فلا تنفع في اليوم
+ *  الذي تُحتاج فيه.
  *
- *  وشاشةٌ منبثقة لأن الخبر لحظيّ ويستحقّ الالتفات — «وصل بانزين محسن» في
- *  المحطة الوحيدة التي تحمله. ولأنها تقطع على القارئ ما يفعله، فثلاثة قيود:
+ *  ولأنها تقطع على القارئ ما يفعله، فثلاثة قيود:
  *
  *  · تُغلق ولا تعود. مفتاحٌ لكل خبر في التخزين، فمن أغلقها لا يراها ثانيةً —
  *    وشاشةٌ تعود بعد إغلاقها تُعلّم الناس أن يغلقوا كل شيء بلا قراءة.
@@ -53,8 +53,8 @@ export function AvailabilityPopup({ rows }: { rows: OpenAnnouncement[] }) {
     }
   }
 
-  // المسجّلة وحدها. وغير المسجّلة لها اللوحة الحمراء بما فيها من تحفّظ.
-  const mine = forCities(rows, choice?.cities).filter((r) => r.station_id);
+  // ما اختارته الإدارة وحده. والباقي يجد مكانه في اللوحة بلا مقاطعة.
+  const mine = forCities(rows, choice?.cities).filter((r) => r.as_popup);
   const one = mine.find((r) => !dismissed.has(r.id));
 
   // لا تُرسم قبل قراءة التخزين: وميضُ شاشة تختفي بعد جزء من الثانية أسوأ من
@@ -96,13 +96,19 @@ export function AvailabilityPopup({ rows }: { rows: OpenAnnouncement[] }) {
           {one.origin_city ?? one.cities?.[0]} · {agoLabel(one.send_at)}
         </p>
 
-        <p className="mt-3 rounded-xl bg-brand-50 p-2.5 text-[11px] leading-relaxed text-brand-900">
-          محطة مسجّلة — لوحتها تؤكّد التوفّر الآن، وتختفي هذه الرسالة متى رفعتْه.
+        <p
+          className={`mt-3 rounded-xl p-2.5 text-[11px] leading-relaxed ${
+            one.station_id ? 'bg-brand-50 text-brand-900' : 'bg-red-50 text-red-900'
+          }`}
+        >
+          {one.station_id
+            ? 'محطة مسجّلة — لوحتها تؤكّد التوفّر الآن، وتختفي هذه الرسالة متى رفعتْه.'
+            : 'محطة لم تنضمّ بعد — لا نعرف عنها إلا هذا الخبر. أكّده أو انفِه من الصفحة.'}
         </p>
 
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <a href={`/station/${one.station_id}`} className="btn-primary">
-            افتح المحطة
+          <a href={one.station_id ? `/station/${one.station_id}` : '/'} className="btn-primary">
+            {one.station_id ? 'افتح المحطة' : 'افتح المنصّة'}
           </a>
           <button type="button" onClick={() => close(one.id)} className="btn-ghost">
             إغلاق

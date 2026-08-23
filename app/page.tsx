@@ -520,8 +520,7 @@ export default function HomePage() {
               فمكانه قبل المحطات التي نعرف عنها كل شيء. */}
               <div id={UNREGISTERED_BOARD_ID}>
                 <UnregisteredBoard rows={announcements} onVoted={reloadAnnouncements} />
-                {/* وخبر المسجّلة في شاشته: مسارٌ منفصل تماماً، فلا يظهر اسم
-                    محطة معروفة تحت عنوان ينفي تسجيلها. */}
+                {/* وما أُشّر عليه يُقاطِع مرةً واحدة — واللوحة تبقى سجلّه بعدها. */}
                 <AvailabilityPopup rows={announcements} />
               </div>
 
