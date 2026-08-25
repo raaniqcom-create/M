@@ -74,54 +74,44 @@ export function StationCard({
   });
 
   return (
-    <article
-      className={`card grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 p-3 ${
-        tinted ? 'border-brand-100 bg-brand-50/60' : ''
-      }`}
-    >
-      {/* أربعة صفوف وعمودان: ما يُقرأ يميناً، وما يُضغط يساراً — وكلٌّ في
-          سطره. كانت البطاقة تكدّس ستّ كتل بعرضها الكامل، فطالت وتكرّرت
-          فيها الحالة مرّتين. */}
+    <article className={`card p-3 ${tinted ? 'border-brand-100 bg-brand-50/60' : ''}`}>
+      {/* صفّان للقراءة، ثم صفٌّ واحد للفعل.
+        *
+        *  كانت الأفعال الثلاثة عموداً على اليسار: أزرارٌ مربّعة بلا أسماء،
+        *  وبينها فراغٌ لأن صفوف النصّ يمينها أقصر منها. فصارت صفّاً واحداً
+        *  بمستوى خطٍّ واحد، ولكلٍّ اسمُه — وأيقونةٌ بلا اسمٍ تُخمَّن، والتخمين
+        *  يُبقي الإصبع معلّقاً. */}
 
-      {/* ١ · الاسم | النجمة */}
-      <h2 className="truncate text-[15px] font-bold leading-snug">{station.name}</h2>
-      {onToggleFavorite ? (
-        <button
-          type="button"
-          onClick={onToggleFavorite}
-          aria-pressed={isFavorite}
-          aria-label={isFavorite ? 'إلغاء متابعة هذه المحطة' : 'تابع هذه المحطة ليصلك إشعارها'}
-          title={isFavorite ? 'تتابعها — يصلك إشعارها' : 'تابعها ليصلك إشعار توفّر الوقود'}
-          className={`grid h-8 w-9 place-items-center rounded-lg ${
-            isFavorite ? 'text-traffic-yellow' : 'text-slate-300'
+      <div className="grid grid-cols-[1fr_auto] items-start gap-x-3">
+        <h2 className="truncate text-[15px] font-bold leading-snug">{station.name}</h2>
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-extrabold ${
+            status.tone === 'closed'
+              ? 'bg-slate-100 text-slate-600'
+              : status.tone === 'soon'
+                ? 'bg-amber-50 text-amber-800'
+                : 'bg-brand-100 text-brand-900'
           }`}
         >
-          <StarIcon filled={isFavorite} />
-        </button>
-      ) : (
-        <span />
-      )}
+          {open ? 'مفتوحة' : station.temp_closed ? 'مغلقة مؤقتاً' : 'مغلقة'}
+        </span>
 
-      {/* ٢ · العنوان ومعه المسافة | الطريق */}
-      <p className="truncate text-[11px] text-slate-500">
-        {station.city} — {station.address}
-        {station.distanceKm !== undefined && (
-          <span className="text-slate-400"> · {station.distanceKm.toFixed(1)} كم</span>
-        )}
-      </p>
-      <RouteButton
-        compact
-        lat={station.lat}
-        lng={station.lng}
-        stationId={station.id}
-        stationName={station.name}
-      />
+        <p className="truncate text-[11px] text-slate-500">
+          {station.city} — {station.address}
+          {station.distanceKm !== undefined && (
+            <span className="text-slate-400"> · {station.distanceKm.toFixed(1)} كم</span>
+          )}
+        </p>
+        <span dir="ltr" className="shrink-0 text-[9.5px] tabular-nums text-slate-400">
+          {station.is_24h ? '24h' : `${formatTime(station.opens_at)} – ${formatTime(station.closes_at)}`}
+        </span>
+      </div>
 
-      {/* ٣ · عنوان المنتجات ومعه الازدحام | الاتصال.
-          والاتصال يخضع للدوام: محطةٌ مغلقة لا يُعرض رقمها زرّاً يرنّ في
-          بيتٍ نائم — يبقى مكانه ليثبت الصفّ، ويقول عنوانُه متى يعمل. */}
-      <p className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
-        <span>المنتجات{isStale ? ' — آخر إعلان قديم' : ''} :</span>
+      {/* المنتجات — بعرض البطاقة، فلا يقصّها عمودٌ ضيّق */}
+      <div className="mt-2 flex flex-wrap items-center gap-1">
+        <span className="text-[10px] font-medium text-slate-400">
+          المنتجات{isStale ? ' — آخر إعلان قديم' : ''} :
+        </span>
         {level && (
           <span
             className={`inline-flex items-center gap-1 rounded-full px-1.5 py-px text-[9.5px] font-bold ${TRAFFIC_COLORS[level].bg} ${TRAFFIC_COLORS[level].text}`}
@@ -130,41 +120,17 @@ export function StationCard({
             {TRAFFIC_LABELS[level]}
           </span>
         )}
-      </p>
-      {station.phone ? (
-        open ? (
-          <a
-            href={`tel:${station.phone}`}
-            aria-label="اتصال بالمحطة"
-            className="grid h-8 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-brand-700 active:bg-brand-50"
-          >
-            <PhoneIcon className="h-4 w-4" />
-          </a>
-        ) : (
-          <span
-            title={`الاتصال متاح عند الفتح ${formatTime(station.opens_at)}`}
-            className="grid h-8 w-9 place-items-center rounded-lg border border-slate-100 text-slate-300"
-          >
-            <PhoneIcon className="h-4 w-4" />
-          </span>
-        )
-      ) : (
-        <span />
-      )}
-
-      {/* ٤ · المتوفّر | الحالة وتحتها الدوام */}
-      <ul className="flex flex-wrap items-center gap-1">
         {shown.length === 0 ? (
-          <li className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
             {!newest ? 'لم تُحدَّث بعد' : 'لا يوجد الآن'}
-          </li>
+          </span>
         ) : (
           shown.map((product) => {
             const row = byProduct.get(product)!;
             const inStock = isOffered(station, row);
             const stale = isStaleOffer(row);
             return (
-              <li
+              <span
                 key={product}
                 className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                   inStock
@@ -179,30 +145,72 @@ export function StationCard({
                   <span className="font-normal"> · {agoLabel(row.updated_at)}</span>
                 )}
                 {!inStock && row.expected_at && (
-                  <span> · {expectedLabel(row.expected_at)}
+                  <span>
+                    {' '}
+                    · {expectedLabel(row.expected_at)}
                     {row.expected_period ? ` ${PERIOD_LABELS[row.expected_period]}` : ''}
                   </span>
                 )}
-              </li>
+              </span>
             );
           })
         )}
-      </ul>
-      <div className="flex min-w-[74px] flex-col items-stretch gap-0.5">
-        <span
-          className={`rounded-full px-2 py-0.5 text-center text-[9.5px] font-extrabold ${
-            status.tone === 'closed'
-              ? 'bg-slate-100 text-slate-600'
-              : status.tone === 'soon'
-                ? 'bg-amber-50 text-amber-800'
-                : 'bg-brand-100 text-brand-900'
-          }`}
-        >
-          {open ? 'مفتوحة' : station.temp_closed ? 'مغلقة مؤقتاً' : 'مغلقة'}
-        </span>
-        <span dir="ltr" className="text-center text-[9px] tabular-nums text-slate-400">
-          {station.is_24h ? '24h' : `${formatTime(station.opens_at)} – ${formatTime(station.closes_at)}`}
-        </span>
+      </div>
+
+      {/* ثلاثة أفعالٍ بمستوى خطٍّ واحد، ولكلٍّ اسمُه */}
+      <div className="mt-2.5 grid grid-cols-3 gap-1.5 border-t border-slate-100 pt-2.5">
+        {onToggleFavorite ? (
+          <button
+            type="button"
+            onClick={onToggleFavorite}
+            aria-pressed={isFavorite}
+            title={isFavorite ? 'تتابعها — يصلك إشعارها' : 'تابعها ليصلك إشعار توفّر الوقود'}
+            className={`flex min-h-[34px] items-center justify-center gap-1 rounded-lg text-[10px] font-bold ${
+              isFavorite
+                ? 'bg-brand-50 text-traffic-yellow'
+                : 'text-slate-500 active:bg-slate-50'
+            }`}
+          >
+            <StarIcon filled={isFavorite} />
+            محطة مثبتة لك
+          </button>
+        ) : (
+          <span />
+        )}
+
+        <RouteButton
+          compact
+          lat={station.lat}
+          lng={station.lng}
+          stationId={station.id}
+          stationName={station.name}
+        />
+
+        {/* الاتصال يخضع للدوام: رقمٌ يرنّ في بيتٍ نائم ليس خدمةً لأحد.
+            ويبقى مكانه فيقول متى يعمل، بدل أن يختفي فيُظنّ أن لا رقم لها. */}
+        {station.phone ? (
+          open ? (
+            <a
+              href={`tel:${station.phone}`}
+              className="flex min-h-[34px] items-center justify-center gap-1 rounded-lg text-[10px] font-bold text-brand-700 active:bg-brand-50"
+            >
+              <PhoneIcon className="h-4 w-4" />
+              الاتصال بالمحطة
+            </a>
+          ) : (
+            <span
+              title={`الاتصال متاح عند الفتح ${formatTime(station.opens_at)}`}
+              className="flex min-h-[34px] items-center justify-center gap-1 rounded-lg text-[10px] font-bold text-slate-300"
+            >
+              <PhoneIcon className="h-4 w-4" />
+              الاتصال بالمحطة
+            </span>
+          )
+        ) : (
+          <span className="flex min-h-[34px] items-center justify-center text-[10px] text-slate-300">
+            لا رقم معلن
+          </span>
+        )}
       </div>
 
       <p className="sr-only">

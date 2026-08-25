@@ -14,7 +14,10 @@ export function SiteFooter() {
         decoding="async"
         className="mx-auto w-[88%] max-w-[268px]"
       />
-      <p className="mt-2 text-[11.5px] font-bold leading-relaxed text-slate-500">
+      {/* فسحةٌ حقيقية تحت الصورة: شراريبها تهبط خارج حدود الإطار، فتقع فوق
+          السطر ويبدو الاسم ممحوّاً وهو مكتوبٌ كاملاً. ولونٌ أدكن — اسم من
+          بنى المنصّة ليس حاشيةً رمادية. */}
+      <p className="mt-4 text-[13px] font-extrabold leading-relaxed text-slate-700">
         فكرة وتنفيذ وبرمجة أحمد الرفاعي
       </p>
     </footer>

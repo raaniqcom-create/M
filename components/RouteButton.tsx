@@ -64,12 +64,12 @@ export function RouteButton({
         aria-label="الطريق إلى المحطة"
         className={
           compact
-            ? 'grid h-8 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-brand-700 active:bg-brand-50'
+            ? 'flex min-h-[34px] w-full items-center justify-center gap-1 rounded-lg text-[10px] font-bold text-brand-700 active:bg-brand-50'
             : 'btn-ghost w-full'
         }
       >
         <MapPinIcon className="h-4 w-4" />
-        {!compact && 'الطريق'}
+        {compact ? 'الوصول للمحطة' : 'الطريق'}
       </button>
 
       {open && (

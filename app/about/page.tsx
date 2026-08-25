@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { FuelIcon, FacebookIcon, InstagramIcon, WhatsappIcon } from '@/components/icons';
+import { SiteFooter } from '@/components/SiteFooter';
 
 export const metadata: Metadata = {
   title: 'من نحن',
@@ -90,6 +91,9 @@ export default function AboutPage() {
       <a href="/" className="mt-2 block min-h-[44px] pt-3 text-center text-sm text-slate-500">
         العودة للصفحة الرئيسية
       </a>
+
+      {/* الشعار في صفحة التعريف قبل غيرها: من فتحها يسأل «من وراء هذا؟» */}
+      <SiteFooter />
     </main>
   );
 }
