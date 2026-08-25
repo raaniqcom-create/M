@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { distanceKm, loadStations } from '@/lib/stations';
-import { useSiteStats } from '@/lib/useSiteStats';
 import { useNativeApp } from '@/lib/useNativeApp';
 import { homeFor, useSession } from '@/lib/useSession';
 import { playAlert, unlockAudio } from '@/lib/alertSound';
@@ -25,16 +24,20 @@ import { UnregisteredBoard } from '@/components/UnregisteredBoard';
 import { AvailabilityPopup } from '@/components/AvailabilityPopup';
 import { forCities, useOpenAnnouncements } from '@/lib/announcements';
 
-/** يربط بطاقة المنتج المعلَن بخبره أسفل الصفحة. */
-const UNREGISTERED_BOARD_ID = 'unregistered-board';
 import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
 import { InstallPrompt } from '@/components/InstallPrompt';
+import { SplashScreen } from '@/components/SplashScreen';
+import { SiteFooter } from '@/components/SiteFooter';
+import { ScopeBar } from '@/components/ScopeBar';
+import { BottomDock } from '@/components/BottomDock';
+import { Sheet } from '@/components/Sheet';
 import { WaitingForStations } from '@/components/WaitingForStations';
 import { FirstRun } from '@/components/FirstRun';
 import { SearchBar, EMPTY_FILTERS, countActive, type Filters } from '@/components/SearchBar';
 import {
   BellIcon,
+  InfoIcon,
   DownloadIcon,
   FuelIcon,
   ListIcon,
@@ -45,6 +48,12 @@ import {
   StoreIcon,
 } from '@/components/icons';
 import type { FuelProduct, StationWithStatus } from '@/types/database';
+
+/** يربط بطاقة المنتج المعلَن بخبره أسفل الصفحة. */
+const UNREGISTERED_BOARD_ID = 'unregistered-board';
+// خريطةٌ فارغة ثابتة: تمنع شرائح المدن داخل الفلاتر، وتُنشأ مرّةً لا في
+// كل رسم — فلا تُعيد تركيب SearchBar بمرجعٍ جديد كل مرّة.
+const EMPTY_CITY_COUNTS: Map<string, number> = new Map();
 
 // Leaflet touches window at import time, so it can't be server-rendered
 const StationMap = dynamic(() => import('@/components/StationMap'), {
@@ -66,14 +75,23 @@ export default function HomePage() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   // «اعرض الباقي» — لحظيّ لا محفوظ: من وسّع مرةً لا يعني أنه غيّر اشتراكه.
   const [showAll, setShowAll] = useState(false);
-  // تناوب الشريط. ثلاث ثوانٍ لكل رسالة — أقلّ منها لا تُقرأ، وأكثر منها يجعل
-  // الثانية تمرّ على أكثر الزوّار بلا أن يروها.
-  const [tick, setTick] = useState(false);
-  useEffect(() => {
-    const t = setInterval(() => setTick((v) => !v), 3000);
-    return () => clearInterval(t);
-  }, []);
+  // مدنٌ تُختار للحظتها ولا تُحفظ.
+  //
+  // 70% من المشتركين اختاروا مدينةً واحدة، وهي وحدها ما يُحفظ ويُبنى عليه
+  // الإشعار. ومن أراد أن يرى مدينةً ثانية اليوم — مسافراً أو سائلاً لأخيه —
+  // يضيفها هنا، ويعود التطبيق إلى مدينته حين يُفتح ثانية. وحفظُ ما اختير
+  // مرّةً بالخطأ يجعله يتلقّى أخبار مدنٍ لا يقصدها ولا يعرف من أين جاءته.
+  const [picked, setPicked] = useState<string[] | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const { choice } = useAlertChoice();
+
+  // مصدرُ النطاق الواحد. كان يُقرأ من ثلاثة مواضع تتقاطع — الاشتراك المحفوظ،
+  // وزرّ «كل الأنبار»، وحقل المدينة في الفلاتر — وكل جزء من الصفحة يقرأ
+  // توليفةً مختلفة منها. وهي الآلة التي أنتجت كل تناقضٍ في هذه الصفحة.
+  const myCities = useMemo(
+    () => (picked?.length ? picked : choice?.cities?.length ? choice.cities : null),
+    [picked, choice]
+  );
 
   // خمس مدن فأكثر: النطاق كل الأنبار ابتداءً.
   //
@@ -86,7 +104,12 @@ export default function HomePage() {
   }, [wideChoice]);
   // نداء واحد يغذّي اللوحة الحمراء ولوحة المنتجات معاً.
   const { announcements, reload: reloadAnnouncements } = useOpenAnnouncements();
-  const { visits, online } = useSiteStats();
+  // العدّادان انتقلا إلى الشريط السفلي، ومعهما نداء useSiteStats.
+  //
+  // وبقاؤه هنا بعد انتقالهما لم يكن حشواً بل عطلاً: الخطّاف يفتح قناة وقتٍ
+  // حقيقي باسمٍ ثابت (visit-counter)، فنداءان يفتحان القناة نفسها مرّتين —
+  // «cannot add postgres_changes callbacks after subscribe()». ولا رقم
+  // يتحدّث بعدها. نداءٌ واحد، في المكان الذي يعرض الرقم.
   // The star is the follow now — see useFollowedStations in lib/alerts.ts.
   const { isFollowed, toggle: toggleFollow } = useFollowedStations();
   const [followNote, setFollowNote] = useState<string | null>(null);
@@ -238,7 +261,7 @@ export default function HomePage() {
     //
     // ولا تُطبَّق إلا حين يختار المستخدم مدينةً بعينها في شرائح البحث: اختياره
     // اللحظي أولى من اشتراكه المحفوظ.
-    const mine = choice?.cities?.length ? choice.cities : null;
+    const mine = myCities;
     if (mine && !showAll && !filters.city) rows = rows.filter((s) => mine.includes(s.city));
 
     if (filters.openOnly) rows = rows.filter(isOpenNow);
@@ -278,28 +301,28 @@ export default function HomePage() {
         Number(isFollowed(b.id)) - Number(isFollowed(a.id)) ||
         Number(actionable(b)) - Number(actionable(a))
     );
-  }, [stations, origin, filters, query, isFollowed, choice, showAll]);
+  }, [stations, origin, filters, query, isFollowed, myCities, showAll]);
 
   // كم محطة تُخفيها التصفية — الرقم نفسه الذي يظهر على الزرّ.
   const hiddenElsewhere = useMemo(() => {
-    const mine = choice?.cities?.length ? choice.cities : null;
+    const mine = myCities;
     if (!mine || showAll || filters.city) return 0;
     return (stations ?? []).filter((s) => !mine.includes(s.city)).length;
-  }, [stations, choice, showAll, filters.city]);
+  }, [stations, myCities, showAll, filters.city]);
 
   // ما يُعرض الآن، لا ما سيحدث عند الضغط.
   //
   // ولا يظهر أصلاً لمن لا اشتراك له أو لمن لا محطات خارج مدنه: زرٌّ لا يغيّر
   // شيئاً هو أثاثٌ يُشغل مكاناً ويُعلَّم أنه بلا فائدة.
   const scopeLabel = useMemo(() => {
-    const mine = choice?.cities?.length ? choice.cities : null;
+    const mine = myCities;
     if (!mine || filters.city) return null;
     if (showAll) return 'محطات كل الأنبار';
     if (!hiddenElsewhere) return null;
     // الأسماء صريحة: «محطات الرمادي، الفلوجة» أوضح من «محطات مدني (2)» —
     // القارئ يرى نطاقه بلا أن يفتح إعداداته ليتذكّره.
     return `محطات ${mine.join('، ')}`;
-  }, [choice, showAll, filters.city, hiddenElsewhere]);
+  }, [myCities, choice, showAll, filters.city, hiddenElsewhere]);
 
   // كم محطة يجدها البحث نفسه خارج مدنه.
   //
@@ -307,7 +330,7 @@ export default function HomePage() {
   // «بانزين محسن ١» ثم «لا توجد محطة» — رقمان صحيحان يتناقضان في عين القارئ،
   // لأن أحدهما لا يقول نطاقه. فالحالة الفارغة تقول السبب وتفتح الباب.
   const elsewhereMatching = useMemo(() => {
-    const mineCities = choice?.cities?.length ? choice.cities : null;
+    const mineCities = myCities;
     if (!stations || !mineCities || showAll || filters.city) return 0;
     const q = query.trim();
     return stations.filter((s) => {
@@ -327,7 +350,17 @@ export default function HomePage() {
       if (q && !(s.name.includes(q) || s.address.includes(q) || s.city.includes(q))) return false;
       return true;
     }).length;
-  }, [stations, choice, showAll, filters, query]);
+  }, [stations, myCities, showAll, filters, query]);
+
+  // أنواع المنتجات بأعدادها داخل النطاق — تُعرض في ورقة المدن، فمن فتحها
+  // يبحث عن شيء وأقصر طريقٍ إليه أن يضغط نوعه مباشرةً.
+  const productCounts = useMemo(() => {
+    const m = new Map<FuelProduct, number>();
+    for (const s of visible ?? []) {
+      for (const pr of s.products) if (isOffered(s, pr)) m.set(pr.product, (m.get(pr.product) ?? 0) + 1);
+    }
+    return [...m.entries()].map(([product, n]) => ({ product, n }));
+  }, [visible]);
 
   const cityCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -353,49 +386,37 @@ export default function HomePage() {
               <SoundToggle />
             </div>
           </div>
-          <p className="mt-1 text-center text-xs text-white/80">منصة وقود الأنبار — في كل مدن الأنبار</p>
+          <ScopeBar
+            homeCities={choice?.cities?.length ? choice.cities : null}
+            picked={picked}
+            allAnbar={showAll}
+            onChange={(next, all) => {
+              setPicked(next);
+              setShowAll(all);
+            }}
+            cityCounts={cityCounts}
+            total={visible?.length ?? 0}
+            productCounts={productCounts}
+            activeProduct={filters.product}
+            onPickProduct={(p) => setFilters({ ...filters, product: p })}
+          />
 
-          {/* An empty list is only a disappointment if nothing is offered in
-              its place. Tell the visitor what to do right now instead of what
-              the platform lacks — and keep the honesty about calling ahead,
-              which is what stops a driver burning fuel on a stale claim. */}
-          {/* This told the visitor to "choose your city and your fuel" and gave
-              them nothing to tap — while the nearest green button on the screen
-              was «سجّل محطتك مجاناً». An instruction with no target sends people
-              to the loudest control instead, which is exactly how citizens ended
-              up on the owner registration form. */}
-          {/* رسالتان تتناوبان كل ثلاث ثوانٍ.
+          {/* إسنادٌ ساكن لا شريطٌ يتبدّل كل ثلاث ثوانٍ.
             *
-            *  الأولى دعوةٌ إلى الاشتراك، والثانية إسنادٌ صريح: من يكتب حالة
-            *  الوقود ومتى. والقارئ يظنّ المنصّة هي التي تُحصي المحطات وتتفقّدها،
-            *  فإن وجد خبراً قديماً لام المنصّة — واللوم في غير موضعه يُفقده
-            *  الثقة بها كلها. فيُقال له من يُحدّث ومتى، ليعرف أين يسأل.
+            *  المؤقّت كان يُجبر الصفحة كلها على إعادة الرسم عشرين مرّة في
+            *  الدقيقة والمستخدم لم يلمس شيئاً — وعند 119 بطاقة يصير تلعثماً
+            *  محسوساً على أندرويد المتوسط، وهو ثلثا أجهزتنا. والنصّ نفسه كان
+            *  يفوت نصف القرّاء: من نظر في الثانية الخطأ لم يره قطّ.
             *
-            *  والأحمر مقصود: يقطع اعتياد العين على الأخضر فتُقرأ الجملة مرة
-            *  واحدة على الأقل، ثم يعود اللون فلا يبقى إنذارٌ دائم. */}
-          <a
-            href="/alerts"
-            className={`mt-2 flex items-start gap-2 rounded-lg px-3 py-2 text-[11px] leading-relaxed text-white transition-colors duration-500 ${
-              tick ? 'bg-traffic-red/80' : 'bg-white/15'
-            }`}
-          >
-            <BellIcon className="mt-0.5 h-4 w-4 shrink-0" />
-            {tick ? (
-              <span>
-                <b>توفّر المنتجات وتحديثها لحظةً بلحظة من إدارة المحطة نفسها</b> — وهي وحدها
-                من يُعلن ما لديها ومتى نفد.
-                <br />
-                والمنصّة تنقل ما تُعلنه، ومعه وقتُه، فلا تُقرأ حالةٌ قديمة على أنها اليوم.
-              </span>
-            ) : (
-              <span>
-                اختر <b>مدينتك</b> و<b>نوع الوقود</b> الذي يهمك، وانتظر — أول ما تسجّل محطة
-                ويتوفر المنتج، يصلك إشعار. <b className="underline">اختر الآن ←</b>
-                <br />
-                المحطات تُضاف تباعاً. وكل حالة يُكتب معها وقتها.
-              </span>
-            )}
-          </a>
+            *  والجملة تبقى لأنها تحمي المنصّة من لومٍ ليس لها: القارئ يظنّها
+            *  هي التي تُحصي المحطات وتتفقّدها، فإن وجد خبراً قديماً لامها. */}
+          <p className="mt-2 flex items-start gap-2 rounded-lg bg-white/15 px-3 py-2 text-[11px] leading-relaxed text-white">
+            <InfoIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              <b>توفّر المنتجات وتحديثها لحظةً بلحظة من إدارة المحطة نفسها</b> — والمنصّة تنقل
+              ما تُعلنه، ومعه وقتُه.
+            </span>
+          </p>
           {/* Both of these speak to someone browsing the site. Inside the app
               they are dead weight: the download already happened, and the
               "coming soon" badge contradicts the app in their hand. */}
@@ -419,59 +440,17 @@ export default function HomePage() {
               )}
             </a>
           )}
-          {/* The blinking "قريباً" pill used to sit right beside this live
-              download link. Both store listings went out today; telling a
-              visitor the app is still coming, next to a button that installs
-              it, is the one contradiction that costs the install. */}
-          {!native && !signedIn && (
-            <div className="mt-2 flex items-center justify-center gap-2">
-              <a
-                href="/download"
-                className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11px] font-extrabold text-brand-700"
-              >
-                <DownloadIcon className="h-4 w-4" />
-                حمّل التطبيق
-              </a>
-            </div>
-          )}
-
-          <div className="mt-4">
-            <SearchBar
-              query={query}
-              onQueryChange={setQuery}
-              filters={filters}
-              onFiltersChange={setFilters}
-              cityCounts={cityCounts}
-            />
-          </div>
-
-          {/* Coverage sits beside the counts on purpose: with no stations yet,
-              "16 cities" is the only number that says how far this reaches. */}
-          <div className="mt-4 grid grid-cols-4 gap-2">
-            {[
-              { label: 'زائر', value: visits ?? '—' },
-              { label: 'مدينة', value: CITY_NAMES.length },
-              { label: 'محطة', value: stations?.length ?? '—' },
-              { label: 'متصل', value: online, live: true },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                className="rounded-xl bg-white/10 py-2 text-center backdrop-blur-sm"
-              >
-                <p className="text-base font-extrabold leading-none">{stat.value}</p>
-                <p className="mt-1 flex items-center justify-center gap-1 text-[11px] text-white/80">
-                  {stat.live && (
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-300" />
-                  )}
-                  {stat.label}
-                </p>
-              </div>
-            ))}
-          </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-md px-4 pb-24 pt-4">
+      {/* الفسحة أسفل المحتوى تُحسب لا تُقدَّر: الشريط السفلي 94 بكسل
+          (أزرارٌ وشريطٌ متحرك) وتحته منطقة الهاتف الآمنة. وpb-24 كانت
+          تترك بكسلين — تختفيان على أول هاتفٍ ذي حافّة منحنية، فيُحجب
+          آخر سطرٍ في الصفحة خلف الشريط. */}
+      <main
+        className="mx-auto max-w-md px-4 pt-4"
+        style={{ paddingBottom: 'calc(7rem + env(safe-area-inset-bottom))' }}
+      >
         <TripAsk stations={stations} />
         {stations && (
           <div className="mb-4">
@@ -492,7 +471,8 @@ export default function HomePage() {
              *  والوحدة أهمّ من الدقّة هنا: رقمٌ يختلف بين جهازين يُفقد الثقة بكل
              *  رقم آخر، ولو كان كلٌّ منهما صادقاً في سياقه. */}
             <ProductsDashboard
-              stations={stations}
+              scopeLabel={scopeLabel ?? undefined}
+              stations={visible ?? stations}
               filter={filters.product}
               onPick={(product) => setFilters({ ...filters, product })}
               announced={announcements}
@@ -513,49 +493,6 @@ export default function HomePage() {
         <div className="mb-3">
           <PromoStrip />
         </div>
-
-        {/* حقلٌ واحد بثلاثة أوجه، لا زرّان متراكمان.
-          *
-          *  «قريبة لي» كان زرّاً منفصلاً بعرض الشاشة يوحي بأنه إجراء آخر، وهو
-          *  وجهٌ ثالث لنفس السؤال: كيف أرى المحطات؟ وضمُّه إلى الصفّ يجعل
-          *  الحالة الفعّالة واحدةً ظاهرة بدل حالتين متجاورتين. */}
-        <div className="grid grid-cols-3 gap-2 rounded-xl bg-brand-50 p-1">
-          {(['list', 'map', 'near'] as const).map((v) => {
-            const active = v === 'near' ? !!origin : view === v && !origin;
-            return (
-              <button
-                key={v}
-                type="button"
-                onClick={() => {
-                  if (v === 'near') return locate();
-                  // العودة إلى قائمة أو خريطة تُنهي ترتيب القُرب، وإلا بقي
-                  // القسم الثالث مُضاءً بينما المستخدم يظنّ أنه خرج منه.
-                  setOrigin(null);
-                  setView(v);
-                }}
-                aria-pressed={active}
-                className={`flex min-h-[42px] items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-colors duration-200 ${
-                  active ? 'bg-white text-brand shadow-soft' : 'text-brand-700'
-                }`}
-              >
-                {v === 'list' ? <ListIcon className="h-4 w-4" /> : <MapPinIcon className="h-4 w-4" />}
-                {v === 'list' ? 'قائمة' : v === 'map' ? 'خريطة' : 'قريبة لي'}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* الحقل الثاني: النطاق. يقول ما يُعرض الآن لا ما سيفعله إن ضُغط. */}
-        {scopeLabel && (
-          <button
-            type="button"
-            onClick={() => setShowAll((v) => !v)}
-            className="btn-ghost mt-2 w-full text-brand"
-          >
-            <ListIcon className="h-4 w-4" />
-            {scopeLabel}
-          </button>
-        )}
 
         <div className="mt-4">
           {failed && stations === null && (
@@ -701,14 +638,50 @@ export default function HomePage() {
             </a>
           </section>
         )}
-        <p className="mt-8 text-center text-[11px] leading-relaxed text-slate-400">
-          فكرة وتنفيذ أحمد الرفاعي
-        </p>
+        <SiteFooter />
       </main>
+
+      {/* خمسة أزرار في متناول الإبهام، والشريط المتحرك تحتها. وما كان يحتلّ
+          أعلى الشاشة — العدّادان والتنقّل والبحث — صار هنا، فلا يكلّف الشاشة
+          الأولى بكسلاً واحداً ولا يُحذف. */}
+      <BottomDock
+        view={view}
+        near={!!origin}
+        stationCount={visible?.length ?? 0}
+        onList={() => {
+          setOrigin(null);
+          setView('list');
+        }}
+        onMap={() => {
+          setOrigin(null);
+          setView('map');
+        }}
+        onNear={locate}
+        onSearch={() => setSearchOpen(true)}
+        onAccount={() => router.push('/alerts')}
+        stations={stations ?? []}
+      />
+
+      <Sheet
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        title="بحث وفلاتر"
+        hint="البحث بالاسم يشمل الأنبار كلها — لا يحبسه اختيار المدينة."
+      >
+        {/* بلا شرائح مدن: المدينة تُختار من شريط النطاق وحده. ومصدرُ حقيقةٍ
+            ثانٍ لسؤالٍ واحد هو تعريف التناقض — وقد كلّفنا ما كلّفنا. */}
+        <SearchBar
+          query={query}
+          onQueryChange={setQuery}
+          filters={filters}
+          onFiltersChange={setFilters}
+          cityCounts={EMPTY_CITY_COUNTS}
+        />
+      </Sheet>
 
       {ready && !signedIn && <FirstRun />}
       <InstallPrompt />
-      <NewsTicker stations={stations ?? []} />
+      <SplashScreen ready={stations !== null || failed} />
     </>
   );
 }

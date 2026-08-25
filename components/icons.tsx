@@ -232,3 +232,28 @@ export const AndroidIcon = ({ className = 'h-5 w-5' }: IconProps) => (
     <path d="M9 11h.01M15 11h.01" />
   </svg>
 );
+
+// سهمٌ لأسفل: شريط النطاق يقول إنه يُفتح، ولا شيء غيره في الملف يقولها.
+export const ChevronDownIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);
+
+// مركزُ تصويب: «أقرب محطة إليّ» في الشريط السفلي. ودبّوس الخريطة لا يصلح
+// له — الشريط يحمل الاثنين متجاورين، فيصيران زرّين بأيقونةٍ واحدة.
+export const CrosshairIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+    <circle cx="12" cy="12" r="6" />
+    <circle cx="12" cy="12" r="2" fill="currentColor" />
+  </svg>
+);
+
+// خريطةٌ مطويّة: أوضح من دبّوسٍ ثانٍ بجوار «أقرب محطة».
+export const MapIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z" />
+    <path d="M9 3v15M15 6v15" />
+  </svg>
+);

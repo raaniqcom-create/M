@@ -26,11 +26,14 @@ export function RouteButton({
   lng,
   stationId,
   stationName,
+  compact = false,
 }: {
   lat: number;
   lng: number;
   stationId?: string;
   stationName?: string;
+  /** زرّ أيقونةٍ مربّع داخل بطاقة القائمة، بدل زرٍّ بعرض البطاقة. */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [first, setFirst] = useState<App>('waze');
@@ -55,9 +58,18 @@ export function RouteButton({
 
   return (
     <div ref={box} className="relative">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="btn-ghost w-full">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="الطريق إلى المحطة"
+        className={
+          compact
+            ? 'grid h-8 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-brand-700 active:bg-brand-50'
+            : 'btn-ghost w-full'
+        }
+      >
         <MapPinIcon className="h-4 w-4" />
-        الطريق
+        {!compact && 'الطريق'}
       </button>
 
       {open && (

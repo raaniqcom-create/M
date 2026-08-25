@@ -27,3 +27,7 @@ backups/
 # مخرجات التوليد: يُعاد إنتاجها بـscripts/render-video.mjs
 # ولا تُخزَّن في المستودع — عشرون ميغابايت لكل نسخة، وتتغيّر مع كل تعديل
 docs/promo/*.mp4
+
+# المصدر الأصلي للشعارين — النسخ المضغوطة في public/anbar-*.webp
+/ANBAR *.png
+/foteranbar.png

@@ -11,10 +11,18 @@ export function ProductsDashboard({
   onPick,
   announced = [],
   onPickAnnounced,
+  scopeLabel,
 }: {
   stations: StationWithStatus[];
   filter: FuelProduct | null;
   onPick: (p: FuelProduct | null) => void;
+  /** «محطات الرمادي» أو «كل الأنبار» — الرقم يحمل نطاقه في عنوانه.
+   *
+   *  كان العنوان «المنتجات المتوفرة الآن» والعدد يُحسب من الأنبار كلها بينما
+   *  القائمة تحته تعرض مدن المستخدم. اليوم الفارق ضعفان فلا يُلاحَظ؛ وعند 119
+   *  محطة يقرأ من في القائم «47 بانزين محسن» ثم يرى بطاقتين — وليس على الشاشة
+   *  كلمةٌ واحدة تشرح لماذا. فصار الرقم والقائمة من نطاقٍ واحد، ومكتوبٍ. */
+  scopeLabel?: string;
   /** أخبار اليوم عن محطات لم تنضمّ — تُعدّ منفصلةً ولا تُخلط. */
   announced?: OpenAnnouncement[];
   onPickAnnounced?: () => void;
@@ -41,7 +49,9 @@ export function ProductsDashboard({
   return (
     <section className="card p-4" aria-label="المنتجات المتوفرة الآن">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold text-brand-900">المنتجات المتوفرة الآن</h2>
+        <h2 className="text-sm font-bold text-brand-900">
+          {scopeLabel ? `المتوفر الآن في ${scopeLabel}` : 'المنتجات المتوفرة الآن'}
+        </h2>
         <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-pulse-ring rounded-full bg-brand-400" />
@@ -102,11 +112,11 @@ export function ProductsDashboard({
       </div>
       {[...counts.values()].length === 0 && announcedCounts.size === 0 ? (
         <p className="py-4 text-center text-sm text-slate-400">
-          لا يتوفر أي منتج في المحطات المفتوحة حالياً
+          {`لا يتوفر أي منتج في ${scopeLabel ?? 'المحطات'} المفتوحة الآن`}
         </p>
       ) : (
         <p className="mt-2 text-center text-[11px] text-slate-400">
-          العدد يمثل المحطات المفتوحة الآن التي يتوفر فيها المنتج — اضغط للتصفية
+          {`العدد يمثل ${scopeLabel ?? 'المحطات'} المفتوحة الآن التي يتوفر فيها المنتج — اضغط للتصفية`}
         </p>
       )}
     </section>

@@ -102,7 +102,18 @@ export function InstallPrompt() {
   const storeName = platform === 'ios' ? 'App Store' : 'Google Play';
 
   return (
-    <div className="fixed inset-x-0 bottom-10 z-50 px-4 pb-2">
+    // فوق الشريط السفلي لا عليه.
+    //
+    // كانت bottom-10 مقيسةً على شريط الأخبار وحده (34 بكسل). ثم صار أسفل
+    // الشاشة شريطاً كاملاً — خمسة أزرار وشريط أخبار تحتها، 94 بكسلاً —
+    // فصارت البطاقة تجلس فوق صفّ الأزرار كلّه بـz-50 فوق z-40. أي أن
+    // المستخدم لا يستطيع التنقّل ما دامت ظاهرة، ولا يعرف لماذا.
+    //
+    // والقيمة تُحسب من ارتفاع الشريط ومنطقة الهاتف الآمنة معاً، لا تُقدَّر.
+    <div
+      className="fixed inset-x-0 z-50 px-4 pb-2"
+      style={{ bottom: 'calc(6.5rem + env(safe-area-inset-bottom))' }}
+    >
       <div className="mx-auto max-w-md rounded-2xl border border-brand-100 bg-white p-4 shadow-lift">
         <div className="flex items-start gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}

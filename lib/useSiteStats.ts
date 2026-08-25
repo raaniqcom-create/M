@@ -39,8 +39,15 @@ export function useSiteStats() {
 
     // The count climbing while the page is open is the point — a visitor
     // watching it move sees a live platform, not a static badge.
+    // اسمٌ فريد لكل تركيب، كما تفعل قناة الحضور تحتها.
+    //
+    // supabase.channel('visit-counter') يُعيد **النسخة نفسها** لكل من يناديه
+    // بالاسم نفسه. فإن رُكّب الخطّاف مرّتين — وضع React الصارم يفعلها في كل
+    // تطوير، وتركيبان في شجرة واحدة يفعلانها في الإنتاج — نُودي on() على قناة
+    // مشتركة سلفاً: «cannot add postgres_changes callbacks after subscribe()».
+    // ويُرمى الخطأ فلا يُسجَّل المستمع، ويبقى الرقم ساكناً بلا عطلٍ ظاهر.
     const counter = supabase
-      .channel('visit-counter')
+      .channel(`visit-counter:${crypto.randomUUID()}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'site_stats' },

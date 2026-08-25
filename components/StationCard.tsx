@@ -1,6 +1,5 @@
 import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, expectedLabel, isOffered, isStaleOffer, trafficSource } from '@/lib/products';
-import { StationActions } from './StationActions';
-import { isFresh, isOpenNow, PERIOD_LABELS, statusNote } from '@/lib/hours';
+import { formatTime, isFresh, isOpenNow, PERIOD_LABELS, statusNote } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
 import { RouteButton } from './RouteButton';
@@ -19,6 +18,10 @@ import { PhoneIcon } from './icons';
  *
  *  Now the name owns its line. What a person came to find — the fuel — sits
  *  directly under it, and everything about opening hours is said once. */
+function newestIsStale(newest: string | null): boolean {
+  return !!newest && !isFresh(newest);
+}
+
 export function StationCard({
   station,
   isFavorite,
@@ -62,6 +65,8 @@ export function StationCard({
   // تحديث قديم». وصفحة المحطة كانت تعرضه أخضرَ كأنه اليوم — فالسطحان يقولان
   // شيئين مختلفين عن المحطة نفسها. والصواب بينهما: يُعرض ما أُعلن مع عمره
   // صريحاً، فلا يُخدع القارئ ولا يُحرَم خبراً قد ينفعه.
+  // هل ما يُعرض كلّه خبرٌ فات عمره؟ يُقال مرّةً في عنوان الصفّ لا على كل شارة.
+  const isStale = newestIsStale(newest);
   const shown = PRODUCT_ORDER.filter((product) => {
     const row = byProduct.get(product);
     if (!row) return false;
@@ -69,153 +74,143 @@ export function StationCard({
   });
 
   return (
-    <article className={`card p-4 ${tinted ? 'border-brand-100 bg-brand-50/60' : ''}`}>
-      {/* The name gets the whole line. Nothing shares it but the star, which
-          is fixed-width — so no station name is truncated to make room for a
-          label the reader did not ask for. */}
-      <header className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-base font-bold leading-snug">{station.name}</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            {station.city} — {station.address}
-          </p>
-        </div>
-        {onToggleFavorite && (
-          <button
-            type="button"
-            onClick={onToggleFavorite}
-            aria-pressed={isFavorite}
-            aria-label={isFavorite ? 'إلغاء متابعة هذه المحطة' : 'تابع هذه المحطة ليصلك إشعارها'}
-            title={isFavorite ? 'تتابعها — يصلك إشعارها' : 'تابعها ليصلك إشعار توفّر الوقود'}
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition-colors duration-200 ${
-              isFavorite
-                ? 'border-brand bg-brand-50 text-brand'
-                : 'border-slate-200 bg-white text-slate-400'
-            }`}
-          >
-            <StarIcon filled={isFavorite} />
-          </button>
+    <article
+      className={`card grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 p-3 ${
+        tinted ? 'border-brand-100 bg-brand-50/60' : ''
+      }`}
+    >
+      {/* أربعة صفوف وعمودان: ما يُقرأ يميناً، وما يُضغط يساراً — وكلٌّ في
+          سطره. كانت البطاقة تكدّس ستّ كتل بعرضها الكامل، فطالت وتكرّرت
+          فيها الحالة مرّتين. */}
+
+      {/* ١ · الاسم | النجمة */}
+      <h2 className="truncate text-[15px] font-bold leading-snug">{station.name}</h2>
+      {onToggleFavorite ? (
+        <button
+          type="button"
+          onClick={onToggleFavorite}
+          aria-pressed={isFavorite}
+          aria-label={isFavorite ? 'إلغاء متابعة هذه المحطة' : 'تابع هذه المحطة ليصلك إشعارها'}
+          title={isFavorite ? 'تتابعها — يصلك إشعارها' : 'تابعها ليصلك إشعار توفّر الوقود'}
+          className={`grid h-8 w-9 place-items-center rounded-lg ${
+            isFavorite ? 'text-traffic-yellow' : 'text-slate-300'
+          }`}
+        >
+          <StarIcon filled={isFavorite} />
+        </button>
+      ) : (
+        <span />
+      )}
+
+      {/* ٢ · العنوان ومعه المسافة | الطريق */}
+      <p className="truncate text-[11px] text-slate-500">
+        {station.city} — {station.address}
+        {station.distanceKm !== undefined && (
+          <span className="text-slate-400"> · {station.distanceKm.toFixed(1)} كم</span>
         )}
-      </header>
-
-      {/* The answer people opened the app for. Only what they can act on: in
-          stock, or announced as arriving. A wall of struck-through "not
-          available" chips is noise. */}
-      {shown.length > 0 && (
-        <ul className="mt-3 flex flex-wrap items-center gap-1.5">
-          {shown.map((product) => {
-            const row = byProduct.get(product)!;
-            const inStock = isOffered(station, row);
-            const stale = isStaleOffer(row);
-            const lane = station.productTraffic?.find((t) => t.product === product);
-            // Lane traffic reads majority_level straight off the view and so
-            // never passed through the closed-station guard in
-            // activeTrafficLevel. Closed means no dot, same rule.
-            const laneLevel = open ? lane?.majority_level : null;
-
-            return (
-              <li
-                key={product}
-                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  inStock
-                    ? 'bg-brand-100 text-brand'
-                    : stale
-                      ? 'bg-slate-100 text-slate-500'
-                      : 'bg-amber-50 text-amber-700'
-                }`}
-              >
-                {laneLevel && (
-                  <span
-                    title={`الازدحام: ${TRAFFIC_LABELS[laneLevel]}`}
-                    className={`h-2 w-2 shrink-0 rounded-full ${TRAFFIC_COLORS[laneLevel].dot}`}
-                  />
-                )}
-                {PRODUCT_LABELS[product]}
-                {stale && !row.expected_at && (
-                  <span className="mr-1 font-normal">· {agoLabel(row.updated_at)}</span>
-                )}
-                {!inStock && row.expected_at && (
-                  <span className="mr-1 font-bold">
-                    · {expectedLabel(row.expected_at)}
-                    {row.expected_period ? ` ${PERIOD_LABELS[row.expected_period]}` : ''}
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {/* Said once، وفرعان لا أربعة.
-       *
-       *  كانت ثمّة حالة «آخر تحديث قديم» بصيغتين حسب وجود الرقم — وقد صارت
-       *  الشارات نفسها تحمل عمرها («بانزين عادي · قبل ٣ أيام»)، فتكرارها هنا
-       *  حشوٌ يقول ما قيل. ولم يبقَ إلا حالتان صادقتان: لم تنشر قطّ، أو نشرت
-       *  ولا شيء لديها. */}
-      {open && !shown.length && (
-        <p className="mt-3 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-medium text-slate-500">
-          {!newest
-            ? 'لم تُحدَّث حالة الوقود بعد'
-            : isFresh(newest)
-              ? 'لا يوجد وقود متوفر الآن'
-              : `لا وقود معلن · آخر تحديث ${agoLabel(newest)}`}
-        </p>
-      )}
-
-      {(level || station.distanceKm !== undefined) && (
-        <div className="mt-2 flex items-center gap-2">
-          {level && (
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${TRAFFIC_COLORS[level].bg} ${TRAFFIC_COLORS[level].text}`}
-            >
-              <span className={`h-2 w-2 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
-              {TRAFFIC_LABELS[level]}
-              {trafficSource(station, station.traffic) === 'station'
-                ? ' · من المحطة'
-                : agoLabel(station.traffic?.last_vote_at) &&
-                  ` · ${agoLabel(station.traffic?.last_vote_at)}`}
-            </span>
-          )}
-          {station.distanceKm !== undefined && (
-            <span className="ms-auto text-xs text-slate-400">
-              {station.distanceKm.toFixed(1)} كم
-            </span>
-          )}
-        </div>
-      )}
-
-      <p
-        className={`mt-3 rounded-lg px-2.5 py-1.5 text-[11px] font-medium ${
-          status.tone === 'closed'
-            ? 'bg-slate-100 text-slate-600'
-            : status.tone === 'soon'
-              ? 'bg-amber-50 font-bold text-amber-800'
-              : 'bg-brand-50 text-brand-900'
-        }`}
-      >
-        {status.text}
       </p>
-
-      <p className="sr-only">
-        المتوفر:{' '}
-        {PRODUCT_ORDER.filter((p) => byProduct.get(p)?.is_available)
-          .map((p) => PRODUCT_LABELS[p])
-          .join('، ') || 'لا شيء'}
-      </p>
-
-      <StationActions
-        phone={station.phone}
-        hours={{
-          is_24h: station.is_24h,
-          opens_at: station.opens_at,
-          closes_at: station.closes_at,
-          temp_closed: station.temp_closed,
-        }}
+      <RouteButton
+        compact
         lat={station.lat}
         lng={station.lng}
         stationId={station.id}
         stationName={station.name}
       />
+
+      {/* ٣ · عنوان المنتجات ومعه الازدحام | الاتصال.
+          والاتصال يخضع للدوام: محطةٌ مغلقة لا يُعرض رقمها زرّاً يرنّ في
+          بيتٍ نائم — يبقى مكانه ليثبت الصفّ، ويقول عنوانُه متى يعمل. */}
+      <p className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
+        <span>المنتجات{isStale ? ' — آخر إعلان قديم' : ''} :</span>
+        {level && (
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-1.5 py-px text-[9.5px] font-bold ${TRAFFIC_COLORS[level].bg} ${TRAFFIC_COLORS[level].text}`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
+            {TRAFFIC_LABELS[level]}
+          </span>
+        )}
+      </p>
+      {station.phone ? (
+        open ? (
+          <a
+            href={`tel:${station.phone}`}
+            aria-label="اتصال بالمحطة"
+            className="grid h-8 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-brand-700 active:bg-brand-50"
+          >
+            <PhoneIcon className="h-4 w-4" />
+          </a>
+        ) : (
+          <span
+            title={`الاتصال متاح عند الفتح ${formatTime(station.opens_at)}`}
+            className="grid h-8 w-9 place-items-center rounded-lg border border-slate-100 text-slate-300"
+          >
+            <PhoneIcon className="h-4 w-4" />
+          </span>
+        )
+      ) : (
+        <span />
+      )}
+
+      {/* ٤ · المتوفّر | الحالة وتحتها الدوام */}
+      <ul className="flex flex-wrap items-center gap-1">
+        {shown.length === 0 ? (
+          <li className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
+            {!newest ? 'لم تُحدَّث بعد' : 'لا يوجد الآن'}
+          </li>
+        ) : (
+          shown.map((product) => {
+            const row = byProduct.get(product)!;
+            const inStock = isOffered(station, row);
+            const stale = isStaleOffer(row);
+            return (
+              <li
+                key={product}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  inStock
+                    ? 'bg-brand-100 text-brand-900'
+                    : stale
+                      ? 'bg-slate-100 text-slate-500'
+                      : 'bg-amber-50 text-amber-700'
+                }`}
+              >
+                {PRODUCT_LABELS[product]}
+                {stale && !row.expected_at && (
+                  <span className="font-normal"> · {agoLabel(row.updated_at)}</span>
+                )}
+                {!inStock && row.expected_at && (
+                  <span> · {expectedLabel(row.expected_at)}
+                    {row.expected_period ? ` ${PERIOD_LABELS[row.expected_period]}` : ''}
+                  </span>
+                )}
+              </li>
+            );
+          })
+        )}
+      </ul>
+      <div className="flex min-w-[74px] flex-col items-stretch gap-0.5">
+        <span
+          className={`rounded-full px-2 py-0.5 text-center text-[9.5px] font-extrabold ${
+            status.tone === 'closed'
+              ? 'bg-slate-100 text-slate-600'
+              : status.tone === 'soon'
+                ? 'bg-amber-50 text-amber-800'
+                : 'bg-brand-100 text-brand-900'
+          }`}
+        >
+          {open ? 'مفتوحة' : station.temp_closed ? 'مغلقة مؤقتاً' : 'مغلقة'}
+        </span>
+        <span dir="ltr" className="text-center text-[9px] tabular-nums text-slate-400">
+          {station.is_24h ? '24h' : `${formatTime(station.opens_at)} – ${formatTime(station.closes_at)}`}
+        </span>
+      </div>
+
+      <p className="sr-only">
+        {status.text} · المتوفر:{' '}
+        {PRODUCT_ORDER.filter((p) => byProduct.get(p)?.is_available)
+          .map((p) => PRODUCT_LABELS[p])
+          .join('، ') || 'لا شيء'}
+      </p>
     </article>
   );
 }
