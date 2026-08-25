@@ -117,13 +117,37 @@ export function statusNote(station: {
   const open =
     closes > opens ? now >= opens && now < closes : now >= opens || now < closes;
 
-  if (!open) return { text: `مغلقة · تفتح ${formatTime(station.opens_at)}`, tone: 'closed' };
+  if (!open) return { text: `مغلقة · تفتح الساعة ${formatTime(station.opens_at)}`, tone: 'closed' };
 
   // Wrap-aware: a station closing at 01:00 is 90 minutes away at 23:30, not
   // minus 1350.
   const left = (closes - now + 1440) % 1440;
   if (left <= CLOSING_SOON_MINUTES) return { text: `تغلق بعد ${minutesLabel(left)}`, tone: 'soon' };
-  return { text: `مفتوحة · تغلق ${formatTime(station.closes_at)}`, tone: 'open' };
+  return { text: `مفتوحة · تغلق الساعة ${formatTime(station.closes_at)}`, tone: 'open' };
+}
+
+/** الحالة مقسومةً: شارةٌ تُلمح، وجملةٌ تُقرأ.
+ *
+ *  البطاقة كانت تعرض الشارة ومعها المدى خاماً — «مغلقة» ثم «6:00 صباحاً –
+ *  9:00 مساءً». والمدى صحيحٌ ولا يُجيب: من يقف أمام محطةٍ مغلقة يسأل «متى
+ *  تفتح؟» لا «ما دوامها؟»، ومن يقف أمام مفتوحةٍ يسأل «كم بقي؟».
+ *
+ *  فالجملة تقول الجواب المباشر وحده، وتُشتقّ من statusNote نفسها — فلا
+ *  تنحرف عنها صفحةُ المحطة بعد شهر. */
+export function openingLine(station: {
+  is_24h: boolean;
+  opens_at: string;
+  closes_at: string;
+  temp_closed?: boolean;
+}): { badge: string; detail: string; tone: 'open' | 'soon' | 'closed' } {
+  const s = statusNote(station);
+  if (station.temp_closed) return { badge: 'مغلقة مؤقتاً', detail: 'حتى تُعلن المحطة عودتها', tone: 'closed' };
+  if (station.is_24h) return { badge: 'مفتوحة', detail: 'على مدار 24 ساعة', tone: 'open' };
+  // «تغلق بعد ٢٥ دقيقة» جملةٌ كاملة بلا شارة تسبقها — وهي الحالة التي
+  // تُغيّر قراراً، فتُعرض كما هي.
+  if (s.tone === 'soon') return { badge: 'مفتوحة', detail: s.text, tone: 'soon' };
+  const [badge, ...rest] = s.text.split(' · ');
+  return { badge, detail: rest.join(' · '), tone: s.tone };
 }
 
 /**

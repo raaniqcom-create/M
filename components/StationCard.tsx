@@ -1,5 +1,5 @@
 import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, expectedLabel, isOffered, isStaleOffer, trafficSource } from '@/lib/products';
-import { formatTime, isFresh, isOpenNow, PERIOD_LABELS, statusNote } from '@/lib/hours';
+import { formatTime, isFresh, isOpenNow, openingLine, PERIOD_LABELS, statusNote } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
 import { RouteButton } from './RouteButton';
@@ -43,6 +43,7 @@ export function StationCard({
   // driving to — and «تغلق بعد 20 دقيقة» is the one fact that changes a
   // decision at the end of the day.
   const status = statusNote(station);
+  const when = openingLine(station);
 
   // Three states the old card collapsed into one sentence, and got wrong in
   // both directions: it printed «لم تُحدَّث حالة الوقود بعد» for a *closed*
@@ -86,14 +87,14 @@ export function StationCard({
         <h2 className="truncate text-[15px] font-bold leading-snug">{station.name}</h2>
         <span
           className={`shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-extrabold ${
-            status.tone === 'closed'
+            when.tone === 'closed'
               ? 'bg-slate-100 text-slate-600'
-              : status.tone === 'soon'
-                ? 'bg-amber-50 text-amber-800'
+              : when.tone === 'soon'
+                ? 'bg-amber-100 text-amber-900'
                 : 'bg-brand-100 text-brand-900'
           }`}
         >
-          {open ? 'مفتوحة' : station.temp_closed ? 'مغلقة مؤقتاً' : 'مغلقة'}
+          {when.badge}
         </span>
 
         <p className="truncate text-[11px] text-slate-500">
@@ -102,8 +103,18 @@ export function StationCard({
             <span className="text-slate-400"> · {station.distanceKm.toFixed(1)} كم</span>
           )}
         </p>
-        <span dir="ltr" className="shrink-0 text-[9.5px] tabular-nums text-slate-400">
-          {station.is_24h ? '24h' : `${formatTime(station.opens_at)} – ${formatTime(station.closes_at)}`}
+        {/* الجواب المباشر، بخطٍّ يُقرأ: «تفتح الساعة 6:00 صباحاً» أو
+            «تغلق الساعة 9:00 مساءً» أو «تغلق بعد 25 دقيقة» حين تقترب. */}
+        <span
+          className={`shrink-0 text-[11px] font-bold ${
+            when.tone === 'soon'
+              ? 'text-amber-800'
+              : when.tone === 'closed'
+                ? 'text-slate-500'
+                : 'text-brand-700'
+          }`}
+        >
+          {when.detail}
         </span>
       </div>
 
