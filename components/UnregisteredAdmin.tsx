@@ -76,6 +76,22 @@ export function UnregisteredAdmin() {
     load();
   }
 
+  /** إلغاءٌ نهائي — لا كتمٌ لنصف ساعة.
+   *
+   *  «نفد» يكتب قراراً عمرُه ثلاثون دقيقة ثم يعود الحكم للتصويت. وهذا صوابٌ
+   *  لادّعاءٍ إيجابي، وخطأٌ لإلغاء: من ضغط أراد أن يذهب الخبر. */
+  async function retire(id: string, name: string) {
+    if (!confirm(`إلغاء خبر «${name}» نهائياً؟
+
+لن يعود بتصويتٍ ولا بمرور وقت.`)) return;
+    setBusy(id);
+    const { error } = await supabase.rpc('retire_announcement', { p_id: id });
+    setBusy(null);
+    if (error) return setErr(`تعذّر الإلغاء: ${error.message}`);
+    setErr(null);
+    load();
+  }
+
   async function saveClose(hm: string) {
     setSavingHm(true);
     const { error } = await supabase.rpc('set_unregistered_close', { p_hm: hm });
@@ -207,16 +223,32 @@ export function UnregisteredAdmin() {
                   للناس
                 </button>
               </div>
+
+              {/* والإلغاء في صفٍّ وحده: زرٌّ يُنهي الخبر لا يُصفّ مع زرَّين
+                  يُبدّلان رأياً. ومن يضغط الثلاثة متجاورةً يظنّها درجات. */}
+              <button
+                type="button"
+                disabled={busy === r.id}
+                onClick={() => retire(r.id, r.station_name)}
+                className="mt-2 flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-xl bg-traffic-red text-xs font-bold text-white disabled:opacity-60"
+              >
+                <XIcon className="h-3.5 w-3.5" />
+                ألغِ الخبر نهائياً
+              </button>
             </li>
           );
         })}
       </ul>
 
       <p className="mt-3 text-[11px] leading-relaxed text-slate-400">
-        «للناس» يرفع قرارك فوراً ويعيد الحكم إلى التصويت. وبلا قرار منك يختفي الخبر في
-        ثلاث حالات: أن يسبق «نفد» بأربعة أصوات صافية في آخر نصف ساعة، أو أن يسكن ساعتين
-        بلا تصويت، أو أن يحلّ وقت الإغلاق أعلاه. وتأكيدك يُعيده ويُنعش ساعته — إلا بعد وقت
-        الإغلاق، فهو مطلق.
+        <b className="text-slate-600">«متوفر» و«نفد» قراران مؤقّتان — نصف ساعة ثم يعود
+        الحكم إلى التصويت.</b> فإن أردتَ أن يذهب الخبر ولا يعود، فـ«ألغِ الخبر نهائياً»
+        هو الزرّ — لا «نفد».
+        <br />
+        <br />
+        و«للناس» يرفع قرارك فوراً. وبلا قرار منك يختفي الخبر في ثلاث حالات: أن يسبق «نفد»
+        بأربعة أصوات صافية في آخر نصف ساعة، أو أن يسكن ساعتين بلا تصويت، أو أن يحلّ وقت
+        الإغلاق أعلاه. وتأكيدك يُعيده ويُنعش ساعته — إلا بعد وقت الإغلاق، فهو مطلق.
       </p>
     </section>
   );
