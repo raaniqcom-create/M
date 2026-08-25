@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>محاكاة الواجهة الجديدة — المحطة التقنية</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   محاكاة بصرية فقط — لا اتصال بقاعدة بيانات ولا بالتطبيق.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root{
+  /* الأخضر بثلاثة أدوار لا بدرجةٍ واحدة — وهذا ما أصلح الوضع الليلي:
+     brand للتعبئة، و brand-wash للسطح الفاتح، و brand-ink للنصّ فوقه.
+     كانت النصوص تقرأ --brand-700 فوق --brand-50، فلمّا قُلب الثاني في
+     الليل ولم يُقلب الأول صار أخضرُ داكن على أخضرَ داكن — لا يُقرأ. */
+  --brand:#16a34a; --brand-strong:#15803d; --brand-deep:#166534;
+  --brand-wash:#f0fdf4; --brand-wash-2:#dcfce7; --brand-edge:#bbf7d0; --brand-ink:#166534;
+  --red:#dc2626; --red-wash:#fef2f2; --red-ink:#b91c1c;
+  --amber:#d97706; --amber-wash:#fffbeb;
+  --ink:#0f172a; --ink-2:#334155; --muted:#64748b; --faint:#94a3b8;
+  --line:#e2e8f0; --line-2:#f1f5f9; --surface:#ffffff; --ground:#f8fafc;
+  --dock:#ffffff; --tick-bg:#14532d; --tick-ink:#ffffff;
+  --shadow-soft:0 1px 2px rgba(20,83,45,.05),0 4px 14px rgba(20,83,45,.07);
+  --bar-h:120px;
+}
+body.dark{
+  --brand:#22c55e; --brand-strong:#16a34a; --brand-deep:#14532d;
+  --brand-wash:#0d2818; --brand-wash-2:#14532d; --brand-edge:#1c5334; --brand-ink:#86efac;
+  --red:#f87171; --red-wash:#2a1212; --red-ink:#fca5a5;
+  --amber:#fbbf24; --amber-wash:#291d0b;
+  --ink:#e6edf3; --ink-2:#c2cedb; --muted:#8ea0b2; --faint:#64748b;
+  --line:#1e293b; --line-2:#151f30; --surface:#0f172a; --ground:#020617;
+  --dock:#0b1220; --tick-bg:#04150c; --tick-ink:#dcfce7;
+  --shadow-soft:0 1px 2px rgba(0,0,0,.5),0 4px 14px rgba(0,0,0,.4);
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:Tajawal,system-ui,sans-serif;
+  background:#0b1220; color:var(--ink);
+  display:flex; align-items:flex-start; justify-content:center;
+  min-height:100vh; padding:24px 12px 60px; gap:20px; flex-wrap:wrap;
+}
+
+.phone{
+  width:390px; max-width:100%; height:844px; max-height:calc(100vh - 60px);
+  background:var(--ground); border-radius:38px; overflow:hidden;
+  position:relative; display:flex; flex-direction:column;
+  box-shadow:0 0 0 10px #1e293b,0 0 0 12px #334155,0 30px 70px rgba(0,0,0,.6);
+}
+@media(max-width:860px){
+  body{padding:0;display:block;background:var(--ground)}
+  .phone{width:100%;height:100vh;max-height:none;border-radius:0;box-shadow:none}
+  .sidepanel{position:static;width:auto;margin:0;border-radius:0}
+}
+
+/* ═══ شاشة التحميل — طريقٌ يتحرّك ═══════════════════════════════ */
+.splash{
+  position:absolute;inset:0;z-index:90;background:var(--surface);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
+  padding:28px;transition:opacity .5s ease,visibility .5s;
+}
+.splash.gone{opacity:0;visibility:hidden}
+.splash img{width:min(74%,250px);height:auto;filter:drop-shadow(0 14px 30px rgba(20,83,45,.22))}
+.splash .credit{
+  margin-top:22px;font-size:12.5px;font-weight:700;color:var(--ink-2);
+  letter-spacing:.01em;text-align:center;
+}
+/* الطريق: خطٌّ داكن وعلاماتُ منتصفٍ تجري عليه، وسيّارةُ ضوءٍ تسبقها */
+.road{
+  margin-top:20px;width:min(78%,262px);height:16px;border-radius:9px;
+  background:var(--ink);position:relative;overflow:hidden;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.5);
+}
+body.dark .road{background:#111c2b}
+.road::before{
+  content:'';position:absolute;inset-inline:0;top:50%;height:2.5px;translate:0 -50%;
+  background:repeating-linear-gradient(to left,#f8fafc 0 16px,transparent 16px 34px);
+  animation:lanes 1.05s linear infinite;
+}
+.road::after{
+  content:'';position:absolute;top:0;bottom:0;width:44%;
+  background:linear-gradient(to left,transparent,rgba(34,197,94,.9),transparent);
+  animation:sweep 1.9s ease-in-out infinite;
+}
+@keyframes lanes{from{background-position:0 0}to{background-position:-34px 0}}
+@keyframes sweep{0%{inset-inline-start:-46%}100%{inset-inline-start:102%}}
+.splash .pct{margin-top:11px;font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums}
+@media(prefers-reduced-motion:reduce){.road::before,.road::after{animation:none}}
+
+/* ═══ الترويسة ═══════════════════════════════════════════════════ */
+.hdr{background:linear-gradient(to bottom,#166534,#16a34a);color:#fff;padding:14px 16px 12px;flex:none}
+.hdr-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.hdr-side{display:flex;align-items:center;gap:1px;min-width:76px}
+.hdr-side.end{justify-content:flex-end}
+.brandmark{display:flex;align-items:center;gap:7px;font-weight:800;font-size:17px;white-space:nowrap}
+.iconbtn{background:none;border:0;color:#fff;padding:6px;cursor:pointer;display:grid;place-items:center;border-radius:9px;position:relative}
+.iconbtn:hover{background:rgba(255,255,255,.14)}
+.iconbtn .dot{position:absolute;top:4px;inset-inline-end:4px;width:7px;height:7px;border-radius:50%;background:#fca5a5;border:1.5px solid #166534}
+
+.scopebar{
+  margin-top:11px;display:flex;align-items:center;gap:7px;width:100%;
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.26);
+  color:#fff;border-radius:13px;padding:9px 12px;cursor:pointer;font-family:inherit;font-size:14px;
+}
+.scopebar:hover{background:rgba(255,255,255,.24)}
+.scopebar .city{font-weight:800;white-space:nowrap}
+.scopebar .plus{
+  font-size:10.5px;font-weight:700;background:rgba(255,255,255,.26);
+  border-radius:20px;padding:1px 7px;white-space:nowrap;
+}
+.scopebar .cnt{font-size:12px;color:rgba(255,255,255,.84);font-weight:500;white-space:nowrap}
+.scopebar .sep{color:rgba(255,255,255,.45)}
+.scopebar .grow{flex:1}
+
+.attrib{
+  display:flex;gap:7px;align-items:flex-start;margin-top:9px;
+  background:rgba(255,255,255,.13);border-radius:10px;padding:7px 10px;
+  font-size:10.5px;line-height:1.65;color:rgba(255,255,255,.95);
+}
+
+/* ═══ المحتوى ════════════════════════════════════════════════════ */
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 14px calc(var(--bar-h) + 16px)}
+
+.promo{
+  position:relative;overflow:hidden;border-radius:15px;margin-bottom:11px;
+  background:linear-gradient(135deg,#14532d,#15803d);color:#fff;
+  min-height:74px;display:flex;align-items:center;padding:12px 14px;box-shadow:var(--shadow-soft);
+}
+.promo.hidden{display:none}
+.promo-slide{width:100%;animation:fadein .5s ease}
+.promo-slide .t{font-weight:800;font-size:14px;display:block}
+.promo-slide .s{font-size:11.5px;color:rgba(255,255,255,.86);display:block;margin-top:3px;line-height:1.6}
+.promo-dots{position:absolute;bottom:7px;inset-inline-start:14px;display:flex;gap:4px}
+.promo-dots i{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.4)}
+.promo-dots i.on{background:#fff;width:14px;border-radius:3px}
+.promo-tag{position:absolute;top:7px;inset-inline-start:12px;font-size:9px;background:rgba(0,0,0,.32);padding:2px 6px;border-radius:5px;color:rgba(255,255,255,.9)}
+@keyframes fadein{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+.panel{background:var(--surface);border-radius:15px;padding:13px;box-shadow:var(--shadow-soft);margin-bottom:11px}
+.panel h2{margin:0 0 2px;font-size:13px;font-weight:800;color:var(--ink);line-height:1.5}
+.panel .sub{margin:0 0 10px;font-size:10.5px;color:var(--faint)}
+.prods{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.prod{
+  background:var(--brand-wash);border:1px solid var(--brand-wash-2);border-radius:11px;
+  padding:8px 3px;text-align:center;cursor:pointer;transition:transform .12s;font-family:inherit;
+}
+.prod:hover{transform:translateY(-2px)}
+.prod.on{background:var(--brand);border-color:var(--brand)}
+.prod .n{font-size:17px;font-weight:800;line-height:1;color:var(--brand-ink)}
+.prod.on .n{color:#fff}
+.prod .l{font-size:9.5px;margin-top:4px;color:var(--ink-2);line-height:1.3;display:block}
+.prod.on .l{color:rgba(255,255,255,.96)}
+.nostock{margin:0;font-size:11.5px;line-height:1.85;color:var(--muted);text-align:center;padding:6px 2px}
+
+/* ═══ بطاقة المحطة ═══════════════════════════════════════════════ */
+.card{
+  background:var(--surface);border-radius:14px;padding:11px 12px;margin-bottom:8px;
+  box-shadow:var(--shadow-soft);display:grid;
+  grid-template-columns:1fr auto;column-gap:10px;row-gap:3px;align-items:center;
+}
+.card.tint{background:var(--brand-wash)}
+.c-name{font-size:13.5px;font-weight:800;color:var(--ink);line-height:1.4;
+        overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-addr{font-size:10.5px;color:var(--muted);line-height:1.45;
+        overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-plabel{font-size:10px;color:var(--faint);font-weight:500}
+.c-prods{display:flex;flex-wrap:wrap;gap:4px;margin-top:1px}
+.tag{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:20px;white-space:nowrap;
+     background:var(--brand-wash-2);color:var(--brand-ink)}
+.tag.stale{background:var(--line-2);color:var(--muted)}
+.c-act{display:grid;place-items:center;width:34px;height:28px;border-radius:9px;cursor:pointer;
+       border:1px solid var(--line);background:var(--surface);color:var(--brand-ink)}
+.c-act:hover{background:var(--brand-wash)}
+.c-act.star{border:0;background:none;color:var(--faint)}
+.c-act.star.on{color:var(--amber)}
+.c-act.off{color:var(--faint);opacity:.45;cursor:not-allowed}
+/* الحالة ومعها ساعتُها — الافتتاح والإغلاق في موضعٍ واحد لا سطرٍ زائد */
+.c-when{display:flex;flex-direction:column;align-items:stretch;gap:2px;min-width:78px}
+.c-state{font-size:9.5px;font-weight:800;padding:3px 8px;border-radius:20px;text-align:center;white-space:nowrap}
+.c-state.open{background:var(--brand-wash-2);color:var(--brand-ink)}
+.c-state.shut{background:var(--red-wash);color:var(--red-ink)}
+.c-hours{font-size:9px;color:var(--faint);text-align:center;letter-spacing:.02em;
+         font-variant-numeric:tabular-nums;direction:ltr}
+
+.more{
+  width:100%;padding:11px;margin-top:4px;border-radius:13px;cursor:pointer;font-family:inherit;
+  background:var(--surface);border:1px dashed var(--brand-edge);color:var(--brand-ink);
+  font-size:12.5px;font-weight:700;
+}
+.more:hover{background:var(--brand-wash)}
+
+.mapview{height:300px;border-radius:15px;background:var(--line-2);border:1px solid var(--line);
+  display:grid;place-items:center;text-align:center;color:var(--muted);font-size:12px;line-height:1.9;padding:20px}
+
+/* ═══ ذيل الموقع ═════════════════════════════════════════════════ */
+.sitefoot{margin-top:22px;padding-top:16px;border-top:1px solid var(--line);text-align:center}
+.sitefoot img{width:min(88%,268px);height:auto;opacity:.96}
+.sitefoot .credit{margin:9px 0 0;font-size:11.5px;font-weight:700;color:var(--muted);line-height:1.8}
+.sitefoot .tiny{margin:5px 0 0;font-size:9.5px;color:var(--faint)}
+
+/* ═══ الشريط السفلي ══════════════════════════════════════════════ */
+.dock{position:absolute;inset-inline:0;bottom:0;z-index:20;background:var(--dock);
+      border-top:1px solid var(--line);box-shadow:0 -4px 20px rgba(0,0,0,.07)}
+.tabs{display:grid;grid-template-columns:repeat(5,1fr)}
+.tab{background:none;border:0;padding:8px 2px 7px;cursor:pointer;font-family:inherit;
+     display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);position:relative}
+.tab .lbl{font-size:9px;font-weight:700;line-height:1.25;text-align:center}
+.tab.on{color:var(--brand)}
+.tab.on::before{content:'';position:absolute;top:0;inset-inline:22%;height:2.5px;background:var(--brand);border-radius:0 0 3px 3px}
+.tab .badge{position:absolute;top:4px;inset-inline-end:calc(50% - 21px);background:var(--brand);color:#fff;
+            font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:9px;line-height:1.5}
+.tab .live{width:5px;height:5px;border-radius:50%;background:var(--brand);display:inline-block;margin-inline-end:3px;animation:blink 1.6s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.swap{animation:swapin .45s ease}
+@keyframes swapin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+.ticker{background:var(--tick-bg);color:var(--tick-ink);overflow:hidden;height:26px;display:flex;align-items:center}
+.ticker-track{display:flex;gap:26px;white-space:nowrap;animation:slide 34s linear infinite;padding-inline-start:100%;font-size:10.5px}
+@keyframes slide{from{transform:translateX(0)}to{transform:translateX(200%)}}
+
+/* ═══ الأوراق ════════════════════════════════════════════════════ */
+.scrim{position:absolute;inset:0;background:rgba(2,6,23,.55);z-index:30;display:none}
+.scrim.on{display:block}
+.sheet{position:absolute;inset-inline:0;bottom:0;z-index:31;background:var(--surface);
+  border-radius:20px 20px 0 0;padding:16px 16px 22px;transform:translateY(101%);
+  transition:transform .28s cubic-bezier(.32,.72,0,1);max-height:82%;overflow-y:auto}
+.sheet.on{transform:none}
+.sheet h3{margin:0 0 3px;font-size:14px;font-weight:800;color:var(--ink)}
+.sheet .hint{margin:0 0 12px;font-size:11px;color:var(--faint);line-height:1.65}
+.grabber{width:36px;height:4px;background:var(--line);border-radius:3px;margin:0 auto 12px}
+
+.sect{margin:0 0 7px;font-size:10.5px;font-weight:800;color:var(--muted);letter-spacing:.03em}
+.citygrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.citybtn{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:10px;
+  cursor:pointer;font-family:inherit;text-align:start;display:flex;justify-content:space-between;
+  align-items:center;gap:6px;position:relative}
+.citybtn:hover{border-color:var(--brand-edge);background:var(--brand-wash)}
+.citybtn.on{background:var(--brand);border-color:var(--brand)}
+.citybtn .cn{font-size:12.5px;font-weight:700;color:var(--ink)}
+.citybtn.on .cn{color:#fff}
+.citybtn .cc{font-size:11px;font-weight:800;color:var(--brand-ink)}
+.citybtn.on .cc{color:rgba(255,255,255,.92)}
+.citybtn .home{position:absolute;top:-6px;inset-inline-start:8px;font-size:8.5px;font-weight:800;
+  background:var(--amber);color:#fff;border-radius:20px;padding:1px 6px}
+.citybtn.soon{opacity:.5;cursor:default}
+.citybtn.soon .cc{font-size:9.5px;color:var(--faint);font-weight:600}
+.citybtn.wide{grid-column:1/-1;justify-content:center;border-style:dashed}
+.tempnote{margin:11px 0 0;background:var(--amber-wash);border:1px solid var(--amber);
+  border-radius:10px;padding:8px 10px;font-size:10px;line-height:1.75;color:var(--ink-2)}
+.sheet-actions{display:grid;grid-template-columns:1fr auto;gap:7px;margin-top:11px}
+.btn-main{background:var(--brand);color:#fff;border:0;border-radius:12px;padding:12px;
+  font-family:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.btn-ghost{background:var(--surface);color:var(--muted);border:1px solid var(--line);
+  border-radius:12px;padding:12px 16px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer}
+
+.field{width:100%;height:42px;border:1px solid var(--line);border-radius:11px;padding:0 12px;
+  font-family:inherit;font-size:16px;background:var(--ground);color:var(--ink);margin-bottom:9px}
+.chiprow{display:flex;flex-wrap:wrap;gap:6px}
+.fchip{border:1px solid var(--line);background:var(--surface);border-radius:20px;padding:6px 12px;
+  font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;color:var(--ink-2)}
+.fchip.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.fchip .k{font-size:10px;opacity:.75;margin-inline-start:3px}
+.acct{display:flex;flex-direction:column;gap:7px}
+.acct a{display:flex;align-items:center;gap:9px;padding:11px;border:1px solid var(--line);
+  border-radius:11px;text-decoration:none;color:var(--ink);font-size:12.5px;font-weight:700}
+.livegrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.livebox{background:var(--brand-wash);border-radius:12px;padding:14px;text-align:center}
+.livebox .v{font-size:23px;font-weight:800;color:var(--brand-ink)}
+.livebox .k{font-size:11px;color:var(--muted);margin-top:3px}
+
+/* ═══ لوحة المحاكاة ══════════════════════════════════════════════ */
+.sidepanel{width:300px;background:#0f172a;border:1px solid #1e293b;border-radius:16px;padding:16px;color:#cbd5e1}
+.sidepanel h4{margin:0 0 3px;font-size:13px;font-weight:800;color:#f1f5f9}
+.sidepanel .note{font-size:10.5px;color:#64748b;line-height:1.75;margin:0 0 13px}
+.sw{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:9px 0;border-top:1px solid #1e293b}
+.sw span{font-size:11.5px;font-weight:600}
+.sw small{display:block;font-size:9.5px;color:#64748b;font-weight:400;margin-top:2px;line-height:1.5}
+.toggle{position:relative;width:40px;height:22px;background:#334155;border-radius:20px;border:0;cursor:pointer;flex:none}
+.toggle::after{content:'';position:absolute;top:3px;inset-inline-end:3px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .2s}
+.toggle.on{background:#22c55e}
+.toggle.on::after{transform:translateX(-18px)}
+.sidepanel .warn{margin-top:13px;padding:9px;background:#1e1b0b;border:1px solid #422006;
+  border-radius:9px;font-size:10px;color:#fbbf24;line-height:1.75}
+.replay{width:100%;margin-top:11px;padding:10px;border-radius:10px;border:1px solid #334155;
+  background:#1e293b;color:#e2e8f0;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer}
+
+/* معاينة الإشعارات الخارجية */
+.notifprev{margin-top:15px;border-top:1px solid #1e293b;padding-top:13px}
+.osnotif{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:9px 11px;
+  margin-bottom:6px;opacity:0;transform:translateY(-8px);animation:drop .45s ease forwards}
+.osnotif .top{display:flex;align-items:center;gap:6px;font-size:9px;color:#64748b;margin-bottom:3px}
+.osnotif .top b{color:#22c55e;font-weight:700}
+.osnotif .t{font-size:11.5px;font-weight:800;color:#f1f5f9;line-height:1.5}
+.osnotif .b{font-size:10px;color:#94a3b8;line-height:1.6;margin-top:2px}
+.osnotif .who{font-size:9px;color:#fbbf24;margin-top:4px}
+@keyframes drop{to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+
+<div class="phone" id="phone">
+
+  <!-- ═══ شاشة التحميل ═══ -->
+  <div class="splash" id="splash">
+    <img src="__SPLASH__" alt="صنع في الأنبار">
+    <p class="credit">فكرة وتنفيذ وبرمجة أحمد الرفاعي</p>
+    <div class="road" aria-hidden="true"></div>
+    <p class="pct" id="pct">جارٍ تحميل محطات الأنبار… 0%</p>
+  </div>
+
+  <!-- ═══ الترويسة ═══ -->
+  <header class="hdr">
+    <div class="hdr-top">
+      <!-- القائمة يميناً · الشعار وسطاً · الإشعارات والتنبيه يساراً -->
+      <div class="hdr-side">
+        <button class="iconbtn" aria-label="القائمة"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      </div>
+      <div class="brandmark">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v18"/><path d="M2 22h13"/><path d="M6 8h4"/><path d="M18 9v9a2 2 0 0 0 4 0V9l-3-3"/><path d="M15 6h4"/></svg>
+        المحطة التقنية
+      </div>
+      <div class="hdr-side end">
+        <button class="iconbtn" aria-label="الإشعارات"><span class="dot"></span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></button>
+        <button class="iconbtn" aria-label="التنبيه بالصوت"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
+      </div>
+    </div>
+
+    <button class="scopebar" onclick="openSheet('cities')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
+      <span class="city" id="scopeCity">الرمادي</span>
+      <span class="plus" id="scopePlus" style="display:none"></span>
+      <span class="sep">·</span>
+      <span class="cnt" id="scopeCount">8 محطات</span>
+      <span class="grow"></span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+
+    <div class="attrib">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex:none;margin-top:2px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+      <span><b>توفّر المنتجات وتحديثها لحظةً بلحظة من إدارة المحطة نفسها</b> — والمنصّة تنقل ما تُعلنه ومعه وقتُه.</span>
+    </div>
+  </header>
+
+  <!-- ═══ المحتوى ═══ -->
+  <div class="scroll" id="scroll">
+
+    <div class="promo" id="promo">
+      <span class="promo-tag">إعلان</span>
+      <div class="promo-slide" id="promoSlide"></div>
+      <div class="promo-dots" id="promoDots"></div>
+    </div>
+
+    <section class="panel" id="prodPanel">
+      <h2 id="prodTitle"></h2>
+      <p class="sub" id="prodSub">اضغط النوع لتصفية القائمة</p>
+      <div class="prods" id="prods"></div>
+      <p class="nostock" id="noStock" style="display:none"></p>
+    </section>
+
+    <div id="listView"></div>
+    <div id="mapView" style="display:none">
+      <div class="mapview">
+        <div>
+          <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg>
+          <p style="margin:10px 0 0"><b id="mapTitle">خريطة الرمادي</b><br>
+          دبابيس مدنك وحدها — لا خريطة على مستوى المحافظة،<br>لأنها تجعل 119 محطة لطخةً واحدة لا تُنقر.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ذيل الموقع -->
+    <footer class="sitefoot">
+      <img src="__FOOTER__" alt="صنع في الأنبار">
+      <p class="credit">فكرة وتنفيذ وبرمجة أحمد الرفاعي</p>
+      <p class="tiny">محاكاة بصرية · بيانات ثابتة داخل الملف · لا اتصال بالتطبيق</p>
+    </footer>
+  </div>
+
+  <!-- ═══ الشريط السفلي ═══ -->
+  <nav class="dock">
+    <div class="tabs">
+      <button class="tab" data-tab="search" onclick="openSheet('search')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span class="lbl">بحث وفلاتر</span>
+      </button>
+      <button class="tab" data-tab="map" onclick="setView('map')">
+        <span class="badge" id="mapBadge">8</span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg>
+        <span class="lbl">خريطة</span>
+      </button>
+      <button class="tab" data-tab="near" onclick="setView('near')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>
+        <span class="lbl">أقرب محطة</span>
+      </button>
+      <button class="tab" data-tab="live" onclick="openSheet('live')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>
+        <span class="lbl" id="liveLbl"></span>
+      </button>
+      <button class="tab" data-tab="me" onclick="openSheet('me')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+        <span class="lbl">حسابي</span>
+      </button>
+    </div>
+    <div class="ticker"><div class="ticker-track" id="tick"></div></div>
+  </nav>
+
+  <!-- ═══ الأوراق ═══ -->
+  <div class="scrim" id="scrim" onclick="closeSheet()"></div>
+
+  <div class="sheet" id="sheet-cities">
+    <div class="grabber"></div>
+    <h3>اختر مدينة — أو أكثر</h3>
+    <p class="hint">مدينتك الأساسية محفوظة. وما تضيفه هنا <b>للحظة الاختيار وحدها</b> — لا يُحفظ، وتعود المدينة الأساسية حين تفتح التطبيق مرّةً أخرى.</p>
+    <div class="citygrid" id="cityGrid"></div>
+    <p class="sect" style="margin-top:14px">وابحث بنوع المنتج</p>
+    <div class="chiprow" id="cityProds"></div>
+    <div class="tempnote" id="tempNote" style="display:none"></div>
+    <div class="sheet-actions">
+      <button class="btn-main" onclick="closeSheet()">اعرض المحطات</button>
+      <button class="btn-ghost" onclick="resetScope()">مدينتي فقط</button>
+    </div>
+  </div>
+
+  <div class="sheet" id="sheet-search">
+    <div class="grabber"></div>
+    <h3>بحث وفلاتر</h3>
+    <p class="hint">البحث بالاسم يشمل الأنبار كلها — لا يحبسه اختيار المدينة.</p>
+    <input class="field" placeholder="ابحث باسم المحطة" oninput="doSearch(this.value)">
+    <div class="chiprow" id="filterChips"></div>
+  </div>
+
+  <div class="sheet" id="sheet-live">
+    <div class="grabber"></div>
+    <h3>الآن على المنصّة</h3>
+    <p class="hint">أرقام المنصّة كلها في الأنبار — لا أرقام مدينتك.</p>
+    <div class="livegrid">
+      <div class="livebox"><div class="v">1,204</div><div class="k">متصل الآن</div></div>
+      <div class="livebox"><div class="v">21,072</div><div class="k">زائر</div></div>
+      <div class="livebox"><div class="v">3,429</div><div class="k">مشترك بالتنبيهات</div></div>
+      <div class="livebox"><div class="v">16</div><div class="k">مدينة</div></div>
+    </div>
+  </div>
+
+  <div class="sheet" id="sheet-me">
+    <div class="grabber"></div>
+    <h3>حسابي</h3>
+    <p class="hint">مدينتك الأساسية ومنتجاتك ومحطاتك المتابَعة.</p>
+    <div class="acct">
+      <a href="#" onclick="return false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg> تنبيهاتي — <b id="homeCityLbl">الرمادي</b> · بنازين محسن</a>
+      <a href="#" onclick="return false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 3 6.5 7 .9-5 4.9 1.2 7L12 18l-6.2 3.3L7 14.3l-5-4.9 7-.9z"/></svg> محطاتي المتابَعة (2)</a>
+      <a href="#" onclick="return false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 22V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v18"/><path d="M2 22h13"/></svg> صاحب محطة؟ سجّلها مجاناً</a>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══ لوحة المحاكاة ═══ -->
+<aside class="sidepanel">
+  <h4>لوحة المحاكاة</h4>
+  <p class="note">لك وحدك — ليست جزءاً من التطبيق.</p>
+
+  <div class="sw"><span>الشريط الترويجي<small>المفتاح نفسه في لوحة التحكم</small></span>
+    <button class="toggle on" id="tPromo" onclick="tog('promo')"></button></div>
+  <div class="sw"><span>عدد المحطات: 119<small>الحال المتوقّع بعد المئة</small></span>
+    <button class="toggle" id="tScale" onclick="tog('scale')"></button></div>
+  <div class="sw"><span>الوضع الليلي<small>أُصلح: الأخضر بثلاثة أدوار</small></span>
+    <button class="toggle" id="tDark" onclick="tog('dark')"></button></div>
+  <div class="sw"><span>الشريط المتحرك<small>أسفل الأيقونات</small></span>
+    <button class="toggle on" id="tTick" onclick="tog('tick')"></button></div>
+
+  <button class="replay" onclick="playSplash()">▸ أعد شاشة التحميل</button>
+
+  <div class="notifprev">
+    <h4>الإشعارات الخارجية</h4>
+    <p class="note">متتاليةً لا متراكمة — ولكل مدينةٍ إشعارُها، يصل مشتركيها وحدهم.</p>
+    <div id="osStack"></div>
+    <button class="replay" onclick="playNotifs()">▸ أعد العرض</button>
+  </div>
+
+  <p class="warn">⚠ لا شيء هنا يمسّ التطبيق أو قاعدة البيانات.</p>
+</aside>
+
+<script>
+/* ═══ بيانات ثابتة — أسماء حقيقية، حالات متخيَّلة ═══ */
+const P={gasoline_premium:'بنازين محسن',gasoline_regular:'بنازين عادي',gas:'غاز',kerosene:'كاز',white_oil:'نفط أبيض',lpg:'LPG',gasoline_super:'سوبر'};
+
+const STATIONS=[
+ {n:'محطة الواحة الخضراء',a:'قرب دائرة التقاعد',c:'الرمادي',o:'06:00',x:'21:00',p:['gasoline_premium','gas'],s:0,f:1},
+ {n:'محطة بوابة الرمادي النموذجيه',a:'مجاور للسونار ال7كيلو',c:'الرمادي',o:'06:00',x:'22:00',p:['gasoline_regular','gasoline_premium','kerosene'],s:0,f:1},
+ {n:'محطة وقود الصابرين المشيده',a:'شارع 60 حي الضباط',c:'الرمادي',o:'07:00',x:'22:00',p:['gasoline_regular','gas'],s:0,f:0},
+ {n:'محطة الميلاد المشيدة',a:'5 كيلو شارع 100 حي الزيتون',c:'الرمادي',o:'07:00',x:'21:00',p:['gasoline_premium'],s:0,f:0},
+ {n:'محطة وقود الاوائل النموذجية',a:'التاميم شارع النخيل',c:'الرمادي',o:'06:00',x:'22:00',p:['gas','kerosene'],s:0,f:0},
+ {n:'محطة وقود الدليم المشيدة',a:'الجزيرة شارع الجرايشي',c:'الرمادي',o:'07:00',x:'19:00',p:['gasoline_regular'],s:0,f:0},
+ {n:'محطة التل الأخضر',a:'جزيرة البوذياب',c:'الرمادي',o:'06:00',x:'20:00',p:['gasoline_premium'],s:1,f:0},
+ {n:'محطه المنتصر بالله المشيده',a:'الرمادي خمسة كم',c:'الرمادي',o:'07:00',x:'21:00',p:[],s:0,f:0},
+ {n:'محطة دار السلام',a:'الطريق القديم فلوجة بغداد',c:'الفلوجة',o:'05:00',x:'19:00',p:['gasoline_regular','gas'],s:0,f:0},
+ {n:'محطة بركة الرحمن',a:'النساف البوعلوان قرب جسر القطار',c:'الفلوجة',o:'06:00',x:'21:00',p:['gasoline_premium'],s:0,f:0},
+ {n:'محطة الكرام المشيدة',a:'النعيمية قرب جسر التفاحة',c:'الفلوجة',o:'06:00',x:'23:00',p:['kerosene'],s:0,f:0},
+ {n:'محطة وقود الشاكر',a:'المنشآت',c:'عامرية الفلوجة',o:'07:00',x:'21:00',p:['gasoline_premium','gas'],s:1,f:0},
+ {n:'الفارس العربي',a:'مجمع الفارس العربي',c:'عامرية الفلوجة',o:'06:00',x:'22:00',p:['gasoline_regular'],s:0,f:0},
+ {n:'محطة وقود الوئام المشيده',a:'ناحية السلام / جزيرة كرطان',c:'الخالدية',o:'07:00',x:'20:00',p:['gasoline_premium','kerosene'],s:0,f:0},
+ {n:'محطة الراية البيضاء المشيده',a:'طريق رمادي فلوجة القديم',c:'الحبانية',o:'06:30',x:'20:00',p:['gas'],s:0,f:0},
+ {n:'محطة اسوار القائم المشيدة',a:'قرية سعدة',c:'القائم',o:'07:00',x:'20:00',p:['gasoline_regular','gas'],s:0,f:0},
+ {n:'محطة الهيف المشيدة',a:'الشارع العام المفرق',c:'عانة',o:'06:00',x:'20:00',p:['gasoline_regular'],s:0,f:0},
+ {n:'محطة قلعة هيت المشيدة',a:'حي الجمعية',c:'هيت',o:'06:00',x:'22:00',p:['gasoline_premium','gas','kerosene'],s:0,f:0},
+];
+
+const CITIES=[
+ {n:'الرمادي',now:8,at:53},{n:'الفلوجة',now:3,at:20},{n:'عامرية الفلوجة',now:2,at:13},
+ {n:'الخالدية',now:1,at:7},{n:'الحبانية',now:1,at:7},{n:'القائم',now:1,at:7},
+ {n:'عانة',now:1,at:6},{n:'هيت',now:1,at:6},
+ {n:'حديثة',now:0,at:0},{n:'راوة',now:0,at:0},{n:'الرطبة',now:0,at:0},{n:'الكرمة',now:0,at:0},
+ {n:'البغدادي',now:0,at:0},{n:'الحقلانية',now:0,at:0},{n:'بروانة',now:0,at:0},{n:'النخيب',now:0,at:0},
+];
+
+const PROMOS=[
+ {t:'وصل بنازين محسن — الرمادي',s:'محطة الواحة الخضراء · قبل 12 دقيقة'},
+ {t:'حمّل التطبيق على هاتفك',s:'إشعارٌ فور وصول الوقود إلى مدينتك'},
+ {t:'صاحب محطة؟ سجّلها مجاناً',s:'بلا رسوم ولا عمولة · لكل مدن الأنبار'},
+];
+
+const TICKS=[
+ 'محطة الواحة الخضراء — بنازين محسن · قبل 12 دقيقة',
+ 'محطة بوابة الرمادي — كاز · قبل 34 دقيقة',
+ 'محطة وقود الوئام (الخالدية) — بنازين محسن · قبل ساعة',
+ 'محطة قلعة هيت — غاز · قبل ساعتين',
+];
+
+const NOTIFS=[
+ {city:'الرمادي',t:'⛽ بنازين محسن متوفّر الآن',b:'محطة الواحة الخضراء — الرمادي',who:'يصل 2,058 مشتركاً في الرمادي وحدهم'},
+ {city:'الفلوجة',t:'⛽ غاز متوفّر الآن',b:'محطة دار السلام — الفلوجة',who:'يصل 611 مشتركاً في الفلوجة وحدهم'},
+ {city:'هيت',t:'⛽ كاز متوفّر الآن',b:'محطة قلعة هيت — هيت',who:'يصل 94 مشتركاً في هيت وحدهم'},
+];
+
+/* ═══ الحالة ═══ */
+const HOME='الرمادي';                 /* المدينة الأساسية — محفوظة */
+let picked=new Set([HOME]);           /* الاختيار اللحظي — لا يُحفظ */
+let allAnbar=false, view='list', prodFilter=null, q='', scale=false, expanded=false;
+const CAP=12;
+const stars=new Set(STATIONS.filter(s=>s.f).map(s=>s.n));
+const el=id=>document.getElementById(id);
+const row=n=>CITIES.find(c=>c.n===n);
+const cnt=n=>{const c=row(n);return c?(scale?c.at:c.now):0;};
+const word=n=>n===1?'محطة واحدة':n===2?'محطتان':(n>=3&&n<=10)?`${n} محطات`:`${n} محطة`;
+const scopeCities=()=>allAnbar?CITIES.filter(c=>cnt(c.n)>0).map(c=>c.n):[...picked];
+const scopeTotal=()=>scopeCities().reduce((t,n)=>t+cnt(n),0);
+
+/* نصّ النطاق: مرّةً واحدة، ويقول ما يُعرض تحته بالضبط */
+function scopeLabel(){
+  if(allAnbar) return 'كل الأنبار';
+  const a=[...picked];
+  if(a.length===1) return `محطات ${a[0]}`;
+  if(a.length===2) return `محطات ${a[0]} و${a[1]}`;
+  return `محطات ${a[0]} و${a.length-1} مدن أخرى`;
+}
+
+/* ═══ الرسم ═══ */
+function visible(){
+  const sc=scopeCities();
+  let r=STATIONS.filter(s=>sc.includes(s.c));
+  if(q){const t=q.trim();r=STATIONS.filter(s=>s.n.includes(t)||s.a.includes(t)||s.c.includes(t));}
+  if(prodFilter)r=r.filter(s=>s.p.includes(prodFilter));
+  return r.sort((a,b)=>
+    (stars.has(b.n)?1:0)-(stars.has(a.n)?1:0) ||
+    ((b.p.length&&!b.s)?1:0)-((a.p.length&&!a.s)?1:0) || a.s-b.s);
+}
+
+const ICON={
+ star:'<path d="m12 2 3 6.5 7 .9-5 4.9 1.2 7L12 18l-6.2 3.3L7 14.3l-5-4.9 7-.9z"/>',
+ route:'<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
+ call:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/>'
+};
+const svg=k=>`<svg width="15" height="15" viewBox="0 0 24 24" fill="${k==='star'?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
+
+/* الساعة الآن — تُحسب مرّةً لا لكل بطاقة */
+const NOW=(()=>{const d=new Date();return d.getHours()*60+d.getMinutes();})();
+const toM=t=>{const[h,m]=t.split(':').map(Number);return h*60+m;};
+const isOpen=s=>{const o=toM(s.o),c=toM(s.x);return o<c?(NOW>=o&&NOW<c):(NOW>=o||NOW<c);};
+
+function card(s,i){
+  const open=isOpen(s);
+  const tags=s.p.length
+    ? s.p.map(p=>`<span class="tag${s.s?' stale':''}">${P[p]}</span>`).join('')
+    : `<span class="tag stale">لا يوجد الآن</span>`;
+  return `<article class="card${i%2?' tint':''}">
+    <div class="c-name">${s.n}</div>
+    <button class="c-act star${stars.has(s.n)?' on':''}" onclick="star('${s.n}')" aria-label="متابعة">${svg('star')}</button>
+    <div class="c-addr">${s.a} · ${s.c}</div>
+    <button class="c-act" aria-label="الطريق">${svg('route')}</button>
+    <div class="c-plabel">المنتجات${s.s?' — آخر إعلان قبل 3 أيام':''} :</div>
+    <button class="c-act${open?'':' off'}" aria-label="اتصال">${svg('call')}</button>
+    <div class="c-prods">${tags}</div>
+    <div class="c-when">
+      <span class="c-state ${open?'open':'shut'}">${open?'مفتوحة':'مغلقة'}</span>
+      <span class="c-hours">${s.o} – ${s.x}</span>
+    </div>
+  </article>`;
+}
+
+function render(){
+  const total=scopeTotal(), a=[...picked];
+
+  el('scopeCity').textContent = allAnbar?'كل الأنبار':a[0];
+  const plus=el('scopePlus');
+  if(!allAnbar && a.length>1){plus.style.display='';plus.textContent=`+${a.length-1}`;}
+  else plus.style.display='none';
+  el('scopeCount').textContent=word(total);
+  el('mapBadge').textContent=total;
+  el('mapTitle').textContent=`خريطة ${allAnbar?'الأنبار':a.join(' و')}`;
+  el('homeCityLbl').textContent=HOME;
+
+  /* لوحة المنتجات: عنوانٌ واحد يحمل النطاق، والصفرُ لا يُعرض أصلاً */
+  el('prodTitle').textContent=`المتوفر الآن في ${scopeLabel()}`;
+  const sc=scopeCities();
+  const inScope=STATIONS.filter(s=>sc.includes(s.c));
+  const mult=scale?Math.max(1,Math.round(total/Math.max(1,sc.reduce((t,n)=>t+row(n).now,0)))):1;
+  const counts=Object.keys(P).map(k=>({k,n:inScope.filter(s=>isOpen(s)&&!s.s&&s.p.includes(k)).length*mult})).filter(x=>x.n>0);
+
+  if(counts.length){
+    el('prods').style.display='';el('noStock').style.display='none';el('prodSub').style.display='';
+    el('prods').innerHTML=counts.map(({k,n})=>
+      `<button class="prod${prodFilter===k?' on':''}" onclick="pickProd('${k}')">
+        <span class="n">${n}</span><span class="l">${P[k]}</span></button>`).join('');
+  }else{
+    el('prods').style.display='none';el('prodSub').style.display='none';
+    el('noStock').style.display='';
+    el('noStock').innerHTML=`لا يتوفّر أي منتج في ${scopeLabel()} المفتوحة الآن.<br>
+      <span style="font-size:10px;color:var(--faint)">وحين يصل شيء، يظهر هنا فوراً ويصلك إشعار.</span>`;
+  }
+
+  const rows=visible(), shown=expanded?rows:rows.slice(0,CAP);
+  const hidden=(scale?total:rows.length)-shown.length;
+  let html=shown.map(card).join('');
+  if(!rows.length) html=`<div class="panel" style="text-align:center;padding:26px 14px">
+      <p style="margin:0;font-size:12.5px;color:var(--muted)">لا نتيجة داخل ${scopeLabel()}</p></div>`;
+  else if(hidden>0) html+=`<button class="more" onclick="expanded=true;render()">اعرض 12 أخرى · ${hidden} متبقية</button>`;
+  el('listView').innerHTML=html;
+
+  /* شبكة المدن — تعدّد لحظيّ، والأساسية معلَّمة */
+  el('cityGrid').innerHTML=CITIES.map(c=>{
+    const n=cnt(c.n);
+    if(!n) return `<div class="citybtn soon"><span class="cn">${c.n}</span><span class="cc">قريباً</span></div>`;
+    const on=!allAnbar&&picked.has(c.n);
+    return `<button class="citybtn${on?' on':''}" onclick="toggleCity('${c.n}')">
+      ${c.n===HOME?'<span class="home">الأساسية</span>':''}
+      <span class="cn">${c.n}</span><span class="cc">${n}</span></button>`;
+  }).join('')
+   +`<button class="citybtn wide${allAnbar?' on':''}" onclick="pickAll()">
+      <span class="cn">كل الأنبار · ${scale?119:18}</span></button>`;
+
+  /* أنواع المنتجات داخل ورقة المدن — تسهيلاً للبحث */
+  el('cityProds').innerHTML=Object.keys(P).map(k=>{
+    const n=STATIONS.filter(s=>isOpen(s)&&!s.s&&s.p.includes(k)).length*(scale?7:1);
+    return n?`<button class="fchip${prodFilter===k?' on':''}" onclick="pickProd('${k}')">${P[k]}<span class="k">${n}</span></button>`:'';
+  }).join('');
+
+  const tn=el('tempNote');
+  if(!allAnbar&&picked.size>1){
+    tn.style.display='';
+    tn.innerHTML=`اخترتَ <b>${picked.size}</b> مدن لهذه الجلسة. <b>لن تُحفظ</b> — وحين تعود يظهر <b>${HOME}</b> وحدها، وإشعاراتك تبقى على مدينتك الأساسية.`;
+  } else tn.style.display='none';
+
+  el('filterChips').innerHTML=Object.keys(P)
+    .map(k=>`<button class="fchip${prodFilter===k?' on':''}" onclick="pickProd('${k}')">${P[k]}</button>`).join('')
+    +`<button class="fchip" onclick="prodFilter=null;q='';render()">مسح</button>`;
+}
+
+/* ═══ التفاعل ═══ */
+function toggleCity(n){
+  allAnbar=false;
+  if(picked.has(n)){ if(picked.size>1) picked.delete(n); }
+  else picked.add(n);
+  expanded=false;render();
+}
+function pickAll(){allAnbar=!allAnbar;expanded=false;render();}
+function resetScope(){allAnbar=false;picked=new Set([HOME]);prodFilter=null;q='';expanded=false;closeSheet();render();}
+function pickProd(k){prodFilter=prodFilter===k?null:k;expanded=false;render();}
+function star(n){stars.has(n)?stars.delete(n):stars.add(n);render();}
+function doSearch(v){q=v;expanded=false;render();}
+function setView(v){
+  view=v;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.tab===v));
+  el('mapView').style.display=v==='map'?'':'none';
+  el('listView').style.display=v==='map'?'none':'';
+  el('prodPanel').style.display=v==='map'?'none':'';
+  if(v==='near')el('scroll').scrollTop=0;
+}
+function openSheet(k){el('scrim').classList.add('on');el('sheet-'+k).classList.add('on');}
+function closeSheet(){el('scrim').classList.remove('on');document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('on'));}
+function tog(k){
+  const b=el({promo:'tPromo',dark:'tDark',tick:'tTick',scale:'tScale'}[k]);
+  b.classList.toggle('on');
+  const on=b.classList.contains('on');
+  if(k==='promo')el('promo').classList.toggle('hidden',!on);
+  if(k==='dark')document.body.classList.toggle('dark',on);
+  if(k==='tick')document.querySelector('.ticker').style.display=on?'':'none';
+  if(k==='scale'){scale=on;expanded=false;render();}
+}
+
+/* ═══ شاشة التحميل ═══ */
+function playSplash(){
+  const s=el('splash');s.classList.remove('gone');
+  let p=0;
+  const t=setInterval(()=>{
+    p=Math.min(100,p+Math.round(4+Math.random()*11));
+    el('pct').textContent=`جارٍ تحميل محطات الأنبار… ${p}%`;
+    if(p>=100){clearInterval(t);setTimeout(()=>s.classList.add('gone'),420);}
+  },170);
+}
+
+/* ═══ معاينة الإشعارات — متتالية لا متراكمة ═══ */
+function playNotifs(){
+  const box=el('osStack');box.innerHTML='';
+  NOTIFS.forEach((n,i)=>{
+    const d=document.createElement('div');
+    d.className='osnotif';d.style.animationDelay=(i*0.75)+'s';
+    d.innerHTML=`<div class="top"><b>المحطة التقنية</b> · الآن</div>
+      <div class="t">${n.t}</div><div class="b">${n.b}</div>
+      <div class="who">▸ ${n.who}</div>`;
+    box.appendChild(d);
+  });
+}
+
+/* ═══ الحركة ═══ */
+let flip=0;
+const LIVE=[{v:'1,204',l:'متصل الآن',live:1},{v:'21,072',l:'زائر',live:0}];
+(function tickLive(){
+  const s=LIVE[flip++%2];
+  el('liveLbl').innerHTML=`<span class="swap">${s.live?'<i class="live"></i>':''}${s.v} ${s.l}</span>`;
+  setTimeout(tickLive,3000);
+})();
+
+let pi=0;
+(function tickPromo(){
+  const p=PROMOS[pi%PROMOS.length];
+  el('promoSlide').innerHTML=`<span class="t">${p.t}</span><span class="s">${p.s}</span>`;
+  el('promoDots').innerHTML=PROMOS.map((_,i)=>`<i class="${i===pi%PROMOS.length?'on':''}"></i>`).join('');
+  pi++;setTimeout(tickPromo,5000);
+})();
+
+el('tick').innerHTML=[...TICKS,...TICKS].map(t=>`<span>${t}</span>`).join('<span style="opacity:.5">•</span>');
+
+setView('list');render();playSplash();playNotifs();
+</script>
+</body>
+</html>
