@@ -282,7 +282,13 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [origin]);
+  // مرّةً واحدة عند الإقلاع، لا كلّما تغيّر origin.
+  //
+  // كانت التبعية [origin]، و«قائمة» و«خريطة» تضبطان origin = null —
+  // فيُعاد إطلاق الأثر فوراً ويُعيد ضبطه لمن أذن سابقاً. أي أن الخروج من
+  // وضع القُرب يرتدّ إليه، والقرص الأخضر يبقى مضيئاً بلا ضغطة.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const visible = useMemo(() => {
     if (!stations) return null;
@@ -301,7 +307,11 @@ export default function HomePage() {
     // ولا تُطبَّق إلا حين يختار المستخدم مدينةً بعينها في شرائح البحث: اختياره
     // اللحظي أولى من اشتراكه المحفوظ.
     const mine = myCities;
-    if (mine && !showAll && !filters.city) rows = rows.filter((s) => mine.includes(s.city));
+    // وتُلغى في وضع القُرب: من ضغط «أقرب محطة» يسأل عن المسافة لا عن
+    // المدينة. وأقربُ محطةٍ إليه قد تكون في الخالدية وهو مشترك بالرمادي
+    // وبينهما ربع ساعة — فحذفُها قبل الفرز يجعل الزرّ يكذب باسمه.
+    if (mine && !showAll && !filters.city && !origin)
+      rows = rows.filter((s) => mine.includes(s.city));
 
     if (filters.openOnly) rows = rows.filter(isOpenNow);
     if (filters.city) rows = rows.filter((s) => s.city === filters.city);
