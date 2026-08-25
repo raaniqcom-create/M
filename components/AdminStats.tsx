@@ -93,7 +93,7 @@ export function AdminStats() {
         supabase
           .from('stations')
           .select('*, station_products(updated_at, is_available, product)')
-          .in('status', ['approved', 'suspended'])
+          .eq('status', 'approved')
       ),
     ]);
 

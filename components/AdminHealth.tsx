@@ -59,7 +59,7 @@ export function AdminHealth() {
       supabase
         .from('stations')
         .select('*, station_products(product, is_available, updated_at)')
-        .in('status', ['approved', 'suspended'])
+        .eq('status', 'approved')
         .order('city'),
     ]);
 

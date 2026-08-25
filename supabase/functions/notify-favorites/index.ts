@@ -135,11 +135,16 @@ Deno.serve(async (req) => {
   // is what actually stops a repeat, so a slow run can never double-announce.
   const since = new Date(Date.now() - 10 * 60_000).toISOString();
 
+  // من المنظور لا من الجدول: يحمل الحارسَين معاً — المنتج متوفر، ومحطته
+  // معتمدة **ومفتوحة الآن**.
+  //
+  // وهذا المسار هو الأخطر في المنصّة، لأنه لا يمرّ بـ notify إطلاقاً: المالك
+  // يبدّل منتجه من بوت تيليجرام أو واتساب، فلا يُنادى أحد — ثم يلتقط هذا
+  // الكنسُ updated_at الجديد ويُرسل «متوفر الآن» إلى كل مفضّليه. فمالكٌ
+  // يبدّل الثانية فجراً ومحطته تفتح السادسة كان يوقظ الناس بوقودٍ لا يُباع.
   const { data: fresh } = await db
-    .from('station_products')
-    .select('station_id, product, updated_at, stations!inner(name, city, slug, status)')
-    .eq('is_available', true)
-    .eq('stations.status', 'approved')
+    .from('station_products_live')
+    .select('station_id, product, updated_at, station_name, station_city, station_slug')
     .gt('updated_at', since);
 
   if (!fresh?.length) return new Response('nothing new');
@@ -179,11 +184,12 @@ Deno.serve(async (req) => {
     marks.push({ station_id: row.station_id, product: row.product, sent_at: new Date().toISOString() });
     if (!favs?.length) continue;
 
-    const s = row.stations as unknown as { name: string; city: string; slug: string };
+    // أعمدة مسطّحة من المنظور: PostgREST لا يعرف مفاتيحه الأجنبية، فلا
+    // يقبل stations!inner(...) فوقه — والتسطيح في تعريف المنظور يُغني عنها.
     const text =
       `⛽ <b>${PRODUCT_LABELS[row.product] ?? row.product} متوفر الآن</b>\n\n` +
-      `<b>${s.name}</b>\n${s.city}\n\n` +
-      `${SITE}/${s.slug}`;
+      `<b>${row.station_name}</b>\n${row.station_city}\n\n` +
+      `${SITE}/${row.station_slug}`;
 
     for (const f of favs) {
       const res = await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {

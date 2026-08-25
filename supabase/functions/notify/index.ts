@@ -574,6 +574,35 @@ Deno.serve(async (req) => {
 
   if (!station || station.status !== 'approved') return json({ error: 'station not found' }, 404);
 
+  // ولا يخرج خبرُ وصولٍ من محطة مغلقة.
+  //
+  // الحارس هنا لا في alerts_for: فرعا تيليجرام وواتساب يقرآن جداول المفضّلة
+  // مباشرةً ولا يمرّان بها، فحارسٌ داخلها يترك قناتين مفتوحتين. وهذا الموضع
+  // فوق فروع الإرسال الخمسة كلّها.
+  //
+  // والقاعدة تُنادى ولا تُكتب: station_open_now في القاعدة تعرف temp_closed
+  // و is_24h ونافذة بغداد — ونسخةٌ رابعة منها هنا تنحرف عنها بعد شهر، وهو
+  // ما وقع فعلاً في بوت تيليجرام (نسخته تتجاهل temp_closed).
+  //
+  // وخبرُ الموافقة يمرّ: وجهته جهاز المالك نفسه لا الناس، ومحطةٌ وافقنا
+  // عليها ليلاً يجب أن يعلم صاحبها الآن لا في الصباح.
+  if (!isNewStation) {
+    const { data: openNow, error: openErr } = await db.rpc('station_open_now_id', {
+      p_id: stationId,
+    });
+    // والفشل يُقال ولا يُبتلع. والصمت هو الافتراض الآمن: إشعارٌ لم يُرسل
+    // يُعاد إرساله، وإشعارٌ أُرسل لا يُستعاد.
+    if (openErr) {
+      return json({ error: `تعذّر التحقّق من دوام المحطة: ${openErr.message}` }, 502);
+    }
+    if (!openNow) {
+      return json(
+        { error: 'محطتك مغلقة الآن — حُفظت الحالة، ولم يُرسل إشعار. سيصل الخبر حين تفتح.' },
+        409
+      );
+    }
+  }
+
   // only announce fuel that is genuinely in stock right now, so a forged call
   // cannot tell drivers to drive to an empty station
   const { data: rows } = await db

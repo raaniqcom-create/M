@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>محاكاة الواجهة الجديدة — المحطة التقنية</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap">
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   محاكاة بصرية فقط — لا اتصال بقاعدة بيانات ولا بالتطبيق.
+   البيانات أدناه ثابتة في الملف، والأسماء حقيقية لتقريب الشكل.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root{
+  --brand:#16a34a; --brand-600:#15803d; --brand-700:#166534; --brand-900:#14532d;
+  --brand-50:#f0fdf4; --brand-100:#dcfce7; --brand-200:#bbf7d0;
+  --red:#dc2626; --red-50:#fef2f2; --amber:#d97706; --amber-50:#fffbeb;
+  --ink:#0f172a; --ink-2:#334155; --muted:#64748b; --faint:#94a3b8;
+  --line:#e2e8f0; --line-2:#f1f5f9; --surface:#ffffff; --ground:#f8fafc;
+  --shadow-soft:0 1px 2px rgba(20,83,45,.05),0 4px 14px rgba(20,83,45,.07);
+  --shadow-lift:0 4px 10px rgba(20,83,45,.08),0 12px 32px rgba(20,83,45,.10);
+  --bar-h:120px;
+}
+body.dark{
+  --ink:#e2e8f0; --ink-2:#cbd5e1; --muted:#94a3b8; --faint:#64748b;
+  --line:#1e293b; --line-2:#172033; --surface:#0f172a; --ground:#020617;
+  --brand-50:#052e16; --brand-100:#14532d; --brand-200:#166534;
+  --red-50:#2a0f0f; --amber-50:#291d0b;
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:Tajawal,system-ui,sans-serif;
+  background:#0b1220; color:var(--ink);
+  display:flex; align-items:flex-start; justify-content:center;
+  min-height:100vh; padding:24px 12px 60px; gap:20px; flex-wrap:wrap;
+}
+
+/* ── إطار الهاتف ─────────────────────────────────────────────── */
+.phone{
+  width:390px; max-width:100%; height:844px; max-height:calc(100vh - 60px);
+  background:var(--ground); border-radius:38px; overflow:hidden;
+  position:relative; display:flex; flex-direction:column;
+  box-shadow:0 0 0 10px #1e293b, 0 0 0 12px #334155, 0 30px 70px rgba(0,0,0,.6);
+}
+@media(max-width:820px){
+  body{padding:0;display:block;background:var(--ground)}
+  .phone{width:100%;height:100vh;max-height:none;border-radius:0;box-shadow:none}
+  .sidepanel{position:static;width:auto;margin:0;border-radius:0}
+}
+
+/* ── الترويسة ────────────────────────────────────────────────── */
+.hdr{background:linear-gradient(to bottom,var(--brand-700),var(--brand));color:#fff;padding:14px 16px 12px;flex:none}
+.hdr-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.brandmark{display:flex;align-items:center;gap:7px;font-weight:800;font-size:17px}
+.hdr-actions{display:flex;align-items:center;gap:2px}
+.iconbtn{background:none;border:0;color:#fff;padding:6px;cursor:pointer;display:grid;place-items:center;border-radius:9px}
+.iconbtn:hover{background:rgba(255,255,255,.14)}
+.tagline{margin:3px 0 0;font-size:11.5px;color:rgba(255,255,255,.82);text-align:center}
+
+/* شريط النطاق — قلب الخطة */
+.scopebar{
+  margin-top:11px;display:flex;align-items:center;gap:8px;width:100%;
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.25);
+  color:#fff;border-radius:13px;padding:9px 12px;cursor:pointer;font-family:inherit;font-size:14px;
+}
+.scopebar:hover{background:rgba(255,255,255,.24)}
+.scopebar .city{font-weight:800}
+.scopebar .cnt{font-size:12px;color:rgba(255,255,255,.82);font-weight:500}
+.scopebar .sep{color:rgba(255,255,255,.45)}
+.scopebar .grow{flex:1}
+
+/* الإسناد الساكن */
+.attrib{
+  display:flex;gap:7px;align-items:flex-start;margin-top:9px;
+  background:rgba(255,255,255,.13);border-radius:10px;padding:7px 10px;
+  font-size:10.5px;line-height:1.65;color:rgba(255,255,255,.94);
+}
+.attrib b{font-weight:700}
+
+/* ── المحتوى ─────────────────────────────────────────────────── */
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 14px calc(var(--bar-h) + 16px);scrollbar-width:thin}
+
+/* الشريط الترويجي الدوّار */
+.promo{
+  position:relative;overflow:hidden;border-radius:15px;margin-bottom:11px;
+  background:linear-gradient(135deg,var(--brand-900),var(--brand-600));color:#fff;
+  min-height:74px;display:flex;align-items:center;padding:12px 14px;box-shadow:var(--shadow-soft);
+}
+.promo.hidden{display:none}
+.promo-slide{width:100%;animation:fadein .5s ease}
+.promo-slide .t{font-weight:800;font-size:14px;display:block}
+.promo-slide .s{font-size:11.5px;color:rgba(255,255,255,.85);display:block;margin-top:3px;line-height:1.6}
+.promo-dots{position:absolute;bottom:7px;inset-inline-start:14px;display:flex;gap:4px}
+.promo-dots i{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.4)}
+.promo-dots i.on{background:#fff;width:14px;border-radius:3px}
+.promo-tag{position:absolute;top:7px;inset-inline-start:12px;font-size:9px;background:rgba(0,0,0,.3);padding:2px 6px;border-radius:5px;color:rgba(255,255,255,.9)}
+@keyframes fadein{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+/* لوحة المنتجات */
+.panel{background:var(--surface);border-radius:15px;padding:13px;box-shadow:var(--shadow-soft);margin-bottom:11px}
+.panel h2{margin:0 0 2px;font-size:13px;font-weight:800;color:var(--ink)}
+.panel .sub{margin:0 0 10px;font-size:10.5px;color:var(--faint)}
+.prods{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.prod{
+  background:var(--brand-50);border:1px solid var(--brand-100);border-radius:11px;
+  padding:8px 3px;text-align:center;cursor:pointer;transition:transform .12s;
+}
+.prod:hover{transform:translateY(-2px)}
+.prod.zero{background:var(--line-2);border-color:var(--line);opacity:.6}
+.prod.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.prod .n{font-size:17px;font-weight:800;line-height:1;color:var(--brand-700)}
+.prod.zero .n{color:var(--faint)}
+.prod.on .n{color:#fff}
+.prod .l{font-size:9.5px;margin-top:4px;color:var(--ink-2);line-height:1.3;display:block}
+.prod.on .l{color:rgba(255,255,255,.95)}
+
+/* ── بطاقة المحطة — بالتخطيط الذي طلبتَه ──────────────────────── */
+.card{
+  background:var(--surface);border-radius:14px;padding:11px 12px;margin-bottom:8px;
+  box-shadow:var(--shadow-soft);display:grid;
+  grid-template-columns:1fr auto;column-gap:10px;row-gap:3px;align-items:center;
+}
+.card.tint{background:var(--brand-50)}
+body.dark .card.tint{background:#0c1f16}
+.c-name{font-size:13.5px;font-weight:800;color:var(--ink);line-height:1.4;
+        overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical}
+.c-addr{font-size:10.5px;color:var(--muted);line-height:1.45;
+        overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical}
+.c-plabel{font-size:10px;color:var(--faint);font-weight:500}
+.c-prods{display:flex;flex-wrap:wrap;gap:4px;margin-top:1px}
+.tag{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:20px;white-space:nowrap;
+     background:var(--brand-100);color:var(--brand-900)}
+.tag.stale{background:var(--line-2);color:var(--muted)}
+.c-act{display:grid;place-items:center;width:34px;height:28px;border-radius:9px;cursor:pointer;
+       border:1px solid var(--line);background:var(--surface);color:var(--brand-700)}
+.c-act:hover{background:var(--brand-50)}
+.c-act.star{border:0;background:none;color:var(--faint)}
+.c-act.star.on{color:var(--amber)}
+.c-act.off{color:var(--faint);opacity:.5;cursor:not-allowed}
+.c-state{font-size:9.5px;font-weight:800;padding:3px 8px;border-radius:20px;text-align:center;white-space:nowrap}
+.c-state.open{background:var(--brand-100);color:var(--brand-900)}
+.c-state.shut{background:var(--red-50);color:var(--red)}
+
+.more{
+  width:100%;padding:11px;margin-top:4px;border-radius:13px;cursor:pointer;font-family:inherit;
+  background:var(--surface);border:1px dashed var(--brand-200);color:var(--brand-700);
+  font-size:12.5px;font-weight:700;
+}
+.more:hover{background:var(--brand-50)}
+.foot-note{font-size:10px;color:var(--faint);text-align:center;margin:10px 0 0;line-height:1.7}
+
+/* حالة الخريطة */
+.mapview{height:330px;border-radius:15px;background:var(--line-2);border:1px solid var(--line);
+  display:grid;place-items:center;text-align:center;color:var(--muted);font-size:12px;line-height:1.9;padding:20px}
+
+/* ── الشريط السفلي — خمس أيقونات + الشريط المتحرك ─────────────── */
+.dock{position:absolute;inset-inline:0;bottom:0;z-index:20;background:var(--surface);
+      border-top:1px solid var(--line);box-shadow:0 -4px 20px rgba(0,0,0,.06)}
+.tabs{display:grid;grid-template-columns:repeat(5,1fr)}
+.tab{background:none;border:0;padding:8px 2px 7px;cursor:pointer;font-family:inherit;
+     display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);position:relative}
+.tab .lbl{font-size:9px;font-weight:700;line-height:1.25;text-align:center}
+.tab.on{color:var(--brand)}
+.tab.on::before{content:'';position:absolute;top:0;inset-inline:22%;height:2.5px;background:var(--brand);border-radius:0 0 3px 3px}
+.tab .badge{position:absolute;top:4px;inset-inline-end:calc(50% - 20px);background:var(--brand);color:#fff;
+            font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:9px;line-height:1.5}
+.tab .live{width:5px;height:5px;border-radius:50%;background:var(--brand);display:inline-block;margin-inline-end:3px;
+           animation:blink 1.6s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.swap{animation:swapin .45s ease}
+@keyframes swapin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+.ticker{background:var(--brand-900);color:#fff;overflow:hidden;height:26px;display:flex;align-items:center}
+body.dark .ticker{background:#04150c}
+.ticker-track{display:flex;gap:26px;white-space:nowrap;animation:slide 34s linear infinite;padding-inline-start:100%;font-size:10.5px}
+.ticker-track b{font-weight:700}
+.ticker-track .dot{color:var(--brand-200)}
+@keyframes slide{from{transform:translateX(0)}to{transform:translateX(200%)}}
+
+/* ── الأوراق المنبثقة ────────────────────────────────────────── */
+.scrim{position:absolute;inset:0;background:rgba(2,6,23,.55);z-index:30;display:none}
+.scrim.on{display:block}
+.sheet{position:absolute;inset-inline:0;bottom:0;z-index:31;background:var(--surface);
+  border-radius:20px 20px 0 0;padding:16px 16px 22px;transform:translateY(101%);
+  transition:transform .28s cubic-bezier(.32,.72,0,1);max-height:78%;overflow-y:auto}
+.sheet.on{transform:none}
+.sheet h3{margin:0 0 3px;font-size:14px;font-weight:800}
+.sheet .hint{margin:0 0 12px;font-size:11px;color:var(--faint);line-height:1.6}
+.grabber{width:36px;height:4px;background:var(--line);border-radius:3px;margin:0 auto 12px}
+.citygrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.citybtn{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:10px;
+  cursor:pointer;font-family:inherit;text-align:start;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.citybtn:hover{border-color:var(--brand-200);background:var(--brand-50)}
+.citybtn.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.citybtn .cn{font-size:12.5px;font-weight:700;color:var(--ink)}
+.citybtn.on .cn{color:#fff}
+.citybtn .cc{font-size:11px;font-weight:800;color:var(--brand-700)}
+.citybtn.on .cc{color:rgba(255,255,255,.9)}
+.citybtn.soon{opacity:.5;cursor:default}
+.citybtn.soon .cc{font-size:9.5px;color:var(--faint);font-weight:600}
+.citybtn.wide{grid-column:1/-1;justify-content:center;border-style:dashed}
+.field{width:100%;height:42px;border:1px solid var(--line);border-radius:11px;padding:0 12px;
+  font-family:inherit;font-size:16px;background:var(--ground);color:var(--ink);margin-bottom:9px}
+.chiprow{display:flex;flex-wrap:wrap;gap:6px}
+.fchip{border:1px solid var(--line);background:var(--surface);border-radius:20px;padding:6px 12px;
+  font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;color:var(--ink-2)}
+.fchip.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.acct{display:flex;flex-direction:column;gap:7px}
+.acct a{display:flex;align-items:center;gap:9px;padding:11px;border:1px solid var(--line);
+  border-radius:11px;text-decoration:none;color:var(--ink);font-size:12.5px;font-weight:700}
+
+/* ── لوحة المحاكاة ───────────────────────────────────────────── */
+.sidepanel{width:290px;background:#0f172a;border:1px solid #1e293b;border-radius:16px;padding:16px;color:#cbd5e1}
+.sidepanel h4{margin:0 0 3px;font-size:13px;font-weight:800;color:#f1f5f9}
+.sidepanel .note{font-size:10.5px;color:#64748b;line-height:1.75;margin:0 0 13px}
+.sw{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:9px 0;border-top:1px solid #1e293b}
+.sw span{font-size:11.5px;font-weight:600}
+.sw small{display:block;font-size:9.5px;color:#64748b;font-weight:400;margin-top:2px;line-height:1.5}
+.toggle{position:relative;width:40px;height:22px;background:#334155;border-radius:20px;border:0;cursor:pointer;flex:none}
+.toggle::after{content:'';position:absolute;top:3px;inset-inline-end:3px;width:16px;height:16px;
+  background:#fff;border-radius:50%;transition:transform .2s}
+.toggle.on{background:var(--brand)}
+.toggle.on::after{transform:translateX(-18px)}
+.sidepanel .warn{margin-top:13px;padding:9px;background:#1e1b0b;border:1px solid #422006;
+  border-radius:9px;font-size:10px;color:#fbbf24;line-height:1.75}
+</style>
+</head>
+<body>
+
+<!-- ═════════════ الهاتف ═════════════ -->
+<div class="phone" id="phone">
+
+  <!-- ── الترويسة ── -->
+  <header class="hdr">
+    <div class="hdr-top">
+      <div class="brandmark">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v18"/><path d="M2 22h13"/><path d="M6 8h4"/><path d="M18 9v9a2 2 0 0 0 4 0V9l-3-3"/><path d="M15 6h4"/></svg>
+        المحطة التقنية
+      </div>
+      <div class="hdr-actions">
+        <button class="iconbtn" aria-label="القائمة"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+        <button class="iconbtn" aria-label="الإشعارات"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></button>
+        <button class="iconbtn" aria-label="الصوت"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
+      </div>
+    </div>
+    <p class="tagline">منصة وقود الأنبار — في كل مدن الأنبار</p>
+
+    <button class="scopebar" onclick="openSheet('cities')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
+      <span class="city" id="scopeCity">الرمادي</span>
+      <span class="sep">·</span>
+      <span class="cnt" id="scopeCount">8 محطات</span>
+      <span class="grow"></span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+
+    <div class="attrib">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex:none;margin-top:2px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+      <span><b>توفّر المنتجات وتحديثها لحظةً بلحظة من إدارة المحطة نفسها</b> — والمنصّة تنقل ما تُعلنه ومعه وقتُه.</span>
+    </div>
+  </header>
+
+  <!-- ── المحتوى ── -->
+  <div class="scroll" id="scroll">
+
+    <div class="promo" id="promo">
+      <span class="promo-tag">إعلان</span>
+      <div class="promo-slide" id="promoSlide"></div>
+      <div class="promo-dots" id="promoDots"></div>
+    </div>
+
+    <section class="panel" id="prodPanel">
+      <h2 id="prodTitle">المتوفر الآن في محطات الرمادي</h2>
+      <p class="sub">اضغط النوع لتصفية القائمة</p>
+      <div class="prods" id="prods"></div>
+    </section>
+
+    <div id="listView"></div>
+    <div id="mapView" style="display:none">
+      <div class="mapview">
+        <div>
+          <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg>
+          <p style="margin:10px 0 0"><b>خريطة الرمادي</b><br>
+          دبابيس المدينة وحدها — لا خريطة على مستوى المحافظة،<br>لأنها تجعل 44 محطة لطخةً واحدة لا تُنقر.</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="foot-note">
+      محاكاة بصرية · بيانات ثابتة في الملف · لا اتصال بالتطبيق ولا بقاعدة البيانات
+    </p>
+  </div>
+
+  <!-- ── الشريط السفلي ── -->
+  <nav class="dock">
+    <div class="tabs">
+      <button class="tab" data-tab="search" onclick="openSheet('search')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span class="lbl">بحث وفلاتر</span>
+      </button>
+
+      <button class="tab" data-tab="map" onclick="setView('map')">
+        <span class="badge" id="mapBadge">8</span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg>
+        <span class="lbl">خريطة</span>
+      </button>
+
+      <button class="tab" data-tab="near" onclick="setView('near')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>
+        <span class="lbl">أقرب محطة</span>
+      </button>
+
+      <button class="tab" data-tab="live" onclick="openSheet('live')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>
+        <span class="lbl" id="liveLbl"></span>
+      </button>
+
+      <button class="tab" data-tab="me" onclick="openSheet('me')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+        <span class="lbl">حسابي</span>
+      </button>
+    </div>
+
+    <div class="ticker"><div class="ticker-track" id="tick"></div></div>
+  </nav>
+
+  <!-- ── الأوراق ── -->
+  <div class="scrim" id="scrim" onclick="closeSheet()"></div>
+
+  <div class="sheet" id="sheet-cities">
+    <div class="grabber"></div>
+    <h3>اختر المدينة</h3>
+    <p class="hint">كل رقم على الشاشة يتبع هذا الاختيار — القائمة والخريطة ولوحة المنتجات والأخبار.</p>
+    <div class="citygrid" id="cityGrid"></div>
+  </div>
+
+  <div class="sheet" id="sheet-search">
+    <div class="grabber"></div>
+    <h3>بحث وفلاتر</h3>
+    <p class="hint">البحث بالاسم يشمل الأنبار كلها — لا يحبسه اختيار المدينة.</p>
+    <input class="field" placeholder="ابحث باسم المحطة" oninput="doSearch(this.value)">
+    <div class="chiprow" id="filterChips"></div>
+  </div>
+
+  <div class="sheet" id="sheet-live">
+    <div class="grabber"></div>
+    <h3>الآن على المنصّة</h3>
+    <p class="hint">أرقام المنصّة كلها في الأنبار — لا أرقام مدينتك.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="background:var(--brand-50);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:23px;font-weight:800;color:var(--brand-700)">1,204</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">متصل الآن</div>
+      </div>
+      <div style="background:var(--brand-50);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:23px;font-weight:800;color:var(--brand-700)">21,072</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">زائر</div>
+      </div>
+      <div style="background:var(--brand-50);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:23px;font-weight:800;color:var(--brand-700)">3,429</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">مشترك بالتنبيهات</div>
+      </div>
+      <div style="background:var(--brand-50);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:23px;font-weight:800;color:var(--brand-700)">16</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">مدينة</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet" id="sheet-me">
+    <div class="grabber"></div>
+    <h3>حسابي</h3>
+    <p class="hint">مدنك ومنتجاتك ومحطاتك المتابَعة.</p>
+    <div class="acct">
+      <a href="#" onclick="return false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg> تنبيهاتي — الرمادي · بنازين محسن</a>
+      <a href="#" onclick="return false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 3 6.5 7 .9-5 4.9 1.2 7L12 18l-6.2 3.3L7 14.3l-5-4.9 7-.9z"/></svg> محطاتي المتابَعة (3)</a>
+      <a href="#" onclick="return false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 22V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v18"/><path d="M2 22h13"/></svg> صاحب محطة؟ سجّلها مجاناً</a>
+      <a href="#" onclick="return false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.2.6.74 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.77 0-1.31.4-1.51 1z"/></svg> الإعدادات</a>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═════════════ لوحة المحاكاة ═════════════ -->
+<aside class="sidepanel">
+  <h4>لوحة المحاكاة</h4>
+  <p class="note">هذه اللوحة لك وحدك — ليست جزءاً من التطبيق. بدّل الحالات لترى الفرق.</p>
+
+  <div class="sw">
+    <span>الشريط الترويجي
+      <small>هذا هو المفتاح الذي طلبتَه في لوحة التحكم</small></span>
+    <button class="toggle on" id="tPromo" onclick="tog('promo')"></button>
+  </div>
+
+  <div class="sw">
+    <span>عدد المحطات: 119
+      <small>الحال المتوقّع بعد انضمام المئة</small></span>
+    <button class="toggle" id="tScale" onclick="tog('scale')"></button>
+  </div>
+
+  <div class="sw">
+    <span>الوضع الليلي
+      <small>كما يراه من يستعمل هاتفه ليلاً</small></span>
+    <button class="toggle" id="tDark" onclick="tog('dark')"></button>
+  </div>
+
+  <div class="sw">
+    <span>الشريط المتحرك
+      <small>أسفل الأيقونات كما طلبت</small></span>
+    <button class="toggle on" id="tTick" onclick="tog('tick')"></button>
+  </div>
+
+  <p class="warn">
+    ⚠ لا شيء هنا يمسّ التطبيق أو قاعدة البيانات. البيانات مكتوبة داخل الملف،
+    والأسماء حقيقية لتقريب الشكل وحده.
+  </p>
+</aside>
+
+<script>
+/* ═══════════ بيانات ثابتة — أسماء حقيقية، حالات مُتخيَّلة ═══════════ */
+const P = {gasoline_premium:'بنازين محسن',gasoline_regular:'بنازين عادي',gas:'غاز',kerosene:'كاز',white_oil:'نفط أبيض',lpg:'LPG',gasoline_super:'سوبر'};
+
+const STATIONS = [
+ {n:'محطة الواحة الخضراء',a:'قرب دائرة التقاعد',c:'الرمادي',o:1,p:['gasoline_premium','gas'],s:0,f:1},
+ {n:'محطة بوابة الرمادي النموذجيه',a:'مجاور للسونار ال7كيلو',c:'الرمادي',o:1,p:['gasoline_regular','gasoline_premium','kerosene'],s:0,f:1},
+ {n:'محطة وقود الصابرين المشيده',a:'شارع 60 حي الضباط قرب النادي',c:'الرمادي',o:1,p:['gasoline_regular','gas'],s:0,f:0},
+ {n:'محطة الميلاد المشيدة',a:'5 كيلو شارع 100 حي الزيتون',c:'الرمادي',o:1,p:['gasoline_premium'],s:0,f:0},
+ {n:'محطة تعبئة وقود الاوائل النموذجية',a:'التاميم شارع النخيل مجاور مول الغزال',c:'الرمادي',o:1,p:['gas','kerosene'],s:0,f:0},
+ {n:'محطة وقود الدليم المشيدة',a:'الجزيرة شارع الجرايشي',c:'الرمادي',o:0,p:['gasoline_regular'],s:0,f:0},
+ {n:'محطة التل الأخضر',a:'جزيرة البوذياب قرب محطة الإروائية',c:'الرمادي',o:0,p:['gasoline_premium'],s:1,f:0},
+ {n:'محطه المنتصر بالله المشيده',a:'الرمادي خمسة كم',c:'الرمادي',o:0,p:[],s:0,f:0},
+ {n:'محطة دار السلام قرب سيطرة التحدي',a:'الطريق القديم فلوجة بغداد',c:'الفلوجة',o:1,p:['gasoline_regular','gas'],s:0,f:0},
+ {n:'محطة بركة الرحمن',a:'النساف البوعلوان قرب جسر القطار',c:'الفلوجة',o:1,p:['gasoline_premium'],s:0,f:0},
+ {n:'محطة الكرام المشيدة',a:'النعيمية قرب جسر التفاحة',c:'الفلوجة',o:0,p:['kerosene'],s:0,f:0},
+ {n:'محطة وقود الشاكر',a:'المنشآت',c:'عامرية الفلوجة',o:1,p:['gasoline_premium','gas'],s:1,f:0},
+ {n:'الفارس العربي',a:'مجمع الفارس العربي',c:'عامرية الفلوجة',o:1,p:['gasoline_regular'],s:0,f:0},
+ {n:'محطة وقود الوئام المشيده',a:'ناحية السلام / جزيرة كرطان',c:'الخالدية',o:1,p:['gasoline_premium','kerosene'],s:0,f:0},
+ {n:'محطة وقود الراية البيضاء المشيده',a:'طريق رمادي فلوجة القديم',c:'الحبانية',o:1,p:['gas'],s:0,f:0},
+ {n:'محطة اسوار القائم المشيدة',a:'قرية سعدة',c:'القائم',o:1,p:['gasoline_regular','gas'],s:0,f:0},
+ {n:'محطة الهيف المشيدة',a:'الشارع العام المفرق',c:'عانة',o:0,p:['gasoline_regular'],s:0,f:0},
+ {n:'محطة قلعة هيت المشيدة',a:'حي الجمعية مجاور مديرية البلدية',c:'هيت',o:1,p:['gasoline_premium','gas','kerosene'],s:0,f:0},
+];
+
+/* التوزيع الحالي وإسقاطه على 119 محطة */
+const CITIES = [
+ {n:'الرمادي',now:8,at119:53},{n:'الفلوجة',now:3,at119:20},{n:'عامرية الفلوجة',now:2,at119:13},
+ {n:'الخالدية',now:1,at119:7},{n:'الحبانية',now:1,at119:7},{n:'القائم',now:1,at119:7},
+ {n:'عانة',now:1,at119:6},{n:'هيت',now:1,at119:6},
+ {n:'حديثة',now:0,at119:0},{n:'راوة',now:0,at119:0},{n:'الرطبة',now:0,at119:0},{n:'الكرمة',now:0,at119:0},
+ {n:'البغدادي',now:0,at119:0},{n:'الحقلانية',now:0,at119:0},{n:'بروانة',now:0,at119:0},{n:'النخيب',now:0,at119:0},
+];
+
+const PROMOS = [
+ {t:'وصل بنازين محسن — الرمادي',s:'محطة الواحة الخضراء · قبل 12 دقيقة'},
+ {t:'حمّل التطبيق على هاتفك',s:'إشعارٌ فور وصول الوقود إلى مدينتك — بلا فتح المتصفّح'},
+ {t:'صاحب محطة؟ سجّلها مجاناً',s:'بلا رسوم ولا عمولة · التسجيل مفتوح لكل مدن الأنبار'},
+];
+
+const TICKS = [
+ 'محطة الواحة الخضراء — بنازين محسن · قبل 12 دقيقة',
+ 'محطة بوابة الرمادي — كاز · قبل 34 دقيقة',
+ 'محطة وقود الوئام (الخالدية) — بنازين محسن · قبل ساعة',
+ 'محطة قلعة هيت — غاز · قبل ساعتين',
+ 'محطة اسوار القائم — بنازين عادي · قبل 3 ساعات',
+];
+
+/* ═══════════ الحالة ═══════════ */
+let city='الرمادي', view='list', prodFilter=null, q='', scale=false, expanded=false;
+const CAP=12;
+const stars=new Set(STATIONS.filter(s=>s.f).map(s=>s.n));
+
+const el=id=>document.getElementById(id);
+const cityRow=n=>CITIES.find(c=>c.n===n);
+const countFor=n=>{const c=cityRow(n);return scale?c.at119:c.now;};
+const plural=(n,a,b,c)=>n===1?a:n===2?b:(n>=3&&n<=10)?c:a;
+const stationWord=n=>n===1?'محطة واحدة':n===2?'محطتان':(n>=3&&n<=10)?`${n} محطات`:`${n} محطة`;
+
+/* ═══════════ الرسم ═══════════ */
+function visible(){
+  let r=STATIONS.filter(s=>s.c===city);
+  if(q){const t=q.trim();r=STATIONS.filter(s=>s.n.includes(t)||s.a.includes(t)||s.c.includes(t));}
+  if(prodFilter)r=r.filter(s=>s.p.includes(prodFilter));
+  /* الترتيب: المتابَعة، ثم من لديه ما يُتصرّف به، ثم الأحدث/الأقرب */
+  return r.sort((a,b)=>
+    (stars.has(b.n)?1:0)-(stars.has(a.n)?1:0) ||
+    ((b.o&&b.p.length&&!b.s)?1:0)-((a.o&&a.p.length&&!a.s)?1:0) ||
+    a.s-b.s);
+}
+
+function icon(name){
+  const I={
+    star:'<path d="m12 2 3 6.5 7 .9-5 4.9 1.2 7L12 18l-6.2 3.3L7 14.3l-5-4.9 7-.9z"/>',
+    route:'<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
+    call:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/>'
+  };
+  return `<svg width="15" height="15" viewBox="0 0 24 24" fill="${name==='star'?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${I[name]}</svg>`;
+}
+
+function card(s,i){
+  const starred=stars.has(s.n);
+  const tags=s.p.length
+    ? s.p.map(p=>`<span class="tag${s.s?' stale':''}">${P[p]}</span>`).join('')
+    : `<span class="tag stale">لا يوجد الآن</span>`;
+  return `<article class="card${i%2?' tint':''}">
+    <div class="c-name">${s.n}</div>
+    <button class="c-act star${starred?' on':''}" onclick="toggleStar('${s.n.replace(/'/g,"")}')" aria-label="متابعة">${icon('star')}</button>
+
+    <div class="c-addr">${s.a}</div>
+    <button class="c-act" aria-label="الطريق">${icon('route')}</button>
+
+    <div class="c-plabel">المنتجات${s.s?' — آخر إعلان قبل 3 أيام':''} :</div>
+    <button class="c-act${s.o?'':' off'}" aria-label="اتصال">${icon('call')}</button>
+
+    <div class="c-prods">${tags}</div>
+    <div class="c-state ${s.o?'open':'shut'}">${s.o?'مفتوحة':'مغلقة'}</div>
+  </article>`;
+}
+
+function render(){
+  const total=countFor(city);
+  el('scopeCity').textContent=city;
+  el('scopeCount').textContent=stationWord(total);
+  el('mapBadge').textContent=total;
+  el('prodTitle').textContent=`المتوفر الآن في محطات ${city}`;
+
+  /* لوحة المنتجات — تعدّ داخل النطاق المعلَن، لا الأنبار كلها */
+  const inCity=STATIONS.filter(s=>s.c===city);
+  const mult=scale?Math.max(1,Math.round(countFor(city)/Math.max(1,cityRow(city).now))):1;
+  el('prods').innerHTML=Object.keys(P).slice(0,8).map(k=>{
+    const n=inCity.filter(s=>s.o&&!s.s&&s.p.includes(k)).length*mult;
+    return `<button class="prod${n?'':' zero'}${prodFilter===k?' on':''}" onclick="pickProd('${k}')">
+      <span class="n">${n}</span><span class="l">${P[k]}</span></button>`;
+  }).join('');
+
+  const rows=visible();
+  const shown=expanded?rows:rows.slice(0,CAP);
+  const hidden=(scale?total:rows.length)-shown.length;
+
+  let html=shown.map(card).join('');
+  if(!rows.length) html=`<div class="panel" style="text-align:center;padding:26px 14px">
+      <p style="margin:0;font-size:12.5px;color:var(--muted)">لا توجد نتيجة داخل ${city}</p>
+      <p style="margin:7px 0 0;font-size:11px;color:var(--faint)">وثمّة <b style="color:var(--brand)">6</b> محطات في مدن مجاورة</p></div>`;
+  else if(hidden>0) html+=`<button class="more" onclick="expanded=true;render()">اعرض 12 أخرى · ${hidden} متبقية</button>`;
+  if(rows.length&&hidden<=0) html+=`<p class="foot-note">وفي مدن مجاورة <b style="color:var(--brand)">6</b> محطات فيها بنازين ›</p>`;
+  el('listView').innerHTML=html;
+
+  /* شبكة المدن */
+  el('cityGrid').innerHTML=CITIES.map(c=>{
+    const n=scale?c.at119:c.now;
+    return n===0
+      ? `<div class="citybtn soon"><span class="cn">${c.n}</span><span class="cc">قريباً</span></div>`
+      : `<button class="citybtn${c.n===city?' on':''}" onclick="pickCity('${c.n}')"><span class="cn">${c.n}</span><span class="cc">${n}</span></button>`;
+  }).join('')
+   +`<button class="citybtn wide" onclick="pickCity('كل الأنبار')"><span class="cn">كل الأنبار · ${scale?119:18}</span></button>`;
+
+  el('filterChips').innerHTML=Object.keys(P).slice(0,7)
+    .map(k=>`<button class="fchip${prodFilter===k?' on':''}" onclick="pickProd('${k}')">${P[k]}</button>`).join('')
+    +`<button class="fchip" onclick="prodFilter=null;q='';render()">مسح</button>`;
+}
+
+/* ═══════════ التفاعل ═══════════ */
+function pickCity(n){
+  if(n==='كل الأنبار'){city=CITIES[0].n;} else city=n;
+  expanded=false;q='';closeSheet();render();
+}
+function pickProd(k){prodFilter=prodFilter===k?null:k;expanded=false;render();}
+function toggleStar(n){stars.has(n)?stars.delete(n):stars.add(n);render();}
+function doSearch(v){q=v;expanded=false;render();}
+
+function setView(v){
+  view=v;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.tab===v));
+  el('mapView').style.display=v==='map'?'':'none';
+  el('listView').style.display=v==='map'?'none':'';
+  el('prodPanel').style.display=v==='map'?'none':'';
+  if(v==='near'){el('scroll').scrollTop=0;}
+}
+
+function openSheet(k){
+  el('scrim').classList.add('on');
+  el('sheet-'+k).classList.add('on');
+}
+function closeSheet(){
+  el('scrim').classList.remove('on');
+  document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('on'));
+}
+
+function tog(k){
+  if(k==='promo'){const b=el('tPromo');b.classList.toggle('on');el('promo').classList.toggle('hidden',!b.classList.contains('on'));}
+  if(k==='dark'){el('tDark').classList.toggle('on');document.body.classList.toggle('dark');}
+  if(k==='tick'){const b=el('tTick');b.classList.toggle('on');document.querySelector('.ticker').style.display=b.classList.contains('on')?'':'none';}
+  if(k==='scale'){el('tScale').classList.toggle('on');scale=!scale;expanded=false;render();}
+}
+
+/* ═══════════ الحركة ═══════════ */
+/* العدّاد يتبدّل كل 3 ثوانٍ — داخل الشريط السفلي وحده، فلا يُعيد رسم الصفحة */
+let flip=0;
+const LIVE=[
+  {v:'1,204',l:'متصل الآن',live:true},
+  {v:'21,072',l:'زائر',live:false},
+];
+function tickLive(){
+  const s=LIVE[flip%2];flip++;
+  el('liveLbl').innerHTML=`<span class="swap">${s.live?'<i class="live"></i>':''}${s.v} ${s.l}</span>`;
+}
+tickLive();setInterval(tickLive,3000);
+
+let pi=0;
+function tickPromo(){
+  const p=PROMOS[pi%PROMOS.length];
+  el('promoSlide').innerHTML=`<span class="t">${p.t}</span><span class="s">${p.s}</span>`;
+  el('promoDots').innerHTML=PROMOS.map((_,i)=>`<i class="${i===pi%PROMOS.length?'on':''}"></i>`).join('');
+  pi++;
+}
+tickPromo();setInterval(tickPromo,5000);
+
+el('tick').innerHTML=[...TICKS,...TICKS]
+  .map(t=>`<span><b>${t.split('—')[0]}</b>—${t.split('—')[1]}</span>`).join('<span class="dot">•</span>');
+
+setView('list');
+render();
+</script>
+</body>
+</html>

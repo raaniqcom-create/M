@@ -35,6 +35,8 @@ export default function OwnerPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [station, setStation] = useState<Station | null>(null);
   const [products, setProducts] = useState<StationProduct[]>([]);
+  /** ما أشعله المالك في هذه الجلسة وحده — وهو وحده ما يُعلَن. */
+  const [turnedOn, setTurnedOn] = useState<Set<FuelProduct>>(new Set());
   const [loading, setLoading] = useState(true);
   const [savingProduct, setSavingProduct] = useState<FuelProduct | null>(null);
   const [view, setView] = useState<'main' | 'info' | 'data'>('main');
@@ -111,9 +113,18 @@ export default function OwnerPage() {
     }
 
     // No push here. An owner who switches on five products would fire five
-    // notifications, and the driver who receives five buzzes in ten seconds
+    // notifications, and someone who receives five buzzes in ten seconds
     // deletes the app — which costs us every future alert, not just these.
     // The announcement belongs to the confirm button, once, for all of them.
+    //
+    // وما أُشعل في هذه الجلسة يُسجَّل هنا: زرّ «تأكيد» يُعلن ما **صار**
+    // متوفراً، لا كل ما هو متوفر. انظر confirmAvailability.
+    setTurnedOn((s) => {
+      const n = new Set(s);
+      if (next) n.add(product);
+      else n.delete(product);
+      return n;
+    });
     setSavingProduct(null);
   }
 
@@ -151,9 +162,18 @@ export default function OwnerPage() {
     setConfirmedAt(now);
     setNotifyNote(null);
 
-    // One message for everything that is in stock, sent when the owner says
-    // the board is right — not on every tap while they are still deciding.
-    const available = products.filter((p) => p.is_available).map((p) => p.product);
+    // خبرُ وصولٍ لا خبرُ حالة: يُعلَن ما **صار** متوفراً في هذه الجلسة، لا
+    // كل ما هو متوفر.
+    //
+    // كان يُرسل كل متوفر: فمالكٌ يُطفئ الغاز — والغاز نفد فعلاً — ثم يضغط
+    // «تأكيد» فيُعاد إعلان البانزين كأنه وصل للتوّ. الفعل إطفاء والنتيجة
+    // بشارة، ووصلت الناسَ إشعاراتُ وصولٍ من محطات كانت تُغلق منتجاتها.
+    //
+    // و«تأكيد» يبقى على معناه الأصلي: يختم الوقت فتعود الحالة طازجة على
+    // اللوحة والملصق — ويُعلن فقط إن كان ثمّة جديدٌ يستحقّ الإعلان.
+    const available = products
+      .filter((p) => p.is_available && turnedOn.has(p.product))
+      .map((p) => p.product);
     if (available.length) {
       // notify only speaks for a station on its owner's or an admin's word, so
       // the session token rides along — the endpoint used to answer anyone.
@@ -170,8 +190,18 @@ export default function OwnerPage() {
         },
         body: JSON.stringify({ stationId: station.id, products: available }),
       })
-        .then((r) => {
-          if (!r.ok) setNotifyNote('حُفظت الحالة، لكن تعذّر إرسال الإشعار للمشتركين. أبلِغ الإدارة.');
+        .then(async (r) => {
+          if (r.ok) {
+            // ما أُعلن لا يُعاد إعلانه بضغطة تأكيدٍ ثانية.
+            setTurnedOn(new Set());
+            return;
+          }
+          // ورسالة الخادم تُعرض كما هي: «محطتك مغلقة الآن» جوابٌ يفهمه المالك
+          // ويتصرّف به، بينما «أبلِغ الإدارة» في هذا الموضع يُرسله إلى لا شيء.
+          const said = await r.json().catch(() => null);
+          setNotifyNote(
+            said?.error ?? 'حُفظت الحالة، لكن تعذّر إرسال الإشعار للمشتركين. أبلِغ الإدارة.'
+          );
         })
         .catch(() =>
           setNotifyNote('حُفظت الحالة، ولم نتأكّد من وصول الإشعار — تحقّق من اتصالك.')

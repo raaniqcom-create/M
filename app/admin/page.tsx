@@ -41,7 +41,7 @@ export default function AdminPage() {
   const [q, setQ] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState<Station[]>([]);
-  const [approved, setApproved] = useState<Station[]>([]);
+  const [live, setLive] = useState<Station[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
 
   const load = useCallback(async () => {
@@ -51,7 +51,7 @@ export default function AdminPage() {
       supabase.from('ads').select('*').order('created_at', { ascending: false }),
     ]);
     setPending(st ?? []);
-    setApproved(ap ?? []);
+    setLive(ap ?? []);
     setAds(ad ?? []);
   }, []);
 
@@ -127,11 +127,23 @@ export default function AdminPage() {
   // predate that column and are still recognised by their fixed UUID prefix,
   // so cleanup covers both and can never catch a real owner's station.
   const DEMO_PREFIX = 'b0000000-0000-0000-0000-';
-  const demoStations = approved.filter((s) => s.is_demo || s.id.startsWith(DEMO_PREFIX));
+  const demoStations = live.filter((s) => s.is_demo || s.id.startsWith(DEMO_PREFIX));
+
+  /** «معتمدة» تعني approved وحدها — في هذه اللوحة وفي الموقع سواء.
+   *
+   *  كان المتغيّر يُسمّى approved ويحمل approved + suspended، فورث كل عنوانٍ
+   *  يقرأه الكذبة: صندوقان في هذه الصفحة نفسها مكتوبٌ عليهما «محطة معتمدة»،
+   *  أحدهما يقول 19 والآخر 18 — لأن الثاني يقرأ من دالّة health التي تعدّ
+   *  approved وحدها. والموقع يعرض 18، فبدا للمالك أن أرقام منصّته تتناقض.
+   *
+   *  والقائمة تبقى على الاثنتين — الموقوفة تُدار من هنا ولا تُدار من غيره —
+   *  لكنها لا تُسمّى «المعتمدة». والعدد يحمل نطاقه في عنوانه. */
+  const approvedOnly = live.filter((s) => s.status === 'approved');
+  const suspended = live.filter((s) => s.status === 'suspended');
 
   async function removeStation(id: string, name: string) {
     if (!confirm(`حذف «${name}» نهائياً؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
-    setApproved((prev) => prev.filter((s) => s.id !== id));
+    setLive((prev) => prev.filter((s) => s.id !== id));
     setPending((prev) => prev.filter((s) => s.id !== id));
     await supabase.from('stations').delete().eq('id', id);
     load();
@@ -140,7 +152,7 @@ export default function AdminPage() {
   async function removeDemoStations() {
     if (!confirm(`حذف ${demoStations.length} محطة تجريبية نهائياً؟`)) return;
     const ids = demoStations.map((s) => s.id);
-    setApproved((prev) => prev.filter((s) => !ids.includes(s.id)));
+    setLive((prev) => prev.filter((s) => !ids.includes(s.id)));
     await supabase.from('stations').delete().in('id', ids);
     load();
   }
@@ -170,7 +182,7 @@ export default function AdminPage() {
   }
 
   async function setKind(id: string, kind: StationKind) {
-    setApproved((prev) => prev.map((s) => (s.id === id ? { ...s, kind } : s)));
+    setLive((prev) => prev.map((s) => (s.id === id ? { ...s, kind } : s)));
     await supabase.from('stations').update({ kind }).eq('id', id);
   }
 
@@ -257,9 +269,13 @@ export default function AdminPage() {
 
       <div className="mt-4 grid grid-cols-3 gap-2">
         {[
-          { label: 'محطة معتمدة', value: approved.length },
+          { label: 'محطة معتمدة', value: approvedOnly.length },
           { label: 'طلب معلّق', value: pending.length, warn: pending.length > 0 },
-          { label: 'مدينة فيها محطة', value: new Set(approved.map((s) => s.city)).size },
+          {
+            label: suspended.length ? 'موقوفة' : 'مدينة فيها محطة',
+            value: suspended.length || new Set(approvedOnly.map((s) => s.city)).size,
+            warn: suspended.length > 0,
+          },
         ].map((stat) => (
           <div key={stat.label} className="rounded-xl bg-brand-50 py-2.5 text-center">
             <p className={`text-lg font-extrabold leading-none ${stat.warn ? 'text-traffic-red' : 'text-brand-700'}`}>
@@ -272,7 +288,7 @@ export default function AdminPage() {
 
       <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-brand-50 p-1">
         {([
-          ['stations', `المحطات (${approved.length})`],
+          ['stations', `المحطات (${live.length})`],
           ['requests', `الطلبات${pending.length ? ` (${pending.length})` : ''}`],
           ['add', 'إضافة محطة'],
           ['announce', 'إشعارات المحطات'],
@@ -338,8 +354,15 @@ export default function AdminPage() {
             className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
           />
           <section className="card p-5">
-            <h2 className="text-sm font-bold">المحطات المعتمدة ({approved.length})</h2>
-            <p className="mt-1 text-xs text-slate-400">اضغط على النوع لتبديله بين حكومية وأهلية</p>
+            {/* «المحطات» لا «المعتمدة»: القائمة تحمل الموقوفة أيضاً لتُدار
+                من هنا، وعنوانٌ يقول «المعتمدة» فوق عددٍ يشملها هو التناقض
+                نفسه الذي أُصلح أعلاه. */}
+            <h2 className="text-sm font-bold">المحطات ({live.length})</h2>
+            <p className="mt-1 text-xs text-slate-400">
+              {suspended.length
+                ? `${approvedOnly.length} معتمدة تظهر للناس · ${suspended.length} موقوفة لا تظهر`
+                : 'اضغط على النوع لتبديله بين حكومية وأهلية'}
+            </p>
 
             {demoStations.length > 0 && (
               <button
@@ -352,7 +375,7 @@ export default function AdminPage() {
               </button>
             )}
             <ul className="mt-3 space-y-3">
-              {approved
+              {live
                 .filter(
                   (s) =>
                     !q.trim() ||
@@ -419,7 +442,7 @@ export default function AdminPage() {
                   </div>
                 </li>
                 ))}
-              {approved.length === 0 && (
+              {live.length === 0 && (
                 <li className="text-sm text-slate-400">لا توجد محطات معتمدة بعد</li>
               )}
             </ul>
@@ -467,7 +490,7 @@ export default function AdminPage() {
               {/* Advisory only. Two stations in one city really can share a
                   word in their name, so the match is surfaced for a human who
                   has spoken to the applicant — never acted on automatically. */}
-              {findSimilar(s, approved).map((m) => (
+              {findSimilar(s, live).map((m) => (
                 <div key={m.id} className="mt-2 rounded-xl bg-amber-50 p-3">
                   <p className="text-xs font-bold text-amber-900">
                     يشبه محطة قائمة: {m.name}
