@@ -84,7 +84,11 @@ export function StationCard({
         *  يُبقي الإصبع معلّقاً. */}
 
       <div className="grid grid-cols-[1fr_auto] items-start gap-x-3">
-        <h2 className="truncate text-[15px] font-bold leading-snug">{station.name}</h2>
+        {/* الاسم كاملاً ولو لفّ سطرين.
+            «محطة وقود الصابرين المشـ…» ليست محطةً يعرفها أحد. والقصّ
+            يقع دائماً على الأسماء الطويلة — وهي أسماء المحطات المشيدة
+            الحقيقية، لا الاستثناء. */}
+        <h2 className="text-[15px] font-bold leading-snug">{station.name}</h2>
         <span
           className={`shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-extrabold ${
             when.tone === 'closed'
@@ -97,7 +101,7 @@ export function StationCard({
           {when.badge}
         </span>
 
-        <p className="truncate text-[11px] text-slate-500">
+        <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-500">
           {station.city} — {station.address}
           {station.distanceKm !== undefined && (
             <span className="text-slate-400"> · {station.distanceKm.toFixed(1)} كم</span>
@@ -175,7 +179,8 @@ export function StationCard({
             type="button"
             onClick={onToggleFavorite}
             aria-pressed={isFavorite}
-            title={isFavorite ? 'تتابعها — يصلك إشعارها' : 'تابعها ليصلك إشعار توفّر الوقود'}
+            aria-label={isFavorite ? 'محطتك المفضلة — اضغط لإلغائها' : 'اجعلها محطة مفضلة ليصلك إشعارها'}
+            title={isFavorite ? 'محطتك المفضلة — يصلك إشعارها' : 'اجعلها مفضلة ليصلك إشعار توفّر الوقود'}
             className={`flex min-h-[34px] items-center justify-center gap-1 rounded-lg text-[10px] font-bold ${
               isFavorite
                 ? 'bg-brand-50 text-traffic-yellow'
@@ -183,7 +188,9 @@ export function StationCard({
             }`}
           >
             <StarIcon filled={isFavorite} />
-            محطة مثبتة لك
+            {/* الزرّ يقول ما سيحدث حين لا تكون متابَعة، وما هو قائمٌ حين
+                تكون. وزرٌّ يصف حالةً وهو دعوةٌ للفعل يُربك الإصبع. */}
+            {isFavorite ? 'محطتك المفضلة' : 'اجعلها محطة مفضلة'}
           </button>
         ) : (
           <span />

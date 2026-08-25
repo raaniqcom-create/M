@@ -83,6 +83,19 @@ export default function HomePage() {
   // مرّةً بالخطأ يجعله يتلقّى أخبار مدنٍ لا يقصدها ولا يعرف من أين جاءته.
   const [picked, setPicked] = useState<string[] | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [locating, setLocating] = useState(false);
+
+  /** تبديل العرض يُعيد القارئ إلى أوّله.
+   *
+   *  الخريطة كانت «لا تعمل»: تُركَّب وتُحمّل بلاطاتها وتُرسم علاماتها
+   *  الثماني — وأعلاها عند 271 بكسلاً **فوق** الشاشة، لأن الصفحة تحتفظ
+   *  بموضع تمريرها من قائمةٍ طويلة. فيضغط المستخدم «خريطة» فيجدها فوق
+   *  رأسه لا أمامه، ويظنّها معطّلة.
+   *
+   *  والتمرير في أثرٍ بعد الرسم، لا في معالج الضغط: القائمة نحو 2400 بكسل
+   *  والخريطة 487، فارتفاع الصفحة ينهار في اللحظة نفسها. وتمريرٌ سلس يبدأ
+   *  قبل الانهيار يُقصّ في منتصفه — قِسته: انتهى عند 695 لا عند الصفر.
+   *  فوريّاً وبعد أن يستقرّ الارتفاع. */
   const { choice } = useAlertChoice();
 
   // مصدرُ النطاق الواحد. كان يُقرأ من ثلاثة مواضع تتقاطع — الاشتراك المحفوظ،
@@ -103,6 +116,10 @@ export default function HomePage() {
     if (wideChoice) setShowAll(true);
   }, [wideChoice]);
   // نداء واحد يغذّي اللوحة الحمراء ولوحة المنتجات معاً.
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [view, origin]);
+
   const { announcements, reload: reloadAnnouncements } = useOpenAnnouncements();
   // العدّادان انتقلا إلى الشريط السفلي، ومعهما نداء useSiteStats.
   //
@@ -208,10 +225,32 @@ export default function HomePage() {
     };
   }, []);
 
+  /** «أقرب محطة» — والفشل يُقال ولا يُبتلع.
+   *
+   *  كان معالج الخطأ فارغاً: من رفض الإذن أو تعذّر تحديد موقعه يضغط الزرّ
+   *  فلا يحدث شيء — لا ترتيب يتغيّر ولا كلمة تُقال. فيضغط ثانيةً وثالثة
+   *  ويظنّ التطبيق معطّلاً. */
   function locate() {
+    if (!navigator.geolocation) {
+      setFollowNote('هذا المتصفّح لا يستطيع تحديد موقعك. استعمل قائمة المدن بدلاً منه.');
+      return;
+    }
+    setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => setOrigin({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {}
+      (pos) => {
+        setLocating(false);
+        setFollowNote(null);
+        setOrigin({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      (err) => {
+        setLocating(false);
+        setFollowNote(
+          err.code === err.PERMISSION_DENIED
+            ? 'إذن الموقع مرفوض لهذا الموقع. فعّله من إعدادات المتصفّح، أو اختر مدينتك من الشريط الأخضر في الأعلى.'
+            : 'تعذّر تحديد موقعك الآن. جرّب ثانيةً، أو اختر مدينتك من الشريط الأخضر في الأعلى.'
+        );
+      },
+      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 }
     );
   }
 
@@ -296,8 +335,17 @@ export default function HomePage() {
         (p) => isOffered(s, p) || !!p.expected_at
       );
 
+    // والمسافة تسبق كل شيء متى عُرف الموقع.
+    //
+    // كانت rows تُرتَّب بالمسافة أعلاه ثم يُعاد فرزها هنا بالمتابَعة ثم
+    // القابلية للتنفيذ — والفرز مستقرّ، فتبقى المسافة داخل كل مجموعة وحدها.
+    // أي أن محطةً متابَعة على بعد خمسين كيلومتراً تسبق أقربَ محطةٍ إليك،
+    // ومن ضغط «أقرب محطة» يرى ترتيباً لا علاقة له بالقُرب.
+    //
+    // فمتى ضغط الزرّ صراحةً، القُرب هو السؤال — والباقي تفاضلٌ عند التساوي.
     return [...rows].sort(
       (a, b) =>
+        (origin ? (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity) : 0) ||
         Number(isFollowed(b.id)) - Number(isFollowed(a.id)) ||
         Number(actionable(b)) - Number(actionable(a))
     );
@@ -453,7 +501,10 @@ export default function HomePage() {
         style={{ paddingBottom: 'calc(9rem + env(safe-area-inset-bottom))' }}
       >
         <TripAsk stations={stations} />
-        {stations && (
+        {/* لوحة المنتجات والشريط الترويجي للقائمة وحدها.
+            في وضع الخريطة كانا يدفعانها 424 بكسلاً لأسفل، فلا يظهر منها
+            إلا ثلاثة أرباعها — والخريطة تُفتح لتُرى كاملة. */}
+        {stations && view === 'list' && (
           <div className="mb-4">
             {/* onPickAnnounced: منتجٌ لا محطة مسجّلة له — الضغط يقود إلى خبره
                 لا إلى قائمة فارغة. وبمعرّفٍ في DOM لا بمرجع React، لأن اللوحة
@@ -491,9 +542,25 @@ export default function HomePage() {
           </div>
         )}
 
-        <div className="mb-3">
-          <PromoStrip />
-        </div>
+        {/* التنبيه فوق القائمة لا تحتها.
+          *
+          *  كان أسفل القائمة كلها. ورسالةُ «إذن الموقع مرفوض» تلي ضغطةً على
+          *  زرٍّ في الشريط السفلي — والقارئ ينظر إلى أعلى الشاشة بعدها، لا
+          *  إلى ما بعد أربعٍ وأربعين بطاقة. جوابٌ لا يُرى ليس جواباً. */}
+        {followNote && (
+          <p
+            role="status"
+            className="mb-3 rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900"
+          >
+            {followNote}
+          </p>
+        )}
+
+        {view === 'list' && (
+          <div className="mb-3">
+            <PromoStrip />
+          </div>
+        )}
 
         <div className="mt-4">
           {failed && stations === null && (
@@ -606,11 +673,6 @@ export default function HomePage() {
             stations exist that block disappears and this banner takes over —
             which is also when owners start looking. Showing both at once put
             the same green button on screen twice. */}
-        {followNote && (
-          <p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-            {followNote}
-          </p>
-        )}
 
         {/* Above the owner banner, not below it: whoever has not chosen a city
             and a fuel yet is the visitor this platform exists for. */}
@@ -677,6 +739,7 @@ export default function HomePage() {
           filters={filters}
           onFiltersChange={setFilters}
           cityCounts={EMPTY_CITY_COUNTS}
+          defaultOpen
         />
       </Sheet>
 

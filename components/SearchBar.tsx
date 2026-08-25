@@ -70,14 +70,20 @@ export function SearchBar({
   filters,
   onFiltersChange,
   cityCounts,
+  defaultOpen = false,
 }: {
   query: string;
   onQueryChange: (q: string) => void;
   filters: Filters;
   onFiltersChange: (f: Filters) => void;
   cityCounts: Map<string, number>;
+  /** تبدأ لوحة الفلاتر مفتوحة — للورقة المنبثقة. */
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  // تُفتح مطويّةً في الترويسة، ومفتوحةً داخل ورقةٍ اسمها «بحث وفلاتر».
+  // من ضغط زرّاً بهذا الاسم فتح الورقة ليرى الفلاتر — فإخفاؤها خلف زرٍّ
+  // ثانٍ يجعله يظنّ الورقة فارغة، وهو ما وقع.
+  const [open, setOpen] = useState(defaultOpen);
   const box = useRef<HTMLInputElement>(null);
   const { choice } = useAlertChoice();
 
