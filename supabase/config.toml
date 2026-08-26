@@ -57,3 +57,31 @@ verify_jwt = false
 # يناديها pg_cron كل دقيقتين برأس x-cron-secret وحده. والحارس في السطر 56.
 [functions.notify-favorites]
 verify_jwt = false
+
+# ── والباقيات ────────────────────────────────────────────────────────────
+# الستّ التالية تعمل على الخادم بـverify_jwt=false ولم يكن الملفّ يعلنها —
+# نفسُ الفخّ الذي كاد يقتل بوت تيليجرام: أوّل نشرٍ من المستودع يضبطها على
+# الافتراضي true، فتُردّ بـ401 قبل أن تصل شيفرتها. أُعلنت كلّها فلا يبقى
+# فخٌّ صامت.
+
+# واتساب لا يرسل Authorization؛ والحارس توقيع HMAC من ميتا.
+[functions.whatsapp]
+verify_jwt = false
+
+# يناديها المتصفّح قبل الدخول — فلا جلسة بعدُ لتُوقَّع.
+[functions.otp]
+verify_jwt = false
+
+# ينادَى من المتصفّح بمفتاح anon، والحارس رمزُ الإدارة داخلها.
+[functions.admin-alert]
+verify_jwt = false
+
+[functions.broadcast]
+verify_jwt = false
+
+# تفتح الرقم للمسافر خارج مدينته — بلا حساب، فبلا JWT.
+[functions.station-phone]
+verify_jwt = false
+
+[functions.test-push]
+verify_jwt = false
