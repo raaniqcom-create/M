@@ -2,6 +2,7 @@
 
 import { supabase } from './supabase';
 import type { FuelProduct, TrafficLevel } from '@/types/database';
+import { randomId } from './uid';
 
 /** Casting a traffic vote, through the one door the database still accepts.
  *
@@ -26,7 +27,7 @@ export function deviceId(): string {
   try {
     let id = localStorage.getItem(DEVICE_KEY);
     if (!id) {
-      id = crypto.randomUUID();
+      id = randomId();
       localStorage.setItem(DEVICE_KEY, id);
     }
     return id;

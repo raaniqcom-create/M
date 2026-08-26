@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
+import { randomId } from './uid';
 
 // Every entry counts — the number is there to show station owners that the
 // platform has real traffic. The only guard is against a stuck refresh loop
@@ -47,7 +48,7 @@ export function useSiteStats() {
     // مشتركة سلفاً: «cannot add postgres_changes callbacks after subscribe()».
     // ويُرمى الخطأ فلا يُسجَّل المستمع، ويبقى الرقم ساكناً بلا عطلٍ ظاهر.
     const counter = supabase
-      .channel(`visit-counter:${crypto.randomUUID()}`)
+      .channel(`visit-counter:${randomId()}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'site_stats' },
@@ -61,7 +62,7 @@ export function useSiteStats() {
     // Realtime Presence gives a genuine concurrent-viewer count — no polling,
     // and members drop off automatically when their socket closes.
     const presence = supabase.channel('online-visitors', {
-      config: { presence: { key: crypto.randomUUID() } },
+      config: { presence: { key: randomId() } },
     });
 
     presence

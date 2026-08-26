@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { randomId } from './uid';
 
 /** Public display of ratings. OFF until the admin queue has been used in
  *  anger and the App Store review of 1.5.0 has landed: the iOS shell loads the
@@ -27,7 +28,7 @@ const KEY = 'device-id';
 export function deviceId(): string {
   let id = localStorage.getItem(KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = randomId();
     localStorage.setItem(KEY, id);
   }
   return id;
