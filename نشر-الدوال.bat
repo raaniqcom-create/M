@@ -8,29 +8,37 @@ echo ═════════════════════════
 echo    نشر دوال المحطة التقنية على Supabase
 echo ════════════════════════════════════════════════════
 echo.
-echo  سينشر ثلاث دوال:
-echo.
-echo    notify            - لا اشعار من محطة مغلقة
-echo                        + الباب الذي يجعل البوت يعلن للجميع
-echo    notify-favorites  - لا اشعار من محطة مغلقة (مسار البوتات)
-echo    telegram          - البوت يعلن لكل المشتركين
-echo                        + يعرف الاغلاق المؤقت
+echo  ملاحظة: الاداة كانت مسجلة بحساب اخر (GEO / BOTQ)
+echo  لا يملك مشروع muhta - ولذلك لم يفتح المتصفح.
+echo  سنخرج من ذلك الحساب اولا.
 echo.
 echo  اضغط اي زر للبدء، او اغلق النافذة للالغاء.
-echo.
 pause >nul
 
 echo.
-echo  [1/2] تسجيل الدخول الى Supabase...
+echo  [1/4] الخروج من الحساب الحالي...
 echo.
-echo  ستفتح نافذة المتصفح. وافق منها، ثم عد الى هنا وانتظر.
-echo  (اذا كنت مسجلا من قبل، سيتخطاها فورا)
+echo y| call npx --yes supabase logout
+
+echo.
+echo  [2/4] تسجيل الدخول بحساب muhta...
+echo.
+echo  ستفتح نافذة المتصفح الان.
+echo  * اذا لم تفتح: انسخ الرابط الذي سيظهر ادناه والصقه في المتصفح بنفسك.
+echo  * تاكد انك داخل بحساب Supabase الذي يملك مشروع muhta.
 echo.
 call npx --yes supabase login
 if errorlevel 1 goto failed
 
 echo.
-echo  [2/2] نشر الدوال الثلاث... قد تستغرق دقيقة.
+echo  [3/4] التحقق ان المشروع صار مرئيا...
+echo.
+call npx --yes supabase projects list | findstr /C:"snlafcvuoxpxcdbtinsy" >nul
+if errorlevel 1 goto wrongaccount
+echo  ✓ مشروع muhta مرئي.
+
+echo.
+echo  [4/4] نشر الدوال الثلاث... قد تستغرق دقيقة.
 echo.
 call npx --yes supabase functions deploy notify notify-favorites telegram --project-ref snlafcvuoxpxcdbtinsy
 if errorlevel 1 goto failed
@@ -50,6 +58,20 @@ echo      يجب ان يصل الاشعار الى هاتفك ايضا، لا ا
 echo.
 pause
 exit /b 0
+
+:wrongaccount
+echo.
+echo ════════════════════════════════════════════════════
+echo    الحساب لا يملك مشروع muhta
+echo ════════════════════════════════════════════════════
+echo.
+echo  دخلت بحساب لا يظهر فيه المشروع snlafcvuoxpxcdbtinsy
+echo.
+echo  شغل الملف مرة اخرى، وانتبه في المتصفح الى اي بريد
+echo  تدخل به - يجب ان يكون بريد الحساب الذي انشات به muhta.
+echo.
+pause
+exit /b 1
 
 :failed
 echo.
