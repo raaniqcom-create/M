@@ -13,12 +13,14 @@ import {
 import { useSession } from '@/lib/useSession';
 import { useNativeApp } from '@/lib/useNativeApp';
 import { shareApp } from '@/lib/shareApp';
+import { roadEnabled, setRoadEnabled } from '@/lib/labs';
 import {
   BellRingIcon,
   DownloadIcon,
   FuelIcon,
   InfoIcon,
   LockIcon,
+  MapIcon,
   MessageIcon,
   PlusIcon,
   ShareIcon,
@@ -47,6 +49,8 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
   const [open, setOpen] = useState(false);
   const [tone, setToneState] = useState<Tone>('2');
   const [muted, setMutedState] = useState(false);
+  /** مفتاحُ التجربة — يُقرأ في المتصفّح وحده كي لا يختلف المبنيّ عن المرسوم */
+  const [road, setRoad] = useState(false);
   // The picker stays folded away: opening a menu should never make a phone
   // make a noise, and the tone is chosen once and then forgotten about.
   const [picking, setPicking] = useState(false);
@@ -60,6 +64,11 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
   useEffect(() => {
     setToneState(getTone());
     setMutedState(isMuted());
+    setRoad(roadEnabled());
+    // يُشغَّل من نافذةٍ أخرى أو من هذه — فتُسمع الحالة بدل أن تُخمَّن.
+    const sync = () => setRoad(roadEnabled());
+    window.addEventListener('muhta:labs', sync);
+    return () => window.removeEventListener('muhta:labs', sync);
   }, []);
 
   // a drawer that leaves the page scrollable behind it feels broken on a phone
@@ -231,6 +240,18 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
 
               <Label>المحطات</Label>
 
+              {/* لا يظهر إلا وهو مشغَّل من «تحت التجربة» أسفل القائمة. جاهزٌ
+                  ولم يُعلَن — والمالك يجرّبه على هاتفه بلا أن يراه أحد. */}
+              {road && (
+                <Item
+                  href="/road"
+                  icon={MapIcon}
+                  title="مساعد الطريق"
+                  note="محطات طريقك بين المدن — وأين لا محطة"
+                  accent
+                />
+              )}
+
               <Row
                 icon={FuelIcon}
                 title="المحطات المتاحة الآن"
@@ -320,6 +341,42 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                 note="تنبيهات ومحطات قريبة"
                 external
               />
+              <Label>تحت التجربة</Label>
+
+              {/* مفتاحٌ محلّيّ لهذا الجهاز وحده: تشغيلُه لا يُظهر الميزة لأحد
+                  غيرك، وإطفاؤه يعيد التطبيق كما هو للناس. */}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !road;
+                  setRoadEnabled(next);
+                  setRoad(next);
+                }}
+                aria-pressed={road}
+                className={`${ROW} w-full`}
+              >
+                <MapIcon className={`mt-0.5 h-5 w-5 shrink-0 ${road ? 'text-brand' : 'text-slate-400'}`} />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-bold text-slate-800">مساعد الطريق</span>
+                  <span className="block text-xs text-slate-500">
+                    {road ? 'يعمل — البند ظاهرٌ في «المحطات»' : 'خدمةٌ جاهزة لم تُعلَن بعد'}
+                  </span>
+                </span>
+                <span
+                  className={`mt-1 h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors duration-200 ${
+                    road ? 'bg-brand' : 'bg-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`block h-4 w-4 rounded-full bg-white transition-transform duration-200 ${
+                      road ? '-translate-x-4' : ''
+                    }`}
+                  />
+                </span>
+              </button>
+
+              <Label>المنصّة</Label>
+
               <Item href="/about" icon={InfoIcon} title="من نحن" note="الفكرة والتواصل" />
               <Item href="/privacy" icon={LockIcon} title="الخصوصية" note="ما نجمعه ولماذا" />
             </nav>

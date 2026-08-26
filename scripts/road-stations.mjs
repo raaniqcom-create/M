@@ -37,6 +37,26 @@ const CITIES = [
   ['التاجي', 33.5192, 44.2542], ['المدائن', 33.1108, 44.5805],
 ];
 
+/** تنقيةُ الاسم — عربيّةٌ خالصة.
+ *
+ *  البيانات المفتوحة تخلط: «Al-Reem Gas Station» بالإنجليزية، و«محطه» بالهاء
+ *  بدل التاء المربوطة، و«lpg» لاحقةً تعني الغاز. والمسافر يقرأ عربيّاً، فما
+ *  لا يُقرأ لا يُعرض. */
+const RENAME = {
+  'Al-Reem Gas Station': 'محطة الريم للوقود',
+  'محطة الوقود الحبانية - Al-Habaniya Gas Station': 'محطة الوقود الحبانية',
+};
+function tidyName(s) {
+  let n = (RENAME[s.trim()] || s).trim();
+  n = n.replace(/\s*[-–]?\s*[A-Za-z][A-Za-z .'-]*Gas Station\s*$/i, '');
+  // lpg لاحقةً تعني الغاز: تُحذف إن كان «غاز» مذكوراً، وتُترجم إن لم يكن.
+  n = /غاز/.test(n)
+    ? n.replace(/\s*(lpg|l)\.?\s*$/i, '')
+    : n.replace(/\s*lpg\.?\s*$/i, ' وغاز').replace(/\s*l\.?\s*$/i, '');
+  n = n.replace(/^محطه/, 'محطة');
+  return n.replace(/\s{2,}/g, ' ').trim();
+}
+
 const R = 6371;
 const rad = (d) => (d * Math.PI) / 180;
 function km(a, b) {

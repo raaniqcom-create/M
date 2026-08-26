@@ -10,7 +10,7 @@ import {
   durationText,
   loadRoutes,
   minutesFor,
-  routeBetween,
+  routesBetween,
   stopsFor,
   type RoadRoute,
 } from '@/lib/geo';
@@ -41,6 +41,8 @@ export function RoadPlanner() {
   const [to, setTo] = useState('بغداد');
   const [query, setQuery] = useState<{ from: string; to: string } | null>(null);
   const [showStops, setShowStops] = useState(false);
+  /** أيّ الطرق حين يصل أكثر من واحد — السريع أوّلاً، والقديم خيارٌ يُعرض. */
+  const [roadIdx, setRoadIdx] = useState(0);
   const [ready, setReady] = useState(false);
   const [loadErr, setLoadErr] = useState('');
 
@@ -60,10 +62,11 @@ export function RoadPlanner() {
     };
   }, []);
 
-  const route: RoadRoute | null = useMemo(
-    () => (query && ready ? routeBetween(query.from, query.to) : null),
+  const roads: RoadRoute[] = useMemo(
+    () => (query && ready ? routesBetween(query.from, query.to) : []),
     [query, ready]
   );
+  const route: RoadRoute | null = roads[roadIdx] ?? roads[0] ?? null;
   const stops = useMemo(() => (route ? stopsFor(route) : []), [route]);
 
   /** الفجوات: بين كل محطتين، وقبل الأولى، وبعد الأخيرة. */
@@ -82,6 +85,7 @@ export function RoadPlanner() {
 
   function search() {
     setShowStops(false);
+    setRoadIdx(0);
     setQuery({ from, to });
   }
 
@@ -94,6 +98,7 @@ export function RoadPlanner() {
     setFrom(to);
     setTo(from);
     setShowStops(false);
+    setRoadIdx(0);
     if (query) setQuery({ from: to, to: from });
   }
 
@@ -180,7 +185,50 @@ export function RoadPlanner() {
         )}
       </section>
 
-      {query && ready && !route && (
+      {/* **الطريق يُختار لا يُفرض.**
+          بين الرمادي وبغداد طريقان، والفرق جوهريّ: القديم يمرّ بمراكز
+          البلدات فتظهر محطاتُها، والسريع يلتفّ حولها. ومن يعرف طريقه أدرى
+          بأيّهما يسلك — فيُعرض الاختيار بأسماء الطرق التي يعرفها، ومعها
+          طولُها وزمنُها وعددُ محطاتها، فيكون الاختيار على بيّنة. */}
+      {roads.length > 1 && (
+        <section className="card p-2">
+          <p className="px-1 pb-1.5 text-[10.5px] font-bold text-slate-500">
+            طريقان بين المدينتين — اختر ما تسلك
+          </p>
+          <div
+            className="grid gap-2"
+            style={{ gridTemplateColumns: `repeat(${roads.length}, minmax(0,1fr))` }}
+          >
+            {roads.map((r, i) => (
+              <button
+                key={r.ref + i}
+                type="button"
+                onClick={() => {
+                  setRoadIdx(i);
+                  setShowStops(false);
+                }}
+                aria-pressed={i === roadIdx}
+                className={`rounded-xl border-2 px-2 py-2 text-center transition-colors ${
+                  i === roadIdx
+                    ? 'border-brand bg-brand text-white'
+                    : 'border-slate-200 bg-white text-slate-600'
+                }`}
+              >
+                <span className="block text-[12px] font-extrabold leading-tight">{r.label}</span>
+                <span
+                  className={`mt-0.5 block text-[10px] font-bold tabular-nums ${
+                    i === roadIdx ? 'text-white/80' : 'text-slate-400'
+                  }`}
+                >
+                  {Math.round(r.km)} كم · {durationText(r.min)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {query && ready && roads.length === 0 && (
         <div className="card p-5 text-center">
           <p className="text-sm font-bold text-slate-700">لا نعرف طريقاً بين هاتين</p>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-600">

@@ -105,6 +105,10 @@ export const TRIP_POINTS: readonly string[] = [
 export interface RoadRoute {
   from: string;
   to: string;
+  /** مرجع الطريق الغالب في OSM — M1، 11، 12… */
+  ref: string;
+  /** اسمه كما يعرفه أهل الأنبار */
+  label: string;
   /** الطول الحقيقي بالكيلومترات — من محرّك التوجيه */
   km: number;
   /** المدّة الحقيقية بالدقائق — من محرّك التوجيه */
@@ -116,19 +120,39 @@ export interface RoadRoute {
   via: string[];
 }
 
-let ROUTES: Map<string, number[]> | null = null;
+type Enc = [number, number, string, ...number[]];
+let ROUTES: Map<string, Enc[]> | null = null;
 let loading: Promise<void> | null = null;
 
-/** يفكّ [كم, دقيقة, Δعرض, Δطول, …] بأعشار الآلاف من الدرجة. */
-function decode(enc: readonly number[]): { km: number; min: number; path: LatLng[] } {
+/** يفكّ [كم, دقيقة, مرجع, Δعرض, Δطول, …] بأعشار الآلاف من الدرجة. */
+function decode(enc: Enc): { km: number; min: number; ref: string; path: LatLng[] } {
   const path: LatLng[] = [];
   let la = 0, lo = 0;
-  for (let i = 2; i < enc.length; i += 2) {
-    la += enc[i];
-    lo += enc[i + 1];
+  for (let i = 3; i < enc.length; i += 2) {
+    la += enc[i] as number;
+    lo += enc[i + 1] as number;
     path.push([la / 1e4, lo / 1e4]);
   }
-  return { km: enc[0], min: enc[1], path };
+  return { km: enc[0], min: enc[1], ref: enc[2], path };
+}
+
+/** أسماءُ الطرق كما يعرفها أهل الأنبار، لا كما ترقّمها الخرائط.
+ *
+ *  «M1» لا يقولها أحد؛ يقولون «السريع». والاسم يأتي من مرجعٍ حقيقيّ استُخرج
+ *  من خطوات محرّك التوجيه، فهو وصفٌ لما يسلكه المسار لا تخمينٌ عنه. */
+const ROAD_NAMES: Readonly<Record<string, string>> = {
+  M1: 'الطريق السريع',
+  '1': 'الطريق السريع رقم ١',
+  '11': 'الطريق القديم',
+  '12': 'طريق الفرات',
+  '22': 'طريق الحج البري',
+  '21': 'طريق الرطبة — النخيب',
+  '20': 'طريق عكاشات',
+  '10': 'طريق ١٠',
+  '2': 'طريق ٢',
+};
+function roadLabel(ref: string): string {
+  return ROAD_NAMES[ref] || (ref ? `طريق ${ref}` : 'طريقٌ فرعيّ');
 }
 
 /** يُحمَّل مرّةً واحدة، وعند فتح صفحة الطريق وحدها.
@@ -143,7 +167,7 @@ export function loadRoutes(): Promise<void> {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
     })
-    .then((d: { routes: Record<string, number[]> }) => {
+    .then((d: { routes: Record<string, Enc[]> }) => {
       ROUTES = new Map(Object.entries(d.routes));
     })
     .catch((e) => {
@@ -179,16 +203,35 @@ function viaOn(path: readonly LatLng[], from: string, to: string): string[] {
   return hits.sort((a, b) => a.at - b.at).map((h) => h.name);
 }
 
-/** المسار بين مدينتين — أو null إن لم يُحسب. */
-export function routeBetween(from: string, to: string): RoadRoute | null {
+/** **كل الطرق بين مدينتين، لا أسرعُها وحده.**
+ *
+ *  حُذف الاختيار حين حلّ محرّك التوجيه محلّ خياطة الممرّات، فبلّغ المالك:
+ *  «كانت اضافة رائعة يختار الطريق الذي سيلكه الشخص — لماذا اصبح يجبره على
+ *  طريق واحد؟». والفرق ليس تفضيلاً: بين الرمادي وبغداد يمرّ القديم بمراكز
+ *  البلدات ويلتفّ السريع حولها، فتختلف المحطات من سبع عشرة إلى سبع.
+ *
+ *  **والسريع أوّلاً حين يوجد.** قِيس على أمثلة المالك الثلاثة: الرمادي↔بغداد
+ *  سريع، والخالدية↔الرمادي عادي (ولا سريعَ بينهما أصلاً)، والفلوجة↔هيت سريع.
+ *  وقاعدةُ «الأسرع زمناً» تُنتج القديم في الأولى والثالثة — لأنه أقصر بستّة
+ *  كيلومترات وإن مرّ بكل بلدة. فالمرجعُ لا الزمن: ما بدأ بـM طريقٌ سريع. */
+export function routesBetween(from: string, to: string): RoadRoute[] {
   const origin = ENDPOINTS[from];
   const dest = ENDPOINTS[to];
-  if (!ROUTES || !origin || !dest || from === to) return null;
-  const enc = ROUTES.get(`${from}|${to}`);
-  if (!enc) return null;
-  const { km, min, path } = decode(enc);
-  if (path.length < 2) return null;
-  return { from, to, km, min, path, origin, dest, via: viaOn(path, from, to) };
+  if (!ROUTES || !origin || !dest || from === to) return [];
+  const list = ROUTES.get(`${from}|${to}`);
+  if (!list?.length) return [];
+  const out: RoadRoute[] = [];
+  for (const enc of list) {
+    const { km, min, ref, path } = decode(enc);
+    if (path.length < 2) continue;
+    out.push({
+      from, to, ref, label: roadLabel(ref),
+      km, min, path, origin, dest,
+      via: viaOn(path, from, to),
+    });
+  }
+  const motorway = (r: RoadRoute) => (/^M/i.test(r.ref) ? 0 : 1);
+  return out.sort((a, b) => motorway(a) - motorway(b) || a.min - b.min);
 }
 
 /** الزمن التقديري حين لا نملك إلا المسافة.
@@ -259,12 +302,25 @@ function snapAlong(p: LatLng, path: readonly LatLng[]) {
   return { km, side, atKm };
 }
 
+/** **محطاتُ مدينتك ووجهتك لا تُعدّ من الطريق.**
+ *
+ *  عدّت الرحلةُ بين الرمادي وبغداد سبعَ عشرة محطة، فقال المالك: «اين هذا
+ *  الأمر؟». وستٌّ منها كانت داخل المدينتين نفسيهما — ثلاثٌ في الكيلومترات
+ *  الأولى من الرمادي وثلاثٌ في بغداد.
+ *
+ *  ومن يسأل «ما على طريقي؟» لا يسأل عن محطة حيّه: يعرفها، ويمرّ بها كل يوم.
+ *  ولا عن محطةٍ في وجهته: بلغَها. يسأل عمّا **بين** الاثنتين.
+ *
+ *  وسبعةٌ لا عشرة: قِيس فوجدت محطاتُ مخرج الرمادي على الكيلومتر الثامن —
+ *  وهي طريقٌ لا حيّ. */
+export const CITY_SKIP_KM = 7;
+
 /** المحطات على هذه الرحلة، مرتّبةً من نقطة الانطلاق. */
 export function stopsFor(
   route: RoadRoute,
   stations: readonly RoadStation[] = ROAD_STATIONS
 ): RouteStop[] {
-  return collectStops(route.path, stations);
+  return collectStops(route.path, stations, [route.origin, route.dest]);
 }
 
 /** **الجانب يُعرض ولا يُخفي.**
@@ -279,10 +335,12 @@ export function stopsFor(
  *  فتُعرض كلّها، ويُكتب الجانب. معلومةٌ أكثر لا أقلّ، والقرار للمسافر. */
 function collectStops(
   path: readonly LatLng[],
-  stations: readonly RoadStation[]
+  stations: readonly RoadStation[],
+  skipNear: readonly LatLng[] = []
 ): RouteStop[] {
   const stops: RouteStop[] = [];
   for (const s of stations) {
+    if (skipNear.some((c) => kmBetween([s.la, s.lo], c) <= CITY_SKIP_KM)) continue;
     const snap = snapAlong([s.la, s.lo], path);
     if (snap.km * 1000 > ON_ROAD_M) continue;
     stops.push({

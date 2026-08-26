@@ -84,13 +84,13 @@ function simplify(pts, tolKm = 0.12) {
   return pts.filter((_, i) => keep[i]);
 }
 
-/** [الطول, الدقائق, Δعرض, Δطول, …] بأعشار الآلاف من الدرجة.
+/** [الطول, الدقائق, مرجع الطريق, Δعرض, Δطول, …] بأعشار الآلاف من الدرجة.
  *
  *  756 مساراً بخمس خاناتٍ عشرية = 1.5 م.ب. وبأربعٍ — دقّة 11 متراً، والمحطة
  *  تُلتقط ضمن 500 — وفروقٍ صحيحة بين النقاط: 639 ك.ب، و47 بعد ضغط الخادم.
  *  أي أقلّ من صورةٍ واحدة، لصفحةٍ تُفتح قبل السفر لا في كل زيارة. */
-function encode(kmv, min, path) {
-  const out = [kmv, min];
+function encode(kmv, min, ref, path) {
+  const out = [kmv, min, ref];
   let pla = 0, plo = 0;
   for (const [la, lo] of path) {
     const a = Math.round(la * 1e4), o = Math.round(lo * 1e4);
@@ -100,8 +100,32 @@ function encode(kmv, min, path) {
   return out;
 }
 
+/** مرجعُ الطريق الغالب على المسار — M1 أو 11 أو 12…
+ *
+ *  يأتي من steps لا من التخمين: كل خطوةٍ تحمل ref الطريق الذي تسير عليه،
+ *  فيُجمع طولُ كل مرجعٍ ويؤخذ الأطول. وهو ما يجعل «السريع» و«القديم» اسمَين
+ *  حقيقيَّين لا وصفَين. */
+function dominantRef(r) {
+  const acc = {};
+  for (const leg of r.legs || []) {
+    for (const s of leg.steps || []) {
+      const ref = (s.ref || '').split(';')[0].trim();
+      if (ref) acc[ref] = (acc[ref] || 0) + s.distance;
+    }
+  }
+  const top = Object.entries(acc).sort((x, y) => y[1] - x[1])[0];
+  return top ? top[0] : '';
+}
+
+/** **البدائل تُحفظ، لا الأسرعُ وحده.**
+ *
+ *  حُذف اختيار الطريق حين حلّ محرّك التوجيه محلّ خياطة الممرّات، فبلّغ
+ *  المالك: «كانت اضافة رائعة يختار الطريق الذي سيلكه الشخص — لماذا اصبح
+ *  يجبره على طريق واحد؟». وهو محقّ: بين الرمادي وبغداد طريقان، والفرق
+ *  جوهريّ لا تفضيليّ — القديم يمرّ بمراكز البلدات فيعدّ سبع عشرة محطة
+ *  أكثرها داخل المدن، والسريع يلتفّ حولها فيعدّ سبعاً. */
 function route(a, b) {
-  const url = `${OSRM}/${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson`;
+  const url = `${OSRM}/${a[1]},${a[0]};${b[1]},${b[0]}?alternatives=2&overview=full&geometries=geojson&steps=true`;
   const tmp = join(tmpdir(), `osrm-${process.pid}-${Math.round(process.uptime() * 1e6)}.json`);
   try {
     // curl لا fetch: الخوادم العامّة ترفض ترويسات نود الافتراضية، وقد وقع
@@ -109,13 +133,24 @@ function route(a, b) {
     execFileSync('curl', ['-s', '--max-time', '60', '-o', tmp, url], { encoding: 'utf8' });
     const d = JSON.parse(readFileSync(tmp, 'utf8'));
     if (d.code !== 'Ok' || !d.routes?.length) return null;
-    const r = d.routes[0];
-    return encode(
-      +(r.distance / 1000).toFixed(1),
-      Math.round(r.duration / 60),
-      // GeoJSON يعطي [lng,lat] — والمشروع كلّه [lat,lng].
-      simplify(r.geometry.coordinates.map((c) => [c[1], c[0]]))
-    );
+    const out = [];
+    for (const r of d.routes) {
+      const kmv = +(r.distance / 1000).toFixed(1);
+      const ref = dominantRef(r);
+      // بديلٌ بنفس المرجع وطولٍ يقارب الأوّل ليس خياراً بل تكراراً يُربك.
+      if (out.some((o) => o[2] === ref && Math.abs(o[0] - kmv) / Math.max(o[0], 1) < 0.06)) continue;
+      out.push(
+        encode(
+          kmv,
+          Math.round(r.duration / 60),
+          ref,
+          // GeoJSON يعطي [lng,lat] — والمشروع كلّه [lat,lng].
+          simplify(r.geometry.coordinates.map((c) => [c[1], c[0]]))
+        )
+      );
+      if (out.length === 3) break;
+    }
+    return out.length ? out : null;
   } catch {
     return null;
   } finally {
