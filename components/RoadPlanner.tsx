@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
   AVG_KMH,
+  durationText,
   GAP_WARN_KM,
   ON_ROAD_M,
   TRIP_POINTS,
@@ -156,7 +157,7 @@ export function RoadPlanner() {
                 {route.from}
               </span>
               <span className="text-slate-400">
-                {Math.round(route.km)} كم · ~{Math.round(route.km / AVG_KMH)} ساعة
+                {Math.round(route.km)} كم · ~{durationText(route.km)}
               </span>
               <span className="flex items-center gap-1.5 text-[#2563eb]">
                 {route.to}
