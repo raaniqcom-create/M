@@ -38,3 +38,22 @@ verify_jwt = false
 # ترفضه قبل أن تعمل الدالة. والدالة تتحقق من السرّ بنفسها.
 [functions.owner-daily]
 verify_jwt = false
+
+# الثلاث التالية كانت تعمل بـfalse على الخادم ولا يعلنها هذا الملفّ — وهو خطرٌ
+# صامت: نشرٌ من المستودع يضبطها على الافتراضي فتموت بـ401 قبل أن تعمل شيفرتها.
+# ولكلٍّ منها حارسُها الخاص، وهو البوابة الحقيقية لا JWT.
+
+# تيليجرام لا ترسل ترويسة Authorization إطلاقاً. والحارس
+# x-telegram-bot-api-secret-token في السطر 1350.
+[functions.telegram]
+verify_jwt = false
+
+# ينادَى من المتصفّح برمز جلسة، ومن الدوالّ الطرفية بـx-cron-secret بلا
+# Authorization — والثاني هو ما يجعل تبديل المنتج من البوت يصل الناس.
+# والحارس callerMayAnnounce يفحص الاثنين بنفسه.
+[functions.notify]
+verify_jwt = false
+
+# يناديها pg_cron كل دقيقتين برأس x-cron-secret وحده. والحارس في السطر 56.
+[functions.notify-favorites]
+verify_jwt = false

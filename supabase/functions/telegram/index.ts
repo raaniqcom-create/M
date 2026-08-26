@@ -100,7 +100,22 @@ const answer = (id: string, text?: string) =>
 
 // ---------- Opening hours (Baghdad clock) ----------
 
-function isOpenNow(s: { is_24h: boolean; opens_at: string; closes_at: string }): boolean {
+function isOpenNow(s: {
+  is_24h: boolean;
+  opens_at: string;
+  closes_at: string;
+  temp_closed?: boolean | null;
+}): boolean {
+  // الإغلاق المؤقّت أولاً — وكان مفقوداً هنا وحده.
+  //
+  // هذه رابع نسخة من قاعدة الدوام في المستودع (القاعدة، و lib/hours.ts،
+  // و owner-daily، وهذه)، وهي الوحيدة التي كانت تجهل temp_closed. فمحطةٌ
+  // أغلقها صاحبها مؤقتاً من الويب تُعرض في البوت «مفتوحة الآن» وتظهر في
+  // «المتوفر الآن». والانحراف موثَّق في notify/index.ts نفسها.
+  //
+  // والقاعدة الأصل station_open_now موجودة في القاعدة — لكن نداءها لكل
+  // محطة في قائمةٍ يعني رحلةً لكل صفّ. فتُصلَح النسخة هنا وتُذكَر أصلها.
+  if (s.temp_closed) return false;
   if (s.is_24h) return true;
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Baghdad',
@@ -1083,7 +1098,7 @@ async function showNearby(chat: number) {
 async function showProducts(chat: number, messageId?: number) {
   const { data: stations } = await db
     .from('stations')
-    .select('id, is_24h, opens_at, closes_at, station_products(product, is_available)')
+    .select('id, is_24h, opens_at, closes_at, temp_closed, station_products(product, is_available)')
     .eq('status', 'approved');
 
   const counts = new Map<string, number>();
@@ -1111,7 +1126,7 @@ async function showProducts(chat: number, messageId?: number) {
 async function showStationsWithProduct(chat: number, messageId: number, product: string) {
   const { data } = await db
     .from('stations_public')
-    .select('name, city, address, phone, slug, is_24h, opens_at, closes_at, station_products!inner(product, is_available)')
+    .select('name, city, address, phone, slug, is_24h, opens_at, closes_at, temp_closed, station_products!inner(product, is_available)')
     .eq('status', 'approved')
     .eq('station_products.product', product)
     .eq('station_products.is_available', true);
@@ -1168,7 +1183,7 @@ async function showManage(chat: number, telegramId: number) {
 async function showOwnerPanel(chat: number, stationId: string, messageId?: number) {
   const { data: station } = await db
     .from('stations')
-    .select('name, is_24h, opens_at, closes_at')
+    .select('name, is_24h, opens_at, closes_at, temp_closed')
     .eq('id', stationId)
     .single();
 
@@ -1283,11 +1298,46 @@ async function toggleProduct(
     .single();
 
   const next = !row?.is_available;
-  await db
+  // upsert لا update: منتجٌ لم يُنشأ صفُّه بعد كان يُبدَّل فلا يتغيّر شيء،
+  // والبوت يجيب «متوفر ✅» عن كتابةٍ لم تقع. (واتساب يفعلها صحيحاً منذ البداية.)
+  const { error: saveErr } = await db
     .from('station_products')
-    .update({ is_available: next, updated_at: new Date().toISOString() })
-    .eq('station_id', stationId)
-    .eq('product', product);
+    .upsert(
+      { station_id: stationId, product, is_available: next, updated_at: new Date().toISOString() },
+      { onConflict: 'station_id,product' }
+    );
+
+  if (saveErr) {
+    await answer(queryId, 'تعذّر الحفظ — أعد المحاولة');
+    return;
+  }
+
+  // وخبرُ الوصول يخرج إلى الناس.
+  //
+  // كان التبديل من البوت لا ينادي notify إطلاقاً، فيصل مفضّلي تيليجرام وحدهم
+  // بعد دقيقتين عبر كنس notify-favorites — ولا يصل 4,728 مشتركاً على الويب
+  // وأندرويد وآيفون. أي أن مالكاً يدير محطته من هنا كان يُعلن لجمهورٍ واحد من
+  // خمسة وهو يظنّ أنه أعلن للكلّ.
+  //
+  // وعند الإطفاء لا يُنادى شيء: الإعلان خبرُ وصولٍ لا خبرُ حالة.
+  // والملكية تحقّقت أعلاه، فالنداء يحمل سرّ الخادم لا رمز جلسة.
+  if (next) {
+    const cron = Deno.env.get('CRON_SECRET');
+    if (cron) {
+      try {
+        const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/notify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-cron-secret': cron },
+          body: JSON.stringify({ stationId, products: [product] }),
+        });
+        // 409 جوابٌ صحيح لا عطل: المحطة مغلقة الآن، أو المنتج لم يعد متوفراً.
+        if (!r.ok && r.status !== 409) console.error('notify', r.status, await r.text());
+      } catch (e) {
+        // الحالة حُفظت، والإشعار لم يخرج. يُسجَّل ولا يُبتلع.
+        console.error('notify fetch', e);
+      }
+    }
+  }
 
   await answer(queryId, `${PRODUCT_LABELS[product]}: ${next ? 'متوفر ✅' : 'غير متوفر ❌'}`);
   await showOwnerPanel(chat, stationId, messageId);
@@ -1565,7 +1615,7 @@ Deno.serve(async (req) => {
     if (q.length >= 2) {
       const { data } = await db
         .from('stations_public')
-        .select('id, name, city, address, phone, slug, is_24h, opens_at, closes_at, station_products(product, is_available)')
+        .select('id, name, city, address, phone, slug, is_24h, opens_at, closes_at, temp_closed, station_products(product, is_available)')
         .eq('status', 'approved')
         .or(`name.ilike.%${q}%,city.ilike.%${q}%,address.ilike.%${q}%`)
         .limit(5);

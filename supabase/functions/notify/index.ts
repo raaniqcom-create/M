@@ -515,6 +515,18 @@ async function notifyIosApps(
  *
  *  Only the station's own owner or an admin may speak for a station. */
 async function callerMayAnnounce(req: Request, stationId: string): Promise<boolean> {
+  // بابٌ داخليّ للدوالّ الطرفية الأخرى.
+  //
+  // البوّابة كانت رمز جلسة مستخدمٍ وحده — والبوتات تعمل بمفتاح الخدمة ولا
+  // جلسة لها. فمالكٌ يبدّل منتجه من تيليجرام كان خبرُه يصل مفضّلي تيليجرام
+  // وحدهم بعد دقيقتين، ولا يصل 4,728 مشتركاً على الويب وأندرويد وآيفون.
+  // يُعلن لجمهورٍ واحد من خمسة وهو يظنّ أنه أعلن للكلّ.
+  //
+  // والسرّ لا يملكه إلا الخادم، والمُنادي يتحقّق من الملكية بنفسه قبل أن
+  // ينادي (telegram_links في البوت). وهو النمط نفسه الذي تعمل به announce.
+  const cron = Deno.env.get('CRON_SECRET');
+  if (cron && req.headers.get('x-cron-secret') === cron) return true;
+
   const auth = req.headers.get('Authorization') ?? '';
   const jwt = auth.startsWith('Bearer ') ? auth.slice(7) : '';
   if (!jwt) return false;
