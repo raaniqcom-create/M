@@ -83,6 +83,8 @@ export default function HomePage() {
   // مرّةً بالخطأ يجعله يتلقّى أخبار مدنٍ لا يقصدها ولا يعرف من أين جاءته.
   const [picked, setPicked] = useState<string[] | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  /** «اعرض المحطات التي لا وقود لديها» — لحظيّ لا محفوظ. */
+  const [showEmpty, setShowEmpty] = useState(false);
   const [locating, setLocating] = useState(false);
 
   /** تبديل العرض يُعيد القارئ إلى أوّله.
@@ -420,6 +422,29 @@ export default function HomePage() {
     return [...m.entries()].map(([product, n]) => ({ product, n }));
   }, [visible]);
 
+  /** محطةٌ كل منتجاتها غير متوفرة.
+   *
+   *  طلب المالك: من لا يُعلن شيئاً لا يظهر في البطاقات — فالقائمة تُفتح
+   *  للبحث عن وقود، وبطاقةٌ لا وقود فيها ضجيجٌ بين الأجوبة.
+   *
+   *  والمقياس is_available وحده — لا حداثةٌ ولا دوام. لأن حارس الحداثة يُخفي
+   *  خبراً شاخ، وحارس الدوام يُخفي المحطة كلها ليلاً: قِستُ الساعة 03:47
+   *  فوجدت صفراً من ثماني عشرة مفتوحة. فقاعدةٌ تتبعهما تُفرغ التطبيق كل ليلة.
+   *
+   *  ولا تُحذف: البحث بالاسم يجدها، والخريطة تحملها، وسطرٌ أسفل القائمة
+   *  يقول كم هي ويفتحها. من يعرف أن «المنتصر بالله» موجودة ويقول له التطبيق
+   *  إنها ليست موجودة — يفقد الثقة بكل ما عداها. */
+  const hasStock = (s: StationWithStatus) => s.products.some((p) => p.is_available);
+
+  const listRows = useMemo(() => {
+    if (!visible) return null;
+    // البحث بالاسم لا يُصفّى: من كتب اسم محطة يريدها هي، لا وقودها.
+    if (query.trim() || showEmpty) return visible;
+    return visible.filter(hasStock);
+  }, [visible, query, showEmpty]);
+
+  const emptyCount = (visible?.length ?? 0) - (listRows?.length ?? 0);
+
   const cityCounts = useMemo(() => {
     const m = new Map<string, number>();
     for (const s of stations ?? []) m.set(s.city, (m.get(s.city) ?? 0) + 1);
@@ -453,7 +478,7 @@ export default function HomePage() {
               setShowAll(all);
             }}
             cityCounts={cityCounts}
-            total={visible?.length ?? 0}
+            total={listRows?.length ?? 0}
             productCounts={productCounts}
             activeProduct={filters.product}
             onPickProduct={(p) => setFilters({ ...filters, product: p })}
@@ -664,7 +689,7 @@ export default function HomePage() {
                   )}
                 </div>
               )}
-              {visible.map((station, i) => (
+              {(listRows ?? visible).map((station, i) => (
                 <StationCard
                   key={station.id}
                   station={station}
@@ -674,6 +699,31 @@ export default function HomePage() {
                 />
               ))}
 
+              {/* البابُ الذي لا يُغلق. */}
+              {emptyCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowEmpty(true)}
+                  className="w-full rounded-xl border border-dashed border-slate-200 bg-white p-3 text-xs font-bold text-slate-500"
+                >
+                  {plural(
+                    emptyCount,
+                    'محطة واحدة لا وقود معلَناً لديها — اعرضها',
+                    'محطتان لا وقود معلَناً لديهما — اعرضهما',
+                    'محطات لا وقود معلَناً لديها — اعرضها',
+                    'محطة لا وقود معلَناً لديها — اعرضها'
+                  )}
+                </button>
+              )}
+              {showEmpty && emptyCount === 0 && (visible?.some((s) => !hasStock(s)) ?? false) && (
+                <button
+                  type="button"
+                  onClick={() => setShowEmpty(false)}
+                  className="w-full rounded-xl border border-dashed border-slate-200 bg-white p-3 text-xs font-bold text-slate-500"
+                >
+                  أخفِ المحطات التي لا وقود لديها
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -720,7 +770,7 @@ export default function HomePage() {
       <BottomDock
         view={view}
         near={!!origin}
-        stationCount={visible?.length ?? 0}
+        stationCount={listRows?.length ?? 0}
         onList={() => {
           setOrigin(null);
           setView('list');

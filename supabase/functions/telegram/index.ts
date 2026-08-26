@@ -1268,6 +1268,43 @@ async function linkByContact(chat: number, telegramId: number, rawPhone: string)
   await showOwnerPanel(chat, match.id);
 }
 
+/** «ما زال متوفراً» — جواب سؤال الساعتين بضغطة.
+ *
+ *  يختم الوقت على كل صفوف المحطة فتعود الحالة طازجة، تماماً كزرّ «تأكيد» في
+ *  لوحة الويب. ولا يُعلن شيئاً: الإعلان خبرُ وصولٍ لا خبرُ بقاء — ومن أكّد ما
+ *  أعلنه قبل ساعتين لم يصل إليه وقودٌ جديد ليُوقَظ الناس له. */
+async function confirmStock(
+  chat: number,
+  messageId: number,
+  telegramId: number,
+  stationId: string,
+  queryId: string
+) {
+  if (!isAdmin(telegramId)) {
+    const { data: link } = await db
+      .from('telegram_links')
+      .select('station_id')
+      .eq('telegram_id', telegramId)
+      .maybeSingle();
+    if (!link || link.station_id !== stationId) {
+      await answer(queryId, 'غير مصرّح لك بإدارة هذه المحطة');
+      return;
+    }
+  }
+
+  const { error } = await db
+    .from('station_products')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('station_id', stationId);
+
+  if (error) {
+    await answer(queryId, 'تعذّر الحفظ — أعد المحاولة');
+    return;
+  }
+  await answer(queryId, 'شكراً — حالتك صارت محدّثة الآن ✅');
+  await showOwnerPanel(chat, stationId, messageId);
+}
+
 async function toggleProduct(
   chat: number,
   messageId: number,
@@ -1449,6 +1486,8 @@ Deno.serve(async (req) => {
       } else if (data.startsWith('p:')) {
         await answer(cb.id);
         await showStationsWithProduct(chat, messageId, data.slice(2));
+      } else if (data.startsWith('c:')) {
+        await confirmStock(chat, messageId, from, data.slice(2), cb.id);
       } else if (data.startsWith('r:')) {
         await answer(cb.id, 'تم التحديث');
         await showOwnerPanel(chat, data.slice(2), messageId);
