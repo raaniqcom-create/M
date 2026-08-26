@@ -1,18 +1,18 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
-  AVG_KMH,
-  durationText,
+  GAP_SEVERE_KM,
   GAP_WARN_KM,
   ON_ROAD_M,
   TRIP_POINTS,
-  kmBetween,
+  durationText,
+  loadRoutes,
   minutesFor,
-  resolveRoutes,
+  routeBetween,
   stopsFor,
-  type LatLng,
+  type RoadRoute,
 } from '@/lib/geo';
 import { RoadStop } from './RoadStop';
 import type { GapSpan } from './RoadMap';
@@ -22,7 +22,7 @@ import { FuelIcon, MapPinIcon, SearchIcon, SpinnerIcon } from './icons';
 const RoadMap = dynamic(() => import('./RoadMap'), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[300px] items-center justify-center rounded-2xl bg-brand-50">
+    <div className="flex h-[320px] items-center justify-center rounded-2xl bg-brand-50">
       <SpinnerIcon className="h-6 w-6 text-brand" />
     </div>
   ),
@@ -34,26 +34,37 @@ const RoadMap = dynamic(() => import('./RoadMap'), {
  *  القائمة لأن السؤال الأول بصريّ — «كيف يبدو طريقي؟» — والقائمة جوابُ
  *  السؤال الثاني: «أين أقف؟».
  *
- *  والاتجاه ليس تفصيلاً: الطرق مزدوجة، ومحطةُ جانبٍ لا تُخدم القادم من الجهة
- *  الأخرى. قِيس على طريق بغداد فكان محطتين ذهاباً وأربعاً عودةً — وطابق ذلك
- *  ذاكرة من يقطعه يومياً. */
+ *  والمسارات مُحسَّبةٌ سلفاً بمحرّك توجيهٍ حقيقي، لا مخيوطةً من مراجع الطرق.
+ *  والفرق ليس تجميلاً: الرمادي ← كبيسة كانت تُرسم داخل الرمادي. */
 export function RoadPlanner() {
   const [from, setFrom] = useState('الرمادي');
   const [to, setTo] = useState('بغداد');
   const [query, setQuery] = useState<{ from: string; to: string } | null>(null);
   const [showStops, setShowStops] = useState(false);
-  /** أيّ الطرق حين يصل أكثر من واحد — السريع أولاً، والقديم خيارٌ يُعرض. */
-  const [roadIdx, setRoadIdx] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [loadErr, setLoadErr] = useState('');
 
-  const routes = useMemo(() => (query ? resolveRoutes(query.from, query.to) : []), [query]);
-  const route = routes[roadIdx] ?? routes[0] ?? null;
+  // الشبكة تُحمَّل مرّةً واحدة عند فتح الصفحة — لا عند كل بحث. و684 ك.ب
+  // تصل ~50 مضغوطة، فالانتظار جزءٌ من فتح الصفحة لا من كل ضغطة.
+  useEffect(() => {
+    let alive = true;
+    loadRoutes()
+      .then(() => {
+        if (alive) setReady(true);
+      })
+      .catch(() => {
+        if (alive) setLoadErr('تعذّر تحميل شبكة الطرق. تحقّق من اتصالك ثم أعد فتح الصفحة.');
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const route: RoadRoute | null = useMemo(
+    () => (query && ready ? routeBetween(query.from, query.to) : null),
+    [query, ready]
+  );
   const stops = useMemo(() => (route ? stopsFor(route) : []), [route]);
-
-  /** بُعد نقطةٍ عن الانطلاق — تُستعمل لوضع الفجوات في مواضعها على الخطّ. */
-  const distanceAt = useMemo(() => {
-    const o = route?.origin;
-    return (p: LatLng) => (o ? kmBetween(o, p) : 0);
-  }, [route]);
 
   /** الفجوات: بين كل محطتين، وقبل الأولى، وبعد الأخيرة. */
   const gaps: GapSpan[] = useMemo(() => {
@@ -71,79 +82,109 @@ export function RoadPlanner() {
 
   function search() {
     setShowStops(false);
-    setRoadIdx(0);
     setQuery({ from, to });
+  }
+
+  /** عكسُ الرحلة — والنتيجة ليست نفسها معكوسة.
+   *
+   *  الطرق مزدوجة، ومسارُ العودة يسلك الجانب الآخر ويمرّ بمخارجَ أخرى. قِيس
+   *  على طريق بغداد فاختلف عدد المحطات ذهاباً وعودة — وطابق ذلك ذاكرة من
+   *  يقطعه يومياً. فالزرّ ليس اختصاراً بل رحلةٌ ثانية. */
+  function swap() {
+    setFrom(to);
+    setTo(from);
+    setShowStops(false);
+    if (query) setQuery({ from: to, to: from });
   }
 
   return (
     <div className="space-y-3">
       <section className="card space-y-3 p-4">
-        <div>
-          <label htmlFor="from" className="text-xs font-bold text-slate-600">
-            من أين تنطلق؟
+        <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+          <label className="block">
+            <span className="text-[11px] font-bold text-slate-600">من أين تنطلق؟</span>
+            <span className="mt-1.5 flex items-center gap-1.5 rounded-xl border-2 border-brand/40 bg-white px-2">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-brand" aria-hidden="true" />
+              <select
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                aria-label="نقطة الانطلاق"
+                className="h-10 w-full bg-transparent text-[13px] font-bold text-slate-800 outline-none"
+              >
+                {TRIP_POINTS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </span>
           </label>
-          <select
-            id="from"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800"
+
+          <button
+            type="button"
+            onClick={swap}
+            aria-label="اعكس الرحلة"
+            title="اعكس الرحلة"
+            className="mb-[1px] flex h-10 w-10 items-center justify-center rounded-xl border border-brand-200 bg-white text-slate-600 transition-colors active:bg-brand-50"
           >
-            {TRIP_POINTS.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M7 4v13m0 0-3-3m3 3 3-3M17 20V7m0 0-3 3m3-3 3 3" />
+            </svg>
+          </button>
+
+          <label className="block">
+            <span className="text-[11px] font-bold text-slate-600">إلى أين وجهتك؟</span>
+            <span className="mt-1.5 flex items-center gap-1.5 rounded-xl border-2 border-[#2563eb]/40 bg-white px-2">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#2563eb]" aria-hidden="true" />
+              <select
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                aria-label="الوجهة"
+                className="h-10 w-full bg-transparent text-[13px] font-bold text-slate-800 outline-none"
+              >
+                {TRIP_POINTS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </span>
+          </label>
         </div>
 
-        <div>
-          <label htmlFor="to" className="text-xs font-bold text-slate-600">
-            إلى أين وجهتك؟
-          </label>
-          <select
-            id="to"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800"
-          >
-            {TRIP_POINTS.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-        </div>
-
-        <button type="button" onClick={search} disabled={from === to} className="btn-primary w-full">
-          <SearchIcon className="h-4 w-4" />
-          ابحث عن الطريق
+        <button
+          type="button"
+          onClick={search}
+          disabled={from === to || !ready}
+          className="btn-primary w-full disabled:opacity-60"
+        >
+          {ready ? <SearchIcon className="h-4 w-4" /> : <SpinnerIcon className="h-4 w-4" />}
+          {ready ? 'ابحث عن الطريق' : 'يُحمّل شبكة الطرق…'}
         </button>
         {from === to && (
-          <p className="text-center text-[11px] text-slate-400">اختر وجهةً غير نقطة الانطلاق.</p>
+          <p className="text-center text-[11px] text-slate-500">اختر وجهةً غير نقطة الانطلاق.</p>
+        )}
+        {loadErr && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-center text-[11px] font-bold text-traffic-red">
+            {loadErr}
+          </p>
         )}
       </section>
 
-      {/* طريقان بين المدينتين — والفرق جوهريّ: السريع يلتفّ حول البلدات
-          والقديم يمرّ بها. فيُعرض الاختيار بدل أن يُفرض واحدٌ صامتاً. */}
-      {routes.length > 1 && (
-        <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${routes.length}, minmax(0,1fr))` }}>
-          {routes.map((r, i) => (
-            <button
-              key={r.ref}
-              type="button"
-              onClick={() => { setRoadIdx(i); setShowStops(false); }}
-              aria-pressed={i === roadIdx}
-              className={`rounded-xl border px-2 py-2 text-[11px] font-bold transition-colors ${
-                i === roadIdx ? 'border-brand bg-brand text-white' : 'border-slate-200 bg-white text-slate-600'
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {query && !route && (
+      {query && ready && !route && (
         <div className="card p-5 text-center">
-          <p className="text-sm font-bold text-slate-700">لا نعرف طريقاً مباشراً بينهما</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
-            الطرق المتاحة تصل الأنبار ببغداد والمنافذ الحدودية. جرّب مدينةً على أحدها.
+          <p className="text-sm font-bold text-slate-700">لا نعرف طريقاً بين هاتين</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
+            لم يُحسب مسارٌ لهذه الرحلة. جرّب مدينةً أخرى، أو أبلغنا لنضيفها.
           </p>
         </div>
       )}
@@ -152,27 +193,28 @@ export function RoadPlanner() {
         <>
           <section className="card p-3">
             <div className="flex items-center justify-between gap-2 text-xs font-bold">
-              <span className="flex items-center gap-1.5 text-brand-700">
-                <span className="h-2.5 w-2.5 rounded-full bg-brand" />
-                {route.from}
+              <span className="flex min-w-0 items-center gap-1.5 text-brand-700">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-brand" />
+                <span className="truncate">{route.from}</span>
               </span>
-              <span className="text-slate-400">
-                {Math.round(route.km)} كم · ~{durationText(route.km)}
+              <span className="shrink-0 text-center text-slate-700">
+                {Math.round(route.km)} كم
+                <span className="mx-1 text-slate-300">·</span>
+                {durationText(route.min)}
               </span>
-              <span className="flex items-center gap-1.5 text-[#2563eb]">
-                {route.to}
-                <span className="h-2.5 w-2.5 rounded-full bg-[#2563eb]" />
+              <span className="flex min-w-0 items-center justify-end gap-1.5 text-[#2563eb]">
+                <span className="truncate">{route.to}</span>
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#2563eb]" />
               </span>
             </div>
-            {route.note && <p className="mt-1.5 text-[10.5px] text-slate-400">{route.note}</p>}
+            {route.via.length > 0 && (
+              <p className="mt-1.5 truncate text-[10.5px] text-slate-500">
+                عبر {route.via.join(' ← ')}
+              </p>
+            )}
           </section>
 
-          <RoadMap path={route.path} stops={stops} gaps={gaps} distanceAt={distanceAt} />
-
-          <p className="px-1 text-[10px] leading-relaxed text-slate-400">
-            الخطّ يبدأ أخضرَ عند {route.from} وينتهي أزرقَ عند {route.to}.
-            {gaps.length > 0 && ' والأحمر المتقطّع: امتدادٌ بلا محطة نعرفها.'}
-          </p>
+          <RoadMap route={route} stops={stops} gaps={gaps} />
 
           {!showStops ? (
             <button type="button" onClick={() => setShowStops(true)} className="btn-primary w-full">
@@ -185,7 +227,7 @@ export function RoadPlanner() {
               <section className="card flex items-center justify-between gap-2 p-3">
                 <span className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
                   <MapPinIcon className="h-4 w-4 text-brand" />
-                  محطات هذا الاتجاه وحده
+                  محطات هذا الطريق
                 </span>
                 <span className="text-xs font-bold text-slate-700">
                   {stops.length === 0
@@ -211,12 +253,11 @@ export function RoadPlanner() {
                 </div>
               )}
 
-              {/* أوّل محطة: كم يفصلها عن الانطلاق */}
               {stops.length > 0 && <Leg km={stops[0].atKm} label="أول محطة" />}
 
               {stops.map((s, i) => (
                 <div key={`${s.name}-${i}`} className="space-y-3">
-                  <RoadStop stop={s} last={i === stops.length - 1} />
+                  <RoadStop stop={s} index={i + 1} last={i === stops.length - 1} />
                   {s.toNextKm != null && s.toNextKm < GAP_WARN_KM && (
                     <Leg km={s.toNextKm} label="المحطة التالية" />
                   )}
@@ -224,8 +265,18 @@ export function RoadPlanner() {
               ))}
 
               {stops.length > 0 && tailGap >= GAP_WARN_KM && (
-                <div className="rounded-xl border-2 border-traffic-red bg-red-50 p-3">
-                  <p className="flex items-center gap-1.5 text-[12px] font-extrabold text-traffic-red">
+                <div
+                  className={`rounded-xl border-2 p-3 ${
+                    tailGap >= GAP_SEVERE_KM
+                      ? 'border-traffic-red bg-red-100'
+                      : 'border-amber-400 bg-amber-50'
+                  }`}
+                >
+                  <p
+                    className={`flex items-center gap-1.5 text-[12px] font-extrabold ${
+                      tailGap >= GAP_SEVERE_KM ? 'text-traffic-red' : 'text-amber-800'
+                    }`}
+                  >
                     <FuelIcon className="h-4 w-4 shrink-0" />
                     {Math.round(tailGap)} كم بلا محطة حتى {route.to}
                   </p>
@@ -235,10 +286,11 @@ export function RoadPlanner() {
                 </div>
               )}
 
-              <p className="px-1 text-[10px] leading-relaxed text-slate-400">
-                المعروض محطاتٌ على حافّة الطريق ضمن {ON_ROAD_M} متراً، من بيانات خرائط
-                مفتوحة — إرشاديّ لا التزاميّ. والزمن تقديريّ بمتوسّط {AVG_KMH} كم/س، بلا
-                حساب سيطرةٍ ولا ازدحام. ومحطات داخل المدن لا تظهر هنا؛ اطلبها من الرئيسة.
+              <p className="px-1 text-[10px] leading-relaxed text-slate-500">
+                المعروض <b>تغطيةٌ فقط</b>: أين تقف المحطات على طريقك، لا ما تبيعه ولا متى
+                تفتح. مصدرها خرائط مفتوحة، ضمن {ON_ROAD_M} متراً من حافّة الطريق — إرشاديّ لا
+                التزاميّ. والمسافة والزمن من محرّك توجيهٍ حقيقي، بلا حساب سيطرةٍ ولا ازدحام.
+                ومحطات داخل المدن لا تظهر هنا؛ اطلبها من الصفحة الرئيسة.
               </p>
             </>
           )}
@@ -260,11 +312,20 @@ function Leg({ km, label }: { km: number; label: string }) {
         style={{ marginRight: '-1px' }}
         aria-hidden="true"
       />
-      <span className="flex items-center gap-1.5 rounded-full border border-dashed border-brand-200 bg-brand-50/60 px-3 py-1 text-[11px] font-bold text-brand-900">
-        <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <span className="flex items-center gap-1.5 rounded-full border border-dashed border-brand-200 bg-brand-50/60 px-3 py-1 text-[11px] font-bold text-slate-700">
+        <svg
+          className="h-3 w-3 shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
           <path d="M12 5v14M6 13l6 6 6-6" />
         </svg>
-        خلال {minutesFor(km)} دقيقة · {Math.round(km)} كم
+        خلال {durationText(minutesFor(km))} · {Math.round(km)} كم
       </span>
     </div>
   );

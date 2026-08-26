@@ -1,4 +1,3 @@
-import { CORRIDORS, type Corridor } from './corridors';
 import { ROAD_STATIONS, type RoadStation } from './roadStations';
 
 export type LatLng = readonly [number, number];
@@ -33,66 +32,40 @@ function projectOnSegment(p: LatLng, a: LatLng, b: LatLng) {
   return { km: kmBetween(proj, p), side: cross < 0 ? -1 : 1, t };
 }
 
-export interface Snap {
-  /** البُعد العموديّ عن الطريق، بالكيلومترات */
-  km: number;
-  /** ‎-1 يمين اتجاه السير · ‎+1 يساره */
-  side: number;
-}
-
-/** أقرب موضعٍ من نقطةٍ إلى شبكةٍ من الأجزاء. */
-export function snapToWays(p: LatLng, ways: readonly (readonly LatLng[])[]): Snap {
-  let best: Snap = { km: Infinity, side: 0 };
-  for (const way of ways) {
-    for (let i = 0; i < way.length - 1; i++) {
-      const r = projectOnSegment(p, way[i], way[i + 1]);
-      if (r.km < best.km) best = { km: r.km, side: r.side };
-    }
-  }
-  return best;
-}
-
-/** طولٌ تقريبيّ لمسار. */
-export function pathLength(way: readonly LatLng[]): number {
-  let n = 0;
-  for (let i = 0; i < way.length - 1; i++) n += kmBetween(way[i], way[i + 1]);
-  return n;
-}
-
-// ── المسارات ──────────────────────────────────────────────────────
-
-/** إحداثيّات أطراف الرحلات. مدن الأنبار في lib/cities.ts، وهذه تضمّ ما
- *  خرج عنها: بغداد، والمنافذ الحدودية التي لا قضاء لها. */
 export const ENDPOINTS: Readonly<Record<string, LatLng>> = {
   'الرمادي': [33.4258, 43.3012],
   'الفلوجة': [33.3556, 43.7864],
   'هيت': [33.6383, 42.8258],
   'حديثة': [34.1372, 42.3789],
-  'عانة': [34.4686, 41.9375],
-  'راوة': [34.4756, 41.9139],
-  'القائم': [34.3689, 41.0906],
+  'عانة': [34.3725, 41.9859],
+  'راوة': [34.4833, 41.9237],
+  'القائم': [34.39577, 40.99437],
   'الرطبة': [33.0386, 40.2864],
   'الحبانية': [33.3628, 43.5586],
   'الخالدية': [33.3789, 43.4881],
-  'عامرية الفلوجة': [33.2264, 43.6786],
-  'الكرمة': [33.4453, 43.7972],
+  'عامرية الفلوجة': [33.16347, 43.86422],
+  'الكرمة': [33.40494, 43.91423],
   'النخيب': [32.0369, 42.2506],
   'بغداد': [33.3152, 44.3661],
-  'طريبيل (الأردن)': [32.92, 38.98],
+  // المعبر لا تقديرُه: [32.92, 38.98] كانت تبعد 21 كم شمال المعبر، فيُسقطها
+  // محرّك التوجيه على أوّل طريقٍ يجده — وينتهي المسار قبل الحدود بستّة عشر
+  // كيلومتراً، فتغيب تغطية آخرها. وهذه من barrier=border_control في OSM.
+  'طريبيل (الأردن)': [32.7395, 39.0073],
   // المنفذ لا المدينة: الطريق العراقي ينتهي هنا، وعرعر بعده بـ59 كم داخل
   // السعودية. ووعدٌ بمحطاتٍ وراء الحدود لا نملكه.
   'منفذ عرعر': [31.37148, 41.44502],
-  'البغدادي': [33.8517, 42.6472],
+  'البغدادي': [33.85175, 42.54918],
   'الحقلانية': [34.0575, 42.3792],
   'كبيسة': [33.5941, 42.6185],
   'المحمدي': [33.5509, 42.9011],
   'الصقلاوية': [33.3964, 43.6833],
-  'حصيبة': [33.4207, 43.4533],
+  'حصيبة الشرقية': [33.4207, 43.4533],
   'العبيدي': [34.4281, 41.2173],
   'الكرابلة': [34.3909, 41.0464],
   'الرمانة': [34.3931, 41.078],
   'عكاشات': [33.6675, 39.967],
   'الوليد': [33.4328, 38.9321],
+  'الوفاء': [33.3975, 42.8531],
   // على بُعد 36 كم من أقرب طريقٍ نعرف هندسته — أي خارج عتبة الـ35. فهي هنا
   // بياناتٍ ولا تُعرض في المختار: وجهةٌ تُختار ثم يُقال «لا نعرف طريقاً»
   // أسوأ من وجهةٍ لا تُعرض. تُرفَع حين يحلّ OSRM محلّ خياطة الممرّات.
@@ -101,183 +74,147 @@ export const ENDPOINTS: Readonly<Record<string, LatLng>> = {
 
 /** ما يُعرض في مختاري «من» و«إلى» — بترتيبٍ يبدأ بالأكثر طلباً. */
 export const TRIP_POINTS: readonly string[] = [
-  'الرمادي', 'الفلوجة', 'بغداد', 'الخالدية', 'الحبانية', 'حصيبة',
+  'الرمادي', 'الفلوجة', 'بغداد', 'الخالدية', 'الحبانية', 'حصيبة الشرقية',
   'عامرية الفلوجة', 'الكرمة', 'الصقلاوية',
-  'هيت', 'المحمدي', 'كبيسة', 'البغدادي', 'الحقلانية', 'حديثة', 'عانة', 'راوة',
+  'هيت', 'الوفاء', 'المحمدي', 'كبيسة', 'البغدادي', 'الحقلانية', 'حديثة', 'عانة', 'راوة',
   'القائم', 'العبيدي', 'الكرابلة', 'الرمانة',
   'الرطبة', 'عكاشات', 'النخيب', 'الوليد', 'طريبيل (الأردن)', 'منفذ عرعر',
 ];
 
-export interface ResolvedRoute {
-  ref: string;
-  label: string;
-  note: string;
-  heading: 'east' | 'west';
-  ways: LatLng[][];
-  /** مسارٌ مرتَّب من الانطلاق إلى الوجهة — للرسم على الخريطة */
-  path: LatLng[];
+// ── المسارات ───────────────────────────────────────────────────────
+//
+// **لماذا مُحسَّبةٌ سلفاً لا محسوبةٌ هنا؟**
+//
+// كانت الطرق تُخاط من أجزاء OSM بمراجعها (M1, 12, 22…): يُسقَط الطرفان على
+// ممرّ، وتُرتَّب أجزاؤه، ويُوصَل الخيط. وكانت تصل أكثر الرحلات وتُفسد ما
+// خرج عن المراجع — والصحراء أكثرها بلا مرجع.
+//
+// وأوضح ما كشفها الرمادي ← كبيسة. كبيسة تبعد 15.7 كم عن أقرب طريقٍ له
+// مرجع، فلا يبلغها الخيط، فيرتدّ إلى أقرب قطعةٍ يعرفها — وكانت **داخل
+// الرمادي**. فبلّغ المالك: «ظهر الطريق داخل الرمادي فقط». والقياس بعده:
+// 36 كم على طريق بغداد، والحقيقة 84 عبر هيت.
+//
+// فحلّ محلّها OSRM: محرّك توجيهٍ يعرف الشبكة كلّها — الفرعيّ والصحراويّ
+// والوصلات بلا اسم. و812 مساراً حُسبت مرّةً واحدة وقت البناء وخُزّنت في
+// public/road-routes.json، فلا يعتمد المسافر على خدمةٍ خارجية وهو في
+// الصحراء، ولا يُحمَّل خادمٌ مجانيٌّ بطلبٍ لكل زائر.
+//
+// والمسافة والزمن من المحرّك لا من قسمةٍ على 80: طريق الصحراء ليس كطريق
+// المدينة، ومتوسّطٌ واحدٌ لهما يكذب على أحدهما.
+
+export interface RoadRoute {
   from: string;
   to: string;
+  /** الطول الحقيقي بالكيلومترات — من محرّك التوجيه */
+  km: number;
+  /** المدّة الحقيقية بالدقائق — من محرّك التوجيه */
+  min: number;
+  path: LatLng[];
   origin: LatLng;
   dest: LatLng;
-  km: number;
+  /** المدن التي يمرّ بها الطريق فعلاً، مستخرَجةً من الهندسة لا مكتوبةً بيد */
+  via: string[];
 }
 
-/** أي مدينتين، لا قائمةٌ ثابتة من الأزواج.
- *
- *  يُختار الطريق الذي **يمرّ بالطرفين معاً** — لا الأقرب إلى أحدهما. فالرمادي
- *  تقع على أربعة طرق، وبغداد على ثلاثة؛ والمشترك بينهما وحده هو الرحلة.
- *
- *  والاتجاه من خطوط الطول: بغداد شرقاً والحدود غرباً، وهو ما فُرزت به أجزاء
- *  الطرق عند التوليد — فلا نقطةَ مرجعية تُخترع هنا. */
-/** حين يصل الطريقان بين مدينتين، أيّهما الافتراضي؟
- *
- *  السريع قبل القديم. وقياسٌ كشف الحاجة: الرمادي↔بغداد كان يختار الطريق
- *  القديم (11) لأنه يمرّ بمركزَي المدينتين بينما M1 يلتفّ حولهما — فظهرت
- *  محطات الخالدية والحبانية «على الطريق» وهي داخل البلدات. والمسافر بين
- *  محافظتين يأخذ السريع، والقديم خيارٌ يُعرض لا يُفرض. */
-const ROAD_RANK: Readonly<Record<string, number>> = { M1: 0, '12': 1, '22': 2, '21': 3, '20': 4, '11': 5 };
+let ROUTES: Map<string, number[]> | null = null;
+let loading: Promise<void> | null = null;
 
-/** كل الطرق التي تصل بين نقطتين، الأفضل أوّلاً. */
-export function resolveRoutes(from: string, to: string): ResolvedRoute[] {
+/** يفكّ [كم, دقيقة, Δعرض, Δطول, …] بأعشار الآلاف من الدرجة. */
+function decode(enc: readonly number[]): { km: number; min: number; path: LatLng[] } {
+  const path: LatLng[] = [];
+  let la = 0, lo = 0;
+  for (let i = 2; i < enc.length; i += 2) {
+    la += enc[i];
+    lo += enc[i + 1];
+    path.push([la / 1e4, lo / 1e4]);
+  }
+  return { km: enc[0], min: enc[1], path };
+}
+
+/** يُحمَّل مرّةً واحدة، وعند فتح صفحة الطريق وحدها.
+ *
+ *  684 ك.ب خاماً و~50 بعد ضغط الخادم — أقلّ من صورة. ولا يُحمَّل على من لا
+ *  يسافر: الملفّ في public/ لا في الحزمة. */
+export function loadRoutes(): Promise<void> {
+  if (ROUTES) return Promise.resolve();
+  if (loading) return loading;
+  loading = fetch('/road-routes.json')
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .then((d: { routes: Record<string, number[]> }) => {
+      ROUTES = new Map(Object.entries(d.routes));
+    })
+    .catch((e) => {
+      loading = null;
+      throw e;
+    });
+  return loading;
+}
+
+export function routesReady(): boolean {
+  return ROUTES !== null;
+}
+
+/** المدن التي يمرّ بها المسار فعلاً — من الهندسة، لا من جدولٍ مكتوب.
+ *
+ *  «عبر هيت» جوابٌ يعرفه من يعرف الطريق، ويُطمئن من لا يعرفه. وحسابُه من
+ *  المسار نفسه يعني أنه لا يكذب حين يتغيّر الطريق. */
+function viaOn(path: readonly LatLng[], from: string, to: string): string[] {
+  const hits: { name: string; at: number }[] = [];
+  for (const [name, p] of Object.entries(ENDPOINTS)) {
+    if (name === from || name === to) continue;
+    let best = Infinity, at = 0, acc = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+      const seg = kmBetween(path[i], path[i + 1]);
+      const r = projectOnSegment(p, path[i], path[i + 1]);
+      if (r.km < best) { best = r.km; at = acc + seg * r.t; }
+      acc += seg;
+    }
+    // ثمانيةُ كيلومترات: المدينة على الطريق لا قريبةٌ منه. وأوسعُ منها يجعل
+    // كل بلدةٍ في الوادي «على الطريق».
+    if (best <= 8) hits.push({ name, at });
+  }
+  return hits.sort((a, b) => a.at - b.at).map((h) => h.name);
+}
+
+/** المسار بين مدينتين — أو null إن لم يُحسب. */
+export function routeBetween(from: string, to: string): RoadRoute | null {
   const origin = ENDPOINTS[from];
   const dest = ENDPOINTS[to];
-  if (!origin || !dest || from === to) return [];
-
-  const found: { r: ResolvedRoute; score: number }[] = [];
-  for (const c of CORRIDORS) {
-    const all = [...c.east, ...c.west, ...c.both] as unknown as LatLng[][];
-    if (!all.length) continue;
-    // الأسوأ من الطرفين هو المقياس: طريقٌ يمرّ بواحدةٍ ويبعد عن الأخرى ليس رحلة.
-    const score = Math.max(snapToWays(origin, all).km, snapToWays(dest, all).km);
-    if (score > 35) continue;
-    const r = buildRoute(c, from, to, origin, dest);
-    if (r && r.path.length > 1) found.push({ r, score });
-  }
-  // الأقصر فعلاً أوّلاً — لا الأسرع صنفاً.
-  //
-  // قال المالك: بغداد↔الرمادي سريع، والخالدية↔الرمادي عادي، والفلوجة↔هيت
-  // سريع. ولا قاعدةَ صنفٍ تُنتج الثلاثة — لكن الطول يُنتجها: السريع يلتفّ
-  // فيطول في الرحلة القصيرة، ويستقيم فيقصر في الطويلة.
-  found.sort((a, b) => a.r.km - b.r.km || (ROAD_RANK[a.r.ref] ?? 9) - (ROAD_RANK[b.r.ref] ?? 9));
-  return found.map((f) => f.r);
-}
-
-/** يخيط أجزاء الطريق في خطٍّ واحد متّصل.
- *
- *  **العطل الذي أصلحه:** كان المسار يُبنى بتسطيح كل الأجزاء إلى نقاطٍ ثم
- *  ترتيبها بالبُعد عن الانطلاق. والنتيجة خربشة: الطريق مزدوج وأجزاؤه
- *  متجاورة، فيقفز الخطّ بين المسارين ذهاباً وإياباً — ورآها المالك تلفّ
- *  داخل الرمادي بدل أن تمضي إلى بغداد.
- *
- *  والصواب أن الجزء **مسارٌ مرتَّب أصلاً** كما جاء من OSM. فيُرتَّب الأجزاء
- *  لا النقاط: لكل جزءٍ موضعٌ على محور الرحلة (إسقاطُ منتصفه)، ويُقلَب إن كان
- *  طرفه الأخير أقرب إلى الانطلاق من أوّله، ثم تُوصَل بترتيبها.
- *
- *  ويُستبعد ما ابتعد عن محور الرحلة: الطريق يتفرّع ويلتفّ داخل المدن،
- *  وفروعُه ليست رحلتك. */
-const CORRIDOR_KM = 12;
-
-function stitchPath(ways: LatLng[][], origin: LatLng, dest: LatLng): LatLng[] {
-  const oy = origin[0], ox = origin[1];
-  const vy = dest[0] - oy, vx = dest[1] - ox;
-  const len2 = vx * vx + vy * vy;
-  if (len2 === 0) return [];
-
-  /** موضع نقطةٍ على محور الرحلة: 0 عند الانطلاق و1 عند الوجهة. */
-  const progress = (p: LatLng) => ((p[1] - ox) * vx + (p[0] - oy) * vy) / len2;
-  /** بُعدها العموديّ عن المحور، تقريباً بالكيلومترات. */
-  const offAxis = (p: LatLng) => {
-    const t = Math.max(0, Math.min(1, progress(p)));
-    return kmBetween(p, [oy + t * vy, ox + t * vx]);
-  };
-
-  const parts: { key: number; pts: LatLng[] }[] = [];
-  for (const w of ways) {
-    if (w.length < 2) continue;
-    const mid = w[Math.floor(w.length / 2)];
-    // خارج المحور أو خارج مدى الرحلة — فرعٌ لا رحلة.
-    if (offAxis(mid) > CORRIDOR_KM) continue;
-    const pm = progress(mid);
-    if (pm < -0.08 || pm > 1.08) continue;
-    // يُقلَب الجزء إن كان يسير عكس اتجاه الرحلة.
-    const pts = progress(w[w.length - 1]) < progress(w[0]) ? [...w].reverse() : w;
-    parts.push({ key: pm, pts });
-  }
-  parts.sort((a, b) => a.key - b.key);
-
-  // وصلٌ بلا تكرار: طرفُ جزءٍ وبداية تاليه قد يكونان النقطة نفسها.
-  const path: LatLng[] = [];
-  for (const part of parts) {
-    for (const p of part.pts) {
-      const last = path[path.length - 1];
-      if (last && Math.abs(last[0] - p[0]) < 1e-6 && Math.abs(last[1] - p[1]) < 1e-6) continue;
-      path.push(p);
-    }
-  }
-  // قصٌّ على الطرفين: ما قبل الانطلاق وما بعد الوجهة ليس من الرحلة.
-  return path.filter((p) => {
-    const t = progress(p);
-    return t >= -0.05 && t <= 1.05;
-  });
-}
-
-function buildRoute(
-  c: Corridor,
-  from: string,
-  to: string,
-  origin: LatLng,
-  dest: LatLng
-): ResolvedRoute | null {
-  const heading: 'east' | 'west' = dest[1] > origin[1] ? 'east' : 'west';
-  const dir = (heading === 'east' ? c.east : c.west) as unknown as LatLng[][];
-  const ways = [...dir, ...(c.both as unknown as LatLng[][])];
-  if (!ways.length) return null;
-  const path = stitchPath(ways, origin, dest);
+  if (!ROUTES || !origin || !dest || from === to) return null;
+  const enc = ROUTES.get(`${from}|${to}`);
+  if (!enc) return null;
+  const { km, min, path } = decode(enc);
   if (path.length < 2) return null;
-  return {
-    ref: c.ref,
-    label: c.label,
-    note: c.note,
-    heading,
-    ways,
-    path,
-    from,
-    to,
-    origin,
-    dest,
-    // طول الطريق الفعليّ لا الخطّ المستقيم — وهو ما يُفاضَل به بين الطرق.
-    km: pathLength(path),
-  };
+  return { from, to, km, min, path, origin, dest, via: viaOn(path, from, to) };
 }
 
-export function resolveRoute(from: string, to: string): ResolvedRoute | null {
-  return resolveRoutes(from, to)[0] ?? null;
-}
-
-/** الزمن التقديري — بمتوسّط 80 كم/س على طرق الأنبار السريعة.
+/** الزمن التقديري حين لا نملك إلا المسافة.
  *
- *  ولا يُدَّعى أكثر: لا حالة طريق ولا سيطرات ولا ازدحام. رقمٌ يُقرَّب إلى
- *  خمس دقائق كي لا يُقرأ وعداً. */
+ *  الرحلة كاملةً تأتي بمدّتها الحقيقية من محرّك التوجيه. وهذه للأجزاء —
+ *  ما بين محطةٍ وأخرى — حيث المسافة وحدها معروفة. ولا يُدَّعى أكثر: لا حالة
+ *  طريق ولا سيطرات ولا ازدحام. ويُقرَّب إلى خمس دقائق كي لا يُقرأ وعداً. */
 export const AVG_KMH = 80;
 export function minutesFor(km: number): number {
   return Math.max(5, Math.round(((km / AVG_KMH) * 60) / 5) * 5);
 }
 
-/** الزمن مكتوباً. `Math.round(km / 80)` كان يقول «~0 ساعة» لكل رحلةٍ دون
+/** الدقائق مكتوبةً. `Math.round(km / 80)` كان يقول «~0 ساعة» لكل رحلةٍ دون
  *  الأربعين كيلومتراً — وهي أكثر رحلات المحافظة: الرمادي إلى حصيبة، الفلوجة
  *  إلى الصقلاوية، هيت إلى كبيسة. والصفر يُقرأ عطلاً لا تقريباً. */
-export function durationText(km: number): string {
-  const total = minutesFor(km);
+export function durationText(minutes: number): string {
+  const total = Math.max(5, Math.round(minutes / 5) * 5);
   const h = Math.floor(total / 60);
   const m = Math.round((total - h * 60) / 5) * 5;
-  if (h === 0) return `${m} دقيقة`;
+  // العربية تعدّ على أربعة أوجه لا وجهين: «5 دقائق» لا «5 دقيقة»، و«ساعتان»
+  // لا «2 ساعة». والتقريب إلى خمسٍ يجعل الدقائق 5..55، فلا يقع المفرد ولا
+  // المثنّى فيها — لكن الساعات تقعان.
+  const mins = m <= 10 ? `${m} دقائق` : `${m} دقيقة`;
+  if (h === 0) return mins;
   const hours = h === 1 ? 'ساعة' : h === 2 ? 'ساعتان' : h <= 10 ? `${h} ساعات` : `${h} ساعة`;
-  return m === 0 ? hours : `${hours} و${m} دقيقة`;
-}
-
-export function corridorFor(ref: string): Corridor | undefined {
-  return CORRIDORS.find((c) => c.ref === ref);
+  return m === 0 ? hours : `${hours} و${mins}`;
 }
 
 // ── المحطات على الطريق ─────────────────────────────────────────────
@@ -287,10 +224,12 @@ export interface RouteStop {
   city: string;
   lat: number;
   lng: number;
-  /** المسافة على الطريق من نقطة الانطلاق */
+  /** المسافة **على الطريق** من نقطة الانطلاق — لا خطّاً مستقيماً */
   atKm: number;
   /** البُعد عن حافّة الطريق، بالأمتار */
   offRoadM: number;
+  /** ‎-1 يمين اتجاه سيرك · ‎+1 يساره */
+  side: number;
   /** المسافة إلى المحطة التالية — null للأخيرة */
   toNextKm: number | null;
   /** محطة مسجّلة في المنصّة؟ يُملأ لاحقاً بالمطابقة */
@@ -304,45 +243,56 @@ export interface RouteStop {
  *  ومحطةُ طريقٍ حقيقية تقف على حافّته: القياس أعطى 34 متراً إلى 385. */
 export const ON_ROAD_M = 500;
 
-/** المحطات التي تخدم هذه الرحلة، مرتّبةً من نقطة الانطلاق. */
-export function stopsFor(
-  route: ResolvedRoute,
-  stations: readonly RoadStation[] = ROAD_STATIONS
-): RouteStop[] {
-  return collectStops(route.ways, route.origin, route.dest, stations);
+/** إسقاطُ نقطةٍ على مسارٍ كامل: بُعدها عنه، وجانبها منه، **وأين تقع عليه**.
+ *
+ *  والثالثة هي الجديدة. كان atKm خطّاً مستقيماً من الانطلاق — فمحطةٌ بعد
+ *  منعطفٍ تُقرأ أقربَ ممّا هي، والفجوة بين محطتين تُحسب أضيقَ من الحقيقة.
+ *  وفي الصحراء الفجوةُ هي المعلومة كلّها. */
+function snapAlong(p: LatLng, path: readonly LatLng[]) {
+  let km = Infinity, side = 0, atKm = 0, acc = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const seg = kmBetween(path[i], path[i + 1]);
+    const r = projectOnSegment(p, path[i], path[i + 1]);
+    if (r.km < km) { km = r.km; side = r.side; atKm = acc + seg * r.t; }
+    acc += seg;
+  }
+  return { km, side, atKm };
 }
 
+/** المحطات على هذه الرحلة، مرتّبةً من نقطة الانطلاق. */
+export function stopsFor(
+  route: RoadRoute,
+  stations: readonly RoadStation[] = ROAD_STATIONS
+): RouteStop[] {
+  return collectStops(route.path, stations);
+}
+
+/** **الجانب يُعرض ولا يُخفي.**
+ *
+ *  كان الترشيح يُسقط كل محطةٍ يسار اتجاه السير — منطقُ طريقٍ مزدوج، حيث
+ *  محطةُ الجانب الآخر خلف حاجزٍ لا تُدخَل. وهو صحيح على طريق بغداد السريع.
+ *
+ *  لكن أكثر طرق الأنبار صحراويّةٌ مفردة: الجانبان يخدمان الاتجاهين، ولا
+ *  حاجز. فإسقاطُ اليسار هناك يُخفي نصف التغطية — وقال المالك إن المطلوب
+ *  **التغطية**: «نريد تغطية المحطات فقط».
+ *
+ *  فتُعرض كلّها، ويُكتب الجانب. معلومةٌ أكثر لا أقلّ، والقرار للمسافر. */
 function collectStops(
-  ways: LatLng[][],
-  origin: LatLng,
-  dest: LatLng | undefined,
+  path: readonly LatLng[],
   stations: readonly RoadStation[]
 ): RouteStop[] {
-
-  // الطريق أطول من الرحلة — فيُقصّ عليها.
-  //
-  // M1 يمتدّ من بغداد إلى طريبيل، فرحلةُ الرمادي↔بغداد كانت تلتقط «محطة
-  // طليحة» في صحراء الرطبة على بُعد أربعمئة كيلومتر. والاختبار قطعٌ ناقص:
-  // مجموع بُعد المحطة عن الطرفين لا يتجاوز طول الرحلة بأكثر من الربع.
-  const span = dest ? kmBetween(origin, dest) : Infinity;
-  const budget = span * 1.25;
-
   const stops: RouteStop[] = [];
   for (const s of stations) {
-    if (dest) {
-      const detour = kmBetween(origin, [s.la, s.lo]) + kmBetween([s.la, s.lo], dest);
-      if (detour > budget) continue;
-    }
-    const snap = snapToWays([s.la, s.lo], ways);
-    // يمين اتجاه السير وحده. والصفر يعني أنها على الخطّ تماماً — تُقبل.
-    if (snap.km * 1000 > ON_ROAD_M || snap.side > 0) continue;
+    const snap = snapAlong([s.la, s.lo], path);
+    if (snap.km * 1000 > ON_ROAD_M) continue;
     stops.push({
       name: s.n,
       city: s.c,
       lat: s.la,
       lng: s.lo,
-      atKm: kmBetween(origin, [s.la, s.lo]),
+      atKm: snap.atKm,
       offRoadM: Math.round(snap.km * 1000),
+      side: snap.side,
       toNextKm: null,
     });
   }
@@ -354,9 +304,17 @@ function collectStops(
   return stops;
 }
 
-/** الفجوة التي تستحقّ تحذيراً.
+/** الفجوة التي تستحقّ تحذيراً — على درجتين، لأن الصحراء درجتان.
  *
- *  خزّانٌ ممتلئ يقطع 400 كم، لكن أحداً لا ينطلق ممتلئاً. وستّون كيلومتراً
- *  بلا محطةٍ في صحراءٍ ليل هي المسافة التي تُغيّر قراراً — أقلّ منها يُثرثر،
- *  وأكثر منها يسكت حيث يجب أن يتكلّم. */
-export const GAP_WARN_KM = 60;
+ *  قِيست 8,234 امتداداً بين محطةٍ وأخرى على كل الرحلات فوق أربعين كيلومتراً:
+ *
+ *      وسيط  4.2 كم · ربع أعلى 14.3 · تسعة أعشار 74.1 · أقصى 362
+ *
+ *  فالقفزة بين 14 و74 — ما دونها عمرانٌ متّصل، وما فوقها صحراءٌ خالصة. ورقمٌ
+ *  واحدٌ لا يفصل بينهما: ستّون يسكت عن أربعين تستحقّ خزّاناً ممتلئاً، ثم
+ *  يقول «املأ خزّانك» بنبرةٍ واحدة أمام مئتين وخمسٍ وسبعين — وهناك لا يكفي
+ *  ملءُ خزّان بل قرارُ ألّا تدخلها ليلاً وحدك.
+ *
+ *  فأربعون تنبيه، ومئةٌ وعشرون خطر. */
+export const GAP_WARN_KM = 40;
+export const GAP_SEVERE_KM = 120;

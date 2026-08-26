@@ -6,13 +6,17 @@ import { FuelIcon } from '@/components/icons';
 export const metadata: Metadata = {
   title: 'مساعد الطريق | المحطة التقنية',
   description:
-    'محطات الوقود على طريقك بين مدن الأنبار وبغداد والمنافذ الحدودية — وأين تمتدّ الطريق بلا محطة.',
+    'تغطية محطات الوقود على طرق الأنبار الصحراوية — بين مدنها وبغداد والمنافذ الحدودية، وأين تمتدّ الطريق بلا محطة.',
 };
 
 /** صفحةٌ ساكنة واحدة، لا مسارٌ ديناميكي.
  *
  *  المشروع output:'export'، وأي [from]/[to] يلزمه generateStaticParams —
- *  أي صفحةً مبنيّةً لكل زوجٍ من المدن. والرحلة تُختار من الحالة لا من العنوان. */
+ *  أي صفحةً مبنيّةً لكل زوجٍ من المدن. والرحلة تُختار من الحالة لا من العنوان.
+ *
+ *  **وهويّتها هويّة المنصّة.** جُرِّب لها لوحٌ رمليّ يحاكي الصحراء، فقرّر
+ *  المالك أن الهويّة أبقى: أخضرُ على أبيض في كل صفحة. والصحراء تُقال بما
+ *  يُعرض — امتدادٌ أحمر بلا محطة — لا بلون الورق. */
 export default function RoadPage() {
   return (
     <main className="mx-auto max-w-md px-4 pb-16 pt-8">
@@ -22,12 +26,22 @@ export default function RoadPage() {
       </a>
 
       <h1 className="mt-6 text-center text-xl font-extrabold text-slate-800">مساعد الطريق</h1>
-      <p className="mx-auto mt-2 max-w-sm text-center text-xs leading-relaxed text-slate-500">
-        اختر رحلتك، فتظهر المحطات التي تخدم اتجاه سيرك — <b>وأين تمتدّ الطريق بلا محطة</b>،
-        وهو ما يستحقّ أن تعرفه قبل أن تتحرّك.
+      <p className="mx-auto mt-2 max-w-sm text-center text-xs leading-relaxed text-slate-600">
+        الأنبار صحراء، وأكثر طرقها تمتدّ في عمقها ولا تمرّ بعمران. فاختر رحلتك، تعرف
+        <b className="text-slate-800"> أين تقف المحطات على طريقك </b>
+        — <b className="text-traffic-red">وأين لا تقف واحدة</b>، وهو ما يستحقّ أن تعرفه قبل
+        أن تتحرّك.
       </p>
 
-      <div className="mt-6">
+      {/* حدُّ التغطية يُقال في الأعلى لا في حاشيةٍ أسفل: من يفتح الصفحة
+          يظنّها كالرئيسة — منتجاتٌ وأسعارٌ ودوام — فيُقال له قبل أن يسأل. */}
+      <p className="mx-auto mt-3 max-w-sm rounded-xl border border-brand-200 bg-brand-50/60 px-3 py-2 text-center text-[11px] leading-relaxed text-slate-700">
+        هنا <b>تغطيةٌ فقط</b>: مواقع المحطات على الطرق، لا نوع الوقود ولا أوقات العمل.
+        <br />
+        <span className="text-slate-600">وقريباً تُضاف المحطات كاملةً إلى النظام بإذن الله.</span>
+      </p>
+
+      <div className="mt-5">
         <RoadPlanner />
       </div>
 

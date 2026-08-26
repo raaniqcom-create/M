@@ -229,3 +229,189 @@
 @media (prefers-reduced-motion: reduce) {
   .card-sep::after { animation: none; opacity: 0; }
 }
+
+/* ── مساعد الطريق: علاماتُ الخريطة ───────────────────────────────────────
+ *
+ * جُرِّب للصفحة لوحٌ رمليّ ومرشّحُ بلاطاتٍ يحاكي الصحراء، فقرّر المالك أن
+ * هويّة المنصّة أبقى — أخضرُ على أبيض في كل صفحة. فبقي من تلك التجربة ما هو
+ * **قياسُ وضوحٍ لا ذوق**: الخيطُ الداكن حول كل علامة، وحجومُ الأقراص،
+ * وتجميعُها. وسقط ما كان لوناً.
+ */
+.road-map-wrap {
+  position: relative;
+  border-radius: 1rem;
+  padding: 4px;
+  background: linear-gradient(160deg, #dcfce7, #f0fdf4 45%, #dcfce7);
+  box-shadow: 0 1px 2px rgba(20, 83, 45, 0.06), 0 6px 18px rgba(20, 83, 45, 0.1);
+}
+
+/* علامةُ المحطة: قرصٌ برقمه. أربعٌ وعشرون نقطة قطراً — ما دون ذلك لا يُصاب
+ * بإبهامٍ في سيارة، وما فوقها يبتلع الخريطة حين تكون المحطات ثلاثين. */
+.road-pin {
+  background: none;
+  border: 0;
+}
+/* الخيطُ الداكن — قياسٌ لا ذوق.
+ *
+ * أخضرُ القرص على بلاط الخريطة 2.4:1، وتحت وهج الشمس المباشرة 1.7:1.
+ * والطوقُ الأبيض لا ينقذه: 1.4:1 على البلاط نفسه — أي لا شيء تقريباً.
+ * الذي ينقذه خيطٌ داكنٌ حادّ بلا تمويه. وهاتفٌ في شمس الأنبار على نصف
+ * السطوع هو حالةُ الاستعمال لا حالةٌ طرفية. */
+.road-pin__disc {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #16a34a;
+  color: #fff;
+  border: 2.5px solid #fff;
+  box-shadow:
+    0 0 0 1.5px rgba(15, 23, 42, 0.9),
+    0 1px 3px rgba(15, 23, 42, 0.5);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* هدفُ لمسٍ 44 والقرصُ 26: إبهامٌ في سيارة لا يصيب ستّاً وعشرين، وتكبيرُ
+   القرص يزيد التزاحم الذي نحاربه. فيُوسَّع الهدف ولا يُوسَّع الرسم. */
+.road-pin__disc::before {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  border-radius: 999px;
+}
+
+/* العنقود. قِيس على 812 مساراً: الفلوجة ← القائم ثمانٍ وعشرون محطة متلاصقة
+   عند التقريب الذي يؤطّر الرحلة — فالتزاحم هو الحالةُ الأولى لا النادرة.
+   والقرص يحمل مداه «4–11» لا عدده، فيبقى الجسر إلى البطاقات قائماً. */
+.road-pin__disc--run {
+  width: auto;
+  min-width: 34px;
+  padding: 0 7px;
+  font-size: 11.5px;
+  box-shadow:
+    0 0 0 1.5px rgba(15, 23, 42, 0.9),
+    0 0 0 4.5px rgba(22, 163, 74, 0.32),
+    0 1px 3px rgba(15, 23, 42, 0.5);
+}
+
+/* «4–11» في سياقٍ عربيّ يُقلب بلا عزل */
+.road-pin__num {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* حكمُ الفجوة — مكتوبٌ دائماً لا تلميحةَ مرور. أهمُّ رقمٍ في الصفحة لا
+   يُراهن على إصابة خطٍّ رفيع بإبهامٍ في سيارة. */
+.road-gap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1.5px solid #dc2626;
+  color: #7f1d1d;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.35;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.4);
+}
+/* يسارُ اتجاه السير: تُعرض ولا تُخفى — لكنّها تحتاج التفافاً، فتُميَّز.
+ * (كان الترشيح يُسقطها، فيُخفي نصف التغطية على الطرق الصحراوية المفردة.) */
+.road-pin__disc--left {
+  background: #fff;
+  color: #15803d;
+  border-color: #16a34a;
+}
+
+.road-end {
+  position: relative;
+  display: block;
+}
+.road-end__dot {
+  display: none;
+}
+.road-end__label {
+  position: absolute;
+  top: 12px;
+  right: 50%;
+  transform: translateX(50%);
+  white-space: nowrap;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.road-end--from .road-end__label {
+  background: #16a34a;
+}
+.road-end--to .road-end__label {
+  background: #2563eb;
+}
+
+/* المفتاح. بلا مفتاحٍ يبقى اللون زينةً — وهو هنا معلومة. */
+.road-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.85rem;
+  padding: 0.5rem 0.6rem 0.15rem;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #334155;
+}
+.road-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.road-legend__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+.road-legend__num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+.road-legend__num--left {
+  background: #fff;
+  color: #166534;
+  box-shadow: inset 0 0 0 2px #16a34a;
+}
+.road-legend__gap {
+  width: 18px;
+  height: 0;
+  border-top: 3px dashed #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+  .road-map-wrap {
+    background: linear-gradient(160deg, #14532d, #0f2c1a 45%, #14532d);
+  }
+  .road-legend {
+    color: #bbf7d0;
+  }
+}

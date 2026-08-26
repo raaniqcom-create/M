@@ -19,43 +19,36 @@
 //
 // والملفّ في public/ لا في lib/: تحمّله صفحة مساعد الطريق وحدها عند فتحها،
 // فلا يُثقل حزمة التطبيق على من لا يسافر.
-import { writeFileSync, unlinkSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const OSRM = 'https://router.project-osrm.org/route/v1/driving';
+const OUT = new URL('../public/road-routes.json', import.meta.url);
+// ما حُسب سابقاً يُبقى — الخادم العامّ مجانيّ، وإعادة 756 طلباً لإضافة مدينةٍ
+// واحدة إساءةُ استعمال. ‎--all‎ وحدها تُعيد الكلّ.
+const ALL = process.argv.includes('--all');
 
-const POINTS = {
-  'الرمادي': [33.4258, 43.3012],
-  'الفلوجة': [33.3556, 43.7864],
-  'بغداد': [33.3152, 44.3661],
-  'الخالدية': [33.3789, 43.4881],
-  'الحبانية': [33.3628, 43.5586],
-  'عامرية الفلوجة': [33.2264, 43.6786],
-  'الكرمة': [33.4453, 43.7972],
-  'هيت': [33.6383, 42.8258],
-  'البغدادي': [33.8517, 42.6472],
-  'الحقلانية': [34.0575, 42.3792],
-  'حديثة': [34.1372, 42.3789],
-  'عانة': [34.4686, 41.9375],
-  'راوة': [34.4756, 41.9139],
-  'القائم': [34.3689, 41.0906],
-  'الرطبة': [33.0386, 40.2864],
-  'النخيب': [32.0369, 42.2506],
-  'كبيسة': [33.5941, 42.6185],
-  'المحمدي': [33.5509, 42.9011],
-  'الصقلاوية': [33.3964, 43.6833],
-  'حصيبة': [33.4207, 43.4533],
-  'الرحالية': [32.7658, 43.3911],
-  'العبيدي': [34.4281, 41.2173],
-  'الكرابلة': [34.3909, 41.0464],
-  'الرمانة': [34.3931, 41.078],
-  'عكاشات': [33.6675, 39.967],
-  'الوليد': [33.4328, 38.9321],
-  'طريبيل (الأردن)': [32.92, 38.98],
-  'منفذ عرعر': [31.37148, 41.44502],
-};
+// **النقاط تُقرأ من lib/geo.ts، لا تُكتب هنا.**
+//
+// كانت نسخةً سادسة من قائمة المدن، وقد سبق أن تباعدت النسخ: عانة كانت
+// موضوعةً على موقع راوة في أربعة ملفّات معاً — اثنا عشر كيلومتراً من الخطأ،
+// كشفها فحصٌ آليّ لا عين. فمصدرٌ واحد، والباقي يقرأ منه.
+const geo = readFileSync(new URL('../lib/geo.ts', import.meta.url), 'utf8');
+const POINTS = {};
+{
+  let inside = false;
+  for (const line of geo.split(String.fromCharCode(10))) {
+    if (line.includes('ENDPOINTS: Readonly')) { inside = true; continue; }
+    if (!inside) continue;
+    if (line.startsWith('};')) break;
+    const m = /^\s*'([^']+)':\s*\[\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\]/.exec(line);
+    if (m) POINTS[m[1]] = [+m[2], +m[3]];
+  }
+  if (Object.keys(POINTS).length < 5) throw new Error('تعذّرت قراءة ENDPOINTS من lib/geo.ts');
+}
+
 
 const R = 6371;
 const rad = (d) => (d * Math.PI) / 180;
@@ -91,22 +84,38 @@ function simplify(pts, tolKm = 0.12) {
   return pts.filter((_, i) => keep[i]);
 }
 
+/** [الطول, الدقائق, Δعرض, Δطول, …] بأعشار الآلاف من الدرجة.
+ *
+ *  756 مساراً بخمس خاناتٍ عشرية = 1.5 م.ب. وبأربعٍ — دقّة 11 متراً، والمحطة
+ *  تُلتقط ضمن 500 — وفروقٍ صحيحة بين النقاط: 639 ك.ب، و47 بعد ضغط الخادم.
+ *  أي أقلّ من صورةٍ واحدة، لصفحةٍ تُفتح قبل السفر لا في كل زيارة. */
+function encode(kmv, min, path) {
+  const out = [kmv, min];
+  let pla = 0, plo = 0;
+  for (const [la, lo] of path) {
+    const a = Math.round(la * 1e4), o = Math.round(lo * 1e4);
+    out.push(a - pla, o - plo);
+    pla = a; plo = o;
+  }
+  return out;
+}
+
 function route(a, b) {
   const url = `${OSRM}/${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson`;
-  const tmp = join(tmpdir(), `osrm-${Date.now()}.json`);
+  const tmp = join(tmpdir(), `osrm-${process.pid}-${Math.round(process.uptime() * 1e6)}.json`);
   try {
     // curl لا fetch: الخوادم العامّة ترفض ترويسات نود الافتراضية، وقد وقع
     // ذلك مع Overpass في هذا المشروع نفسه.
     execFileSync('curl', ['-s', '--max-time', '60', '-o', tmp, url], { encoding: 'utf8' });
-    const d = JSON.parse(execFileSync('cat', [tmp], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
+    const d = JSON.parse(readFileSync(tmp, 'utf8'));
     if (d.code !== 'Ok' || !d.routes?.length) return null;
     const r = d.routes[0];
-    return {
-      km: +(r.distance / 1000).toFixed(1),
-      min: Math.round(r.duration / 60),
+    return encode(
+      +(r.distance / 1000).toFixed(1),
+      Math.round(r.duration / 60),
       // GeoJSON يعطي [lng,lat] — والمشروع كلّه [lat,lng].
-      path: simplify(r.geometry.coordinates.map((c) => [+c[1].toFixed(5), +c[0].toFixed(5)])),
-    };
+      simplify(r.geometry.coordinates.map((c) => [c[1], c[0]]))
+    );
   } catch {
     return null;
   } finally {
@@ -114,33 +123,49 @@ function route(a, b) {
   }
 }
 
-const names = Object.keys(POINTS);
+const prev = !ALL && existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')) : { points: {}, routes: {} };
+
+// **ما تغيّرت إحداثيّته يُبطَل.** إصلاحُ موقع مدينةٍ لا ينفع إن بقي مسارها
+// المحفوظ محسوباً على الموقع الخطأ — وهو صمتٌ أسوأ من العطل.
+const moved = new Set(
+  Object.keys(POINTS).filter((n) => {
+    const o = prev.points?.[n];
+    return o && (o[0] !== POINTS[n][0] || o[1] !== POINTS[n][1]);
+  })
+);
+if (moved.size) console.log(`  تغيّرت: ${[...moved].join('، ')}`);
+
 const out = {};
-let done = 0, failed = 0;
+for (const [k, v] of Object.entries(prev.routes || {})) {
+  const [a, b] = k.split('|');
+  if (POINTS[a] && POINTS[b] && !moved.has(a) && !moved.has(b)) out[k] = v;
+}
+
+const names = Object.keys(POINTS);
+let done = 0, kept = 0, failed = 0;
 
 // الاتجاهان كلاهما يُحسب، ولا يُعكس أحدهما عن الآخر: الطرق مزدوجة، ومسارُ
 // العودة يسلك الجانب الآخر — وهو ما يجعل قائمة المحطات مختلفة أصلاً.
 for (const from of names) {
   for (const to of names) {
     if (from === to) continue;
-    const straight = km(POINTS[from], POINTS[to]);
+    const key = `${from}|${to}`;
     // ما تباعد أكثر من 600 كم ليس رحلةً داخل هذا النطاق.
-    if (straight > 600) continue;
+    if (km(POINTS[from], POINTS[to]) > 600) continue;
+    if (out[key]) { kept++; continue; }
     const r = route(POINTS[from], POINTS[to]);
     if (!r) { failed++; continue; }
-    out[`${from}|${to}`] = r;
+    out[key] = r;
     done++;
-    process.stdout.write(`\r  ${done} مساراً…`);
-    // الخادم العامّ مجانيّ — والفاصل أدبٌ لا تحسين.
-    execFileSync('curl', ['-s', '-o', join(tmpdir(), 'nul.txt'), 'https://router.project-osrm.org/'], { encoding: 'utf8' });
+    process.stdout.write(`
+  ${done} جديداً · ${kept} محفوظاً…`);
   }
 }
 
-writeFileSync(
-  new URL('../public/road-routes.json', import.meta.url),
-  JSON.stringify({ points: POINTS, routes: out }),
-  'utf8'
+const payload = JSON.stringify({ points: POINTS, routes: out });
+writeFileSync(OUT, payload, 'utf8');
+console.log(
+  `
+✓ ${Object.keys(out).length} مساراً (${done} جديد · ${kept} محفوظ · ${failed} فشل) · ` +
+  `${(Buffer.byteLength(payload, 'utf8') / 1024).toFixed(0)} ك.ب`
 );
-
-const bytes = Buffer.byteLength(JSON.stringify({ points: POINTS, routes: out }), 'utf8');
-console.log(`\n✓ ${done} مساراً · فشل ${failed} · ${(bytes / 1024).toFixed(0)} ك.ب`);
