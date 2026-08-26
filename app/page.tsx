@@ -689,14 +689,31 @@ export default function HomePage() {
                   )}
                 </div>
               )}
+              {/* فاصلٌ بين كل بطاقتين، لا قبل الأولى.
+                *
+                *  «توهمتُ بالبطاقات»: تسعَ عشرة بطاقةً متشابهة الحوافّ،
+                *  والفراغ وحده لا يفصلها. والتظليل المتناوب (tinted) كان
+                *  يفعلها بلونٍ خفيف — لكنه يضيع على شاشةٍ في الشمس.
+                *
+                *  واللمعة تنطلق متدرّجةً بحسب الموضع فلا تومض تسعَ عشرة
+                *  مرّةً معاً. والتأخير يدور على ثمانٍ حتى لا تتباعد أواخر
+                *  القائمة عن أوائلها فتبدو ساكنة. */}
               {(listRows ?? visible).map((station, i) => (
-                <StationCard
-                  key={station.id}
-                  station={station}
-                  tinted={i % 2 === 1}
-                  isFavorite={isFollowed(station.id)}
-                  onToggleFavorite={() => onStar(station.id)}
-                />
+                <div key={station.id}>
+                  {i > 0 && (
+                    <div
+                      className="card-sep mb-3"
+                      aria-hidden="true"
+                      style={{ '--sep-delay': `${(i % 8) * 0.45}s` } as React.CSSProperties}
+                    />
+                  )}
+                  <StationCard
+                    station={station}
+                    tinted={i % 2 === 1}
+                    isFavorite={isFollowed(station.id)}
+                    onToggleFavorite={() => onStar(station.id)}
+                  />
+                </div>
               ))}
 
               {/* البابُ الذي لا يُغلق. */}

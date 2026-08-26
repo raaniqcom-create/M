@@ -3,6 +3,7 @@ import { formatTime, isFresh, isOpenNow, openingLine, PERIOD_LABELS, statusNote 
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
 import { RouteButton } from './RouteButton';
+import { OutOfCityCall } from './OutOfCityCall';
 import { StarIcon } from './icons';
 import { PhoneIcon } from './icons';
 
@@ -230,6 +231,14 @@ export function StationCard({
           </span>
         )}
       </div>
+
+      {/* شريطٌ أسفل البطاقة، وحدُه. لا يُمسّ تخطيطها ولا ترتيبها — ولا يظهر
+          إلا لمن يستحقّه: مسافرٌ إلى محطةٍ تُخفي رقمها. */}
+      <OutOfCityCall
+        stationId={station.id}
+        stationCity={station.city}
+        phoneHidden={station.phone_hidden}
+      />
 
       <p className="sr-only">
         {status.text} · المتوفر:{' '}

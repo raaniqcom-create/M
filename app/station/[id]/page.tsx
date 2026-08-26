@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { StationActions } from '@/components/StationActions';
+import { OutOfCityCall } from '@/components/OutOfCityCall';
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import {
@@ -136,6 +137,14 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
         </div>
 
         <StationLive station={station} initial={rows} />
+
+        {/* الشريط نفسه على صفحة المحطة: من فتحها من إشعارٍ أو رابطٍ
+            مشارَك لم يمرّ بالبطاقة، وهو أحوج ما يكون إلى التحذير. */}
+        <OutOfCityCall
+          stationId={station.id}
+          stationCity={station.city}
+          phoneHidden={station.phone_hidden}
+        />
 
         <StationActions
           phone={station.phone}

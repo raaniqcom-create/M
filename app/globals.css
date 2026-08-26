@@ -176,3 +176,56 @@
   .road::before,
   .road::after { animation: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   فاصلٌ بين البطاقات — خطٌّ أخضر بلمعةٍ فضّية تمرّ عليه.
+   «توهمتُ بالبطاقات»: القائمة صارت تسعَ عشرة بطاقة متشابهة الحوافّ،
+   والفراغ وحده لا يفصلها. والخطّ يفصل، واللمعة تجعله حيّاً لا خطّاً ميّتاً.
+
+   واللمعة بطيئة ومتدرّجة الانطلاق (تأخيرٌ لكل فاصل بحسب موضعه)، فلا
+   تومض تسعَ عشرة مرّةً معاً فتصير وميضاً. وهي transform خالص — تعمل
+   على المعالج الرسومي ولا تُعيد رسم شيء، بخلاف مؤقّت جافاسكربت الذي
+   حُذف من الترويسة.
+   ───────────────────────────────────────────────────────────────────── */
+.card-sep {
+  position: relative;
+  height: 2px;
+  margin: 0.125rem 1.25rem;
+  border-radius: 2px;
+  overflow: hidden;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(22, 163, 74, 0.45) 22%,
+    rgba(22, 163, 74, 0.65) 50%,
+    rgba(22, 163, 74, 0.45) 78%,
+    transparent 100%
+  );
+}
+.card-sep::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 34%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.95) 45%,
+    rgba(226, 232, 240, 0.9) 55%,
+    transparent
+  );
+  /* التأخير يُمرَّر برمزٍ لا بخاصّية: خاصّيةٌ في سطر العنصر لا تبلغ
+     عنصره الزائف، والرموز وحدها تُورَّث إليه. */
+  animation: sep-shine 4.2s ease-in-out infinite;
+  animation-delay: var(--sep-delay, 0s);
+}
+@keyframes sep-shine {
+  0%   { transform: translateX(-140%); }
+  55%  { transform: translateX(340%); }
+  100% { transform: translateX(340%); }
+}
+/* من أطفأ الحركة يرى خطّاً أخضر ساكناً — لا وميض ولا فراغ */
+@media (prefers-reduced-motion: reduce) {
+  .card-sep::after { animation: none; opacity: 0; }
+}
