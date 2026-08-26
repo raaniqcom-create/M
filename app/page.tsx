@@ -13,7 +13,7 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { SideMenu } from '@/components/SideMenu';
 import { isFresh, isOpenNow } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
-import { PRODUCT_LABELS, isOffered } from '@/lib/products';
+import { PRODUCT_LABELS, hasSomethingToShow, isOffered } from '@/lib/products';
 import { CITY_NAMES } from '@/lib/cities';
 import { StationCard } from '@/components/StationCard';
 import { PromoStrip } from '@/components/PromoStrip';
@@ -434,7 +434,7 @@ export default function HomePage() {
    *  ولا تُحذف: البحث بالاسم يجدها، والخريطة تحملها، وسطرٌ أسفل القائمة
    *  يقول كم هي ويفتحها. من يعرف أن «المنتصر بالله» موجودة ويقول له التطبيق
    *  إنها ليست موجودة — يفقد الثقة بكل ما عداها. */
-  const hasStock = (s: StationWithStatus) => s.products.some((p) => p.is_available);
+  const hasStock = hasSomethingToShow;
 
   const listRows = useMemo(() => {
     if (!visible) return null;
@@ -708,10 +708,10 @@ export default function HomePage() {
                 >
                   {plural(
                     emptyCount,
-                    'محطة واحدة لا وقود معلَناً لديها — اعرضها',
-                    'محطتان لا وقود معلَناً لديهما — اعرضهما',
-                    'محطات لا وقود معلَناً لديها — اعرضها',
-                    'محطة لا وقود معلَناً لديها — اعرضها'
+                    'محطة واحدة لا وقود لديها ولا متوقَّع — اعرضها',
+                    'محطتان لا وقود لديهما ولا متوقَّع — اعرضهما',
+                    'محطات لا وقود لديها ولا متوقَّع — اعرضها',
+                    'محطة لا وقود لديها ولا متوقَّع — اعرضها'
                   )}
                 </button>
               )}
@@ -721,7 +721,7 @@ export default function HomePage() {
                   onClick={() => setShowEmpty(false)}
                   className="w-full rounded-xl border border-dashed border-slate-200 bg-white p-3 text-xs font-bold text-slate-500"
                 >
-                  أخفِ المحطات التي لا وقود لديها
+                  أخفِ المحطات التي لا وقود لديها ولا متوقَّع
                 </button>
               )}
             </div>

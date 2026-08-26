@@ -1189,10 +1189,14 @@ async function showOwnerPanel(chat: number, stationId: string, messageId?: numbe
 
   const { data: rows } = await db
     .from('station_products')
-    .select('product, is_available')
+    .select('product, is_available, expected_at')
     .eq('station_id', stationId);
 
   const byProduct = new Map((rows ?? []).map((r) => [r.product, r.is_available]));
+  // القاعدة نفسها التي تُخفي البطاقة في التطبيق (hasSomethingToShow في
+  // lib/products.ts): متوفرٌ الآن، أو متوقّعٌ لاحقاً. ومن لا هذا ولا ذاك
+  // لا يظهر — ويجب أن يعلم، لا أن يكتشف.
+  const shows = (rows ?? []).some((r) => r.is_available || r.expected_at);
   const open = station ? isOpenNow(station as never) : false;
 
   const keyboard = PRODUCTS.map((p) => [
@@ -1206,8 +1210,11 @@ async function showOwnerPanel(chat: number, stationId: string, messageId?: numbe
 
   const text =
     `🏪 <b>${station?.name ?? 'محطتك'}</b>\n` +
-    `الحالة: ${open ? 'مفتوحة الآن' : 'مغلقة الآن'}\n\n` +
-    'اضغط على أي منتج لتبديل حالته بين متوفر وغير متوفر:';
+    `الحالة: ${open ? 'مفتوحة الآن' : 'مغلقة الآن'}\n` +
+    (shows
+      ? ''
+      : '\n⚠️ <b>محطتك لا تظهر في القائمة</b>\nلا منتج متوفراً ولا متوقَّعاً. أعلِن ما وصلك وتعود فوراً.\n') +
+    '\nاضغط على أي منتج لتبديل حالته بين متوفر وغير متوفر:';
 
   if (messageId) await edit(chat, messageId, text, { reply_markup: { inline_keyboard: keyboard } });
   else await send(chat, text, { reply_markup: { inline_keyboard: keyboard } });

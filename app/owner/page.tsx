@@ -476,6 +476,25 @@ export default function OwnerPage() {
             </section>
             {/* One deliberate act at the end, not a poster that jumps on every
                 toggle while the owner is still working through six products. */}
+            {/* حين يُطفأ الأخير — يُقال في اللحظة، لا في رسالة الغد.
+              *
+              *  المحطة التي لا متوفر لديها ولا متوقَّع لم تعد تظهر في القائمة.
+              *  والمالك يُطفئ آخر منتجٍ ولا يعلم أن محطته اختفت — فيظنّ التطبيق
+              *  معطّلاً، أو يظنّ نفسه ما زال معروضاً وهو ليس كذلك.
+              *
+              *  وإشعارٌ يصله بعد ضغطته بثانية عبثٌ: هو ينظر إلى الشاشة. فالسطر
+              *  هنا، ورسالة owner-daily لمن أطفأ وأغلق ومضى. */}
+            {!products.some((p) => p.is_available || p.expected_at) && (
+              <section className="card border-traffic-yellow bg-amber-50 p-5">
+                <h3 className="text-sm font-bold text-amber-900">محطتك لا تظهر في القائمة الآن</h3>
+                <p className="mt-1 text-xs leading-relaxed text-amber-900/80">
+                  لا منتج متوفراً ولا متوقَّعاً على صفحتك، فلا تظهر بطاقتك لمن يبحث عن وقود.
+                  <b> أعلِن ما وصلك</b>، أو <b>ضع موعد الوصول المتوقّع</b> لأي منتج أعلاه — وتعود
+                  فوراً. ومن يعرف اسمك يجدك بالبحث في كل الأحوال.
+                </p>
+              </section>
+            )}
+
             <section className="card p-5">
               <h3 className="text-sm font-bold">تأكيد ونشر التوفّر</h3>
               <p className="mt-1 text-xs leading-relaxed text-slate-500">

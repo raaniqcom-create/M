@@ -188,7 +188,7 @@ const MESSAGES: Record<string, (name: string, n: number, city: string) => Msg> =
   // ولا لماذا. فتُخبَر، ويُقال لها الطريق: ضغطةٌ واحدة تُعيدها.
   no_stock: (name, _n, _city) => ({
     title: `${name} — لا تظهر في القائمة الآن`,
-    body: 'لا منتج معلَناً على صفحتك، فلا تظهر محطتك لمن يبحث عن وقود. إن وصلك شيءٌ فأعلنه بضغطة وتعود فوراً.',
+    body: 'لا منتج متوفراً ولا متوقَّعاً على صفحتك، فلا تظهر محطتك لمن يبحث عن وقود. أعلِن ما وصلك، أو ضع موعد الوصول المتوقّع — وتعود فوراً.',
   }),
 };
 
@@ -222,7 +222,7 @@ async function preview(req: Request, stationId: string): Promise<Response> {
 
   const [{ data: products }, { data: pinged }, { data: watchRows }, { data: devices }] =
     await Promise.all([
-      db.from('station_products').select('updated_at, is_available').eq('station_id', st.id),
+      db.from('station_products').select('updated_at, is_available, expected_at').eq('station_id', st.id),
       db.from('owner_pings').select('kind, sent_at').eq('station_id', st.id).eq('day', day),
       db.rpc('watchers_by_city', { p_cities: [st.city] }),
       db.from('device_tokens').select('token').eq('station_id', st.id),
@@ -332,7 +332,7 @@ Deno.serve(async (req) => {
   const [{ data: products }, { data: pinged }, { data: votes }, { data: watchRows }] = await Promise.all([
     // سبعة صفوف لكل محطة: بلا حدّ صريح تُقرأ المحطات بعد القطع «لم تنشر قطّ»،
     // فتُرحَّب بها يومياً ولا يصلها شكر الإغلاق أبداً.
-    db.from('station_products').select('station_id, updated_at, is_available').in('station_id', ids).range(0, 99_999),
+    db.from('station_products').select('station_id, updated_at, is_available, expected_at').in('station_id', ids).range(0, 99_999),
     // وعلامات اليوم: ضياعها يعني رسالةً مكرّرة لكل مالك.
     db.from('owner_pings').select('station_id, kind').eq('day', day).in('station_id', ids).range(0, 99_999),
     // Only the tail matters: a vote older than 45 minutes lapsed long ago and
@@ -417,7 +417,14 @@ Deno.serve(async (req) => {
   //
   // هذه هي التي اختفت من القائمة. وlastAvailable لا تحمل لها صفّاً، فغيابُها
   // منها هو المقياس نفسه الذي تُخفى به: مقياسٌ واحد لا اثنان يتباعدان.
-  const noStock = (id: string) => !lastAvailable.has(id);
+  // والمتوقَّع يُبقيها ظاهرة: من يقول «بانزين متوقّع الصباح» يُعلن شيئاً،
+  // وإخفاؤه يعاقب السلوك الذي تريده المنصّة. القاعدة نفسها في
+  // lib/products.ts → hasSomethingToShow — والرسالة تتبع ما يُخفي.
+  const expecting = new Set<string>();
+  for (const p of products ?? []) {
+    if ((p as { expected_at?: string | null }).expected_at) expecting.add(p.station_id);
+  }
+  const noStock = (id: string) => !lastAvailable.has(id) && !expecting.has(id);
 
   // Which of the three, if any, is due for each station right now
   const due: { station: (typeof stations)[number]; kind: string }[] = [];
