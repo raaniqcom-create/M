@@ -5,7 +5,7 @@ import { SiteFooter } from '@/components/SiteFooter';
 import { FuelIcon } from '@/components/icons';
 
 export const metadata: Metadata = {
-  title: 'مساعد الطريق | المحطة التقنية',
+  title: 'مساعد الطريق',
   description:
     'تغطية محطات الوقود على طرق الأنبار — بين مدنها وبغداد والمنافذ الحدودية.',
   // لم تُعلَن بعد: لا تُفهرَس ولا تظهر في نتائج البحث.

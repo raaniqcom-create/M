@@ -40,7 +40,7 @@ export function StationRegisterForm() {
   const [name, setName] = useState('');
   /** أُكّدت من قائمة المحطات المعروفة — فموقعُها مسحيٌّ لا تخمين */
   const [fromKnown, setFromKnown] = useState(false);
-  const [twin, setTwin] = useState<{ id: string; name: string } | null>(null);
+  const [twin, setTwin] = useState<{ id: string; name: string; city: string } | null>(null);
 
   // الخطوة الثانية
   const [city, setCity] = useState<string>(ANBAR_CITIES[0].name);
@@ -107,17 +107,33 @@ export function StationRegisterForm() {
   /** «الرحاب» دخلت أربع مرّات بأربعة أرقام، ففحصُ الرقم لم يقع مرّةً واحدة.
    *  وهذا يقارن الاسم بنفس المُطابِق الذي تحكم به لوحةُ الإدارة. إرشاديٌّ عن
    *  قصد: محطتان حقيقيّتان قد تشتركان في اسم، فيُنبّه ويعرض البابَ الذي أراده
-   *  الطالبُ غالباً، ولا يمنع. */
-  async function checkName(value: string) {
+   *  الطالبُ غالباً، ولا يمنع.
+   *
+   *  **والمدينةُ تُمرَّر ولا تُؤخَذ من الحالة.** المقارنةُ داخل مدينةٍ واحدة
+   *  (`lib/similar.ts:41` يرفض ما اختلفت مدينتُه)، والخطواتُ تسأل عن الاسم
+   *  قبل المدينة — فالقراءةُ من الحالة تفحص أبداً «الرمادي» وحدها، وهي
+   *  القيمةُ الأولى، فيسكت التحذيرُ في سبعٍ وعشرين مدينة. وهو التحذيرُ
+   *  الموجودُ أصلاً لأجل «الرحاب». */
+  async function checkName(value: string, inCity = city) {
     if (!value.trim()) {
       setTwin(null);
       return;
     }
-    const { data } = await supabase.from('stations_public').select('id, name, city').eq('city', city);
+    const { data } = await supabase
+      .from('stations_public')
+      .select('id, name, city')
+      .eq('city', inCity);
     if (!data) return;
-    const request = { id: '', name: value, city, phone: '999999999999' } as Station;
+    const request = { id: '', name: value, city: inCity, phone: '999999999999' } as Station;
     const [hit] = findSimilar(request, data as Station[]);
-    setTwin(hit ? { id: hit.id, name: hit.name } : null);
+    setTwin(hit ? { id: hit.id, name: hit.name, city: inCity } : null);
+  }
+
+  /** تبديلُ المدينة يُعيد الفحص: الاسمُ سُئل عنه قبلها، فما فُحص فُحص في
+   *  مدينةٍ لم يخترها صاحبُ الطلب بعد. */
+  function pickCity(next: string) {
+    setCity(next);
+    void checkName(name, next);
   }
 
   function chooseKnown(h: ReturnType<typeof searchKnownFuel>[number]) {
@@ -126,7 +142,15 @@ export function StationRegisterForm() {
     setCoords({ lat: h.station.la, lng: h.station.lo });
     const known = ANBAR_CITIES.find((c) => c.name === h.station.c);
     if (known) setCity(known.name);
-    void checkName(h.station.n);
+    // بالقيمة الصريحة لا من الحالة: setCity أعلاه لم يُطبَّق بعد في هذه الجولة
+    void checkName(h.station.n, known ? known.name : city);
+  }
+
+  /** خطوةٌ إلى أمام أو خلف — ورسالةُ الخطأ لا تُرافقها.
+   *  خطأٌ من شاشةٍ أخرى معروضٌ فوق شاشةٍ لا حقلَ له فيها لغزٌ لا إرشاد. */
+  function go(delta: 1 | -1) {
+    setError(null);
+    setStep((s) => (s + delta) as Step);
   }
 
   const canNext =
@@ -221,7 +245,26 @@ export function StationRegisterForm() {
   }
 
   return (
-    <form onSubmit={submit} className="card space-y-5 p-5">
+    <form
+      onSubmit={submit}
+      /** **«إدخال» في شاشةٍ بلا زرِّ إرسال يُرسل النموذج كلَّه.**
+       *
+       *  قاعدةُ الإرسال الضمنيّ في HTML: نموذجٌ لا زرَّ إرسالٍ فيه يُرسَل عند
+       *  «إدخال» ما دام حقلٌ واحدٌ فيه يمنع ذلك — والخطوةُ الأولى فيها حقلٌ
+       *  واحد (الاسم)، والثانيةُ حقلٌ واحد (العنوان، والقائمةُ المنسدلة لا
+       *  تُحتسب). فكان الضغطُ عليها — وهو أطبعُ ما يفعله من ينهي حقلاً على
+       *  لوحة هاتف — يستدعي submit فيصرخ «رقم الهاتف غير صحيح» في شاشةٍ لا
+       *  رقمَ فيها أصلاً.
+       *
+       *  فيصير «إدخال» ما يتوقّعه صاحبُه: خطوةً إلى الأمام. */
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' || step === 3) return;
+        if ((e.target as HTMLElement).tagName !== 'INPUT') return;
+        e.preventDefault();
+        if (canNext) go(1);
+      }}
+      className="card space-y-5 p-5"
+    >
       {/* شريطُ الخطوات: من يعرف أين هو من الطريق يُكمله */}
       <div>
         <div className="flex items-center gap-1.5">
@@ -250,6 +293,7 @@ export function StationRegisterForm() {
               onChange={(e) => {
                 setName(e.target.value);
                 setFromKnown(false);
+                setTwin(null); // تحذيرٌ عن اسمٍ لم يعد مكتوباً تحذيرٌ عن لا شيء
               }}
               onBlur={(e) => checkName(e.target.value)}
               required
@@ -337,21 +381,6 @@ export function StationRegisterForm() {
               اختَرت «{name}» — وموقعُها محفوظٌ عندنا، فستجده جاهزاً في خطوة الموقع.
             </p>
           )}
-
-          {twin && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
-              <p className="text-xs font-extrabold text-amber-900">
-                «{twin.name}» مسجّلة بالفعل في {city}.
-              </p>
-              <p className="mt-1 text-[11px] leading-relaxed text-amber-900">
-                إن كنت تريد أن يصلك إشعار عند توفّر الوقود فيها، فتابِعها ولا تسجّلها من
-                جديد. ولا تكمل التسجيل هنا إلا إن كنت صاحبها.
-              </p>
-              <a href={`/station/${twin.id}`} className="btn-primary mt-3 w-full">
-                افتح صفحتها وتابعها
-              </a>
-            </div>
-          )}
         </div>
       )}
 
@@ -365,7 +394,7 @@ export function StationRegisterForm() {
             <select
               id="city"
               value={city}
-              onChange={(e) => setCity(e.target.value)}
+              onChange={(e) => pickCity(e.target.value)}
               className="field"
             >
               {ANBAR_CITIES.map((c) => (
@@ -587,12 +616,30 @@ export function StationRegisterForm() {
         </p>
       )}
 
+      {/* **التوأم يُقال حيث يُكتشف، لا حيث سُئل عنه.**
+          الفحص يحتاج الاسمَ والمدينةَ معاً، والمدينةُ تُختار في الخطوة الثانية —
+          فلوحةٌ داخل الأولى وحدها تظهر بعد أن يُغادَر المكانُ الذي تُرى فيه. */}
+      {twin && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
+          <p className="text-xs font-extrabold text-amber-900">
+            «{twin.name}» مسجّلة بالفعل في {twin.city}.
+          </p>
+          <p className="mt-1 text-[11px] leading-relaxed text-amber-900">
+            إن كنت تريد أن يصلك إشعار عند توفّر الوقود فيها، فتابِعها ولا تسجّلها من
+            جديد. ولا تكمل التسجيل هنا إلا إن كنت صاحبها.
+          </p>
+          <a href={`/station/${twin.id}`} className="btn-primary mt-3 w-full">
+            افتح صفحتها وتابعها
+          </a>
+        </div>
+      )}
+
       {/* ─────────────── التنقّل ─────────────── */}
       <div className="flex gap-2">
         {step > 0 && (
           <button
             type="button"
-            onClick={() => setStep((s) => (s - 1) as Step)}
+            onClick={() => go(-1)}
             className="btn-ghost flex-1"
           >
             رجوع
@@ -601,7 +648,7 @@ export function StationRegisterForm() {
         {step < 3 ? (
           <button
             type="button"
-            onClick={() => canNext && setStep((s) => (s + 1) as Step)}
+            onClick={() => canNext && go(1)}
             disabled={!canNext}
             className="btn-primary flex-[2] disabled:opacity-60"
           >

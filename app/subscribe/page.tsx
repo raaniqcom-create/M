@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { SubscribeForm } from '@/components/SubscribeForm';
 
 export const metadata: Metadata = {
-  title: 'اشترك بالعروض | المحطة التقنية',
+  title: 'اشترك بالعروض',
   description: 'سجّل رقمك ليصلك خبر توفر الوقود والعروض في مدينتك.',
 };
 

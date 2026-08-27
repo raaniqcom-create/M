@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { ResetForm } from '@/components/ResetForm';
 
 export const metadata: Metadata = {
-  title: 'استعادة كلمة المرور | المحطة التقنية',
+  title: 'استعادة كلمة المرور',
   description: 'استعد الدخول إلى لوحة محطتك على المحطة التقنية عبر رمز يصلك برسالة.',
 };
 
