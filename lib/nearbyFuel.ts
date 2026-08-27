@@ -64,3 +64,57 @@ export function metresToKnownFuel(lat: number, lng: number): number {
 
 /** العتبةُ التي تستحقّ سؤالاً — قِيست، لا خُمّنت. */
 export const SUSPICIOUS_M = 1000;
+
+/** توحيدُ الاسم قبل المقارنة.
+ *
+ *  «محطة» تتصدّر ثلثَي الأسماء في الملفّين، فمقارنةٌ تحسبها تُطابق كلَّ شيء
+ *  بكلِّ شيء. وكذلك «تعبئة» و«وقود» و«المشيدة» و«النموذجية»: صفاتٌ إدارية
+ *  لا تُميّز محطةً عن أخرى. فتُسقَط، ويبقى الاسمُ الذي يقوله الناس.
+ *
+ *  والألفُ والهاءُ تُوحَّدان: «الاوائل» و«الأوائل»، و«جوهره» و«جوهرة» —
+ *  والناسُ يكتبون الوجهين. */
+const NOISE = /(محطة|محطه|محطات|تعبئة|تعبئه|وقود|بانزين|بنزين|للوقود|المشيدة|المشيده|النموذجية|النموذجيه|الاهلية|الاهليه|للمنتوجات|النفطية|النفطيه)/g;
+export function normalizeName(s: string): string {
+  return (s || '')
+    .replace(/[ً-ْٰ]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[^؀-ۿ0-9a-zA-Z ]/g, ' ')
+    .replace(NOISE, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+export interface NameHit {
+  station: RoadStation;
+  score: number;
+}
+
+/** محطاتٌ نعرفها يشبه اسمُها ما كتبه المسجِّل.
+ *
+ *  **وهذا أقوى من تحديد الموقع بالإصبع.** من يكتب «النخيب» نعرض له المحطة
+ *  باسمها الكامل ومدينتها وإحداثياتها المسحيّة — فيؤكّد بضغطة، فيُملأ
+ *  الاسمُ والمدينة والموقع دفعةً واحدة وبدقّةٍ لا يبلغها إبهامٌ على خريطة. */
+export function searchKnownFuel(query: string, limit = 6): NameHit[] {
+  const q = normalizeName(query);
+  if (q.length < 2) return [];
+  const qt = q.split(' ').filter((w) => w.length > 1);
+  if (!qt.length) return [];
+  const out: NameHit[] = [];
+  for (const s of ROAD_STATIONS) {
+    const n = normalizeName(s.n);
+    if (!n) continue;
+    let score = 0;
+    if (n === q) score = 100;
+    else if (n.includes(q)) score = 70 + Math.min(20, q.length);
+    else {
+      const nt = new Set(n.split(' '));
+      const hit = qt.filter((w) => nt.has(w) || n.includes(w)).length;
+      if (!hit) continue;
+      score = (hit / qt.length) * 55;
+    }
+    if (score > 20) out.push({ station: s, score });
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, limit);
+}

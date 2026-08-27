@@ -2,24 +2,26 @@
 
 import { useState } from 'react';
 import { StationRegisterForm } from './StationRegisterForm';
+import { AlertSetup } from './AlertSetup';
 import { BellRingIcon, StoreIcon } from './icons';
 
-/** Ask before showing the form, instead of warning next to it.
+/** بابان: صاحبُ محطة، ومشترك. ويُسأل قبل أن يُعرض أيُّ حقل.
  *
- *  «الرحاب» was registered four times in seventy-one minutes by four different
- *  people with four different phone numbers, and every one of those rows has
- *  zero available products — nobody who registered them was an owner. They
- *  arrived after the real station appeared, wanting to hear when it had fuel,
- *  and this was the only thing on the site that looked like signing up.
+ *  «الرحاب» سُجّلت أربع مرّات في إحدى وسبعين دقيقة بأربعة أرقام، وكلُّ صفٍّ
+ *  منها بلا منتجٍ متوفّر — لم يكن أحدُهم صاحبَ محطة. جاؤوا بعد أن ظهرت المحطة
+ *  الحقيقية يريدون أن يعرفوا متى يتوفّر فيها الوقود، وكان هذا وحده ما يشبه
+ *  التسجيل في الموقع. والنثرُ بجانب النموذج يخسر أمام النموذج دائماً: الحقولُ
+ *  هي ما يبدو أنه الجواب. فلا تُرسَم الحقول حتى يقول الزائرُ أيَّ بابٍ أراد.
  *
- *  The page already carried an amber warning and a link to /alerts above the
- *  form, and people still filled the form in. Prose beside a form loses to the
- *  form every time: the fields are the thing that looks like the answer. So the
- *  fields are not rendered at all until someone says which door they wanted. */
+ *  **وبابُ المشترك تسجيلٌ لا إعداد.**
+ *
+ *  كان رابطاً يُخرج الزائرَ من صفحة التسجيل إلى صفحةٍ اسمُها «تنبيهات»، فمن
+ *  جاء ليسجّل يجد نفسه في إعدادات. فصار الاشتراكُ يتمّ هنا، في مكانه، بنفس
+ *  وزن الباب الآخر — ولا يزال بلا حسابٍ ولا رقم. */
 export function RegisterGate() {
-  const [isOwner, setIsOwner] = useState(false);
+  const [mode, setMode] = useState<'owner' | 'subscriber' | null>(null);
 
-  if (isOwner) {
+  if (mode === 'owner') {
     return (
       <>
         <p className="mt-2 text-center text-xs font-bold text-slate-500">
@@ -30,10 +32,33 @@ export function RegisterGate() {
         </div>
         <button
           type="button"
-          onClick={() => setIsOwner(false)}
+          onClick={() => setMode(null)}
           className="mt-2 block min-h-[44px] w-full pt-2 text-center text-xs font-semibold text-slate-400"
         >
           لست صاحب محطة — رجوع
+        </button>
+      </>
+    );
+  }
+
+  if (mode === 'subscriber') {
+    return (
+      <>
+        <p className="mt-2 text-center text-xs font-bold text-slate-500">
+          تسجيل مشترك — ليصلك إشعارٌ فور توفّر الوقود
+        </p>
+        <div className="mt-2">
+          <AlertSetup />
+        </div>
+        <p className="mt-2 text-center text-[11px] leading-relaxed text-slate-400">
+          اشتراكُك محفوظٌ على هذا الجهاز. ولك إيقافه متى شئت.
+        </p>
+        <button
+          type="button"
+          onClick={() => setMode(null)}
+          className="mt-1 block min-h-[44px] w-full pt-2 text-center text-xs font-semibold text-slate-400"
+        >
+          رجوع
         </button>
       </>
     );
@@ -45,7 +70,7 @@ export function RegisterGate() {
 
       <button
         type="button"
-        onClick={() => setIsOwner(true)}
+        onClick={() => setMode('owner')}
         className="card mt-3 flex w-full items-center gap-3 border-brand-100 p-4 text-right"
       >
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand">
@@ -59,10 +84,10 @@ export function RegisterGate() {
         </span>
       </button>
 
-      {/* The one people actually came for, so it is a real card of equal weight
-          and not a footnote under the form. */}
-      <a
-        href="/alerts"
+      {/* البابُ الذي جاء له أكثرُ الناس — فبطاقةٌ بوزن الأولى، لا حاشيةٌ تحتها */}
+      <button
+        type="button"
+        onClick={() => setMode('subscriber')}
         className="card mt-3 flex w-full items-center gap-3 border-brand-100 p-4 text-right"
       >
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand">
@@ -73,10 +98,10 @@ export function RegisterGate() {
             أريد أن يصلني إشعار عند توفّر الوقود
           </span>
           <span className="mt-1 block text-xs leading-relaxed text-slate-500">
-            لا تحتاج حساباً ولا تسجيلاً — اختر مدينتك ونوع وقودك فقط
+            سجّل اشتراكك هنا — بلا حساب وبلا رقم هاتف. اختر مدينتك ونوع وقودك فقط.
           </span>
         </span>
-      </a>
+      </button>
     </section>
   );
 }

@@ -81,7 +81,7 @@ export function LocationField({
   return (
     <div>
       <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] font-bold leading-relaxed text-amber-900">
-        حدّد موقع <b>المحطة نفسها</b> — لا موقعك أنت. فالناس يقصدونها بهذا الدبّوس.
+        حدّد موقع <b>المحطة نفسها</b> — لا موقعك أنت. فالناس يقصدونها بهذا الموقع.
       </p>
 
       <div className="grid grid-cols-2 gap-2">
@@ -132,7 +132,7 @@ export function LocationField({
       {/* دقّةٌ رديئة تعني نقطةً في حيٍّ لا في محطة */}
       {accuracy != null && accuracy > 100 && (
         <p className="mt-1.5 rounded-lg border border-traffic-red bg-red-50 px-3 py-2 text-[11px] font-bold leading-relaxed text-red-900">
-          دقّةُ جهازك ±{accuracy} متراً — وهي أوسع من محطةٍ كاملة. اضبط الدبّوس على
+          دقّةُ جهازك ±{accuracy} متراً — وهي أوسع من محطةٍ كاملة. اضبط الموقع على
           الخريطة يدوياً.
         </p>
       )}

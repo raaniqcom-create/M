@@ -513,7 +513,7 @@ export default function AdminPage() {
                       className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border-2 border-amber-400 bg-white px-3 text-xs font-extrabold text-amber-800"
                     >
                       <WhatsappIcon className="h-4 w-4" />
-                      اسأله: هل الدبّوس على المحطة؟
+                      اسأله: هل الموقع على المحطة؟
                     </a>
                   )}
                 </div>
