@@ -419,38 +419,44 @@
 /* ── شريطُ «غير معتمدة» ───────────────────────────────────────────────────
  *
  * شريطٌ رأسيّ أحمر على حافّة البطاقة، كتابتُه بيضاء رأسيّة — على هيئة
- * الشريط الذي يُلصَق على الإعلانات فيقرأه المارّ قبل أن يقرأ ما تحته.
+ * الشريط الذي يُلصَق على الإعلان فيقرأه المارّ قبل أن يقرأ ما تحته.
  *
- * وموضعُه على الحافّة لا فوق النصّ: البطاقةُ تُقرأ كاملةً، والشريطُ يقول
- * حدَّها. ومن يمرّ بالعين وحدها يرى الأحمرَ فيعرف قبل أن يقرأ حرفاً.
+ * **وعلى الحافّة اليسرى بخصائصَ فيزيائية صريحة، لا منطقية.**
+ * جُرّبت inset-inline-end فخرج الشريط على اليمين فوق مؤشّر الرقم — لأن
+ * الخصائص المنطقية تُحلّ باتّجاه الكتابة، والعنصرُ نفسُه writing-mode
+ * رأسيّ، فالتبس محورُه بمحور البطاقة. والفيزيائيّ لا يلتبس.
+ *
+ * واليمينُ محجوزٌ أصلاً: عليه خطُّ المسار الرأسيّ وقرصُ رقم المحطة. فاليسار
+ * هو الجهة الخالية، وهي حيث تنتهي العينُ في العربية — فيُقرأ آخِراً كما
+ * ينبغي لحاشيةٍ لا لعنوان.
  *
  * وwriting-mode لا دورانٌ بـtransform: الدورانُ يُخرج العنصر من التخطيط
  * فيلزمه ارتفاعٌ مكتوبٌ بيد، والكتابةُ الرأسيّة تُبقيه في التدفّق فيمتدّ
  * بامتداد البطاقة مهما طال اسمُ المحطة.
  */
+.card.road-carded {
+  position: relative;
+  padding-left: 40px;
+}
 .road-stamp {
   position: absolute;
-  inset-block: 0;
-  inset-inline-end: 0;
-  width: 26px;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--stamp, #dc2626);
+  background: #dc2626;
   color: #fff;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.5px;
   white-space: nowrap;
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  border-start-end-radius: 1rem;
-  border-end-end-radius: 1rem;
+  border-top-left-radius: 1rem;
+  border-bottom-left-radius: 1rem;
   /* خيطٌ فاتحٌ يفصله عن البطاقة، فلا يبدو امتداداً لحدّها */
-  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.35);
-}
-/* والبطاقةُ تُفسح له، فلا يقع على كلامها */
-.road-carded {
-  position: relative;
-  padding-inline-end: 38px;
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.35);
 }
