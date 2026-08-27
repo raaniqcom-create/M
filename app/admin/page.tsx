@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { metresToKnownFuel, SUSPICIOUS_M } from '@/lib/nearbyFuel';
 import { CheckIcon, LogOutIcon, MapPinIcon, SpinnerIcon, WhatsappIcon, XIcon } from '@/components/icons';
 import { whatsappLink } from '@/lib/phone';
 import { AdminStationForm } from '@/components/AdminStationForm';
@@ -487,6 +488,36 @@ export default function AdminPage() {
                 <MapPinIcon className="h-4 w-4" />
                 عرض الموقع على الخريطة
               </a>
+              {/* **إشارةُ الموضع — إرشاديّةٌ كسابقتها.**
+                  المشكلة المقيسة: أصحابُ محطاتٍ يسجّلون موضعهم هم. والمراجعُ
+                  لا يكشفها من عنوانٍ نصّيٍّ معقول ودبّوسٍ لا يعرف حيَّه.
+                  فيُقاس بُعدُ الدبّوس عن أقرب محطةِ وقودٍ تعرفها الخرائط
+                  المفتوحة: وسيطُ المعتمدات 76 متراً، وعشرون من أربعٍ وعشرين
+                  ضمن كيلومتر. فما جاوزه يُعرض للمراجع — ولا يُرفض تلقائياً:
+                  أربعٌ صحيحةٌ جاوزته، ومنها محطتا القائم. */}
+              {(() => {
+                const d = metresToKnownFuel(s.lat, s.lng);
+                if (d <= SUSPICIOUS_M) {
+                  return (
+                    <p className="mt-2 text-[11px] font-bold text-brand">
+                      ✓ الموقع على بُعد {Math.round(d)} م من محطةِ وقودٍ معروفة في الخرائط.
+                    </p>
+                  );
+                }
+                return (
+                  <div className="mt-2 rounded-xl border border-amber-400 bg-amber-50 p-3">
+                    <p className="text-xs font-bold text-amber-900">
+                      ⚠ لا محطةَ وقودٍ معروفة قرب هذا الموقع
+                    </p>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-amber-800">
+                      أقربُ محطةٍ تعرفها الخرائط المفتوحة تبعد{' '}
+                      <b>{d > 950 ? `${(d / 1000).toFixed(1)} كم` : `${Math.round(d)} م`}</b>.
+                      قد يكون سجّل موقعه هو لا موقع محطته — تحقّق قبل الاعتماد.
+                    </p>
+                  </div>
+                );
+              })()}
+
               {/* Advisory only. Two stations in one city really can share a
                   word in their name, so the match is surfaced for a human who
                   has spoken to the applicant — never acted on automatically. */}

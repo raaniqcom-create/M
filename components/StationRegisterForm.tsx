@@ -260,11 +260,12 @@ export function StationRegisterForm() {
 
       <div>
         <span className="label">
-          إضافة العنوان على الخريطة <span className="text-traffic-red">*</span>
+          موقع المحطة على الخريطة <span className="text-traffic-red">*</span>
         </span>
         <LocationField coords={coords} onChange={setCoords} city={city} />
         <p className="mt-1 text-xs text-slate-400">
-          اضغط «موقعك الحالي» وأنت داخل المحطة، أو اختر النقطة من الخريطة
+          هذا الدبّوس هو ما يقصده الناس. اضغط «أنا في المحطة الآن» وأنت داخلها، أو اختر
+          النقطة من الخريطة.
         </p>
       </div>
 
