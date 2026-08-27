@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
+  attachApproved,
   GAP_SEVERE_KM,
   GAP_WARN_KM,
   ON_ROAD_M,
@@ -14,6 +15,8 @@ import {
   stopsFor,
   type RoadRoute,
 } from '@/lib/geo';
+import { loadStations } from '@/lib/stations';
+import type { StationWithStatus } from '@/types/database';
 import { RoadStop } from './RoadStop';
 import type { GapSpan } from './RoadMap';
 import { FuelIcon, MapPinIcon, SearchIcon, SpinnerIcon } from './icons';
@@ -45,6 +48,8 @@ export function RoadPlanner() {
   const [roadIdx, setRoadIdx] = useState(0);
   const [ready, setReady] = useState(false);
   const [loadErr, setLoadErr] = useState('');
+  /** المحطات المعتمدة في المنصّة — تُطابَق بالإحداثيات فتصير بطاقاتٍ كاملة */
+  const [approved, setApproved] = useState<StationWithStatus[]>([]);
 
   // الشبكة تُحمَّل مرّةً واحدة عند فتح الصفحة — لا عند كل بحث. و684 ك.ب
   // تصل ~50 مضغوطة، فالانتظار جزءٌ من فتح الصفحة لا من كل ضغطة.
@@ -57,6 +62,17 @@ export function RoadPlanner() {
       .catch(() => {
         if (alive) setLoadErr('تعذّر تحميل شبكة الطرق. تحقّق من اتصالك ثم أعد فتح الصفحة.');
       });
+    // **سقوطُها لا يُسقط الصفحة.** المحطات المعتمدة زيادةٌ على التغطية لا
+    // شرطٌ لها: إن تعذّر جلبُها بقيت الرحلةُ كاملةً وبقيت البطاقاتُ كما هي
+    // — «غير معتمدة» جميعاً. وهو أصدق من صفحةٍ فارغة.
+    loadStations()
+      .then((s) => {
+        if (alive) setApproved(s);
+      })
+      .catch(() => {
+        /* التغطيةُ تكفي وحدها */
+      });
+
     return () => {
       alive = false;
     };
@@ -67,7 +83,10 @@ export function RoadPlanner() {
     [query, ready]
   );
   const route: RoadRoute | null = roads[roadIdx] ?? roads[0] ?? null;
-  const stops = useMemo(() => (route ? stopsFor(route) : []), [route]);
+  const stops = useMemo(
+    () => (route ? attachApproved(stopsFor(route), approved) : []),
+    [route, approved]
+  );
 
   /** الفجوات: بين كل محطتين، وقبل الأولى، وبعد الأخيرة. */
   const gaps: GapSpan[] = useMemo(() => {
@@ -277,7 +296,12 @@ export function RoadPlanner() {
                   <MapPinIcon className="h-4 w-4 text-brand" />
                   محطات هذا الطريق
                 </span>
-                <span className="text-xs font-bold text-slate-700">
+                <span className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                  {stops.some((s) => s.approved) && (
+                    <span className="rounded-full bg-brand px-2 py-0.5 text-[10px] font-extrabold text-white">
+                      {stops.filter((s) => s.approved).length} معتمدة
+                    </span>
+                  )}
                   {stops.length === 0
                     ? 'لا محطة'
                     : stops.length === 1

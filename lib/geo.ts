@@ -1,4 +1,5 @@
 import { ROAD_STATIONS, type RoadStation } from './roadStations';
+import type { StationWithStatus } from '@/types/database';
 
 export type LatLng = readonly [number, number];
 
@@ -275,8 +276,44 @@ export interface RouteStop {
   side: number;
   /** المسافة إلى المحطة التالية — null للأخيرة */
   toNextKm: number | null;
-  /** محطة مسجّلة في المنصّة؟ يُملأ لاحقاً بالمطابقة */
-  registeredId?: string;
+  /** صفُّ المحطة في المنصّة إن كانت معتمدة — يُملأ بالمطابقة على الإحداثيات */
+  approved?: StationWithStatus;
+}
+
+/** **المطابقةُ بالإحداثيات وحدها، عند خمسِ مئة متر.**
+ *
+ *  قِيس على الخمسٍ وعشرين محطةً المعتمدة اليوم: أبعدُ تطابقٍ حقيقيّ 424 متراً
+ *  (الواحة الخضراء، والاسمان متطابقان)، وأقربُ «شبيهٍ خادع» 580 (جوهرة
+ *  الفلوجة وبينهما محطة التفاحة). فبينهما فجوةٌ خالية، والخمسُ مئة في وسطها.
+ *
+ *  **ولا يُشترط تشابهُ الاسم.** فملفّ الطرق تصديرُ خرائط، وأسماؤه ما كتبه
+ *  راسمُ الخريطة لا ما سجّله المالك: «المنتصر بالله» تُطابق «غاز أركان خلف
+ *  الطرموز» على بُعد 79 متراً بلا حرفٍ مشترك، و«التلّ الأخضر» تُطابق «بنزين
+ *  محمود العبد» على 133. والإحداثيات أصدق.
+ *
+ *  **وضررُ الخطأين ليس واحداً.** إيجابيّةٌ كاذبة تضع رقمَ صاحبِ محطةٍ على
+ *  محطةِ غيره — وسلبيّةٌ كاذبة تضع شريط «غير معتمدة» على محطةٍ معتمدة، وهو
+ *  محرجٌ ولا يُضلّل أحداً. فالعتبةُ تميل نحو الثانية.
+ *
+ *  وقِيس عند الخمس مئة: ستَّ عشرةَ مطابقةً، واحدةً لواحدة، وصفرُ التباس.
+ *  (وأقربُ معتمدتين إحداهما من الأخرى 1,346 متراً — فلا يمكن أصلاً لمحطة
+ *  طريقٍ أن تقع ضمن خمسِ مئةٍ من اثنتين.) */
+export const MATCH_M = 500;
+
+export function attachApproved(
+  stops: RouteStop[],
+  stations: readonly StationWithStatus[]
+): RouteStop[] {
+  if (!stations.length) return stops;
+  return stops.map((s) => {
+    let best: StationWithStatus | undefined;
+    let bd = Infinity;
+    for (const a of stations) {
+      const d = kmBetween([s.lat, s.lng], [a.lat, a.lng]) * 1000;
+      if (d < bd) { bd = d; best = a; }
+    }
+    return bd <= MATCH_M ? { ...s, approved: best } : s;
+  });
 }
 
 /** شريطٌ ضيّق عن قصد.

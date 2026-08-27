@@ -2,18 +2,23 @@
 
 import { GAP_SEVERE_KM, GAP_WARN_KM, type RouteStop } from '@/lib/geo';
 import { RouteButton } from './RouteButton';
+import { StationCard } from './StationCard';
 import { FuelIcon } from './icons';
 
 /** محطةٌ على الطريق — وما بعدها.
  *
- *  StationCard لا تصلح هنا: تفترض منتجاتٍ وازدحاماً وساعات دوامٍ وصفّاً في
- *  القاعدة، وهذه لا تملك شيئاً من ذلك ولا يُدَّعى أنها تملكه. والمالك حسم
- *  الغرض: «نريد تغطية المحطات فقط» — أين تقف، لا ما تبيع.
+ *  **وبطاقتان لا واحدة.**
  *
- *  والرقم يطابق رقمَها على الخريطة، فتُقرأ النقطة والبطاقة معاً.
+ *  أكثرُ ما على الطرق نقاطٌ من خرائطَ مفتوحة: لا صاحبَ لها عندنا ولا التزام،
+ *  فلا تُعرض إلا موقعاً. وبعضُها محطاتٌ **معتمدة** في المنصّة، صاحبُها يُعلن
+ *  توفّره ويُحاسَب عليه — وهذه تستحقّ بطاقتها الكاملة: منتجاتها ودوامُها
+ *  وازدحامُها ورقمُها.
  *
- *  والفجوة تُرسم بندَاً مستقلاً بينها وبين تاليتها — لا حاشيةً في زاوية. من
- *  يعبر الصحراء لا يقرأ الحواشي. */
+ *  والفرقُ يُقال بصراحة لا بالإهمال: المعتمدةُ بشارةٍ خضراء، وغيرُها بشريطٍ
+ *  أحمر على حافّتها مكتوبٌ عليه «غير معتمدة». فلا يظنّ المسافرُ أن ما لا
+ *  نعرف عنه شيئاً مثلُ ما نضمن عنه.
+ *
+ *  والرقمُ يطابق رقمَها على الخريطة، فتُقرأ النقطة والبطاقة معاً. */
 export function RoadStop({
   stop,
   index,
@@ -27,6 +32,25 @@ export function RoadStop({
   const warn = !last && gap >= GAP_WARN_KM;
   const severe = gap >= GAP_SEVERE_KM;
   const left = stop.side > 0;
+  const approved = stop.approved;
+
+  /** حقائقُ الطريق — كم على المسار، وبُعدٌ عن الحافّة، وأيّ جانب.
+   *
+   *  لا مكانَ لها داخل StationCard، ولا تُكتب في خانة distanceKm فيها: تلك
+   *  مسافةٌ مستقيمة من موقع القارئ، وهذه مسافةٌ على الطريق من نقطة انطلاقه.
+   *  رقمان مختلفان، ووضعُ أحدهما مكان الآخر كذبٌ صامت. */
+  const facts = (
+    <p className="text-[10.5px] text-slate-500">
+      كم <b className="tabular-nums text-slate-700">{Math.round(stop.atKm)}</b>
+      {' · '}
+      {stop.offRoadM} م عن الطريق
+      {' · '}
+      <span className={left ? 'font-bold text-amber-800' : 'font-bold text-brand-700'}>
+        {left ? 'يسار اتجاهك' : 'يمين اتجاهك'}
+      </span>
+      {stop.toNextKm != null && ` · ${Math.round(stop.toNextKm)} كم إلى التالية`}
+    </p>
+  );
 
   return (
     <>
@@ -43,44 +67,48 @@ export function RoadStop({
           {index}
         </span>
 
-        <div className="card mr-3 w-full p-3">
-          <div className="flex items-start justify-between gap-2">
+        {approved ? (
+          /* ── معتمدة: بطاقةُ المنصّة كاملةً ──────────────────────────────
+             وStationCard جذرُها ‎.card‎ بحاشيتها، فلا تُلفّ في ‎.card‎ ثانية —
+             حدّان وحاشيتان على بطاقةٍ واحدة. */
+          <div className="mr-3 w-full space-y-1.5">
+            <div className="flex items-center justify-between gap-2 px-1">
+              <span className="inline-flex items-center gap-1 rounded-full bg-brand px-2.5 py-0.5 text-[10px] font-extrabold text-white">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.2}
+                  strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3" aria-hidden="true">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+                معتمدة في المنصّة
+              </span>
+              {facts}
+            </div>
+            <StationCard station={approved} />
+          </div>
+        ) : (
+          /* ── غير معتمدة: ما نعرفه فقط، وشريطٌ يقول حدَّه ──────────────── */
+          <div className="card road-carded mr-3 w-full p-3">
             <h3 className="text-[13.5px] font-bold leading-snug text-slate-800">{stop.name}</h3>
-            <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-extrabold tabular-nums text-slate-700">
-              كم {Math.round(stop.atKm)}
+            <p className="mt-0.5 text-[10.5px] text-slate-500">{stop.city}</p>
+            <div className="mt-0.5">{facts}</div>
+
+            {/* حدُّ ما نعرضه يُقال، ولا يُترك للقارئ ليفترضه. ولا تُذكر
+                المنتجات ولا الدوام: ذكرُهما — ولو نفياً — يُحيي توقّعاً
+                أخرجه المالك من نطاق هذه الصفحة. */}
+            <p className="mt-1.5 rounded-lg bg-brand-50/60 px-2 py-1 text-[10px] leading-relaxed text-slate-600">
+              موقعُها على طريقك — وهذا كلّ ما نعرضه هنا اليوم.{' '}
+              <b>وقريباً تُضاف المحطات كاملةً إلى النظام بإذن الله.</b>
+            </p>
+
+            <div className="mt-2">
+              <RouteButton lat={stop.lat} lng={stop.lng} stationName={stop.name} />
+            </div>
+
+            <span className="road-stamp" aria-hidden="true">
+              غير معتمدة
             </span>
+            <span className="sr-only">هذه المحطة غير معتمدة في المنصّة — موقعها فقط معروض.</span>
           </div>
-
-          <p className="mt-0.5 text-[10.5px] text-slate-500">
-            {stop.city}
-            {' · '}
-            {stop.offRoadM} م عن الطريق
-            {stop.toNextKm != null && ` · ${Math.round(stop.toNextKm)} كم إلى التالية`}
-          </p>
-
-          {/* الجانب يُعرض ولا يُخفي: على الطرق الصحراوية المفردة يخدم
-              الجانبان الاتجاهين، وعلى المزدوجة يحتاج اليسارُ التفافاً. */}
-          <p
-            className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-              left ? 'bg-amber-50 text-amber-800' : 'bg-brand-50 text-brand-700'
-            }`}
-          >
-            {left ? 'يسار اتجاهك — قد تحتاج التفافاً' : 'يمين اتجاهك'}
-          </p>
-
-          {/* حدُّ ما نعرضه يُقال، ولا يُترك للقارئ ليفترضه.
-              ولا تُذكر المنتجات ولا الدوام: ذكرُهما — ولو نفياً — يُحيي توقّعاً
-              أخرجه المالك من نطاق هذه الصفحة. ولا يُقال «لم تنضمّ»، فقد تكون
-              منضمّةً ولا نعرف؛ المعلوم هو ما نعرضه لا ما هي عليه. */}
-          <p className="mt-1.5 rounded-lg bg-brand-50/60 px-2 py-1 text-[10px] leading-relaxed text-slate-600">
-            موقعُها على طريقك — وهذا كلّ ما نعرضه هنا اليوم.{' '}
-            <b>وقريباً تُضاف المحطات كاملةً إلى النظام بإذن الله.</b>
-          </p>
-
-          <div className="mt-2">
-            <RouteButton lat={stop.lat} lng={stop.lng} stationName={stop.name} />
-          </div>
-        </div>
+        )}
       </article>
 
       {warn && (
