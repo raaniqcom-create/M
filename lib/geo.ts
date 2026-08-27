@@ -300,21 +300,74 @@ export interface RouteStop {
  *  طريقٍ أن تقع ضمن خمسِ مئةٍ من اثنتين.) */
 export const MATCH_M = 500;
 
-export function attachApproved(
+/** **والمعتمدةُ تُضاف ولو بعُدت — ويُقال بُعدُها.**
+ *
+ *  خمسُ محطاتٍ معتمدة لا تقابلها نقطةٌ في ملفّ الطرق أصلاً: الهيف في عانة،
+ *  والكرام في الفلوجة، والفتيان وأسوار القائم — وملفُّ الطرق لا يحوي نقطةً
+ *  واحدة في القائم. فلو انتظرنا أن تظهر في ملفٍّ مولَّدٍ من خرائطَ مفتوحة
+ *  لغابت محطاتٌ **نضمنُ بياناتها** بينما تظهر نقاطٌ لا نعرف عنها شيئاً.
+ *
+ *  فتُسقَط المعتمدةُ على المسار بإحداثيات المنصّة نفسِها، وتُضاف إن كانت
+ *  ضمن خمسة كيلومترات. ولا تُخفى بحجّة أنها ليست «على الحافّة»: يُكتب بُعدُها
+ *  صريحاً، فيقرّر المسافرُ أيستحقّ الانعطافُ أم لا. وإخفاءُ محطةٍ على بُعد
+ *  ثلاثة كيلومترات ليس صدقاً بل نقصُ معلومة.
+ *
+ *  وخمسةٌ لا أكثر: ما بَعُد أكثر لم يعد على الطريق بأي معنى، وصار رحلةً
+ *  ثانية. */
+export const APPROVED_NEAR_KM = 5;
+
+/** يُطابق المحطات المعتمدة بنقاط الطريق، ويُضيف ما لا نقطةَ له منها. */
+export function withApproved(
+  route: RoadRoute,
   stops: RouteStop[],
-  stations: readonly StationWithStatus[]
+  approved: readonly StationWithStatus[]
 ): RouteStop[] {
-  if (!stations.length) return stops;
-  return stops.map((s) => {
+  if (!approved.length) return stops;
+
+  const taken = new Set<string>();
+  const merged = stops.map((s) => {
     let best: StationWithStatus | undefined;
     let bd = Infinity;
-    for (const a of stations) {
+    for (const a of approved) {
+      if (taken.has(a.id)) continue;
       const d = kmBetween([s.lat, s.lng], [a.lat, a.lng]) * 1000;
       if (d < bd) { bd = d; best = a; }
     }
-    return bd <= MATCH_M ? { ...s, approved: best } : s;
+    if (bd > MATCH_M || !best) return s;
+    taken.add(best.id);
+    return { ...s, approved: best, name: best.name, city: best.city };
   });
+
+  // ما لم تُطابَق: تُسقَط على المسار وتُضاف إن قربت منه
+  const skip = [
+    { at: route.origin, km: skipRadius(route.from) },
+    { at: route.dest, km: skipRadius(route.to) },
+  ];
+  for (const a of approved) {
+    if (taken.has(a.id)) continue;
+    if (skip.some((c) => c.km > 0 && kmBetween([a.lat, a.lng], c.at) <= c.km)) continue;
+    const snap = snapAlong([a.lat, a.lng], route.path);
+    if (snap.km > APPROVED_NEAR_KM) continue;
+    merged.push({
+      name: a.name,
+      city: a.city,
+      lat: a.lat,
+      lng: a.lng,
+      atKm: snap.atKm,
+      offRoadM: Math.round(snap.km * 1000),
+      side: snap.side,
+      toNextKm: null,
+      approved: a,
+    });
+  }
+
+  merged.sort((x, y) => x.atKm - y.atKm);
+  for (let i = 0; i < merged.length; i++) {
+    merged[i] = { ...merged[i], toNextKm: i < merged.length - 1 ? merged[i + 1].atKm - merged[i].atKm : null };
+  }
+  return merged;
 }
+
 
 /** شريطٌ ضيّق عن قصد.
  *

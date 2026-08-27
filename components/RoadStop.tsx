@@ -42,11 +42,20 @@ export function RoadStop({
    *  لا مكانَ لها داخل StationCard، ولا تُكتب في خانة distanceKm فيها: تلك
    *  مسافةٌ مستقيمة من موقع القارئ، وهذه مسافةٌ على الطريق من نقطة انطلاقه.
    *  رقمان مختلفان، ووضعُ أحدهما مكان الآخر كذبٌ صامت. */
+  /** بُعدُها عن الطريق — بالمتر ما دام قريباً، وبالكيلومتر إذا بَعُد.
+   *  «3200 م» رقمٌ يحتاج قسمةً، و«3.2 كم» جوابٌ مباشر. */
+  const off =
+    stop.offRoadM >= 950
+      ? `${(stop.offRoadM / 1000).toFixed(1)} كم عن الطريق`
+      : `${stop.offRoadM} م عن الطريق`;
+  /** انعطافٌ يستحقّ أن يُقال: ما جاوز نصف كيلومتر لم يعد على الحافّة. */
+  const detour = stop.offRoadM > 500;
+
   const facts = (
     <p className="text-[10.5px] text-slate-500">
       كم <b className="tabular-nums text-slate-700">{Math.round(stop.atKm)}</b>
       {' · '}
-      {stop.offRoadM} م عن الطريق
+      <span className={detour ? 'font-bold text-amber-800' : ''}>{off}</span>
       {' · '}
       <span className={left ? 'font-bold text-amber-800' : 'font-bold text-brand-700'}>
         {left ? 'يسار اتجاهك' : 'يمين اتجاهك'}
@@ -85,6 +94,24 @@ export function RoadStop({
               </span>
               {facts}
             </div>
+            {/* **البُعدُ يُقال، ولا تُخفى المحطة به.**
+                خمسُ محطاتٍ معتمدة لا تقابلها نقطةٌ في ملفّ الطرق، وبعضُها
+                على كيلومترات من المسار. وإخفاؤها ليس صدقاً بل نقصُ معلومة —
+                فتُعرض، ويُكتب كم ينعطف إليها من طريقه. */}
+            {detour && (
+              <p className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[10.5px] font-bold leading-relaxed text-amber-900">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}
+                  strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 shrink-0"
+                  aria-hidden="true">
+                  <path d="M18 15l3-3-3-3M3 6h6a3 3 0 0 1 3 3v9" />
+                </svg>
+                ليست على حافّة الطريق — تبعد{' '}
+                <b className="tabular-nums">
+                  {stop.offRoadM >= 950 ? `${(stop.offRoadM / 1000).toFixed(1)} كم` : `${stop.offRoadM} م`}
+                </b>{' '}
+                عن مسارك، فتحتاج انعطافاً.
+              </p>
+            )}
             <StationCard station={approved} fromCity={fromCity} />
           </div>
         ) : (

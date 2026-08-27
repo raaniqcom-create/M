@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
-  attachApproved,
+  withApproved,
   GAP_SEVERE_KM,
   GAP_WARN_KM,
   ON_ROAD_M,
@@ -84,7 +84,7 @@ export function RoadPlanner() {
   );
   const route: RoadRoute | null = roads[roadIdx] ?? roads[0] ?? null;
   const stops = useMemo(
-    () => (route ? attachApproved(stopsFor(route), approved) : []),
+    () => (route ? withApproved(route, stopsFor(route), approved) : []),
     [route, approved]
   );
 
