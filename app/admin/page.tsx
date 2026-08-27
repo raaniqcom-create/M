@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { metresToKnownFuel, SUSPICIOUS_M } from '@/lib/nearbyFuel';
 import { CheckIcon, LogOutIcon, MapPinIcon, SpinnerIcon, WhatsappIcon, XIcon } from '@/components/icons';
-import { whatsappLink } from '@/lib/phone';
+import { whatsappLink, whatsappVerifyLocation, whatsappVerifyRole } from '@/lib/phone';
 import { AdminStationForm } from '@/components/AdminStationForm';
 import { BroadcastPanel } from '@/components/BroadcastPanel';
 import { ReviewsPanel } from '@/components/ReviewsPanel';
@@ -488,6 +488,37 @@ export default function AdminPage() {
                 <MapPinIcon className="h-4 w-4" />
                 عرض الموقع على الخريطة
               </a>
+              {/* **رسالتان جاهزتان قبل القرار.**
+                  الاعتمادُ ليس زرَّين فقط — بينهما سؤال. وأكثرُ ما يُوقف
+                  الطلبَ سببان: مقدِّمُه ليس من إدارة المحطة بل يريد إشعاراً،
+                  أو دبّوسُه على غير محطته. فتُكتب الرسالتان مرّةً هنا بدل أن
+                  تُعاد كتابتُهما مع كل طلب — وضغطةٌ واحدة تفتح المحادثة
+                  والنصُّ فيها. */}
+              {s.phone && (
+                <div className="mt-2 grid gap-2">
+                  <a
+                    href={whatsappVerifyRole(s.phone, s.contact_name, s.name, s.city)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border-2 border-brand bg-white px-3 text-xs font-extrabold text-brand-700"
+                  >
+                    <WhatsappIcon className="h-4 w-4" />
+                    اسأله: هل أنت من إدارة المحطة؟
+                  </a>
+                  {metresToKnownFuel(s.lat, s.lng) > SUSPICIOUS_M && (
+                    <a
+                      href={whatsappVerifyLocation(s.phone, s.contact_name, s.name)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border-2 border-amber-400 bg-white px-3 text-xs font-extrabold text-amber-800"
+                    >
+                      <WhatsappIcon className="h-4 w-4" />
+                      اسأله: هل الدبّوس على المحطة؟
+                    </a>
+                  )}
+                </div>
+              )}
+
               {/* **إشارةُ الموضع — إرشاديّةٌ كسابقتها.**
                   المشكلة المقيسة: أصحابُ محطاتٍ يسجّلون موضعهم هم. والمراجعُ
                   لا يكشفها من عنوانٍ نصّيٍّ معقول ودبّوسٍ لا يعرف حيَّه.
