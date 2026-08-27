@@ -315,12 +315,32 @@ function snapAlong(p: LatLng, path: readonly LatLng[]) {
  *  وهي طريقٌ لا حيّ. */
 export const CITY_SKIP_KM = 7;
 
+/** **والمنفذُ ليس مدينة.**
+ *
+ *  محطةٌ على بُعد أربعة كيلومترات من منفذ عرعر ليست «محطةَ حيّك تعرفها» —
+ *  هي آخرُ ما تراه قبل الحدود، وأهمُّ محطةٍ في الرحلة كلِّها. وكذلك محطةُ
+ *  ناحية النخيب على بُعد كيلومترين منها.
+ *
+ *  فنصفُ القطر يسقط عند المنافذ والبلدات الصغيرة، ويبقى عند المدن التي
+ *  يعرف ساكنُها محطاتِ حيّه. */
+const NO_SKIP = new Set([
+  'طريبيل (الأردن)', 'منفذ عرعر', 'الوليد', 'القائم', 'النخيب', 'عكاشات',
+  'الرحالية', 'الرمانة', 'الكرابلة', 'العبيدي', 'كبيسة', 'الوفاء', 'المحمدي',
+  'بروانة', 'الحقلانية', 'البغدادي', 'حصيبة الشرقية', 'الصقلاوية',
+]);
+function skipRadius(name: string): number {
+  return NO_SKIP.has(name) ? 0 : CITY_SKIP_KM;
+}
+
 /** المحطات على هذه الرحلة، مرتّبةً من نقطة الانطلاق. */
 export function stopsFor(
   route: RoadRoute,
   stations: readonly RoadStation[] = ROAD_STATIONS
 ): RouteStop[] {
-  return collectStops(route.path, stations, [route.origin, route.dest]);
+  return collectStops(route.path, stations, [
+    { at: route.origin, km: skipRadius(route.from) },
+    { at: route.dest, km: skipRadius(route.to) },
+  ]);
 }
 
 /** **الجانب يُعرض ولا يُخفي.**
@@ -336,11 +356,11 @@ export function stopsFor(
 function collectStops(
   path: readonly LatLng[],
   stations: readonly RoadStation[],
-  skipNear: readonly LatLng[] = []
+  skipNear: readonly { at: LatLng; km: number }[] = []
 ): RouteStop[] {
   const stops: RouteStop[] = [];
   for (const s of stations) {
-    if (skipNear.some((c) => kmBetween([s.la, s.lo], c) <= CITY_SKIP_KM)) continue;
+    if (skipNear.some((c) => c.km > 0 && kmBetween([s.la, s.lo], c.at) <= c.km)) continue;
     const snap = snapAlong([s.la, s.lo], path);
     if (snap.km * 1000 > ON_ROAD_M) continue;
     stops.push({
