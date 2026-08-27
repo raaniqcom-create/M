@@ -7,7 +7,7 @@ import { FuelIcon } from '@/components/icons';
 export const metadata: Metadata = {
   title: 'مساعد الطريق | المحطة التقنية',
   description:
-    'تغطية محطات الوقود على طرق الأنبار الصحراوية — بين مدنها وبغداد والمنافذ الحدودية.',
+    'تغطية محطات الوقود على طرق الأنبار — بين مدنها وبغداد والمنافذ الحدودية.',
   // لم تُعلَن بعد: لا تُفهرَس ولا تظهر في نتائج البحث.
   robots: { index: false, follow: false },
 };
@@ -35,7 +35,7 @@ export default function RoadPage() {
 
       <h1 className="mt-6 text-center text-xl font-extrabold text-slate-800">مساعد الطريق</h1>
       <p className="mx-auto mt-2 max-w-sm text-center text-xs leading-relaxed text-slate-600">
-        الأنبار صحراء، وأكثر طرقها تمتدّ في عمقها ولا تمرّ بعمران. فاختر رحلتك، تعرف
+        أغلبُ الطرق الرئيسية في الأنبار تمرّ بمناطقَ صحراوية لا عمران فيها. فاختر رحلتك، تعرف
         <b className="text-slate-800"> أين تقف المحطات على طريقك </b>
         — <b className="text-traffic-red">وأين لا تقف واحدة</b>، وهو ما يستحقّ أن تعرفه قبل
         أن تتحرّك.
