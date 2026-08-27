@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AdminOnly } from '@/components/AdminOnly';
 import { RoadPlanner } from '@/components/RoadPlanner';
 import { SiteFooter } from '@/components/SiteFooter';
 import { FuelIcon } from '@/components/icons';
@@ -6,7 +7,9 @@ import { FuelIcon } from '@/components/icons';
 export const metadata: Metadata = {
   title: 'مساعد الطريق | المحطة التقنية',
   description:
-    'تغطية محطات الوقود على طرق الأنبار الصحراوية — بين مدنها وبغداد والمنافذ الحدودية، وأين تمتدّ الطريق بلا محطة.',
+    'تغطية محطات الوقود على طرق الأنبار الصحراوية — بين مدنها وبغداد والمنافذ الحدودية.',
+  // لم تُعلَن بعد: لا تُفهرَس ولا تظهر في نتائج البحث.
+  robots: { index: false, follow: false },
 };
 
 /** صفحةٌ ساكنة واحدة، لا مسارٌ ديناميكي.
@@ -14,11 +17,16 @@ export const metadata: Metadata = {
  *  المشروع output:'export'، وأي [from]/[to] يلزمه generateStaticParams —
  *  أي صفحةً مبنيّةً لكل زوجٍ من المدن. والرحلة تُختار من الحالة لا من العنوان.
  *
+ *  **ومحجوبةٌ عن غير الإدارة.** جاهزةٌ ولم تُعلَن، فحارسُها هو الدورُ نفسُه
+ *  الذي يحرس لوحة الإدارة — لا مفتاحاً في التخزين المحلّي يعرفه كلُّ من فتح
+ *  أدوات المتصفّح.
+ *
  *  **وهويّتها هويّة المنصّة.** جُرِّب لها لوحٌ رمليّ يحاكي الصحراء، فقرّر
  *  المالك أن الهويّة أبقى: أخضرُ على أبيض في كل صفحة. والصحراء تُقال بما
  *  يُعرض — امتدادٌ أحمر بلا محطة — لا بلون الورق. */
 export default function RoadPage() {
   return (
+    <AdminOnly>
     <main className="mx-auto max-w-md px-4 pb-16 pt-8">
       <a href="/" className="mx-auto flex w-fit items-center gap-2 text-brand-700">
         <FuelIcon className="h-6 w-6" />
@@ -51,5 +59,6 @@ export default function RoadPage() {
 
       <SiteFooter />
     </main>
+    </AdminOnly>
   );
 }
