@@ -39,6 +39,17 @@ html,body{height:100%;background:#000;overflow:hidden;font-family:Tajawal,'Segoe
   width:var(--W);height:var(--H);position:absolute;top:50%;left:50%;
   overflow:hidden;background:#fff;transform-origin:center;
 }
+/* **وميضُ الافتتاح.**
+ *
+ * بين لحظة تحليل الصفحة ولحظة استدعاء collect() تمضي أجزاءٌ من الثانية،
+ * تعمل فيها كلُّ حركات الـCSS بساعتها الحرّة — فيلمعُ نصُّ المشهد الأول
+ * ثمّ يُردّ إلى الصفر. وهو ما رآه المالك: «يظهر الكلام أجزاء من الثانية».
+ *
+ * فالمسرحُ مخفيٌّ حتى تُمسَك الحركاتُ وتُسحَب إلى الصفر، ثمّ يُكشَف.
+ * ولا يُستعمل display:none: الـSVG لا يُقاس وهو غير معروض، فتفشل
+ * getBBox التي يقوم عليها فضُّ تراكب اللافتات. */
+#stage > *{visibility:hidden}
+#stage.ready > *{visibility:visible}
 .scene{position:absolute;inset:0 0 var(--band) 0;opacity:0;display:grid;
   place-items:center;align-content:center;gap:var(--g,30px);text-align:center;padding:150px 90px 0}
 /* مشاهد الخريطة: النصُّ في عمودٍ جهةَ الانطلاق، والخريطة في العمود الآخر */
@@ -74,47 +85,48 @@ html.v .scene.wm > *{max-width:100%}
    رجوعاً إلى الصفر، فتطمس الثلاثَ قبلها. والصواب خطٌّ زمنيٌّ واحد بطول
    الفيلم، نسبُه من الثواني: t/78×100. */
 @keyframes mapshow{
-  0%,23.27%{opacity:0}
-  24.08%,53.98%{opacity:1}   /* الرحلة والمحطات والفجوة */
-  54.69%,66.94%{opacity:0}   /* مشهد المنافذ */
-  67.76%,74.9%{opacity:0}   /* مشهد الأعمدة */
-  75.92%,81.02%{opacity:1}   /* العودة */
-  81.94%,89.18%{opacity:.14} /* الاعتراف فوق الفراغ */
-  90.41%,100%{opacity:1}
+  0%,25.26%{opacity:0}
+  25.96%,51.67%{opacity:1}
+  52.28%,62.81%{opacity:0}
+  63.51%,69.65%{opacity:0}
+  70.53%,74.91%{opacity:1}
+  75.7%,81.93%{opacity:.14}
+  82.98%,90.7%{opacity:1}
+  91.4%,100%{opacity:0}
 }
 /* الأخضر يخفت في مشهد الفراغ فيبقى الأحمرُ وحده يُقرأ، ثم يعود في الختام */
 @keyframes routedim{
-  0%,51.43%{opacity:1}
-  52.35%,74.9%{opacity:.22}
-  75.92%,81.02%{opacity:1}
-  81.94%,89.18%{opacity:.22}
-  90.41%,100%{opacity:1}
+  0%,49.47%{opacity:1}
+  50.26%,69.65%{opacity:.22}
+  70.53%,74.91%{opacity:1}
+  75.7%,81.93%{opacity:.22}
+  82.98%,100%{opacity:1}
 }
 /* **لا تُسَلسَل حركتان بـ‎both‎ على خاصّيةٍ واحدة.** الأخيرةُ تملأ رجوعاً
    إلى بداية الزمن فتطمس كلَّ ما قبلها — وهو عطلٌ صامت وقع مرّتين هنا:
    مرّةً أخفى الخريطة كلَّها، ومرّةً أخفى الخطَّ الأحمر. فلكلّ خاصّيةٍ
    حركةٌ واحدة بطول الفيلم، نسبُها من الثواني: t/78×100. */
 @keyframes gapfwd{
-  0%,42.35%{opacity:0}
-  42.55%,75.71%{opacity:1}
-  75.92%,81.43%{opacity:0}  /* مشهد العودة */
-  81.63%,100%{opacity:1}
+  0%,41.67%{opacity:0}
+  41.84%,70.35%{opacity:1}
+  70.53%,75.26%{opacity:0}
+  75.44%,100%{opacity:1}
 }
 @keyframes gapback{
-  0%,75.71%{opacity:0}
-  75.92%,81.02%{opacity:1}
-  81.22%,100%{opacity:0}
+  0%,70.35%{opacity:0}
+  70.53%,74.91%{opacity:1}
+  75.09%,100%{opacity:0}
 }
 @keyframes chipfwd{
-  0%,43.98%{opacity:0}
-  44.18%,75.71%{opacity:1}
-  75.92%,81.43%{opacity:0}
-  81.63%,100%{opacity:1}
+  0%,43.07%{opacity:0}
+  43.25%,70.35%{opacity:1}
+  70.53%,75.26%{opacity:0}
+  75.44%,100%{opacity:1}
 }
 @keyframes chipback{
-  0%,76.94%{opacity:0}
-  77.14%,81.02%{opacity:1}
-  81.22%,100%{opacity:0}
+  0%,71.4%{opacity:0}
+  71.58%,74.91%{opacity:1}
+  75.09%,100%{opacity:0}
 }
 /* الشبكةُ تعيش في مشهدها الثالث، وتعود في مشهد المنافذ */
 /* حلقةٌ تتّسع حول المنفذ حين يُذكر — ثلاثُ مرّات، واحدةٌ لكلِّ بلد.
@@ -128,11 +140,11 @@ html.v .scene.wm > *{max-width:100%}
   50%{transform:scale(1.5)}
 }
 @keyframes netshow{
-  0%,14.18%{opacity:0}
-  14.9%,23.06%{opacity:1}
-  23.67%,54.29%{opacity:0}
-  55.0%,66.73%{opacity:1}   /* المنافذ الثلاثة */
-  67.35%,100%{opacity:0}
+  0%,17.46%{opacity:0}
+  18.07%,25.09%{opacity:1}
+  25.61%,51.93%{opacity:0}
+  52.54%,62.63%{opacity:1}
+  63.16%,100%{opacity:0}
 }
 @keyframes breathe{0%,100%{filter:drop-shadow(0 0 6px rgba(220,38,38,.4))}
                    50%{filter:drop-shadow(0 0 10px rgba(220,38,38,.8))}}
@@ -257,13 +269,26 @@ html.v .bars{width:900px}
 html.v .limit{font-size:40px;max-width:900px}
 
 /* ---------- 9 · الختام ---------- */
+.scene.store{align-content:center}
+.appicon{width:150px;height:150px;border-radius:34px;border:3px solid var(--brand-100);
+  box-shadow:0 10px 30px rgba(20,83,45,.16)}
+.badges{display:flex;gap:20px;margin-top:6px}
+.badge{display:flex;align-items:center;gap:14px;background:var(--ink);color:#fff;
+  border-radius:18px;padding:14px 26px 14px 20px;text-decoration:none}
+.badge svg{width:38px;height:38px;fill:#fff;flex:none}
+.badge span{display:flex;flex-direction:column;line-height:1.15;text-align:start}
+.badge b{font-size:28px;font-weight:800;direction:ltr}
+.badge i{font-size:19px;font-style:normal;font-weight:400;opacity:.75}
+html.v .badges{flex-direction:column;gap:14px}
+html.v .appicon{width:180px;height:180px;border-radius:40px}
+
 .close .name{font-size:126px;font-weight:900;color:var(--brand-900);letter-spacing:-2px}
 .close .rule{height:8px;width:260px;background:var(--brand);border-radius:99px}
 .close .url{font-size:44px;font-weight:700;color:var(--brand)}
 .close .soon{font-size:32px;font-weight:500;color:var(--mute)}
 .close .by{font-size:26px;font-weight:400;color:var(--faint)}
 html.v .close .name{font-size:84px}
-html.v .scene.close{gap:10px;padding-top:96px}
+html.v .scene.close{gap:10px;padding-top:210px}
 html.v .close .url{font-size:38px}
 html.v .close .soon{font-size:28px}
 
@@ -275,43 +300,52 @@ html.v .close .soon{font-size:28px}
  * الأفقيّ وحده في الأسفل وسطاً.
  */
 #corner{
-  position:absolute;top:40px;inset-inline-end:52px;z-index:6;
+  position:absolute;top:40px;left:50%;transform:translateX(-50%);z-index:6;
   width:92px;height:92px;border-radius:21px;background:#fff;
   border:2px solid var(--brand-100);box-shadow:0 6px 20px rgba(20,83,45,.12);
-  animation:fade .8s both .4s;
+  animation:corner 114s linear both;
+}
+/* يغيب في مشهد التحميل: الأيقونةُ هناك كبيرةٌ في الوسط، فنسختُها الصغيرة
+   في الأعلى تكرارٌ لا يضيف. */
+@keyframes corner{
+  0%,5.35%{opacity:0}
+  6.05%,90.7%{opacity:1}
+  91.4%,100%{opacity:0}
 }
 html.v #corner{width:110px;height:110px;border-radius:25px;top:52px}
 
 /* العلامةُ المائية: خلفَ كلِّ شيء، وبشفافيةٍ لا تُقرأ إلا إن قُصدت */
 #wm{
   position:absolute;bottom:calc(var(--band) - 20px);inset-inline-end:60px;
-  width:380px;opacity:.05;z-index:0;pointer-events:none;filter:grayscale(.25);
+  width:380px;opacity:0;z-index:0;pointer-events:none;filter:grayscale(.25);
+  animation:wmfade .8s both 6.1s;
 }
+@keyframes wmfade{from{opacity:0}to{opacity:.05}}
 html.v #wm{width:480px;bottom:calc(var(--band) + 40px)}
 
 /* الافتتاح على مرحلتين: 0 → 2.6ث شعارُ المنصّة · 2.9 → 5.6 «صنع في الأنبار» */
 #opener,#wmbig{position:absolute;top:50%;left:50%;z-index:8;pointer-events:none}
-#opener{width:230px;border-radius:52px;animation:opener 98s linear both}
-#wmbig{width:400px;animation:wmbig 98s linear both}
+#opener{width:230px;border-radius:52px;animation:opener 114s linear both}
+#wmbig{width:400px;animation:wmbig 114s linear both}
 html.v #opener{width:280px;border-radius:64px}
 html.v #wmbig{width:480px}
 @keyframes opener{
   0%{opacity:0;transform:translate(-50%,-50%) scale(.9)}
-  0.9%{opacity:1;transform:translate(-50%,-50%) scale(1)}
-  2.2%{opacity:1;transform:translate(-50%,-50%) scale(1)}
-  2.9%,100%{opacity:0;transform:translate(-50%,-50%) scale(1.04)}
+  0.79%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  2.11%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  2.63%,100%{opacity:0;transform:translate(-50%,-50%) scale(1.04)}
 }
 @keyframes wmbig{
-  0%,2.9%{opacity:0;transform:translate(-50%,-50%) scale(.94)}
-  3.9%{opacity:1;transform:translate(-50%,-50%) scale(1)}
-  5.1%{opacity:1;transform:translate(-50%,-50%) scale(1)}
-  5.9%,100%{opacity:0;transform:translate(-50%,-50%) scale(1.03)}
+  0%,2.63%{opacity:0;transform:translate(-50%,-50%) scale(.94)}
+  3.42%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  4.56%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  5.18%,100%{opacity:0;transform:translate(-50%,-50%) scale(1.03)}
 }
 
 #madein{
   position:absolute;bottom:34px;left:50%;transform:translateX(-50%);z-index:5;
   width:340px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.14));
-  animation:fade .8s both .3s;
+  animation:fade .8s both 6.3s;
 }
 html.v #madein{width:440px;bottom:56px}
 
@@ -380,123 +414,123 @@ html.v #madein{width:440px;bottom:56px}
   <!-- 1 · صنعت في الأنبار، وتُجيب سؤالاً واحداً.
        رُفعت الإحصائيات من هنا بطلب المالك: المشهدُ الأوّل يقول ما تفعله
        المنصّة، لا كم تكبُر. والعددُ يُقنع من يقارن، والسؤالُ يُمسك من يشاهد. -->
-  <section class="scene" style="animation:scene 7s both">
-    <h2 class="w" style="animation-delay:6.2s">المحطةُ التقنية تُجيبُ سؤالاً واحداً</h2>
-    <h1 class="w" style="animation-delay:6.8s">أين الوقودُ في مدينتي الآن؟</h1>
+  <section class="scene" style="animation:scene 7s both;animation-delay:6s">
+    <h2 class="w" style="animation-delay:12.2s">المحطةُ التقنية تُجيبُ سؤالاً واحداً</h2>
+    <h1 class="w" style="animation-delay:12.8s">أين الوقودُ في مدينتي الآن؟</h1>
   </section>
 
   <!-- 2 · وخارج المدينة، السؤال غيره -->
-  <section class="scene" style="animation:scene 6s both;animation-delay:7.0s">
-    <p class="sub w" style="animation-delay:7.5s">لكنّ الأنبار صحراء</p>
-    <h1 class="w" style="animation-delay:8.4s">وخارجَ المدينةِ يتبدّلُ السؤال</h1>
-    <h2 class="w" style="animation-delay:9.8s">ماذا على طريقي؟<br>وأينَ لا شيء؟</h2>
+  <section class="scene" style="animation:scene 6s both;animation-delay:13.0s">
+    <p class="sub w" style="animation-delay:13.5s">لكنّ الأنبار صحراء</p>
+    <h1 class="w" style="animation-delay:14.4s">وخارجَ المدينةِ يتبدّلُ السؤال</h1>
+    <h2 class="w" style="animation-delay:15.8s">ماذا على طريقي؟<br>وأينَ لا شيء؟</h2>
   </section>
 
   <!-- 3 · الطريق يُرسم -->
   <!-- 3 · الشبكة: مدنُ الأنبار كلُّها ومنافذُها -->
-  <section class="scene wm" style="animation:scene 10s both;animation-delay:13.0s;--g:20px">
-    <h2 class="w" style="animation-delay:13.3s">شبكةُ الأنبار كاملةً</h2>
-    <p class="sub w" style="animation-delay:14.6s">
+  <section class="scene wm" style="animation:scene 10s both;animation-delay:19.0s;--g:20px">
+    <h2 class="w" style="animation-delay:19.3s">شبكةُ الأنبار كاملةً</h2>
+    <p class="sub w" style="animation-delay:20.6s">
       من بغداد شرقاً إلى <b style="color:var(--blue)">طريبيل</b> على حدود الأردن،
       ومن <b style="color:var(--blue)">القائم</b> و<b style="color:var(--blue)">الوليد</b> على حدود سوريا
       إلى <b style="color:var(--blue)">عرعر</b> على حدود السعودية.
     </p>
-    <p class="sub w" style="animation-delay:17.8s;font-size:34px">
+    <p class="sub w" style="animation-delay:23.8s;font-size:34px">
       <b><span class="num" data-count="30" data-from="17.8" data-to="19.2">0</span> مدينةً ومنفذاً</b> ·
       <b><span class="num" data-count="870" data-from="17.8" data-to="19.6">0</span> رحلةً بين نقطتين</b>
     </p>
-    <p class="sub f" style="animation-delay:20.2s;font-size:30px">
+    <p class="sub f" style="animation-delay:26.2s;font-size:30px">
       وكلُّ وصلةٍ منها طريقُ قيادةٍ حقيقيّ، لا خطٌّ على ورق.
     </p>
   </section>
 
   <!-- 4 · الطريق يُرسَم -->
-  <section class="scene wm" style="animation:scene 8s both;animation-delay:23.0s;--g:22px">
-    <h2 class="w" style="animation-delay:23.3s">تختارُ من أين، وإلى أين</h2>
-    <p class="sub w" style="animation-delay:24.0s">
+  <section class="scene wm" style="animation:scene 8s both;animation-delay:29.0s;--g:22px">
+    <h2 class="w" style="animation-delay:29.3s">تختارُ من أين، وإلى أين</h2>
+    <p class="sub w" style="animation-delay:30.0s">
       <span style="color:var(--brand);font-weight:800">الرمادي</span>
       &nbsp;←&nbsp;
       <span style="color:var(--blue);font-weight:800">النخيب</span>
     </p>
-    <p class="big f" style="animation-delay:25.6s"><span class="num" data-count="309" data-from="25.8" data-to="28.4">0</span> كم</p>
-    <p class="sub f" style="animation-delay:28.6s">4 ساعات و5 دقائق — من محرّكِ توجيهٍ حقيقيّ، لا من سرعةٍ مفترضة</p>
+    <p class="big f" style="animation-delay:31.6s"><span class="num" data-count="309" data-from="25.8" data-to="28.4">0</span> كم</p>
+    <p class="sub f" style="animation-delay:34.6s">4 ساعات و5 دقائق — من محرّكِ توجيهٍ حقيقيّ، لا من سرعةٍ مفترضة</p>
   </section>
 
   <!-- 4 · ما على الطريق -->
-  <section class="scene wm" style="animation:scene 9s both;animation-delay:31.0s;--g:14px">
-    <h2 class="w" style="animation-delay:31.4s">محطاتُ هذا الطريق — بالترتيبِ الذي تمرُّ به</h2>
+  <section class="scene wm" style="animation:scene 9s both;animation-delay:37.0s;--g:14px">
+    <h2 class="w" style="animation-delay:37.4s">محطاتُ هذا الطريق — بالترتيبِ الذي تمرُّ به</h2>
     <div class="cards" id="cards"></div>
-    <p class="sub w" style="animation-delay:38.4s;font-size:34px">كلُّها في أوّلِ <span class="num">77</span> كم — ثمّ لا شيء</p>
+    <p class="sub w" style="animation-delay:44.4s;font-size:34px">كلُّها في أوّلِ <span class="num">77</span> كم — ثمّ لا شيء</p>
   </section>
 
   <!-- 5 · الفراغ — الذروة -->
-  <section class="scene wm" style="animation:scene 13s both;animation-delay:40.0s;--g:16px">
-    <h2 class="w" style="animation-delay:40.4s">ثمّ يبدأُ ما لا محطةَ فيه</h2>
-    <p class="big red f" style="animation-delay:42.0s"><span class="num" data-count="232" data-from="34.6" data-to="39.1">0</span> كم بلا محطة</p>
-    <p class="sub wu" style="animation-delay:48.8s;color:var(--red-900);font-weight:700">
+  <section class="scene wm" style="animation:scene 13s both;animation-delay:46.0s;--g:16px">
+    <h2 class="w" style="animation-delay:46.4s">ثمّ يبدأُ ما لا محطةَ فيه</h2>
+    <p class="big red f" style="animation-delay:48.0s"><span class="num" data-count="232" data-from="34.6" data-to="39.1">0</span> كم بلا محطة</p>
+    <p class="sub wu" style="animation-delay:54.8s;color:var(--red-900);font-weight:700">
       صحراءٌ مفتوحة. لا تدخلها بخزّانٍ ناقص، ولا وحدَك ليلاً.
     </p>
-    <p class="sub f" style="animation-delay:49.8s;font-size:32px">
+    <p class="sub f" style="animation-delay:55.8s;font-size:32px">
       تحذيرٌ عند <span class="num">40</span> كم · خطرٌ عند <span class="num">120</span> كم
     </p>
   </section>
 
   <!-- 7 · المنافذ الثلاثة -->
-  <section class="scene wm" style="animation:scene 13s both;animation-delay:53.0s;--g:16px">
-    <h2 class="w" style="animation-delay:53.4s">وثلاثةُ منافذَ تبدأُ من هنا</h2>
+  <section class="scene wm" style="animation:scene 13s both;animation-delay:59.0s;--g:16px">
+    <h2 class="w" style="animation-delay:59.4s">وثلاثةُ منافذَ تبدأُ من هنا</h2>
     <div class="gates">
-      <div class="gate f" style="animation-delay:54.6s">
+      <div class="gate f" style="animation-delay:60.6s">
         <div class="c">الأردن</div>
         <div class="r">بغداد ← طريبيل</div>
         <div class="k"><span class="num">544</span> كم · 6 ساعات و20 دقيقة</div>
         <div class="v"><span class="num">196</span> كم بلا محطة</div>
       </div>
-      <div class="gate f" style="animation-delay:55.8s">
+      <div class="gate f" style="animation-delay:61.8s">
         <div class="c">سوريا</div>
         <div class="r">بغداد ← القائم</div>
         <div class="k"><span class="num">406</span> كم · 4 ساعات و50 دقيقة</div>
         <div class="v"><span class="num">230</span> كم بلا محطة</div>
       </div>
-      <div class="gate f" style="animation-delay:57.0s">
+      <div class="gate f" style="animation-delay:63.0s">
         <div class="c">السعودية</div>
         <div class="r">بغداد ← عرعر</div>
         <div class="k"><span class="num">411</span> كم · 5 ساعات و10 دقائق</div>
         <div class="v"><span class="num">247</span> كم بلا محطة</div>
       </div>
     </div>
-    <p class="sub wu" style="animation-delay:60.4s;font-size:32px;color:var(--red-900);font-weight:700">
+    <p class="sub wu" style="animation-delay:66.4s;font-size:32px;color:var(--red-900);font-weight:700">
       ثلاثةُ طرقٍ دولية، وفي كلٍّ منها مئتا كيلومترٍ لا نعرفُ عليها محطة.
     </p>
   </section>
 
   <!-- 8 · وليس هذا الطريق وحده -->
-  <section class="scene" style="animation:scene 8s both;animation-delay:66.0s;gap:16px">
-    <h2 class="w" style="animation-delay:66.2s">وليس هذا الطريقَ وحدَه</h2>
+  <section class="scene" style="animation:scene 8s both;animation-delay:72.0s;gap:16px">
+    <h2 class="w" style="animation-delay:72.2s">وليس هذا الطريقَ وحدَه</h2>
     <!-- الأعمدة بمقياسٍ واحد: عرضُ كلِّ عمودٍ يتناسب مع طوله الحقيقي،
          والجزءُ الأحمر مع فجوته. لو لم يكن الطولُ على الشاشة متناسباً مع
          رقمه لكان المشهدُ رسماً لا قياساً. -->
     <div class="bars">
-      <div class="bar f" style="animation-delay:66.50s">
+      <div class="bar f" style="animation-delay:72.5s">
         <div class="lbl">بغداد ← طريبيل · الأردن · <span class="num">544</span> كم</div>
         <div class="rail" style="width:100.0%"><i class="void" style="right:64.0%;width:36.0%"></i></div>
         <div class="fig"><span class="num">196</span> كم بلا محطة</div>
       </div>
-      <div class="bar f" style="animation-delay:66.95s">
+      <div class="bar f" style="animation-delay:72.95s">
         <div class="lbl">بغداد ← عرعر · السعودية · <span class="num">411</span> كم</div>
         <div class="rail" style="width:75.6%"><i class="void" style="right:39.9%;width:60.1%"></i></div>
         <div class="fig"><span class="num">247</span> كم بلا محطة</div>
       </div>
-      <div class="bar f" style="animation-delay:67.40s">
+      <div class="bar f" style="animation-delay:73.4s">
         <div class="lbl">بغداد ← القائم · سوريا · <span class="num">406</span> كم</div>
         <div class="rail" style="width:74.6%"><i class="void" style="right:6.0%;width:56.7%"></i></div>
         <div class="fig"><span class="num">230</span> كم بلا محطة</div>
       </div>
-      <div class="bar f" style="animation-delay:67.85s">
+      <div class="bar f" style="animation-delay:73.85s">
         <div class="lbl">الرمادي ← النخيب · <span class="num">309</span> كم</div>
         <div class="rail" style="width:56.8%"><i class="void" style="right:24.9%;width:75.1%"></i></div>
         <div class="fig"><span class="num">232</span> كم بلا محطة</div>
       </div>
-      <div class="bar f" style="animation-delay:68.30s">
+      <div class="bar f" style="animation-delay:74.3s">
         <div class="lbl">الفلوجة ← القائم · <span class="num">347</span> كم</div>
         <div class="rail" style="width:63.8%"><i class="void" style="right:6.0%;width:66.3%"></i></div>
         <div class="fig"><span class="num">230</span> كم بلا محطة</div>
@@ -505,34 +539,34 @@ html.v #madein{width:440px;bottom:56px}
   </section>
 
   <!-- 7 · والعودة ليست الذهاب -->
-  <section class="scene wm" style="animation:scene 6s both;animation-delay:74.0s;--g:22px">
-    <h2 class="w" style="animation-delay:74.3s">والعودةُ ليست الذهابَ معكوساً</h2>
-    <p class="sub wu" style="animation-delay:77.4s">
+  <section class="scene wm" style="animation:scene 6s both;animation-delay:80.0s;--g:22px">
+    <h2 class="w" style="animation-delay:80.3s">والعودةُ ليست الذهابَ معكوساً</h2>
+    <p class="sub wu" style="animation-delay:83.4s">
       محطاتٌ غيرُها — <b style="color:var(--red)">والفراغُ في أوّلِ الطريق لا في آخره</b>
     </p>
   </section>
 
   <!-- 8 · حدُّ ما نعرف -->
-  <section class="scene" style="animation:scene 8s both;animation-delay:80.0s">
-    <p class="limit wu" style="animation-delay:80.5s">المعروضُ تغطيةٌ فقط: أين تقفُ المحطاتُ على طريقك.</p>
-    <p class="limit wu" style="animation-delay:81.6s"><b>لا</b> ما تبيعه، و<b>لا</b> متى تفتح.</p>
-    <p class="limit wu" style="animation-delay:82.7s">وقد توجدُ محطاتٌ <b>لا</b> نعرفها — لكنّا <b>لا</b> نَعِدُك بها.</p>
-    <div class="f" style="animation-delay:84.4s;height:6px;width:300px;background:var(--brand);border-radius:99px"></div>
+  <section class="scene" style="animation:scene 8s both;animation-delay:86.0s">
+    <p class="limit wu" style="animation-delay:86.5s">المعروضُ تغطيةٌ فقط: أين تقفُ المحطاتُ على طريقك.</p>
+    <p class="limit wu" style="animation-delay:87.6s"><b>لا</b> ما تبيعه، و<b>لا</b> متى تفتح.</p>
+    <p class="limit wu" style="animation-delay:88.7s">وقد توجدُ محطاتٌ <b>لا</b> نعرفها — لكنّا <b>لا</b> نَعِدُك بها.</p>
+    <div class="f" style="animation-delay:90.4s;height:6px;width:300px;background:var(--brand);border-radius:99px"></div>
   </section>
 
   <!-- 9 · الختام -->
-  <section class="scene close wm" style="animation:scene 10s both;animation-delay:88.0s;gap:18px">
-    <p class="sub w" style="animation-delay:88.4s">
+  <section class="scene close wm" style="animation:scene 10s both;animation-delay:94.0s;gap:18px">
+    <p class="sub w" style="animation-delay:94.4s">
       <span class="num" data-count="870" data-from="68.5" data-to="69.4">0</span> رحلةً بين نقطتين ·
       <span class="num" data-count="185" data-from="68.5" data-to="69.4">0</span> محطةَ طريق
     </p>
-    <p class="sub w" style="animation-delay:89.4s;font-size:34px">حُسبت مرّةً وخُزّنت — تعملُ والشبكةُ بعيدة</p>
-    <div class="rule f" style="animation-delay:91.0s"></div>
-    <div class="name w" style="animation-delay:91.4s">مساعدُ الطريق</div>
-    <p class="sub w" style="animation-delay:92.2s">داخلَ المحطةِ التقنية · مجّاناً</p>
-    <p class="url w" style="animation-delay:92.9s"><span class="ltr">muhta.online</span></p>
-    <p class="soon w" style="animation-delay:93.8s">وقريباً تُضافُ المحطاتُ كاملةً إلى النظامِ بإذنِ الله</p>
-    <p class="by w" style="animation-delay:94.6s">فكرةً وتنفيذاً وبرمجةً: أحمد الرفاعي</p>
+    <p class="sub w" style="animation-delay:95.4s;font-size:34px">حُسبت مرّةً وخُزّنت — تعملُ والشبكةُ بعيدة</p>
+    <div class="rule f" style="animation-delay:97.0s"></div>
+    <div class="name w" style="animation-delay:97.4s">مساعدُ الطريق</div>
+    <p class="sub w" style="animation-delay:98.2s">داخلَ المحطةِ التقنية · مجّاناً</p>
+    <p class="url w" style="animation-delay:98.9s"><span class="ltr">muhta.online</span></p>
+    <p class="soon w" style="animation-delay:99.8s">وقريباً تُضافُ المحطاتُ كاملةً إلى النظامِ بإذنِ الله</p>
+    <p class="by w" style="animation-delay:100.6s">فكرةً وتنفيذاً وبرمجةً: أحمد الرفاعي</p>
   </section>
 
   <!-- **«صنع في الأنبار» طوال الفيلم.**
@@ -547,6 +581,28 @@ html.v #madein{width:440px;bottom:56px}
 
   <!-- شعارُ التطبيق في الزاوية العليا — ثابتٌ لا يغيب -->
   <img id="corner" src="icon-192.png" alt="">
+
+  <!-- 12 · حمّل التطبيق — الدعوة الأخيرة -->
+  <section class="scene store" style="animation:scene 10s both;animation-delay:104s;--g:16px">
+    <img class="appicon" src="icon-192.png" alt="المحطة التقنية"
+         style="animation:pop .5s cubic-bezier(.34,1.4,.64,1) both;animation-delay:104.4s">
+    <h1 class="w" style="animation-delay:105.0s">المحطةُ التقنية</h1>
+    <p class="sub w" style="animation-delay:105.5s">ومعها مساعدُ الطريق · مجّاناً وبلا حساب</p>
+    <div class="badges">
+      <span class="badge f" style="animation-delay:106.3s">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 12.1c0-2 1.6-3 1.7-3.1-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .7 1 1.5 2 2.5 2 1 0 1.4-.6 2.6-.6s1.5.6 2.6.6c1.1 0 1.8-1 2.4-2 .8-1.1 1.1-2.2 1.1-2.3 0 0-2.2-.8-2.2-3zM14.6 5.9c.5-.7.9-1.6.8-2.6-.8 0-1.8.5-2.4 1.2-.5.6-1 1.6-.8 2.5.9.1 1.8-.4 2.4-1.1z"/></svg>
+        <span><b>App Store</b><i>لآيفون وآيباد</i></span>
+      </span>
+      <span class="badge f" style="animation-delay:106.7s">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.6 2.3c-.3.3-.5.8-.5 1.4v16.6c0 .6.2 1.1.5 1.4l.1.1 9.3-9.3v-.2L3.6 2.3zM16.2 15.7l-3.1-3.1v-.2l3.1-3.1.1.1 3.7 2.1c1 .6 1 1.6 0 2.2l-3.8 2zM15.9 16l-3.2-3.2-9.1 9.1c.3.4.9.4 1.5.1l10.8-6M15.9 8L5.1 1.9c-.6-.4-1.2-.3-1.5.1l9.1 9.1L15.9 8z"/></svg>
+        <span><b>Google Play</b><i>لأندرويد</i></span>
+      </span>
+    </div>
+    <p class="sub wu" style="animation-delay:108.0s;font-size:36px;color:var(--brand-700);font-weight:800">
+      كُن مع آلافٍ يعرفون أين الوقودُ قبل أن يتحرّكوا
+    </p>
+    <p class="sub f" style="animation-delay:109.2s;font-size:28px"><span class="ltr">muhta.online</span></p>
+  </section>
 
   <!-- **الشريط السفلي: «صنع في الأنبار» وحدها.**
        كان مربّعُ اسم المنصّة وعنوانها هنا، فحُذف بطلب المالك: الاسمُ يُقال
@@ -584,7 +640,7 @@ const STOPS = [
   {i:7,at:76.9, xy:[256.1,85.7], side: 1, n:"محطة وقود المحمديات", c:"كبيسة"},
 ];
 const ORIGIN = [440,44.8], DEST = [176.8,458.5];
-const TOTAL = 98;                       // ثوانٍ — مجموع مدد المشاهد
+const TOTAL = 114;                       // ثوانٍ — مجموع مدد المشاهد
 const GAP_FROM_KM = 76.9, ROUTE_KM = 308.6;
 
 
@@ -600,7 +656,7 @@ route.style.strokeDasharray = LEN;
 route.style.strokeDashoffset = LEN;
 // الرسمة تبدأ عند 16.6ث وتستغرق 2.6 — مع عدّاد الكيلومترات تماماً
 route.style.animation = 'draw 2.6s linear both';
-route.style.animationDelay = '25.6s';
+route.style.animationDelay = '31.6s';
 
 // **الفجوة مسارٌ مستقلّ، لا قصٌّ بالتقطيع.**
 // جُرّب dasharray مع dashoffset سالب لعزل الذيل، فأتت رسمةُ draw على
@@ -622,7 +678,7 @@ gapline.style.strokeDashoffset = GLEN;
 gapline.style.opacity = 0;
 // **أبطأُ رسمةٍ في الفيلم، وبتسارعٍ خطّيٍّ صِرف.** الفراغُ يُقاس ولا يُمثَّل،
 // وقياسٌ يتباطأ في نهايته قياسٌ يؤدّي دوراً.
-gapline.style.animation = 'gapfwd 98s linear both, draw 4.5s linear both 41.6s, breathe 3s ease-in-out 1 both 47.0s';
+gapline.style.animation = 'gapfwd 114s linear both, draw 4.5s linear both 47.6s, breathe 3s ease-in-out 1 both 53.0s';
 
 // **فجوةُ العودة في أوّل الطريق لا في آخره.**
 // النخيب ← الرمادي: 231 كم بلا محطة تبدأ من النقطة صفر. ولو بقي الأحمر في
@@ -640,7 +696,7 @@ gapline.style.animation = 'gapfwd 98s linear both, draw 4.5s linear both 41.6s, 
   gapback.style.setProperty('--len', L2);
   gapback.style.strokeDashoffset = L2;
   gapback.style.opacity = 0;
-  gapback.style.animation = 'gapback 98s linear both, draw 1.2s linear both 74.6s';
+  gapback.style.animation = 'gapback 114s linear both, draw 1.2s linear both 80.6s';
 }
 // وفجوةُ الذهاب تغيب في مشهد العودة، فلا يظهر الأحمران معاً
 
@@ -667,7 +723,7 @@ STOPS.forEach((s, k) => {
   const tx = el('text', { y: 0.5 }); tx.textContent = s.i; inner.appendChild(tx);
   // تظهر بترتيب المرور، بفارقِ 180 مللي — وهي وحدها التي «تَظهر» لا تُرسَم
   inner.style.animation = 'pop .32s cubic-bezier(.34,1.4,.64,1) both';
-  inner.style.animationDelay = (32.2 + k * 0.18) + 's';
+  inner.style.animationDelay = (38.2 + k * 0.18) + 's';
   pins.appendChild(outer);
 });
 
@@ -682,8 +738,8 @@ function endMark(xy, color, label, delay) {
   g.style.animationDelay = delay + 's';
   ends.appendChild(outer);
 }
-endMark(ORIGIN, '#16a34a', 'الرمادي', 25.4);
-endMark(DEST, '#2563eb', 'النخيب', 28.2);
+endMark(ORIGIN, '#16a34a', 'الرمادي', 31.4);
+endMark(DEST, '#2563eb', 'النخيب', 34.2);
 
 // ── شبكةُ المحافظة ────────────────────────────────────────────────────────
 //
@@ -706,7 +762,7 @@ const NET_INTL = [21, 22, 23, 24, 25, 26];   // الوصلات إلى المنا
     // تُرسَم من الداخل إلى الأطراف: بغداد والرمادي أوّلاً، ثمّ المنافذ —
     // فتُقرأ الشبكةُ وهي تنمو، لا تظهرُ دفعةً واحدة.
     q.style.animation = 'draw 1.3s linear both';
-    q.style.animationDelay = (13.4 + i * 0.09) + 's';
+    q.style.animationDelay = (19.4 + i * 0.09) + 's';
     lines.appendChild(q);
   });
   const BIG = ["بغداد", "الرمادي", "الفلوجة", "هيت", "حديثة", "عانة", "راوة", "القائم", "الرطبة", "النخيب"];
@@ -744,7 +800,7 @@ const NET_INTL = [21, 22, 23, 24, 25, 26];   // الوصلات إلى المنا
     tx.textContent = SHORT[name] || name;
     g.appendChild(tx);
     g.style.animation = 'pop .3s cubic-bezier(.34,1.4,.64,1) both';
-    g.style.animationDelay = (13.6 + i * 0.07) + 's';
+    g.style.animationDelay = (19.6 + i * 0.07) + 's';
     nodes.appendChild(outer);
     made.push({ name, xy, tx, r: gate ? 9 : big ? 7 : 4.6, fs: gate ? 23 : big ? 19 : 15 });
   });
@@ -787,7 +843,7 @@ const NET_INTL = [21, 22, 23, 24, 25, 26];   // الوصلات إلى المنا
   // **موضعُ المنفذ على الخريطة جزءٌ من شرحه.** حين تُذكر الأردن تتّسع حلقةٌ
   // حول طريبيل، وحين تُذكر سوريا حول القائم، وحين تُذكر السعودية حول عرعر —
   // بالترتيب نفسِه الذي تدخل به بطاقاتُها. فيربط المشاهدُ الاسمَ بالمكان.
-  const RING = [['طريبيل (الأردن)', 54.6], ['القائم', 55.8], ['منفذ عرعر', 57.0]];
+  const RING = [['طريبيل (الأردن)', 60.6], ['القائم', 61.8], ['منفذ عرعر', 63.0]];
   for (const [name, at] of RING) {
     const xy = NET_NODES[name];
     if (!xy) continue;
@@ -810,7 +866,7 @@ const NET_INTL = [21, 22, 23, 24, 25, 26];   // الوصلات إلى المنا
   }
 
   // مسرحُ الشبكة يعيش في مشهده وحده، ويعود لحظةً في مشهد المنافذ
-  $('#netwrap').style.animation = 'netshow 98s linear both';
+  $('#netwrap').style.animation = 'netshow 114s linear both';
 }
 
 
@@ -819,10 +875,10 @@ const NET_INTL = [21, 22, 23, 24, 25, 26];   // الوصلات إلى المنا
 // الخريطة تعيش من المشهد الثالث إلى الأخير: تظهر، وتخفت تحت النصّ في مشهد
 // الاعتراف — فالحدُّ يُقال فوق الفراغ لا بعيداً عنه — ثم تعود كاملةً في
 // الختام. طبقةٌ واحدة، وحركةٌ واحدة بطول الفيلم.
-$('#mapwrap').style.animation = 'mapshow 98s linear both';
-route.style.animation += ', routedim 98s linear both';
-pins.style.animation = 'routedim 98s linear both';
-ends.style.animation = 'routedim 98s linear both';
+$('#mapwrap').style.animation = 'mapshow 114s linear both';
+route.style.animation += ', routedim 114s linear both';
+pins.style.animation = 'routedim 114s linear both';
+ends.style.animation = 'routedim 114s linear both';
 
 // **حكمُ الفجوة داخل الـSVG لا فوقه.**
 //
@@ -845,7 +901,7 @@ ends.style.animation = 'routedim 98s linear both';
   tx.textContent = label;
   g.appendChild(tx);
   // يغيب مع فجوته في مشهد العودة، فلا يبقى رقمُ الذهاب فوق فراغِ العودة
-  g.style.animation = 'chipfwd 98s linear both';
+  g.style.animation = 'chipfwd 114s linear both';
   $('#gapmark').replaceWith(g);
 
   // وشارةُ العودة: 231 كم، في أوّل الطريق
@@ -858,7 +914,7 @@ ends.style.animation = 'routedim 98s linear both';
   t2.textContent = '231 كم بلا محطة';
   g2.appendChild(t2);
   g2.style.opacity = 0;
-  g2.style.animation = 'chipback 98s linear both';
+  g2.style.animation = 'chipback 114s linear both';
   g.parentNode.appendChild(g2);
 }
 
@@ -871,7 +927,7 @@ STOPS.forEach((s, k) => {
     const d = Math.max(5, Math.round((s.at - STOPS[k - 1].at) / 80 * 60 / 5) * 5);
     leg.innerHTML = 'خلال <span class="num">' + d + '</span> دقيقة · <span class="num">'
       + Math.round(s.at - STOPS[k - 1].at) + '</span> كم';
-    leg.style.animationDelay = (32.3 + k * 0.18) + 's';
+    leg.style.animationDelay = (38.3 + k * 0.18) + 's';
     if (k > 3) leg.style.display = 'none';
     cards.appendChild(leg);
   }
@@ -881,7 +937,7 @@ STOPS.forEach((s, k) => {
     + '</div><div class="m">' + s.c + ' · كم <span class="num">' + Math.round(s.at) + '</span> · '
     + (s.side > 0 ? 'يسارَ اتجاهك' : 'يمينَ اتجاهك') + '</div></div>';
   c.style.animation = 'slidein .42s cubic-bezier(.22,1,.36,1) both';
-  c.style.animationDelay = (32.2 + k * 0.18) + 's';
+  c.style.animationDelay = (38.2 + k * 0.18) + 's';
   // أربعُ بطاقاتٍ تملأ الإطار؛ الباقيةُ على الخريطة، وتزاحمُها في أوّل 77 كم
   // هو المعنى نفسه.
   if (k > 3) c.style.display = 'none';
@@ -946,6 +1002,7 @@ function now() {
   return (performance.now() - t0) / 1000;
 }
 collect();
+stage.classList.add('ready');
 addEventListener('load', () => { collect(); fit(); });
 fit();
 
@@ -973,8 +1030,8 @@ function tick() {
   // مشهد البطاقات وحده تنكمش فيه الخريطة — والساعة أصدق من حركةٍ على
   // متغيّرٍ لا تُحرِّكه المتصفّحات بلا ‎@property‎.
   // مشهدُ البطاقات تنكمش فيه خريطةُ الرحلة، ومشهدُ المنافذ تنكمش فيه الشبكة
-  const small = s >= 31 && s < 40;
-  const gates = s >= 53 && s < 66;
+  const small = s >= 37 && s < 46;
+  const gates = s >= 59 && s < 72;
   if (small !== mapwrap.classList.contains('small') ||
       gates !== netwrap.classList.contains('small')) {
     mapwrap.classList.toggle('small', small);
@@ -995,7 +1052,7 @@ function start() {
 addEventListener('click', (e) => { if (!e.target.closest('#bar, #note')) start(); });
 
 // ── الفصول: تسعُ علاماتٍ على الشريط، ولكلٍّ هدفُ لمسٍ 44 ──────────────────
-const MARKS = [0, 7, 13, 23, 31, 40, 53, 66, 74, 80, 88];
+const MARKS = [0, 6, 13, 19, 29, 37, 46, 59, 72, 80, 86, 94, 104];
 const ticks = $('#ticks');
 MARKS.forEach((m, i) => {
   const b = document.createElement('button');
