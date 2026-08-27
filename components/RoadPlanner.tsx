@@ -329,7 +329,12 @@ export function RoadPlanner() {
 
               {stops.map((s, i) => (
                 <div key={`${s.name}-${i}`} className="space-y-3">
-                  <RoadStop stop={s} index={i + 1} last={i === stops.length - 1} />
+                  <RoadStop
+                    stop={s}
+                    index={i + 1}
+                    last={i === stops.length - 1}
+                    fromCity={route.from}
+                  />
                   {s.toNextKm != null && s.toNextKm < GAP_WARN_KM && (
                     <Leg km={s.toNextKm} label="المحطة التالية" />
                   )}

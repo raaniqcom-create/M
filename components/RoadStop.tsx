@@ -23,10 +23,13 @@ export function RoadStop({
   stop,
   index,
   last,
+  fromCity,
 }: {
   stop: RouteStop;
   index: number;
   last: boolean;
+  /** منطلقُ الرحلة — يفتح رقمَ المحطات المُخفية لمن صرّح بسفره */
+  fromCity?: string;
 }) {
   const gap = stop.toNextKm ?? 0;
   const warn = !last && gap >= GAP_WARN_KM;
@@ -82,7 +85,7 @@ export function RoadStop({
               </span>
               {facts}
             </div>
-            <StationCard station={approved} />
+            <StationCard station={approved} fromCity={fromCity} />
           </div>
         ) : (
           /* ── غير معتمدة: ما نعرفه فقط، وشريطٌ يقول حدَّه ──────────────── */

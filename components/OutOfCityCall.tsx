@@ -19,20 +19,34 @@ import { PhoneIcon } from './icons';
  *  تصفّح الفلوجة.
  *
  *  ولا يُجلب الرقم إلا لمن يستحقّه: نداءٌ واحد لكل بطاقةٍ مؤهَّلة، وأكثرها
- *  لا يُنادى أصلاً لأن سبع محطات من أربعٍ وعشرين تُخفي رقمها. */
+ *  لا يُنادى أصلاً لأن عشر محطات من خمسٍ وعشرين تُخفي رقمها.
+ *
+ *  **وfromCity تسبق المحفوظة.**
+ *
+ *  في مساعد الطريق لا يُسأل الزائرُ عن مدينته: هو قد صرّح بها في المختار —
+ *  «من أين تنطلق». وذلك تصريحٌ بالسفر لا تفضيلٌ مخزَّن، وهو أقوى دليلٍ على
+ *  أنه مسافر. فلا يُقال له «اختر مدينتك» وهو قد اختارها في السطر الذي فوقه.
+ *
+ *  والقاعدةُ لا تُخترق بذلك بل تُطبَّق على وجهها: منطلقُه يُقارَن بمدينة
+ *  المحطة كما تُقارَن المحفوظة — فمن ينطلق من الرمادي لا يُفتح له رقمُ محطةٍ
+ *  في الرمادي، ويُفتح له ما بعدها. */
 export function OutOfCityCall({
   stationId,
   stationCity,
   phoneHidden,
+  fromCity,
 }: {
   stationId: string;
   stationCity: string;
   phoneHidden?: boolean | null;
+  /** منطلقُ الرحلة — يسبق المدينة المحفوظة حين يوجد */
+  fromCity?: string | null;
 }) {
   const { choice } = useAlertChoice();
   const [phone, setPhone] = useState<string | null>(null);
 
-  const mine = choice?.cities?.length ? choice.cities : null;
+  const saved = choice?.cities?.length ? choice.cities : null;
+  const mine = fromCity ? [fromCity] : saved;
   const away = !!phoneHidden && !!mine && !mine.includes(stationCity);
 
   useEffect(() => {
@@ -69,8 +83,17 @@ export function OutOfCityCall({
   return (
     <div className="mt-2 rounded-xl border-2 border-traffic-red bg-red-50 px-3 py-2.5">
       <p className="text-[11px] font-bold leading-relaxed text-red-900">
-        أنت من <b>{mine[0]}</b> وهذه المحطة في <b>{stationCity}</b> — لا تقطع الطريق قبل أن
-        تتصل.
+        {fromCity ? (
+          <>
+            انطلاقُك من <b>{mine[0]}</b> وهذه المحطة في <b>{stationCity}</b> — اتصل قبل أن
+            تقطع الطريق إليها.
+          </>
+        ) : (
+          <>
+            أنت من <b>{mine[0]}</b> وهذه المحطة في <b>{stationCity}</b> — لا تقطع الطريق قبل
+            أن تتصل.
+          </>
+        )}
       </p>
       <p className="mt-1 text-[10px] leading-relaxed text-red-900/70">
         رقمها مخفيٌّ عن أهل مدينتها احتراماً لها، وفُتح لك لأنك مسافر. تأكّد من التوفّر قبل

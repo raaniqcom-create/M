@@ -28,10 +28,14 @@ export function StationCard({
   isFavorite,
   onToggleFavorite,
   tinted = false,
+  fromCity,
 }: {
   station: StationWithStatus;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
+  /** منطلقُ رحلةٍ صرّح بها القارئ — يسبق مدينته المحفوظة في بوّابة الرقم.
+   *  يمرّره مساعدُ الطريق وحدَه: من اختار «من أين تنطلق» قال مدينته للتوّ. */
+  fromCity?: string | null;
   /** Every other card sits on a faint green wash so a long list stays
    *  readable without drawing a divider between each pair. */
   tinted?: boolean;
@@ -238,6 +242,7 @@ export function StationCard({
         stationId={station.id}
         stationCity={station.city}
         phoneHidden={station.phone_hidden}
+        fromCity={fromCity}
       />
 
       <p className="sr-only">
