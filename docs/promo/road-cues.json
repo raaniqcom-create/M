@@ -1,108 +1,108 @@
 {
-  "audioTotal": 151.82,
+  "audioTotal": 149.82,
   "filmTotal": 131,
-  "lead": 2,
+  "lead": 0,
   "gap": 0.45,
   "rms": 0.88,
   "utterances": 58,
   "clips": [
     {
       "clip": 1,
-      "start": 2,
-      "end": 5.37
+      "start": 0,
+      "end": 3.37
     },
     {
       "clip": 4,
-      "start": 5.82,
-      "end": 11.12
+      "start": 3.82,
+      "end": 9.12
     },
     {
       "clip": 5,
-      "start": 11.57,
-      "end": 29.18
+      "start": 9.57,
+      "end": 27.18
     },
     {
       "clip": 6,
-      "start": 29.63,
-      "end": 53.14
+      "start": 27.63,
+      "end": 51.14
     },
     {
       "clip": 7,
-      "start": 53.59,
-      "end": 72.68
+      "start": 51.59,
+      "end": 70.68
     },
     {
       "clip": 8,
-      "start": 73.13,
-      "end": 89.8
+      "start": 71.13,
+      "end": 87.8
     },
     {
       "clip": 9,
-      "start": 90.25,
-      "end": 119.06
+      "start": 88.25,
+      "end": 117.06
     },
     {
       "clip": 10,
-      "start": 119.51,
-      "end": 151.02
+      "start": 117.51,
+      "end": 149.02
     }
   ],
   "scenes": [
     {
       "film": 6,
-      "audio": 2.2
+      "audio": 0.2
     },
     {
       "film": 11,
-      "audio": 6.07
+      "audio": 4.07
     },
     {
       "film": 18,
-      "audio": 9.72
+      "audio": 7.72
     },
     {
       "film": 24,
-      "audio": 17.52
+      "audio": 15.52
     },
     {
       "film": 34,
-      "audio": 33.53
+      "audio": 31.53
     },
     {
       "film": 42,
-      "audio": 46.18
+      "audio": 44.18
     },
     {
       "film": 51,
-      "audio": 57.19
+      "audio": 55.19
     },
     {
       "film": 64,
-      "audio": 73.33
+      "audio": 71.33
     },
     {
       "film": 77,
-      "audio": 90.45
+      "audio": 88.45
     },
     {
       "film": 85,
-      "audio": 99.7
+      "audio": 97.7
     },
     {
       "film": 91,
-      "audio": 106.55
+      "audio": 104.55
     },
     {
       "film": 99,
-      "audio": 116.25
+      "audio": 114.25
     },
     {
       "film": 109,
-      "audio": 124.96
+      "audio": 122.96
     },
     {
       "film": 121,
-      "audio": 143.66
+      "audio": 141.66
     }
   ]
 }
