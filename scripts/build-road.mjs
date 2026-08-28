@@ -231,11 +231,27 @@ const OPEN = '/* <<warp>> */', CLOSE = '/* <</warp>> */';
 const had = page.indexOf(OPEN);
 if (had >= 0) page = page.slice(0, had) + page.slice(page.indexOf(CLOSE) + CLOSE.length);
 
+// ── طبقةُ الكلمات: ‎?words=1‎ ─────────────────────────────────────────────
+//
+// **لأن من يبني الفيلم لا يسمعه.** المطابقةُ تنسب كلَّ فقرةٍ إلى وحدة نطقٍ
+// مقيسة، وقد تُخطئ النسبة — ولا يظهر خطؤها في أيّ رقم: الجدولُ متّسقٌ مع
+// نفسه مهما كان الإسناد. والذي يكشفه أذنٌ تسمع وعينٌ تقرأ في اللحظة نفسِها.
+//
+// فتُعرض أوّلُ كلمات الفقرة التي يظنّ الجدولُ أنها تُقال الآن. فمن شاهد
+// الفيلم بـ‎?words=1‎ رأى الانحراف فوراً، وقال الثانيةَ التي وقع عندها بدل
+// «الصوت لا يطابق الصورة».
+const paraCue = groups.map(([a], p) => {
+  const words = paras[p].split(/\s+/).slice(0, 7).join(' ');
+  return `[${r2(UTT[a][0])},${JSON.stringify(words)}]`;
+}).join(',');
+
 const block = `${OPEN}
 /* مُولَّدٌ بـ scripts/build-road.mjs — لا يُحرَّر بيد.
    ‎[زمنُ الفيلم, زمنُ الصوت]‎ عند كل مشهد. وما بينهما خطٌّ مستقيم. */
 const WARP = [${OLD.map((o, i) => `[${o},${r2(NEW[i])}]`).join(',')}];
 const AUDIO_TOTAL = ${made.toFixed(2)};
+/* ‎[بدايةُ الفقرة بالصوت, أوّلُ كلماتها]‎ — تُعرض مع ‎?words=1‎ وحدها */
+const PARAS = [${paraCue}];
 function filmTime(a) {
   for (let i = 0; i < WARP.length - 1; i++) {
     const [f0, a0] = WARP[i], [f1, a1] = WARP[i + 1];
@@ -251,6 +267,32 @@ function audioTime(f) {
   return AUDIO_TOTAL;
 }
 ${CLOSE}
+/* طبقةُ الكلمات — بمفتاح W، على نمط V وD وR. وسلسلةُ الاستعلام تسقط في بعض
+   نوافذ المعاينة، والمفتاحُ لا يسقط. ولا تظهر في التسجيل ما لم تُطلب. */
+let wordsTag = null;
+function toggleWords() {
+  if (wordsTag) { wordsTag.remove(); wordsTag = null; return; }
+  wordsTag = buildWords();
+}
+function buildWords() {
+  const tag = document.createElement('div');
+  tag.style.cssText =
+    'position:absolute;left:0;right:0;bottom:52px;z-index:60;text-align:center;' +
+    'font:700 20px/1.5 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.62);' +
+    'padding:10px 16px;pointer-events:none;direction:rtl';
+  stage.appendChild(tag);
+  setInterval(() => {
+    const a = haveVoice ? voice.currentTime : 0;
+    let cur = PARAS[0];
+    for (const p of PARAS) if (a >= p[0]) cur = p;
+    // بلا قالبٍ نصّيّ: هذا السطر داخل قالبِ البناء، فمُعامِلُ القالب يُفسَّر مرّتين
+    tag.textContent = a.toFixed(1) + ' ث — يُفترض: ' + (cur ? cur[1] : '—');
+  }, 120);
+  return tag;
+}
+if (new URLSearchParams(location.search).has('words')) wordsTag = buildWords();
+addEventListener('keydown', (e) => { if (e.code === 'KeyW') toggleWords(); });
+
 function now() {
   if (!started) return 0;
   /* المسجّلُ يقف عند ‎TOTAL + 0.7‎، وساعةُ الصوت تقف عند ‎TOTAL‎ بالضبط —
@@ -280,6 +322,7 @@ if (!page.includes(OLD_SEEK)) {
   process.exit(1);
 }
 page = page.replace(OLD_SEEK, 'if (haveVoice) { voice.currentTime = audioTime(s); }');
+
 writeFileSync(PAGE, page);
 
 const err = groups.map(([a, b], p) => C[p] / rate - (ps[b] - ps[a]));
