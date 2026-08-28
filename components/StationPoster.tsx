@@ -25,7 +25,16 @@ function fitFont(
   return size;
 }
 
-export function StationPoster({ name, slug }: { name: string; slug: string | null }) {
+export function StationPoster({
+  name,
+  slug,
+  onSaved,
+}: {
+  name: string;
+  slug: string | null;
+  /** يُنادى بعد الحفظ — تستعمله بطاقةُ الترحيب لتنزوي بنفسها */
+  onSaved?: () => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
   const link = slug ? `${SITE}/${slug}` : SITE;
@@ -150,7 +159,10 @@ export function StationPoster({ name, slug }: { name: string; slug: string | nul
 
   async function save() {
     const canvas = canvasRef.current;
-    if (canvas) await savePoster(canvas, `${slug || 'muhta'}-poster.png`, `تابعونا على المحطة التقنية — ${link}`);
+    if (!canvas) return;
+    await savePoster(canvas, `${slug || 'muhta'}-poster.png`, `تابعونا على المحطة التقنية — ${link}`);
+    // من حفظ أخذ ما جاء من أجله — فتنزوي بطاقةُ الترحيب التي تلفّ هذه، إن وُجدت
+    onSaved?.();
   }
 
   return (

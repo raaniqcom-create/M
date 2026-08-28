@@ -634,8 +634,10 @@ Deno.serve(async (req) => {
   // جديدة» to a whole city; it now tells the one person who can act on it
   // what to do next.
   const alertTitle = isNewStation ? 'تمّت الموافقة على محطتك' : headline(live);
+  // وذِكرُ الصورة في النصّ لا في اللوحة وحدها: البطاقةُ في أعلى /owner لا
+  // يعرفها من لم يفتح اللوحة، والإشعارُ هو ما يفتحها.
   const alertBody = isNewStation
-    ? 'حدّث توفّر الوقود من لوحتك ليصل الخبر إلى أهل مدينتك'
+    ? 'حدّث توفّر الوقود من لوحتك، وفيها صورةٌ إعلانية جاهزة باسم محطتك لتنشرها'
     : placeline(station.name, station.city);
   // An approval fires while the static export containing the station's own
   // page is still building — about two minutes of 404 for anyone who taps.
@@ -683,6 +685,27 @@ Deno.serve(async (req) => {
   // no device on the platform carries is_admin today. admin-alert already
   // owns both, so this reuses it rather than repeating the fan-out here.
   if (isNewStation) {
+    // **وأثرٌ يبقى بعد أن يزول الإشعار.**
+    //
+    // الإشعارُ يُمسَح أو يُفوَّت، فلا يبقى منه شيء. والمجرى يبقى: صاحبُ
+    // المحطة يفتح تبويب «الرسائل» بعد أسبوع فيجد ما قيل له يومَ اعتُمد.
+    //
+    // و sender:'system' لا تقبلها سياسةٌ من المتصفّح، ودورُ الخدمة وحدَه
+    // يكتبها — وهو هنا. و kind إلزاميّةٌ غيرُ فارغة بحكم القيد
+    // station_messages_kind_is_system، و'approved' هي الكلمة التي يسمّي بها
+    // notification_log هذا الحدث بعينه.
+    db.from('station_messages')
+      .insert({
+        station_id: stationId,
+        sender: 'system',
+        kind: 'approved',
+        body:
+          'اعتُمدت محطتك وصارت ظاهرةً للناس. وفي أعلى لوحتك صورةٌ إعلانية جاهزة ' +
+          'باسم محطتك ورابطها — احفظها وانشرها على صفحاتك ليتابعك زبائنك، فيصلهم ' +
+          'خبرُ توفّر الوقود عندك فور إعلانه.',
+      })
+      .then(() => {});
+
     fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/admin-alert`, {
       method: 'POST',
       headers: {

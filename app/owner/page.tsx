@@ -25,6 +25,7 @@ import { ProductControl } from '@/components/ProductControl';
 import { WorkingHours } from '@/components/WorkingHours';
 import { OwnerReminders } from '@/components/OwnerReminders';
 import { StationChat } from '@/components/StationChat';
+import { JoinPoster } from '@/components/JoinPoster';
 import { FRESH_HOURS, WITHDRAW_HOURS, ageLabel } from '@/lib/hours';
 import { DeleteAccount } from '@/components/DeleteAccount';
 import type { ExpectedPeriod } from '@/lib/hours';
@@ -409,6 +410,12 @@ export default function OwnerPage() {
           )}
 
           <AudienceBanner station={station} products={products} muted={!!staleSince} />
+
+          {/* بعد ما يُفعل الآن، وقبل الدخول إلى التبويبات: أوّلُ ما يحتاجه
+              صاحبُ المحطة يومَ اعتماده — ولا تُعرض لمن لم تُعتمد محطتُه. */}
+          {station.status === 'approved' && (
+            <JoinPoster stationId={station.id} name={station.name} slug={station.slug} />
+          )}
         </div>
       )}
 

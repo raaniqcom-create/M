@@ -8,6 +8,7 @@ import { CheckIcon, LogOutIcon, MapPinIcon, SpinnerIcon, WhatsappIcon, XIcon } f
 import { whatsappLink, whatsappVerifyLocation, whatsappVerifyRole } from '@/lib/phone';
 import { AdminStationForm } from '@/components/AdminStationForm';
 import { BroadcastPanel } from '@/components/BroadcastPanel';
+import { AdminThreads } from '@/components/AdminThreads';
 import { ReviewsPanel } from '@/components/ReviewsPanel';
 import { AvailabilityBoard } from '@/components/AvailabilityBoard';
 import { AdminStats } from '@/components/AdminStats';
@@ -37,7 +38,16 @@ export default function AdminPage() {
   // tab, so the one thing an admin opens this page to look at was two taps
   // and a scroll past a registration form.
   const [tab, setTab] = useState<
-    'stations' | 'requests' | 'add' | 'announce' | 'system' | 'stats' | 'ads' | 'offers' | 'reviews'
+    | 'stations'
+    | 'requests'
+    | 'messages'
+    | 'add'
+    | 'announce'
+    | 'system'
+    | 'stats'
+    | 'ads'
+    | 'offers'
+    | 'reviews'
   >('stations');
   const [q, setQ] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
@@ -46,6 +56,7 @@ export default function AdminPage() {
   const [ads, setAds] = useState<Ad[]>([]);
   /** ما ردّ به أصحابُ المحطات ولم تقرأه الإدارة — من منظور station_unread */
   const [unread, setUnread] = useState<Map<string, number>>(new Map());
+  const totalUnread = [...unread.values()].reduce((a, b) => a + b, 0);
 
   const load = useCallback(async () => {
     const [{ data: st }, { data: ap }, { data: ad }, { data: un }] = await Promise.all([
@@ -298,6 +309,9 @@ export default function AdminPage() {
         {([
           ['stations', `المحطات (${live.length})`],
           ['requests', `الطلبات${pending.length ? ` (${pending.length})` : ''}`],
+          // ثالثاً لا عاشراً: بابٌ في آخر الصفّ الرابع بابٌ لا يُرى، وهذه
+          // بُنيت ونُشرت فلم تُعثَر — فموضعُها هو إصلاحُها.
+          ['messages', `الرسائل${totalUnread ? ` (${totalUnread})` : ''}`],
           ['add', 'إضافة محطة'],
           ['announce', 'إشعارات المحطات'],
           ['system', 'النظام'],
@@ -611,6 +625,8 @@ export default function AdminPage() {
       )}
 
       {tab === 'offers' && <BroadcastPanel />}
+      {tab === 'messages' && <AdminThreads />}
+
       {tab === 'reviews' && <ReviewsPanel />}
 
       {tab === 'ads' && (
