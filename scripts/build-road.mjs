@@ -205,42 +205,75 @@ for (const x of spoken) ps.push(ps.at(-1) + x);
 
 /** ما سُمع فثُبِّت: ‎فقرة -> وحدةُ النطق التي تبدأ عندها‎.
  *
- *  المالك قال: «مساعدُ الطريق» تنتهي عند 9.2، و«تُجيبُ سؤالاً واحداً»
- *  تُقال 10.0–15.5. فالمقطعُ الرابع كلُّه فقرةٌ واحدة، و«تُجيب» تبدأ
- *  بأوّل المقطع الخامس، و«لكنّ أغلب» بالنطق الذي يليها.
+ *  وهذه هي المعرفةُ الوحيدة المؤكَّدة في الملفّ كلِّه، إذ من يبني الفيلم
+ *  لا يسمعه. وكلُّ خطأٍ يبقى يُصلَح بسطرٍ يُزاد هنا: رقمُ الفقرة، ورقمُ
+ *  وحدةِ النطق — يُقرآن من `UTT=1 node scripts/build-road.mjs`.
  *
- *  وكلُّ خطأٍ يبقى في الفيلم يُصلَح بسطرٍ يُزاد هنا: رقمُ الفقرة، ورقمُ
- *  وحدةِ النطق التي تبدأ عندها — يُقرآن من `UTT=1 node scripts/build-road.mjs`. */
-const ANCHOR = new Map([[0, 0], [1, 1], [2, 2], [3, 4], [4, 6]]);
+ *    0-2   «المحطة التقنية» · «صنع في الأنبار» · «خدمةٌ جديدة … مساعدُ الطريق»
+ *    3     «تُجيبُ سؤالاً واحداً»   سمعه المالك 10.0-15.5
+ *    4     «لكنّ أغلبَ الطرق»
+ *    6     «فتختارُ من أين تنطلق»   سمعه المالك عند 53، والشريحةُ كانت عند 38 */
+const ANCHOR = new Map([[0, 0], [1, 1], [2, 2], [3, 4], [4, 6], [6, 21]]);
 
-/** كم من الخطأ يُغفَر لحدٍّ يقع على أوّلِ مقطع. بالثانية المربّعة، إذ
- *  الكلفةُ فرقُ ثوانٍ مربّع — فثانيتان تعني «حدُّ المقطع يستحقّ أن نتحمّل
- *  في سبيله فرقاً قدرُه ثانيةٌ وأربعون بالمئة». */
+/** كم من الخطأ يُغفَر لحدٍّ يقع على أوّلِ مقطع — بالثانية المربّعة. */
 const CLIP_BONUS = 2.0;
 const CLIP_HEAD = new Set(CLIPS.map((_, c) => UTT_CLIP.indexOf(c)));
 
+// ── ولا وتيرةَ واحدة للفيلم كلِّه ────────────────────────────────────────
+//
+// **وهذا هو الخطأ الذي كشفه المالك.** حُسبت وتيرةٌ واحدة — عشرون حرفاً في
+// الثانية — وقُسِم الفيلمُ كلُّه عليها. فجاءت «فتختارُ من أين تنطلق» عند
+// السابعة والثلاثين، والمالكُ يسمعها عند الثالثة والخمسين.
+//
+// والوتيرةُ ليست واحدة، والمقيسُ يقول ذلك: المقطعُ الأوّل اثنا عشرَ حرفاً
+// في الثانية، والرابع أحدَ عشرَ — وكلاهما مثبَّتٌ بأذن المالك. أي أن
+// الافتتاح يُقرأ متمهّلاً، والتفاصيلُ العدديةُ بعده تُقرأ ضِعفَ ذلك. فوتيرةٌ
+// وسطى تُسرِع الأوّلَ وتُبطئ الآخِر، ويتراكم الفرق.
+//
+// فتُقاس الوتيرةُ **بين مِرساتين** لا على الفيلم كلِّه: ما بينهما من حروفٍ
+// معلوم، وما بينهما من ثوانٍ مقيس، فالقسمةُ وتيرتُهما هما. ولا يُقدَّر إلا
+// موضعُ الحدود داخلَ المدى. وكلُّ مِرساةٍ يزيدها المالك تشدّ مدىً وتقسمه.
+
 const K = C.length, M = UTT.length, INFC = Infinity;
-const d = Array.from({ length: M + 1 }, () => new Array(K + 1).fill(INFC));
-const bk = Array.from({ length: M + 1 }, () => new Array(K + 1).fill(-1));
-d[0][0] = 0;
-for (let j = 1; j <= K; j++) {
-  const fix = ANCHOR.get(j - 1);
-  for (let i = j; i <= M; i++) {
-    for (let m = j - 1; m < i; m++) {
-      if (fix != null && m !== fix) continue;
-      if (d[m][j - 1] === INFC) continue;
-      const dd = C[j - 1] / rate - (ps[i] - ps[m]);
-      const e = d[m][j - 1] + dd * dd - (CLIP_HEAD.has(m) ? CLIP_BONUS : 0);
-      if (e < d[i][j]) { d[i][j] = e; bk[i][j] = m; }
-    }
-  }
-}
-if (d[M][K] === INFC) {
-  console.log('تعذّرت المطابقة — راجِع ANCHOR');
+const marks = [...ANCHOR.entries()].sort((a, b) => a[0] - b[0]);
+if (marks[0][0] !== 0 || marks[0][1] !== 0) {
+  console.log('أوّلُ مِرساةٍ يجب أن تكون الفقرةَ صفر عند النطق صفر');
   process.exit(1);
 }
+marks.push([K, M]);
+for (let i = 1; i < marks.length; i++) {
+  if (marks[i][0] <= marks[i - 1][0] || marks[i][1] <= marks[i - 1][1] ||
+      marks[i][0] - marks[i - 1][0] > marks[i][1] - marks[i - 1][1]) {
+    console.log(`مِرساةٌ لا تستقيم عند الفقرة ${marks[i][0]} — راجِع ANCHOR`);
+    process.exit(1);
+  }
+}
+
 const groups = [];
-for (let i = M, j = K; j > 0; j--) { const m = bk[i][j]; groups.unshift([m, i]); i = m; }
+/** وتيرةُ المدى الذي وقعت فيه كلُّ فقرة — للتقرير، فيُقرأ الخطأ بميزانه */
+const paraRate = new Array(K).fill(0);
+for (let s = 0; s + 1 < marks.length; s++) {
+  const [p0, u0] = marks[s], [p1, u1] = marks[s + 1];
+  const n = p1 - p0, m = u1 - u0;
+  const R = C.slice(p0, p1).reduce((a, b) => a + b, 0) / (ps[u1] - ps[u0]);
+  for (let p = p0; p < p1; p++) paraRate[p] = R;
+  if (n === 1) { groups.push([u0, u1]); continue; }
+
+  const d = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(INFC));
+  const bk = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(-1));
+  d[0][0] = 0;
+  for (let j = 1; j <= n; j++)
+    for (let i = j; i <= m; i++)
+      for (let q = j - 1; q < i; q++) {
+        if (d[q][j - 1] === INFC) continue;
+        const dd = C[p0 + j - 1] / R - (ps[u0 + i] - ps[u0 + q]);
+        const e = d[q][j - 1] + dd * dd - (CLIP_HEAD.has(u0 + q) ? CLIP_BONUS : 0);
+        if (e < d[i][j]) { d[i][j] = e; bk[i][j] = q; }
+      }
+  const cuts = [];
+  for (let i = m, j = n; j > 0; j--) { const q = bk[i][j]; cuts.unshift([u0 + q, u0 + i]); i = q; }
+  groups.push(...cuts);
+}
 
 const sceneAt = new Map();
 groups.forEach(([a], p) => {
@@ -390,7 +423,7 @@ page = page.replace(OLD_SEEK, 'if (haveVoice) { voice.currentTime = audioTime(s)
 
 writeFileSync(PAGE, page);
 
-const err = groups.map(([a, b], p) => C[p] / rate - (ps[b] - ps[a]));
+const err = groups.map(([a, b], p) => C[p] / paraRate[p] - (ps[b] - ps[a]));
 const rms = Math.sqrt(err.reduce((s, x) => s + x * x, 0) / K);
 writeFileSync(
   resolve('docs/promo/road-cues.json'),
@@ -419,7 +452,7 @@ CLIPS.forEach((name, c) => {
 });
 console.log('');
 groups.forEach(([a, b], p) => {
-  const d = C[p] / rate - (ps[b] - ps[a]);
+  const d = C[p] / paraRate[p] - (ps[b] - ps[a]);
   const mark = ANCHOR.has(p) ? '✓' : CLIP_HEAD.has(a) ? '·' : ' ';
-  console.log(`  ${mark} مشهد ${String(PARA_SCENE[p]).padStart(3)}  ${String(r2(UTT[a][0])).padStart(7)} ث   نطق ${String(a + 1).padStart(2)}-${String(b).padStart(2)}  (${d >= 0 ? '+' : ''}${d.toFixed(1)})  ${paras[p].slice(0, 38)}`);
+  console.log(`  ${mark} مشهد ${String(PARA_SCENE[p]).padStart(3)}  ${String(r2(UTT[a][0])).padStart(7)} ث   نطق ${String(a + 1).padStart(2)}-${String(b).padStart(2)}  (${d >= 0 ? '+' : ''}${d.toFixed(1)})  ${String(Math.round(paraRate[p])).padStart(2)}ح/ث  ${paras[p].slice(0, 32)}`);
 });
