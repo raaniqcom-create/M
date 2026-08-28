@@ -5,6 +5,8 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const OTPIQ_KEY = Deno.env.get('OTPIQ_API_KEY')!;
+/** اسمُ المُرسِل المسجَّل لدى OTPIQ — بدونه يُرفض كلُّ نصٍّ حرّ بـ400. */
+const OTPIQ_SENDER = Deno.env.get('OTPIQ_SENDER_ID');
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -57,6 +59,14 @@ Deno.serve(async (req) => {
     if (text.length < 5) return json({ error: 'الرسالة قصيرة جداً' }, 400);
     if (text.length > 300) return json({ error: 'الرسالة أطول من ٣٠٠ حرف' }, 400);
     if (!list.length) return json({ error: 'لا يوجد مشتركون في هذا النطاق' }, 400);
+    // قبل أول نداء: بلا مُرسِلٍ مسجَّل تسقط كلُّ رسالةٍ بـ400، والحلقةُ تعدّ
+    // فشلاً بعدد المشتركين ثمّ تعود «تمّ الإرسال: 0». فيُقال السببُ مرّةً.
+    if (!OTPIQ_SENDER) {
+      return json(
+        { error: 'لا يمكن الإرسال: لم يُضبط OTPIQ_SENDER_ID — سجّل اسم مُرسِلٍ في حساب OTPIQ أولاً.' },
+        400
+      );
+    }
 
     let sent = 0;
     const failures: string[] = [];
@@ -69,6 +79,11 @@ Deno.serve(async (req) => {
         headers: { Authorization: `Bearer ${OTPIQ_KEY}`, 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({
           smsType: 'custom',
+          // OTPIQ يرفض كلَّ نصٍّ حرٍّ بلا اسم مُرسِلٍ مسجَّل: 400 «you must
+          // provide (senderId)». وقِيس على الحساب الحيّ فوُجد بلا مُرسِلٍ
+          // واحد — أي أن هذا البثّ لم يُرسِل رسالةً قطُّ منذ كُتب، وكان
+          // يعود بـ{ok:true, sent:0} فيُقرأ نجاحاً.
+          senderId: OTPIQ_SENDER,
           phoneNumber: `964${s.phone}`,
           customMessage: text,
           provider: 'auto',

@@ -584,6 +584,23 @@ Deno.serve(async (req) => {
   // والرسالةُ تحمل بابَ الخروج من الكلفة: من فتح الرابط ومنح الإذن صار على
   // القناة المجّانية وسقطت عنه. فهذه نفقةٌ تتناقص بطبعها، لا اشتراكٌ دائم.
   const OTPIQ_KEY = Deno.env.get('OTPIQ_API_KEY');
+  /** اسمُ المُرسِل المسجَّل لدى OTPIQ.
+   *
+   *  قِيس على الحساب الحيّ: `sender-ids` يعود `{"success":true,"data":[]}` —
+   *  ولا مُرسِلَ واحد. وOTPIQ يردّ كلَّ `smsType:'custom'` بلا مُرسِلٍ بـ400.
+   *  فالقناةُ جاهزةٌ في الشيفرة ومحبوسةٌ على تسجيلٍ إداريّ عند المزوّد
+   *  (اسمٌ تجاريّ يُعتمد لدى شركات الاتصال العراقية).
+   *
+   *  ولا يُخمَّن اسم: رسالةٌ باسمٍ ليس لنا أسوأ من رسالةٍ لا تخرج. */
+  const OTPIQ_SENDER = Deno.env.get('OTPIQ_SENDER_ID');
+
+  /** ولا تسقط صامتة.
+   *
+   *  أوّلُ تشغيلٍ حيّ: محطتان بلا قناةٍ مجّانية استُحقّتا، ولم تخرج رسالة ولم
+   *  يُكتب سبب — لأن الفشل كان `return 0` وحدَه. وسجلُّ الدوالّ لا يُقرأ من
+   *  هنا، فالمكانُ الوحيد الذي يُقرأ هو جوابُ الدالّة نفسِه. فتُعَدّ المحاولةُ
+   *  والنجاحُ والفشل، ويُحمَل أوّلُ سببٍ معه. */
+  const sms = { tried: 0, sent: 0, failed: 0, why: null as string | null };
 
   async function tellPhone(
     station: { id: string; name: string; phone?: string | null; last_reminded_at?: string | null },
@@ -599,12 +616,20 @@ Deno.serve(async (req) => {
     const last = station.last_reminded_at ? new Date(station.last_reminded_at).getTime() : 0;
     if (Date.now() - last < 24 * 3600_000) return 0;
 
+    sms.tried++;
+    if (!OTPIQ_SENDER) {
+      sms.failed++;
+      if (!sms.why)
+        sms.why = 'OTPIQ_SENDER_ID غير مضبوط — الحساب بلا اسم مُرسِلٍ مسجَّل، وOTPIQ يرفض كل رسالة نصّية حرّة بدونه';
+      return 0;
+    }
     try {
       const r = await fetch('https://api.otpiq.com/api/sms', {
         method: 'POST',
         headers: { Authorization: `Bearer ${OTPIQ_KEY}`, 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({
           smsType: 'custom',
+          senderId: OTPIQ_SENDER,
           phoneNumber: `964${digits}`,
           // والنصّان يفترقان لأن الحالين تفترقان: ما بين اليوم واليومين معروضٌ
           // بالرمادي، وما بعدهما سُحب. ورسالةٌ تقول «لم يعد يظهر» لمن ما زال
@@ -616,11 +641,18 @@ Deno.serve(async (req) => {
           provider: 'auto',
         }),
       });
-      if (!r.ok) return 0;
+      if (!r.ok) {
+        sms.failed++;
+        if (!sms.why) sms.why = `${r.status}: ${(await r.text().catch(() => '')).slice(0, 160)}`;
+        return 0;
+      }
+      sms.sent++;
       // الختمُ بعد النجاح لا قبله: ختمٌ على رسالةٍ لم تخرج يُسكت التذكيرَ يوماً كاملاً
       await db.from('stations').update({ last_reminded_at: new Date().toISOString() }).eq('id', station.id);
       return 1;
-    } catch {
+    } catch (e) {
+      sms.failed++;
+      if (!sms.why) sms.why = `throw: ${String(e).slice(0, 160)}`;
       return 0;
     }
   }
@@ -763,7 +795,7 @@ ${body}`,
   if (marks.length) await db.from('owner_pings').upsert(marks);
 
   return new Response(
-    JSON.stringify({ at: minutes, day, due: due.length, sent, failed }),
+    JSON.stringify({ at: minutes, day, due: due.length, sent, failed, sms }),
     { headers: { 'Content-Type': 'application/json' } }
   );
 });
