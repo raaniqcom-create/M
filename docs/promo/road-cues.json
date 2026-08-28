@@ -3,7 +3,7 @@
   "filmTotal": 131,
   "lead": 0,
   "gap": 0.45,
-  "rms": 0.57,
+  "rms": 0.46,
   "utterances": 58,
   "clips": [
     {
@@ -74,35 +74,35 @@
     },
     {
       "film": 42,
-      "audio": 60.79
-    },
-    {
-      "film": 51,
       "audio": 71.33
     },
     {
+      "film": 51,
+      "audio": 78.73
+    },
+    {
       "film": 64,
-      "audio": 84.48
+      "audio": 90.9
     },
     {
       "film": 77,
-      "audio": 97.7
-    },
-    {
-      "film": 85,
       "audio": 104.55
     },
     {
-      "film": 91,
+      "film": 85,
       "audio": 110.05
     },
     {
+      "film": 91,
+      "audio": 114.25
+    },
+    {
       "film": 99,
-      "audio": 117.71
+      "audio": 121.16
     },
     {
       "film": 109,
-      "audio": 125.56
+      "audio": 128.81
     },
     {
       "film": 121,
