@@ -26,6 +26,7 @@ import { WorkingHours } from '@/components/WorkingHours';
 import { OwnerReminders } from '@/components/OwnerReminders';
 import { StationChat } from '@/components/StationChat';
 import { JoinPoster } from '@/components/JoinPoster';
+import { ChangePassword } from '@/components/ChangePassword';
 import { FRESH_HOURS, WITHDRAW_HOURS, ageLabel } from '@/lib/hours';
 import { DeleteAccount } from '@/components/DeleteAccount';
 import type { ExpectedPeriod } from '@/lib/hours';
@@ -726,6 +727,8 @@ export default function OwnerPage() {
                     محطة يعتمد عليها المستخدمون دون مراجعة.
                   </p>
                 </section>
+            <ChangePassword />
+
             <OwnerReminders stationId={station.id} />
             <DeleteAccount phone={station.phone} />
               </>
