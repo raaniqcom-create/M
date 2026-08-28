@@ -9,6 +9,7 @@ import { whatsappLink, whatsappVerifyLocation, whatsappVerifyRole } from '@/lib/
 import { AdminStationForm } from '@/components/AdminStationForm';
 import { BroadcastPanel } from '@/components/BroadcastPanel';
 import { AdminThreads } from '@/components/AdminThreads';
+import { DeletedStations } from '@/components/DeletedStations';
 import { ReviewsPanel } from '@/components/ReviewsPanel';
 import { AvailabilityBoard } from '@/components/AvailabilityBoard';
 import { AdminStats } from '@/components/AdminStats';
@@ -161,7 +162,18 @@ export default function AdminPage() {
   const suspended = live.filter((s) => s.status === 'suspended');
 
   async function removeStation(id: string, name: string) {
-    if (!confirm(`حذف «${name}» نهائياً؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    // النصُّ كان يقول «لا يمكن التراجع» وكان صادقاً — فضاعت ثلاثُ محطات.
+    // وصار يُنسَخ الصفُّ قبل محوه، فيُقال ما يقع: ما يعود وما لا يعود.
+    if (
+      !confirm(
+        `حذف «${name}»؟
+
+تُنسخ بياناتها ويمكن استرجاعها من «محطات محذوفة».
+` +
+          `لكن متابعيها والأجهزة المربوطة بها لا تعود.`
+      )
+    )
+      return;
     setLive((prev) => prev.filter((s) => s.id !== id));
     setPending((prev) => prev.filter((s) => s.id !== id));
     await supabase.from('stations').delete().eq('id', id);
@@ -625,6 +637,8 @@ export default function AdminPage() {
       )}
 
       {tab === 'offers' && <BroadcastPanel />}
+      {tab === 'stations' && <DeletedStations />}
+
       {tab === 'messages' && <AdminThreads />}
 
       {tab === 'reviews' && <ReviewsPanel />}
