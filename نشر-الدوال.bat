@@ -38,9 +38,9 @@ if errorlevel 1 goto wrongaccount
 echo  ✓ مشروع muhta مرئي.
 
 echo.
-echo  [4/4] نشر الدوال الثلاث... قد تستغرق دقيقة.
+echo  [4/4] نشر الدوال... قد تستغرق دقيقة.
 echo.
-call npx --yes supabase functions deploy notify notify-favorites telegram --project-ref snlafcvuoxpxcdbtinsy
+call npx --yes supabase functions deploy notify notify-favorites telegram owner-daily admin-alert broadcast --project-ref snlafcvuoxpxcdbtinsy
 if errorlevel 1 goto failed
 
 echo.

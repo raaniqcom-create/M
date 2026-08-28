@@ -24,6 +24,7 @@ import { AvailabilityPoster } from '@/components/AvailabilityPoster';
 import { ProductControl } from '@/components/ProductControl';
 import { WorkingHours } from '@/components/WorkingHours';
 import { OwnerReminders } from '@/components/OwnerReminders';
+import { StationChat } from '@/components/StationChat';
 import { FRESH_HOURS, WITHDRAW_HOURS, ageLabel } from '@/lib/hours';
 import { DeleteAccount } from '@/components/DeleteAccount';
 import type { ExpectedPeriod } from '@/lib/hours';
@@ -41,7 +42,9 @@ export default function OwnerPage() {
   const [turnedOn, setTurnedOn] = useState<Set<FuelProduct>>(new Set());
   const [loading, setLoading] = useState(true);
   const [savingProduct, setSavingProduct] = useState<FuelProduct | null>(null);
-  const [view, setView] = useState<'main' | 'info' | 'data'>('main');
+  const [view, setView] = useState<'main' | 'info' | 'data' | 'chat'>('main');
+  /** ما لم يقرأه صاحبُ المحطة من الإدارة أو من المنصّة */
+  const [unread, setUnread] = useState(0);
   const [trafficNote, setTrafficNote] = useState<string | null>(null);
   const [phoneNote, setPhoneNote] = useState<string | null>(null);
 
@@ -74,8 +77,28 @@ export default function OwnerPage() {
         .select('*')
         .eq('station_id', st.id);
       setProducts(pr ?? []);
+
+      // عدٌّ بلا صفوف: ما لم يقرأه المالك من الإدارة أو من المنصّة. ولا
+      // ينتظره باقي التحميل — شارةٌ متأخّرةٌ نصفَ ثانية خيرٌ من لوحةٍ تنتظرها.
+      supabase
+        .from('station_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('station_id', st.id)
+        .neq('sender', 'owner')
+        .is('read_at', null)
+        .then(({ count }) => setUnread(count ?? 0));
     }
     setLoading(false);
+  }, []);
+
+  // رابطُ الإشعار يحمل ?chat=1، فيفتح تبويبَ الرسائل بدل أن يترك صاحبَ
+  // المحطة يبحث عنه. ويُقرأ من location لا بـuseSearchParams: الأخيرة تُلزم
+  // حدَّ Suspense في بناء التصدير الساكن، وهذه قراءةٌ واحدة عند التركيب.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('chat=1')) {
+      setView('chat');
+      setUnread(0);
+    }
   }, []);
 
   useEffect(() => {
@@ -448,22 +471,32 @@ export default function OwnerPage() {
               </button>
             </section>
 
-            <nav className="grid grid-cols-3 gap-1 rounded-xl bg-brand-50 p-1">
+            <nav className="grid grid-cols-4 gap-1 rounded-xl bg-brand-50 p-1">
               {([
                 ['main', 'اللوحة'],
-                ['info', 'معلومات المحطة'],
-                ['data', 'بيانات الحساب'],
+                ['chat', 'الرسائل'],
+                ['info', 'المحطة'],
+                ['data', 'حسابي'],
               ] as const).map(([k, label]) => (
                 <button
                   key={k}
                   type="button"
-                  onClick={() => setView(k)}
+                  onClick={() => { setView(k); if (k === 'chat') setUnread(0); }}
                   aria-pressed={view === k}
-                  className={`min-h-[40px] rounded-lg text-xs font-bold transition-colors duration-200 ${
+                  className={`relative min-h-[40px] rounded-lg text-xs font-bold transition-colors duration-200 ${
                     view === k ? 'bg-white text-brand shadow-soft' : 'text-brand-700'
                   }`}
                 >
                   {label}
+                  {/* نقطةٌ لا رقم: العددُ الدقيق لا يُغيّر الفعل — والفعلُ فتحُ
+                      التبويب. والنقطةُ تُقرأ في لمحةٍ على شاشةٍ ضيّقة، والأسماءُ
+                      قُصِّرت لأن أربعةً في صفٍّ على 360 بكسل لا تتّسع. */}
+                  {k === 'chat' && unread > 0 && (
+                    <span
+                      aria-label={`${unread} رسالة غير مقروءة`}
+                      className="absolute end-1.5 top-1.5 h-2 w-2 rounded-full bg-traffic-red"
+                    />
+                  )}
                 </button>
               ))}
             </nav>
@@ -593,6 +626,8 @@ export default function OwnerPage() {
             />
               </>
             )}
+
+            {view === 'chat' && <StationChat stationId={station.id} as="owner" />}
 
             {view === 'info' && (
               <>

@@ -44,16 +44,23 @@ export default function AdminPage() {
   const [pending, setPending] = useState<Station[]>([]);
   const [live, setLive] = useState<Station[]>([]);
   const [ads, setAds] = useState<Ad[]>([]);
+  /** ما ردّ به أصحابُ المحطات ولم تقرأه الإدارة — من منظور station_unread */
+  const [unread, setUnread] = useState<Map<string, number>>(new Map());
 
   const load = useCallback(async () => {
-    const [{ data: st }, { data: ap }, { data: ad }] = await Promise.all([
+    const [{ data: st }, { data: ap }, { data: ad }, { data: un }] = await Promise.all([
       supabase.from('stations').select('*').eq('status', 'pending').order('created_at'),
       supabase.from('stations').select('*').in('status', ['approved', 'suspended']).order('city'),
       supabase.from('ads').select('*').order('created_at', { ascending: false }),
+      // **بلا هذا لا تعرف الإدارةُ أن أحداً ردّ** إلا إن صادف أن وصل إشعار.
+      // والقائمةُ بشاراتها هي صندوقُ البريد عند ثمانٍ وعشرين محطة — فصفحةٌ
+      // منفصلة تُبنى حين تكفّ القائمةُ عن الاتّساع في شاشة.
+      supabase.from('station_unread').select('station_id, unread'),
     ]);
     setPending(st ?? []);
     setLive(ap ?? []);
     setAds(ad ?? []);
+    setUnread(new Map((un ?? []).map((r) => [r.station_id as string, r.unread as number])));
   }, []);
 
   useEffect(() => {
@@ -389,7 +396,14 @@ export default function AdminPage() {
                   {/* the name is the way in: everything per-station lives on
                       its own page rather than swelling this list */}
                   <a href={`/admin/station/?id=${s.id}`} className="block">
-                    <p className="text-sm font-bold text-brand-700 underline">{s.name}</p>
+                    <p className="flex items-center gap-1.5 text-sm font-bold text-brand-700 underline">
+                      {s.name}
+                      {!!unread.get(s.id) && (
+                        <span className="rounded-full bg-traffic-red px-1.5 py-px text-[10px] font-extrabold text-white no-underline">
+                          {unread.get(s.id)}
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-slate-500">
                       {s.city} — {s.address}
                     </p>

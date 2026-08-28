@@ -227,8 +227,16 @@ const MESSAGES: Record<string, (name: string, n: number, city: string) => Msg> =
  *  within a month the panel shows a message nobody receives. The preview is
  *  produced here instead, by the same MESSAGES table and the same rules that
  *  do the sending, so it cannot describe a message that would not be sent. */
-async function preview(req: Request, stationId: string): Promise<Response> {
-  // Cron carries a secret; a person carries a token. Same function, two doors.
+/** بابُ الإنسان. الكرون يحمل سرّاً، والشخص يحمل رمزاً — والدالّة واحدة
+ *  ببابين. تُرجع رَدّاً حين يُرفض، وnull حين يُقبل. */
+type Station = {
+  id: string; name: string; city: string; phone?: string | null; owner_id?: string | null;
+  is_24h: boolean; opens_at: string; closes_at: string; temp_closed?: boolean | null;
+  manual_traffic_level?: string | null; manual_traffic_set_at?: string | null;
+  last_reminded_at?: string | null;
+};
+
+async function adminOnly(req: Request): Promise<Response | null> {
   const jwt = req.headers.get('Authorization')?.replace('Bearer ', '') ?? '';
   const { data: auth } = await db.auth.getUser(jwt);
   if (!auth?.user) return json({ error: 'unauthorized' }, 401);
@@ -238,6 +246,32 @@ async function preview(req: Request, stationId: string): Promise<Response> {
     .eq('id', auth.user.id)
     .maybeSingle();
   if (profile?.role !== 'admin') return json({ error: 'forbidden' }, 403);
+  return null;
+}
+
+/** رسالةُ محادثةٍ كتبتها الإدارة، تُقرأ من الصفّ لا من الطلب.
+ *
+ *  **الحمولةُ معرّفٌ لا نصّ.** فما يظهر على قفل شاشة المالك هو ما في المجرى
+ *  حرفاً بحرف، ولا يستطيع نداءٌ أن يكتب عليها كلاماً لا أثر له في القاعدة. */
+async function chatMessage(id: string) {
+  const { data } = await db
+    .from('station_messages')
+    .select('id, body, sender, station_id')
+    .eq('id', id)
+    .maybeSingle();
+  if (!data || data.sender !== 'admin') return null;
+  const { data: st } = await db
+    .from('stations')
+    .select('id, name, city, phone, owner_id, is_24h, opens_at, closes_at, temp_closed, manual_traffic_level, manual_traffic_set_at, last_reminded_at')
+    .eq('id', data.station_id)
+    .maybeSingle();
+  if (!st) return null;
+  return { station: st, body: String(data.body) };
+}
+
+async function preview(req: Request, stationId: string): Promise<Response> {
+  const denied = await adminOnly(req);
+  if (denied) return denied;
 
   const { day } = baghdadNow();
   const { data: st } = await db
@@ -360,17 +394,37 @@ Deno.serve(async (req) => {
   const wanted = url.searchParams.get('preview');
   if (wanted) return preview(req, wanted);
 
-  if (req.headers.get('x-cron-secret') !== CRON_SECRET) {
+  // ── إيصالُ رسالةِ محادثة ────────────────────────────────────────────────
+  //
+  // **بالمرور في المسار نفسِه، لا بنسخه.** حلقةُ الإيصال هنا خمسةٌ وثمانون
+  // سطراً تعرف APNs وFCM ودفعَ المتصفّح وتيليغرام وتنظيفَ الرموز الميتة.
+  // واستخراجُها أو نسخُها يصنع مسارَين يفترقان في أوّل إصلاح — وفي هذا
+  // المستودع أربعُ نسخٍ من isOpenNow تشهد بذلك.
+  //
+  // فتُحمَّل المحطة وحدَها، ويُصنع «مستحقٌّ» من عنصرٍ واحد نوعُه chat، ويمضي
+  // في الحلقة كما يمضي التذكير. والفروقُ ثلاثةُ شروطٍ صغيرة: النصُّ من الصفّ،
+  // والرابطُ يفتح تبويب الرسائل، ولا علامةَ في owner_pings ولا صفَّ جديد في
+  // المجرى — فالرسالةُ مكتوبةٌ فيه أصلاً.
+  const deliverId = url.searchParams.get('deliver');
+  let chatMsg: { station: Station; body: string } | null = null;
+  if (deliverId) {
+    const denied = await adminOnly(req);
+    if (denied) return denied;
+    chatMsg = (await chatMessage(deliverId)) as { station: Station; body: string } | null;
+    if (!chatMsg) return json({ error: 'not deliverable' }, 400);
+  } else if (req.headers.get('x-cron-secret') !== CRON_SECRET) {
     return new Response('forbidden', { status: 403 });
   }
 
   const { minutes, day } = baghdadNow();
 
-  const { data: stations } = await db
-    .from('stations')
-    .select('id, name, city, phone, owner_id, is_24h, opens_at, closes_at, temp_closed, manual_traffic_level, manual_traffic_set_at, last_reminded_at')
-    .eq('status', 'approved')
-    .eq('is_demo', false);
+  const { data: stations } = chatMsg
+    ? { data: [chatMsg.station] }
+    : await db
+        .from('stations')
+        .select('id, name, city, phone, owner_id, is_24h, opens_at, closes_at, temp_closed, manual_traffic_level, manual_traffic_set_at, last_reminded_at')
+        .eq('status', 'approved')
+        .eq('is_demo', false);
 
   if (!stations?.length) return new Response('no stations');
 
@@ -480,7 +534,8 @@ Deno.serve(async (req) => {
 
   // Which of the three, if any, is due for each station right now
   const due: { station: (typeof stations)[number]; kind: string }[] = [];
-  for (const s of stations) {
+  if (chatMsg) due.push({ station: stations[0], kind: 'chat' });
+  for (const s of chatMsg ? [] : stations) {
     // a 24-hour station has no opening or closing moment; its day is judged at
     // 07:00 and 21:00, the hours a forecourt actually changes hands
     const open = s.is_24h ? 420 : toMinutes(s.opens_at);
@@ -665,7 +720,9 @@ Deno.serve(async (req) => {
     // زرّان للسؤال وحده: «هل ما زال متوفراً؟» يُجاب بضغطة بلا فتح شيء —
     // وهذا هو الفرق بين سؤالٍ يُجاب وسؤالٍ يُقرأ ثم يُنسى.
     const keyboard =
-      kind === 'stock_check' || kind === 'stale_stock'
+      // baseKind لا kind: الخاناتُ جعلت النوعَ 'stock_check#2'، فسقط الزرّان
+      // عن التذكيرين الثاني والثالث — وهما أحوجُ ما يكون إلى جوابٍ بضغطة.
+      baseKind(kind) === 'stock_check' || baseKind(kind) === 'stale_stock'
         ? {
             inline_keyboard: [
               [
@@ -701,12 +758,17 @@ ${body}`,
   }
 
   const marks: { station_id: string; kind: string; day: string }[] = [];
+  const thread: { station_id: string; sender: string; kind: string; body: string }[] = [];
   let sent = 0;
   let failed = 0;
 
   for (const { station, kind } of due) {
     const targets = byStation.get(station.id) ?? [];
-    const { title, body } = MESSAGES[baseKind(kind)](station.name, watchersFor(station.city), station.city);
+    const { title, body } = chatMsg
+      ? { title: `${station.name} — رسالة من الإدارة`, body: chatMsg.body.slice(0, 300) }
+      : MESSAGES[baseKind(kind)](station.name, watchersFor(station.city), station.city);
+    // الدفعُ يفتح تبويبَ الرسائل مباشرةً، لا اللوحةَ ثمّ بحثاً عنه
+    const deepLink = chatMsg ? '/owner?chat=1' : '/owner';
 
     // تيليجرام أولاً، وقبل حارس «لا أجهزة».
     //
@@ -733,7 +795,7 @@ ${body}`,
             },
             body: JSON.stringify({
               aps: { alert: { title, body }, sound: 'alert.caf' },
-              url: '/owner',
+              url: deepLink,
             }),
           });
           if (r.status === 410) await db.from('device_tokens').delete().eq('token', t.token);
@@ -746,7 +808,7 @@ ${body}`,
           try {
             await webpush.sendNotification(
               { endpoint: t.token, keys: { p256dh: t.keys?.p256dh, auth: t.keys?.auth } },
-              JSON.stringify({ title, body, url: '/owner' })
+              JSON.stringify({ title, body, url: deepLink })
             );
             sent++;
           } catch (e) {
@@ -768,7 +830,7 @@ ${body}`,
                 message: {
                   token: t.token,
                   notification: { title, body },
-                  data: { url: '/owner' },
+                  data: { url: deepLink },
                   android: { priority: 'HIGH', notification: { channel_id: 'muhta_alerts', sound: 'alert' } },
                 },
               }),
@@ -789,13 +851,22 @@ ${body}`,
       if (paid) { sent += paid; marks.push({ station_id: station.id, kind: 'stale_sms', day }); }
     }
 
-    marks.push({ station_id: station.id, kind, day });
+    if (!chatMsg) {
+      marks.push({ station_id: station.id, kind, day });
+      // **والتذكيرُ يدخل المجرى — وصل أم لم يصل.**
+      //
+      // وهذا هو المقصود بالضبط للستّ محطاتٍ التي لا جهازَ لها ولا تيليغرام:
+      // التذكيرُ موجودٌ في لوحتها حين تُفتح، وإن لم يرنّ هاتف. ورسالةُ
+      // المحادثة لا تُدرَج هنا لأنها مكتوبةٌ في المجرى قبل النداء أصلاً.
+      thread.push({ station_id: station.id, sender: 'system', kind: baseKind(kind), body });
+    }
   }
 
   if (marks.length) await db.from('owner_pings').upsert(marks);
+  if (thread.length) await db.from('station_messages').insert(thread);
 
   return new Response(
-    JSON.stringify({ at: minutes, day, due: due.length, sent, failed, sms }),
+    JSON.stringify(chatMsg ? { ok: true, sent, failed } : { at: minutes, day, due: due.length, sent, failed, sms }),
     { headers: { 'Content-Type': 'application/json' } }
   );
 });

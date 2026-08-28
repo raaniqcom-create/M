@@ -9,6 +9,7 @@ import { StationPoster } from '@/components/StationPoster';
 import { AvailabilityPoster } from '@/components/AvailabilityPoster';
 import { SpinnerIcon } from '@/components/icons';
 import { OwnerMessagePreview } from '@/components/OwnerMessagePreview';
+import { StationChat } from '@/components/StationChat';
 import { LocationField } from '@/components/LocationField';
 import { WorkingHours } from '@/components/WorkingHours';
 import { ANBAR_CITIES } from '@/lib/cities';
@@ -426,6 +427,15 @@ function Panel() {
           )}
         </div>
       </section>
+
+      {/* ما نقوله بجوار ما سيقوله النظام: الإدارةُ ترى تذكيراتِ اليوم قبل
+          أن تكتب، فلا تُعيد ما قيل ولا تناقضه. */}
+      <StationChat
+        stationId={station.id}
+        as="admin"
+        phone={station.phone}
+        name={station.contact_name}
+      />
 
       <OwnerMessagePreview stationId={station.id} />
 

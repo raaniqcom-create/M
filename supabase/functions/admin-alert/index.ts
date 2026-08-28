@@ -187,6 +187,12 @@ Deno.serve(async (req) => {
     } else if (event === 'approved') {
       title = '✅ محطة اعتُمدت';
       body = `${station.name} — ${station.city}`;
+    } else if (event === 'message') {
+      // **ولا نصَّ من المتصل.** 'complaint' تمرّر نصّاً لأنها سبقت، وتوسيعُ
+      // البابِ هنا يجعل كلَّ من يحمل المفتاح العامّ يكتب على قفل شاشة
+      // الإدارة. ووظيفةُ الإشعار «انظر»، لا «اقرأ هنا».
+      title = '💬 رسالة من محطة';
+      body = `${station.name} — ${station.city}`;
     } else {
       return json({ error: 'unknown event' }, 400);
     }
