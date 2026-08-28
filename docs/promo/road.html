@@ -64,6 +64,9 @@ html.v .scene.wm > *{max-width:100%}
 
 /* لكل مشهد ظهور واختفاء بنفس المنحنى، فلا يقفز شيء */
 @keyframes scene{0%{opacity:0}4%{opacity:1}92%{opacity:1}100%{opacity:0}}
+/* والمشهدُ الأخير لا يُغمَض: الفيلمُ ينتهي عليه، فلا معنى لمحوِه قبل نهايته
+   بثمانيةِ أعشارِ ثانية — والاسمُ والرابطُ فيه، وهما آخرُ ما يُقرأ. */
+@keyframes scenehold{0%{opacity:0}4%{opacity:1}100%{opacity:1}}
 
 /* ── لغةُ الحركة: كلُّ شيءٍ يُرسَم ────────────────────────────────────────
    لا شيء يظهر من العدم ولا يكبر من مركزه. كل عنصرٍ يصل بأن يُرسَم أو
@@ -304,7 +307,7 @@ html.v .appicon{width:180px;height:180px;border-radius:40px}
 .close .rule{height:8px;width:260px;background:var(--brand);border-radius:99px}
 .close .url{font-size:44px;font-weight:700;color:var(--brand)}
 .close .soon{font-size:32px;font-weight:500;color:var(--mute)}
-.close .by{font-size:26px;font-weight:400;color:var(--faint)}
+.by{font-size:26px;font-weight:400;color:var(--faint)}
 html.v .close .name{font-size:84px}
 html.v .scene.close{gap:10px;padding-top:210px}
 html.v .close .url{font-size:38px}
@@ -622,7 +625,6 @@ html.v #madein{width:440px;bottom:56px}
     <p class="sub w" style="animation-delay:103.2s">داخلَ المحطةِ التقنية · مجّاناً</p>
     <p class="url w" style="animation-delay:103.9s"><span class="ltr">muhta.online</span></p>
     <p class="soon w" style="animation-delay:104.8s">وقريباً تُضافُ المحطاتُ كاملةً إلى النظامِ بإذنِ الله</p>
-    <p class="by w" style="animation-delay:105.6s">فكرةً وتنفيذاً وبرمجةً: أحمد الرفاعي</p>
   </section>
 
   <!-- **«صنع في الأنبار» طوال الفيلم.**
@@ -672,7 +674,7 @@ html.v #madein{width:440px;bottom:56px}
   </section>
 
   <!-- 12 · حمّل التطبيق — الدعوة الأخيرة -->
-  <section class="scene store" style="animation:scene 10s both;animation-delay:121.0s;--g:16px">
+  <section class="scene store" style="animation:scenehold 10s both;animation-delay:121.0s;--g:16px">
     <img class="appicon" src="icon-192.png" alt="المحطة التقنية"
          style="animation:pop .5s cubic-bezier(.34,1.4,.64,1) both;animation-delay:121.4s">
     <h1 class="w" style="animation-delay:122.0s">المحطةُ التقنية</h1>
@@ -690,6 +692,10 @@ html.v #madein{width:440px;bottom:56px}
     <p class="sub wu" style="animation-delay:125.0s;font-size:36px;color:var(--brand-700);font-weight:800">
       كُن مع آلافٍ يعرفون أين الوقودُ قبل أن يتحرّكوا
     </p>
+    <!-- الاسمُ في الختام لا في وسط الفيلم، والرابطُ تحته.
+         و126.2 للرابط قبل 129.2 للاسم عن قصد: `both` تحجز موضعَ الاسم قبل
+         أن يُرسَم، فالرابطُ يستقرّ تحته من أوّل ظهوره ولا يقفز. -->
+    <p class="by w" style="animation-delay:129.2s">فكرةً وتنفيذاً وبرمجةً: أحمد الرفاعي</p>
     <p class="sub f" style="animation-delay:126.2s;font-size:28px"><span class="ltr">muhta.online</span></p>
   </section>
 
