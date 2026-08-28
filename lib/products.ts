@@ -1,5 +1,5 @@
 import type { FuelProduct, TrafficLevel } from '@/types/database';
-import { isFresh, isOpenNow } from './hours';
+import { isFresh, isOpenNow, isWithdrawn } from './hours';
 
 // single source of truth for the 6 fixed products — mirrors the fuel_product
 // enum in supabase/schema.sql
@@ -201,16 +201,37 @@ export function isOffered(
  *
  *  ونظيرتها في الخادم: noStock داخل supabase/functions/owner-daily — تُبقي
  *  الرسالة التي تصل المالك على المقياس نفسه الذي يُخفيه. */
+/** هل يُعرض هذا المنتج على البطاقة أصلاً؟
+ *
+ *  ثلاثةُ مواضع كانت تكتب الشرط بيدها — البطاقة وسؤال الرحلة ولوحة المالك —
+ *  فأضافت `WITHDRAW_HOURS` قاعدةً رابعة تُنسى في اثنين منها. والمنسيُّ هنا
+ *  ليس تفصيلاً: منتجٌ سُحب ولم يخرج من `shown` يسقط إلى فرع «متوقَّع» في
+ *  التنسيق، فيُعرض بلون الترقّب خبرٌ عمره خمسة أيام.
+ *
+ *  فصارت جملةً واحدة: متوفّرٌ لم يُسحب، أو له موعدُ وصولٍ معلَن. */
+export function isListed(
+  row: { is_available?: boolean | null; updated_at?: string | null; expected_at?: string | null } | undefined | null
+): boolean {
+  return (!!row?.is_available && !isWithdrawn(row.updated_at)) || !!row?.expected_at;
+}
+
 export function hasSomethingToShow(station: {
-  products: { is_available?: boolean | null; expected_at?: string | null }[];
+  products: { is_available?: boolean | null; expected_at?: string | null; updated_at?: string | null }[];
 }): boolean {
-  return station.products.some((p) => p.is_available || p.expected_at);
+  // ادّعاءٌ سُحب لا يُبقي محطةً في القائمة: البقاءُ عليه يعني أن يقصدها
+  // مسافرٌ على خبرٍ لم نعد نعرضه نحن أنفسنا.
+  return station.products.some(isListed);
 }
 
 /** أُعلن متوفّراً، وفات عمر إعلانه. يُعرض بالرمادي مع عمره: لا يُخفى فتضيع
- *  المعلومة، ولا يُعرض أخضرَ فيُرسل الناس إلى وقود نفد. */
+ *  المعلومة، ولا يُعرض أخضرَ فيُرسل الناس إلى وقود نفد.
+ *
+ *  **وله حدٌّ ينتهي عنده.** بعد `WITHDRAW_HOURS` لا يُعرض أصلاً: «بانزين ·
+ *  قبل ١٠ أيام» ليست معلومةً ناقصة بل جملةٌ لا يُبنى عليها قرار، وعرضُها
+ *  يُبقي في الجدول محطةً لا نعرف عنها شيئاً. والسحبُ عرضٌ لا حذف — انظر
+ *  `isWithdrawn` في lib/hours.ts. */
 export function isStaleOffer(
   row: { is_available?: boolean | null; updated_at?: string | null } | undefined | null
 ): boolean {
-  return !!row?.is_available && !isFresh(row.updated_at);
+  return !!row?.is_available && !isFresh(row.updated_at) && !isWithdrawn(row.updated_at);
 }

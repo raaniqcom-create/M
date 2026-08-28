@@ -33,6 +33,24 @@ const BAGHDAD = 'Asia/Baghdad';
 // the window that just passed, so nothing is missed and nothing repeats
 const WINDOW_MIN = 20;
 
+/** التذكيرُ الواحد في اليوم لا يكفي، والتذكيرُ كلَّ ربع ساعة يُغلَق الإشعارُ
+ *  من أجله. فثلاثُ ساعاتٍ بين واحدةٍ وأخرى، وثلاثٌ في اليوم على الأكثر.
+ *
+ *  و`owner_pings` مفتاحُه `(station_id, kind, day)` — نوعٌ واحد في اليوم. فبدل
+ *  هجرةٍ على الجدول، تُحمَل الخانةُ في اسم النوع: `stale_stock#1`. والخانةُ
+ *  لا تتقدّم إلا كلَّ ثلاث ساعات، فالفاصلُ والحدُّ كلاهما من الحساب نفسه، لا
+ *  من شرطٍ ثانٍ يُنسى. */
+const SLOT_MIN = 180;
+const MAX_SLOTS = 3;
+const slotOf = (minutes: number, open: number) =>
+  Math.min(MAX_SLOTS - 1, Math.max(0, Math.floor((minutes - open) / SLOT_MIN)));
+const withSlot = (kind: string, slot: number) => (slot ? `${kind}#${slot}` : kind);
+const baseKind = (kind: string) => kind.split('#')[0];
+
+/** بعدها يُسحب المعروضُ من العرض العامّ — WITHDRAW_HOURS في lib/hours.ts.
+ *  والرسالةُ تتبع ما يُخفي: من سُحب توفّرُه يُقال له إنه سُحب، لا أنه قديم. */
+const WITHDRAW_MS = 48 * 3600_000;
+
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -186,6 +204,15 @@ const MESSAGES: Record<string, (name: string, n: number, city: string) => Msg> =
   //
   // القائمة صارت تُخفي من لا وقود معلَناً لديه — والمحطة لا تعرف أنها اختفت
   // ولا لماذا. فتُخبَر، ويُقال لها الطريق: ضغطةٌ واحدة تُعيدها.
+  // سُحب، لا شاخ.
+  //
+  // بعد يومين بلا تأكيد لا تُعرض الشريحةُ الرمادية أصلاً، فالمحطة خرجت من
+  // القائمة وصاحبُها لا يدري. و«حدّثه» لا تصف ما وقع؛ الصريحُ أن يُقال إنه
+  // سُحب وأن العودة بضغطة — فالفعلُ المطلوب واحدٌ والخبرُ صادق.
+  stale_withdrawn: (name, _n, _city) => ({
+    title: `${name} — سُحب توفّرك من العرض`,
+    body: 'مضى يومان بلا تأكيد، فلم يعد وقودُك معروضاً للناس ولا تظهر محطتك في المتاح الآن. أكّده بضغطة ليعود في الحال.',
+  }),
   no_stock: (name, _n, _city) => ({
     title: `${name} — لا تظهر في القائمة الآن`,
     body: 'لا منتج متوفراً ولا متوقَّعاً على صفحتك، فلا تظهر محطتك لمن يبحث عن وقود. أعلِن ما وصلك، أو ضع موعد الوصول المتوقّع — وتعود فوراً.',
@@ -215,7 +242,7 @@ async function preview(req: Request, stationId: string): Promise<Response> {
   const { day } = baghdadNow();
   const { data: st } = await db
     .from('stations')
-    .select('id, name, city, is_24h, opens_at, closes_at')
+    .select('id, name, city, phone, is_24h, opens_at, closes_at, last_reminded_at')
     .eq('id', stationId)
     .maybeSingle();
   if (!st) return json({ error: 'no station' }, 404);
@@ -227,6 +254,8 @@ async function preview(req: Request, stationId: string): Promise<Response> {
       db.rpc('watchers_by_city', { p_cities: [st.city] }),
       db.from('device_tokens').select('token').eq('station_id', st.id),
     ]);
+
+  const { data: tg } = await db.from('telegram_links').select('telegram_id').eq('station_id', st.id);
 
   const last = (products ?? [])
     .map((p) => p.updated_at)
@@ -242,6 +271,7 @@ async function preview(req: Request, stationId: string): Promise<Response> {
     .sort()
     .at(-1) as string | undefined;
   const staleStock = !!lastAvail && Date.now() - new Date(lastAvail).getTime() >= 24 * 3600_000;
+  const withdrawn = !!lastAvail && Date.now() - new Date(lastAvail).getTime() >= WITHDRAW_MS;
   const publishedToday = !!last && last.slice(0, 10) === day;
   const everPublished = !!last;
 
@@ -259,6 +289,18 @@ async function preview(req: Request, stationId: string): Promise<Response> {
     // No device linked means none of this arrives, however good the text is —
     // and that is the single most useful thing this panel can tell an admin.
     devices: (devices ?? []).length,
+    telegram: (tg ?? []).length,
+    // **بأيّ قناة تصل، وهل تُكلّف.** الرسالةُ الجيّدة إلى عنوانٍ مفقود لا شيء،
+    // ورقمُ الأجهزة وحدَه كان يقول نصفَ الخبر: أربعٌ وعشرون محطةً بلا جهاز،
+    // ومنها من هو على تيليغرام. فيُقال العنوانُ صراحةً.
+    reach: (devices ?? []).length
+      ? 'جهاز'
+      : (tg ?? []).length
+        ? 'تيليغرام'
+        : /^7\d{9}$/.test(String(st.phone ?? '').replace(/\D/g, '').replace(/^964/, '').replace(/^0/, ''))
+          ? 'هاتف (مدفوعة)'
+          : 'لا عنوان',
+    smsSentAt: st.last_reminded_at ?? null,
     messages: [
       {
         when: st.is_24h ? '07:00' : st.opens_at.slice(0, 5),
@@ -281,14 +323,18 @@ async function preview(req: Request, stationId: string): Promise<Response> {
       {
         // بلا موعد ثابت: تُطلق في أول دورة تجد المحطة مفتوحة وخبرها فائتاً.
         when: 'عند الحاجة',
-        kind: 'stale_stock',
-        ...MESSAGES.stale_stock(st.name, n, st.city),
-        sent: sentKinds.has('stale_stock'),
-        sentAt: at('stale_stock'),
+        kind: withdrawn ? 'stale_withdrawn' : 'stale_stock',
+        ...MESSAGES[withdrawn ? 'stale_withdrawn' : 'stale_stock'](st.name, n, st.city),
+        sent: sentKinds.has(withdrawn ? 'stale_withdrawn' : 'stale_stock'),
+        sentAt: at(withdrawn ? 'stale_withdrawn' : 'stale_stock'),
         skipped: !staleStock,
-        note: staleStock
-          ? 'ستُرسل: المحطة تعرض وقوداً أعلنته قبل أكثر من يوم'
-          : 'لن تُرسل: لا وقود معروضاً بخبر قديم',
+        // وتتكرّر: ثلاثُ خانات، كلّ ثلاث ساعات، ما دامت مفتوحةً وراكدة.
+        repeats: `حتى ${MAX_SLOTS} مرّات، كل ${SLOT_MIN / 60} ساعات`,
+        note: withdrawn
+          ? 'ستُرسل: سُحب توفّرها من العرض — مضى يومان بلا تأكيد'
+          : staleStock
+            ? 'ستُرسل: المحطة تعرض وقوداً أعلنته قبل أكثر من يوم'
+            : 'لن تُرسل: لا وقود معروضاً بخبر قديم',
       },
     ],
   });
@@ -322,7 +368,7 @@ Deno.serve(async (req) => {
 
   const { data: stations } = await db
     .from('stations')
-    .select('id, name, city, owner_id, is_24h, opens_at, closes_at, temp_closed, manual_traffic_level, manual_traffic_set_at')
+    .select('id, name, city, phone, owner_id, is_24h, opens_at, closes_at, temp_closed, manual_traffic_level, manual_traffic_set_at, last_reminded_at')
     .eq('status', 'approved')
     .eq('is_demo', false);
 
@@ -400,6 +446,12 @@ Deno.serve(async (req) => {
     return !!a && Date.now() - new Date(a).getTime() >= 24 * 3600_000;
   };
 
+  // ومن تجاوز اليومين: سُحب عرضُه فعلاً، فرسالتُه غير رسالة من شاخ خبرُه.
+  const withdrawn = (id: string) => {
+    const a = lastAvailable.get(id);
+    return !!a && Date.now() - new Date(a).getTime() >= WITHDRAW_MS;
+  };
+
   // وسؤالُ الساعتين بعتبةٍ مستقلّة — ومحدودةٍ من أعلى.
   //
   // بلا الحدّ الأعلى يبتلع stale_stock: محطةٌ خبرها عمره ثلاثون ساعة تطابق
@@ -457,9 +509,9 @@ Deno.serve(async (req) => {
     ) {
       kind = 'traffic_confirm';
     } else if (minutes >= open && minutes < close && !s.temp_closed && staleStock(s.id)) {
-      kind = 'stale_stock';
+      kind = withSlot(withdrawn(s.id) ? 'stale_withdrawn' : 'stale_stock', slotOf(minutes, open));
     } else if (minutes >= open && minutes < close && !s.temp_closed && stockCheck(s.id)) {
-      kind = 'stock_check';
+      kind = withSlot('stock_check', slotOf(minutes, open));
     } else if (minutes >= open && minutes < close && !s.temp_closed && noStock(s.id)) {
       kind = 'no_stock';
     }
@@ -513,6 +565,66 @@ Deno.serve(async (req) => {
     tgByStation.set(l.station_id, [...(tgByStation.get(l.station_id) ?? []), l.telegram_id]);
   }
 
+  // ── الهاتف: العنوان الوحيد الذي تملكه كلُّ محطة ────────────────────
+  //
+  // القياس قبل هذا: ثلاثُ محطاتٍ من ثمانٍ وعشرين لها جهازٌ مربوط، وواحدةٌ على
+  // تيليغرام. فأربعٌ وعشرون تُحسب لها التذكيراتُ يومياً وتُختم في owner_pings
+  // ولا تصل أحداً — جدولٌ عامرٌ ورسائلُ في الفراغ.
+  //
+  // و `stations.phone` إلزاميّ وهو اسمُ الدخول نفسُه: ثمانٍ وعشرون من ثمانٍ
+  // وعشرين. و OTPIQ مدمَجٌ أصلاً في broadcast و otp، و `provider:'auto'` يجرّب
+  // واتساب وتيليغرام قبل الرسالة القصيرة — فلا قالبَ من «ميتا» ولا تكاملَ جديد.
+  //
+  // **وهي مدفوعة، فثلاثة قيود عليها:**
+  //
+  // ١ · الركودُ وحده — لا ترحيبٌ ولا شكرُ إغلاق. من يُحدّث لا يُرسَل إليه شيء.
+  // ٢ · بعد سكوت المجّانيّتين — إن وصل تيليغرام أو جهازٌ فلا رسالة.
+  // ٣ · واحدةٌ كلَّ أربعٍ وعشرين ساعة لكل محطة، مهما تكرّرت الخانات.
+  //
+  // والرسالةُ تحمل بابَ الخروج من الكلفة: من فتح الرابط ومنح الإذن صار على
+  // القناة المجّانية وسقطت عنه. فهذه نفقةٌ تتناقص بطبعها، لا اشتراكٌ دائم.
+  const OTPIQ_KEY = Deno.env.get('OTPIQ_API_KEY');
+
+  async function tellPhone(
+    station: { id: string; name: string; phone?: string | null; last_reminded_at?: string | null },
+    kind: string
+  ): Promise<number> {
+    if (!OTPIQ_KEY) return 0;
+    if (!baseKind(kind).startsWith('stale')) return 0;
+
+    // 07XXXXXXXXX أو 9647XXXXXXXX أو 7XXXXXXXXX — كلُّها تؤول إلى 7XXXXXXXXX
+    const digits = String(station.phone ?? '').replace(/\D/g, '').replace(/^964/, '').replace(/^0/, '');
+    if (!/^7\d{9}$/.test(digits)) return 0;
+
+    const last = station.last_reminded_at ? new Date(station.last_reminded_at).getTime() : 0;
+    if (Date.now() - last < 24 * 3600_000) return 0;
+
+    try {
+      const r = await fetch('https://api.otpiq.com/api/sms', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${OTPIQ_KEY}`, 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({
+          smsType: 'custom',
+          phoneNumber: `964${digits}`,
+          // والنصّان يفترقان لأن الحالين تفترقان: ما بين اليوم واليومين معروضٌ
+          // بالرمادي، وما بعدهما سُحب. ورسالةٌ تقول «لم يعد يظهر» لمن ما زال
+          // ظاهراً كذبةٌ صغيرة تُكلّف تصديقَ ما بعدها.
+          customMessage:
+            baseKind(kind) === 'stale_withdrawn'
+              ? `${station.name}: سُحب توفّرك من العرض — مضى يومان بلا تأكيد ولم تعد محطتك تظهر للناس. أكّده من تطبيق المحطة التقنية أو muhta.online/owner`
+              : `${station.name}: وقودك معروض بخبر أقدم من يوم. أكّده بضغطة من تطبيق المحطة التقنية أو muhta.online/owner — وإن نفد فأطفئه`,
+          provider: 'auto',
+        }),
+      });
+      if (!r.ok) return 0;
+      // الختمُ بعد النجاح لا قبله: ختمٌ على رسالةٍ لم تخرج يُسكت التذكيرَ يوماً كاملاً
+      await db.from('stations').update({ last_reminded_at: new Date().toISOString() }).eq('id', station.id);
+      return 1;
+    } catch {
+      return 0;
+    }
+  }
+
   async function tellTelegram(stationId: string, kind: string, title: string, body: string) {
     if (!tgToken) return 0;
     const chats = tgByStation.get(stationId) ?? [];
@@ -562,19 +674,19 @@ ${body}`,
 
   for (const { station, kind } of due) {
     const targets = byStation.get(station.id) ?? [];
-    const { title, body } = MESSAGES[kind](station.name, watchersFor(station.city), station.city);
+    const { title, body } = MESSAGES[baseKind(kind)](station.name, watchersFor(station.city), station.city);
 
     // تيليجرام أولاً، وقبل حارس «لا أجهزة».
     //
     // كان الحارس يقفز فوق المحطة كلّها حين لا جهاز مربوط — وأربع محطات كذلك.
     // فصاحبها لا يصله شيء وإن كان على البوت. والقناتان مستقلّتان: من له
     // الاثنتان يصله من الاثنتين، ومن له واحدة يصله منها.
+    const before = sent;
     sent += await tellTelegram(station.id, kind, title, body);
 
-    // Nothing to send to. Recorded anyway: an owner who installs the app at
-    // noon should not receive this morning's greeting when they arrive.
-    if (!targets.length) { marks.push({ station_id: station.id, kind, day }); continue; }
-
+    // بلا خروجٍ مبكر حين لا جهاز: الحلقةُ على قائمةٍ فارغة لا تفعل شيئاً،
+    // والخروجُ كان يقفز فوق القناة الهاتفية — وهي القناة التي تخصّ من لا جهاز
+    // له بالضبط. والعلامةُ تُختم في آخر الدورة كما كانت.
     for (const t of targets) {
       try {
         if (t.platform === 'ios') {
@@ -638,6 +750,13 @@ ${body}`,
         failed++;
       }
     }
+    // آخرُ العناوين، وبعد سكوت ما قبله. ويُختم في owner_pings بنوعٍ خاصّ
+    // فتصير الكلفةُ معدودةً بصفٍّ لا مقدَّرة.
+    if (sent === before) {
+      const paid = await tellPhone(station, kind);
+      if (paid) { sent += paid; marks.push({ station_id: station.id, kind: 'stale_sms', day }); }
+    }
+
     marks.push({ station_id: station.id, kind, day });
   }
 

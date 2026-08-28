@@ -1,4 +1,4 @@
-import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, expectedLabel, isOffered, isStaleOffer, trafficSource } from '@/lib/products';
+import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, expectedLabel, isListed, isOffered, isStaleOffer, trafficSource } from '@/lib/products';
 import { formatTime, isFresh, isOpenNow, openingLine, PERIOD_LABELS, statusNote } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
@@ -73,11 +73,7 @@ export function StationCard({
   // صريحاً، فلا يُخدع القارئ ولا يُحرَم خبراً قد ينفعه.
   // هل ما يُعرض كلّه خبرٌ فات عمره؟ يُقال مرّةً في عنوان الصفّ لا على كل شارة.
   const isStale = newestIsStale(newest);
-  const shown = PRODUCT_ORDER.filter((product) => {
-    const row = byProduct.get(product);
-    if (!row) return false;
-    return row.is_available || !!row.expected_at;
-  });
+  const shown = PRODUCT_ORDER.filter((product) => isListed(byProduct.get(product)));
 
   return (
     <article className={`card p-3 ${tinted ? 'border-brand-100 bg-brand-50/60' : ''}`}>

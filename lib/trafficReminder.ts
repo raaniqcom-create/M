@@ -9,8 +9,11 @@ import { MANUAL_TRAFFIC_MINUTES } from './products';
 // late — for a reminder whose whole value is landing exactly when the reading
 // goes stale.
 //
-// The general every-30-minutes product reminder is unaffected; it still runs
-// from netlify/functions/owner-reminders.mts.
+// وتذكيرُ المنتجات العامّ في مكانٍ آخر: supabase/functions/owner-daily، على
+// pg_cron كلَّ ربع ساعة. وكان هذا التعليق يحيل إلى netlify/functions —
+// ودالّةٌ لم تُشغَّل قطّ منذ صار الموقع تصديراً ساكناً على GitHub Pages
+// (كلُّ stations.last_reminded_at فارغ). فحُذفت، ومن قرأ التعليقَ قبل حذفها
+// حسِب التذكيرَ مغطّى مرّتين وهو غيرُ مغطّى مرّة.
 const ID = 7301; // fixed: scheduling again replaces rather than stacks
 
 type Plugin = typeof import('@capacitor/local-notifications').LocalNotifications;

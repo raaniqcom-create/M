@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { isOpenNow } from '@/lib/hours';
-import { PRODUCT_LABELS, TRAFFIC_COLORS, TRAFFIC_LABELS } from '@/lib/products';
+import { PRODUCT_LABELS, TRAFFIC_COLORS, TRAFFIC_LABELS, isListed } from '@/lib/products';
 import { distanceKm } from '@/lib/stations';
 import { castVote, quietPosition, VOTE_MESSAGES } from '@/lib/vote';
 import type { FuelProduct, StationWithStatus, TrafficLevel } from '@/types/database';
@@ -113,7 +113,7 @@ export function TripAsk({ stations }: { stations: StationWithStatus[] | null }) 
   // list about the product catalogue rather than about this forecourt.
   const askProducts = ask
     ? ((stations ?? []).find((s) => s.id === ask.id)?.products ?? [])
-        .filter((p) => p.is_available || p.expected_at)
+        .filter(isListed)
         .map((p) => p.product)
     : [];
 

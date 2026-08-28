@@ -65,6 +65,8 @@ export function AdminStats() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [byCity, setByCity] = useState<CityRow[]>([]);
   const [reach, setReach] = useState<{ people: number; allCities: number } | null>(null);
+  /** بأيّ عنوانٍ يصل التذكيرُ كلَّ محطة — من station_reach، وفارغةٌ إن لم تُطبَّق بعد */
+  const [reachOf, setReachOf] = useState<Map<string, { devices: number; telegram: number }>>(new Map());
   const [failed, setFailed] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -87,7 +89,7 @@ export function AdminStats() {
       return last as T;
     };
 
-    const [stats, s] = await Promise.all([
+    const [stats, s, reachRes] = await Promise.all([
       attempt(() => supabase.rpc('admin_stats')),
       attempt(() =>
         supabase
@@ -95,7 +97,23 @@ export function AdminStats() {
           .select('*, station_products(updated_at, is_available, product)')
           .eq('status', 'approved')
       ),
+      // **بأيّ عنوانٍ يصلها التذكير.**
+      //
+      // «١٠ أيام» في عمود التفاعل تُقرأ تقصيراً من صاحب المحطة، والقياس يقول
+      // غير ذلك: ثلاثُ محطاتٍ من ثمانٍ وعشرين لها جهازٌ مربوط وواحدةٌ على
+      // تيليغرام — فأربعٌ وعشرون تُذكَّر يومياً في الفراغ. وعمودٌ لا يقول ذلك
+      // يُحمّل اللومَ من لا يملك أن يسمع.
+      //
+      // و device_tokens لا SELECT عليها لأحد، فالعدّ خلف دالّة. وسقوطُها لا
+      // يُسقط اللوحة: إن لم تُطبَّق الهجرة بعدُ يبقى العمود شرطات.
+      Promise.resolve(supabase.rpc('station_reach')).catch(() => ({ data: null })),
     ]);
+    setReachOf(
+      new Map<string, { devices: number; telegram: number }>(
+        (((reachRes as { data?: { station_id: string; devices: number; telegram: number }[] }).data) ?? [])
+          .map((r) => [r.station_id, { devices: r.devices, telegram: r.telegram }])
+      )
+    );
 
     if (stats.error) {
       // The old message blamed the admin's account for every failure. It is
@@ -263,6 +281,7 @@ export function AdminStats() {
                   <th className="pb-2 text-start font-semibold">المدينة</th>
                   <th className="pb-2 text-center font-semibold">النوع</th>
                   <th className="pb-2 text-center font-semibold">المنتجات</th>
+                  <th className="pb-2 text-center font-semibold">القناة</th>
                   <th className="pb-2 text-start font-semibold">التفاعل</th>
                   <th className="pb-2 text-center font-semibold">تذكير</th>
                 </tr>
@@ -289,6 +308,21 @@ export function AdminStats() {
                           —
                         </span>
                       )}
+                    </td>
+                    <td className="py-2 text-center">
+                      {/* جهاز · تيليغرام · هاتف — والأخيرُ يعني أن التذكير
+                          المجّاني لا يصلها، وأنها تُكلّف رسالةً حين تركد. */}
+                      {(() => {
+                        const r = reachOf.get(s.id);
+                        if (!r) return <span className="text-slate-300">—</span>;
+                        if (r.devices) return <span title="جهاز مربوط" className="font-bold text-brand">جهاز</span>;
+                        if (r.telegram) return <span title="مربوطة ببوت تيليغرام" className="font-bold text-brand-700">تيليغرام</span>;
+                        return (
+                          <span title="لا يصلها إشعارٌ مجّاني — التذكير برسالة مدفوعة" className="font-bold text-amber-700">
+                            هاتف
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-2">
                       <span className="flex items-center gap-1.5">

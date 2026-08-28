@@ -18,13 +18,20 @@ import type { Station, StationProduct } from '@/types/database';
  *
  *  Two tones, because two situations. Red when today has gone unreported: the
  *  people are there and hearing nothing. Green when it has: the same people,
- *  named as a reason to keep going rather than a reason to feel guilty. */
+ *  named as a reason to keep going rather than a reason to feel guilty.
+ *
+ *  **و`muted` لئلّا يحمرَّ لوحان معاً.** فوقها الآن بطاقةُ الركود، وهي تقول
+ *  الأهمَّ وتحمل الفعلَ نفسَه. ولوحان أحمران متجاوران يُقرآن عتاباً مضاعفاً
+ *  على غلطةٍ واحدة، فيسقط أثرُهما معاً. فحين تظهر تلك يبقى هذا على وجهه
+ *  الهادئ: العددُ خبرٌ نافع في الحالين. */
 export function AudienceBanner({
   station,
   products,
+  muted = false,
 }: {
   station: Station;
   products: StationProduct[];
+  muted?: boolean;
 }) {
   const [audience, setAudience] = useState<{ watchers: number; followers: number } | null>(null);
 
@@ -45,7 +52,7 @@ export function AudienceBanner({
   const n = audience.watchers.toLocaleString('en-US');
   const f = audience.followers;
 
-  if (!updatedToday) {
+  if (!updatedToday && !muted) {
     return (
       <section className="rounded-2xl border-2 border-traffic-red bg-red-50 p-4">
         <p className="flex items-center gap-2 text-sm font-extrabold text-traffic-red">
@@ -70,16 +77,18 @@ export function AudienceBanner({
     <section className="rounded-2xl border border-brand-100 bg-brand-50 p-4">
       <p className="flex items-center gap-2 text-sm font-extrabold text-brand-900">
         <CheckIcon className="h-5 w-5 shrink-0 text-brand" />
-        خبرك وصل اليوم إلى {n} شخص
+        {updatedToday ? `خبرك وصل اليوم إلى ${n} شخص` : `${n} شخص ينتظرون خبرك`}
       </p>
       <p className="mt-2 text-xs leading-relaxed text-brand-900/90">
         نؤكّد لك أن <b>{n}</b> مشتركاً في <b>{station.city}</b> على المحطة التقنية
         يهتمّون بما يتوفّر في <b>{station.name}</b>
-        {f > 0 ? <> ، و<b>{f}</b> منهم يتابعونك بعينك</> : null}. حدّثتَ اليوم فوصلهم
-        خبرك.
+        {f > 0 ? <> ، و<b>{f}</b> منهم يتابعونك بعينك</> : null}.{' '}
+        {updatedToday ? 'حدّثتَ اليوم فوصلهم خبرك.' : 'وضغطةُ التأكيد أعلاه تُوصله إليهم.'}
       </p>
       <p className="mt-2 text-xs leading-relaxed text-brand-800">
-        استمرّ على هذا: أنت تكسب زبائنك، ونحن نكسب ثقتهم.
+        {updatedToday
+          ? 'استمرّ على هذا: أنت تكسب زبائنك، ونحن نكسب ثقتهم.'
+          : 'أنت تكسب زبائنك، ونحن نكسب ثقتهم — والأمر ضغطةٌ واحدة.'}
       </p>
     </section>
   );

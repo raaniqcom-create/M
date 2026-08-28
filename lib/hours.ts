@@ -174,6 +174,25 @@ export function isFresh(updatedAt: string | null | undefined): boolean {
   return age >= 0 && age < FRESH_HOURS * 3600_000;
 }
 
+/** ومتى يُسحب الادّعاء لا يُشاخ وحسب.
+ *
+ *  `FRESH_HOURS` تُسقط الأخضر بعد يوم، فيبقى المنتج معروضاً رماديّاً ومعه
+ *  عمرُه — وهو الصواب ليومٍ أو يومين: خبرٌ قديمٌ صريحُ القِدَم أنفعُ من لا شيء.
+ *
+ *  **لكنه بعد يومين لم يعد خبراً.** محطةٌ في اللوحة لم تُلمس منذ عشرة أيام،
+ *  وأربعٌ بين يومين وأسبوع؛ وشريحتُها الرمادية تقول «بانزين · قبل ١٠ أيام»،
+ *  وهي جملةٌ لا تحمل معلومةً يبني عليها مسافرٌ قراراً. فتُسحب.
+ *
+ *  والسحبُ عرضٌ لا حذف: `is_available` باقيةٌ في القاعدة كما تركها صاحبُها،
+ *  و`updated_at` لا تُلمس — فضغطةُ «أكّد التوفّر» تُعيد كلَّ شيء في لحظة.
+ *  ولذلك يُقال لصاحبها إنها سُحبت، وإلا اختفى وهو لا يدري. */
+export const WITHDRAW_HOURS = 48;
+
+export function isWithdrawn(updatedAt: string | null | undefined): boolean {
+  if (!updatedAt) return true;
+  return Date.now() - new Date(updatedAt).getTime() >= WITHDRAW_HOURS * 3600_000;
+}
+
 /** «قبل ٣ ساعات» / «قبل يومين» — the age of the claim, in the driver's words. */
 export function ageLabel(updatedAt: string | null | undefined): string {
   if (!updatedAt) return 'غير معروف';

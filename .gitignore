@@ -31,3 +31,4 @@ docs/promo/*.mp4
 # المصدر الأصلي للشعارين — النسخ المضغوطة في public/anbar-*.webp
 /ANBAR *.png
 /foteranbar.png
+supabase/.temp/

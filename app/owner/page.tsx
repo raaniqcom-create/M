@@ -15,6 +15,7 @@ import {
   TRAFFIC_COLORS,
   TRAFFIC_LABELS,
   expectedLabel,
+  isListed,
 } from '@/lib/products';
 import { ShareButton } from '@/components/ShareButton';
 import { StationLinkCard } from '@/components/StationLinkCard';
@@ -23,6 +24,7 @@ import { AvailabilityPoster } from '@/components/AvailabilityPoster';
 import { ProductControl } from '@/components/ProductControl';
 import { WorkingHours } from '@/components/WorkingHours';
 import { OwnerReminders } from '@/components/OwnerReminders';
+import { FRESH_HOURS, WITHDRAW_HOURS, ageLabel } from '@/lib/hours';
 import { DeleteAccount } from '@/components/DeleteAccount';
 import type { ExpectedPeriod } from '@/lib/hours';
 import { FuelIcon, LogOutIcon, SpinnerIcon } from '@/components/icons';
@@ -151,6 +153,18 @@ export default function OwnerPage() {
   const posterRef = useRef<HTMLDivElement>(null);
   const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
   const [notifyNote, setNotifyNote] = useState<string | null>(null);
+
+  /** أحدثُ ختمٍ على منتجٍ معروضٍ متوفراً — نفسُ مقياس `owner-daily`
+   *  (lastAvailable هناك): محطةٌ تلمس منتجاً غير متوفر يبدو لوحها حديثاً
+   *  بينما البانزين الذي يقصده الناس معروضٌ بخبرٍ عمره ثلاثة أيام. */
+  const lastAvailable = products
+    .filter((p) => p.is_available)
+    .map((p) => p.updated_at)
+    .sort()
+    .at(-1);
+  const staleAge = lastAvailable ? Date.now() - new Date(lastAvailable).getTime() : 0;
+  const staleSince = lastAvailable && staleAge >= FRESH_HOURS * 3600_000 ? lastAvailable : null;
+  const withdrawnNow = staleAge >= WITHDRAW_HOURS * 3600_000;
 
   async function confirmAvailability() {
     if (!station) return;
@@ -332,10 +346,46 @@ export default function OwnerPage() {
       {/* At the very top, above the panel itself: the point of the whole
           platform stated as a number of people, not as a nag. */}
       {station && (
-        <div className="mt-4">
+        <div className="mt-4 space-y-3">
           <OwnerDeviceLink stationId={station.id} />
 
-          <AudienceBanner station={station} products={products} />
+          {/* **التذكيرُ الداخلي — لمن فتح اللوحة ولم يصله شيء.**
+            *
+            *  ثلاثُ محطاتٍ من ثمانٍ وعشرين لها جهازٌ مربوط. فالإشعارُ لا يصل
+            *  أكثرَهم، وحين يفتح صاحبُ المحطة لوحته بنفسه تكون هذه آخرَ فرصة
+            *  لقول ما لم يبلغه: وقودُك معروضٌ بخبرٍ فائت، وهذه ضغطةُ إصلاحه.
+            *
+            *  ويستدعي `confirmAvailability` نفسَها التي في أسفل الصفحة — لا
+            *  نسخةً منها: هي تختم كلَّ الصفوف وتُعلن الجديدَ وحدَه، ونسخةٌ
+            *  ثانية تفترق عنها في أوّل تعديل. */}
+          {staleSince && (
+            <section
+              className={`card p-4 ${withdrawnNow ? 'border-2 border-traffic-red bg-red-50' : 'border-traffic-yellow bg-amber-50'}`}
+            >
+              <h3 className={`text-sm font-extrabold ${withdrawnNow ? 'text-traffic-red' : 'text-amber-900'}`}>
+                {withdrawnNow ? 'سُحب توفّرك من العرض' : 'وقودك معروض بخبر قديم'}
+              </h3>
+              <p className={`mt-1 text-xs leading-relaxed ${withdrawnNow ? 'text-red-900' : 'text-amber-900/80'}`}>
+                آخر تأكيد لمنتجاتك <b>{ageLabel(staleSince)}</b>.{' '}
+                {withdrawnNow ? (
+                  <>
+                    مضى أكثر من {WITHDRAW_HOURS} ساعة بلا تأكيد، فلم يعد وقودُك معروضاً للناس
+                    ولا تظهر محطتك في «المتاح الآن». <b>أكّده ليعود في الحال.</b>
+                  </>
+                ) : (
+                  <>
+                    ما زال معروضاً على صفحتك، لكنه بالرمادي ومعه عمره. أكّده ليعود أخضرَ —
+                    وإن نفد فأطفئه من الأعلى.
+                  </>
+                )}
+              </p>
+              <button type="button" onClick={confirmAvailability} className="btn-primary mt-3 w-full">
+                ✅ أكّد التوفّر الآن
+              </button>
+            </section>
+          )}
+
+          <AudienceBanner station={station} products={products} muted={!!staleSince} />
         </div>
       )}
 
@@ -484,7 +534,7 @@ export default function OwnerPage() {
               *
               *  وإشعارٌ يصله بعد ضغطته بثانية عبثٌ: هو ينظر إلى الشاشة. فالسطر
               *  هنا، ورسالة owner-daily لمن أطفأ وأغلق ومضى. */}
-            {!products.some((p) => p.is_available || p.expected_at) && (
+            {!products.some(isListed) && (
               <section className="card border-traffic-yellow bg-amber-50 p-5">
                 <h3 className="text-sm font-bold text-amber-900">محطتك لا تظهر في القائمة الآن</h3>
                 <p className="mt-1 text-xs leading-relaxed text-amber-900/80">
