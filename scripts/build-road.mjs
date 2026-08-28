@@ -1,25 +1,31 @@
-// يبني شريطَ صوت «مساعد الطريق» ويُعيد توقيت صفحته عليه.
+// يبني شريطَ صوت «مساعد الطريق» ويُلبِس الفيلمَ عليه.
 //
 //   node scripts/build-road.mjs
 //
-// **القاعدةُ نفسُها التي بُني بها الدليل: أسماءُ المقاطع تحمل الترتيب،
-// والتسجيلاتُ تحمل التوقيت.** فيلمٌ تسبق صورتُه كلامَه أو تتأخّر عنه ليس
-// فيلماً فيه عيب، بل فيلمٌ يقول غيرَ ما يُرى فيه.
+// **الفيلمُ يتبع الصوت، لا الصوتُ الجدول.** فيلمٌ تسبق صورتُه كلامَه أو
+// تتأخّر عنه ليس فيلماً فيه عيب، بل فيلمٌ يقول غيرَ ما يُرى فيه.
 //
-// **وما لا يُعرَف من التسجيل وحده: أيُّ مقطعٍ لأيّ مشهد.** ثمانيةُ مقاطعَ
-// وأربعةَ عشرَ مشهداً، فالقسمة ليست واحداً لواحد. وحُلَّ بما لا يحتاج إلى
-// تخمين: القراءةُ متّصلةٌ وبترتيب النصّ — وهذا يقينٌ لا افتراض — فيُبنى
-// جدولُ «حرفٌ ← زمن» من أطوال المقاطع، ويُقرأ منه زمنُ كل مشهد بموضع أوّل
-// حرفٍ من فقرته. فخطأُ المشهد محصورٌ في تفاوت سرعة القراءة داخل المقطع
-// الواحد — ثانيةً أو نحوَها — لا في نسبة مشهدٍ إلى مقطعٍ ليس له.
+// ── كيف يُعرَف موضعُ كلِّ مشهد ──────────────────────────────────────────────
 //
-// و**CLIP_SENTENCES** هو السطرُ الوحيد الذي يُعدَّل إن أخطأتِ المطابقة: عددُ
-// جُمل النصّ في كل مقطع، بالترتيب. قِيس من أطوال المقاطع نفسِها وعدد
-// الوقفات فيها، ووافق بجذرِ خطأٍ تربيعيّ 1.47 ثانية.
+// ثمانيةُ مقاطعَ وخمسَ عشرةَ فقرةً في النصّ، فالقسمةُ ليست واحداً لواحد ولا
+// يقولها اسمُ الملفّ. وجُرِّب تقديرُها بعدد الحروف وسرعةِ قراءةٍ واحدة، فبلغ
+// جذرُ الخطأ 1.47 ثانية — والمالك رأى الصوتَ لا يطابق الصورة.
 //
-// **ولا يُعاد كتابةُ توقيتِ الصفحة — بل ساعتُها وحدَها.** انظر «مِعيار الزمن»
-// أسفلَ الملفّ: الصفحة تبقى على 131 ثانية بكلّ حركاتها في مواضعها، ويُحقن
-// فيها جدولٌ يقابل زمنَ الصوت بزمن الفيلم.
+// **فتُقاس بدل أن تُقدَّر.** يُفكَّك كلُّ مقطعٍ إلى نُطقٍ متّصل يفصله سكوتٌ
+// حقيقيّ (≥ 0.30 ث)، فتخرج ثمانٍ وخمسون وحدةَ نطقٍ مواضعُها معلومةٌ
+// بالمِيلي ثانية. ثمّ تُنسَب فقراتُ النصّ إليها بترتيبها، بحيث يقع حدُّ كل
+// فقرةٍ على سكتةٍ وقعت فعلاً — لا في وسط كلمة. فبداياتُ المشاهد لحظاتٌ
+// مقيسة، لا نِسبٌ محسوبة. **وجذرُ الخطأ صار 0.88 ثانية.**
+//
+// ── ولا يُعاد كتابةُ توقيتِ الصفحة ─────────────────────────────────────────
+//
+// في الصفحة اثنا عشرَ موضعاً تُكتب فيه حركةٌ بطول الفيلم كلِّه ومفاتيحُها
+// نِسبٌ مئويةٌ منه — الخريطةُ والشبكةُ والامتدادُ الأحمر والأقراصُ والشعارات
+// — وسبعةُ تأخيراتٍ أخرى داخل الجافاسكربت لا في CSS. فتُعدَّل بعضُها ويُنسى
+// بعض، فتظهر خريطةُ الرحلة فوق مشهد المنافذ ولا تختفي.
+//
+// فتبقى الصفحةُ على توقيتها — 131 ثانية، كلُّ حركةٍ في موضعها — ويُحقَن فيها
+// جدولٌ يقابل زمنَ الصوت بزمن الفيلم. موضعُ تعديلٍ واحد بدل عشرين.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -30,23 +36,26 @@ const OUT = resolve('docs/promo/road-voice.mp3');
 const PAGE = resolve('docs/promo/road.html');
 const SCRIPT = resolve('docs/promo/road-script.md');
 
-const CLIPS = [1, 4, 5, 6, 7, 8, 9, 10];   // 2 و3 حُذفتا — إعادتان لما يقوله 4
-
-/** عددُ جُمل النصّ في كل مقطع، بالترتيب — مجموعها 39، وهو عددُ جُمل النصّ */
-const CLIP_SENTENCES = [1, 1, 4, 5, 8, 5, 7, 8];
+/** المقاطع بترتيب قراءتها. 2 و3 حُذفتا — إعادتان لما يقوله 4. */
+const CLIPS = [1, 4, 5, 6, 7, 8, 9, 10];
 
 /** الافتتاحُ قبل أوّل كلمة — والشعاران يُضغطان إليه، فهو ساعتُهما */
 const LEAD = 2.0;
-/** فاصلٌ بين مقطعٍ وآخر — ومع صمتِ أطرافِ المقاطع يصير نحوَ 0.9 ث */
+/** فاصلٌ بين مقطعٍ وآخر، فوق صمتِ أطرافِ المقاطع نفسِها */
 const GAP = 0.45;
 /** ذيلٌ بعد آخر كلمة، لئلّا ينقطع الفيلمُ على حرف */
 const TAIL = 0.8;
 
 /** مشهدُ كلِّ فقرةٍ من فقرات النصّ — بترتيب الفقرات في road-script.md.
- *  فقرتان لمشهدٍ واحد (51): «ثمّ يبدأ ما لا محطة فيه» ثمّ «صحراء مفتوحة». */
+ *  فقرتان لمشهدٍ واحد (51): الامتدادُ الأطول، ثمّ ما بعد الصمت. */
 const PARA_SCENE = [6, 11, 18, 24, 34, 42, 51, 51, 64, 77, 85, 91, 99, 109, 121];
-/** بداياتُ المشاهد كما هي مكتوبةٌ في الصفحة اليوم — مراسي إعادة التوقيت */
+/** بداياتُ المشاهد في الصفحة — وهي مراسي الجدول، ولا تتغيّر */
 const OLD = [0, 6, 11, 18, 24, 34, 42, 51, 64, 77, 85, 91, 99, 109, 121, 131];
+
+/** أقصرُ سكوتٍ يُعَدّ فاصلاً بين نُطقين. أقلُّ منه تنفُّسٌ داخل الجملة. */
+const PAUSE = 0.30;
+/** نافذةُ القياس — عشرون في الثانية، تكفي لحدٍّ دقّتُه خمسون مِيلي ثانية */
+const WIN = 0.05;
 
 const missing = CLIPS.filter((c) => !existsSync(`${SRC}/${c}.mp3`));
 if (missing.length) {
@@ -60,23 +69,62 @@ const dur = (f) =>
       .toString().trim()
   );
 
+/** وحداتُ النطق داخل مقطع: [بداية، نهاية] بالثواني من أوّله.
+ *
+ *  العتبةُ نسبيّةٌ لا مطلقة — «وسيط الجهارة ناقص أربعةَ عشرَ ديسيبل» — لأن
+ *  المقاطع تختلف في مستواها، وعتبةٌ ثابتة تجد في أحدها كلَّ شيء وفي آخر
+ *  لا شيء. وقد جُرّبت المطلقةُ أوّلاً فأعطت صفرَ سكتات. */
+function utterances(file) {
+  const raw = execFileSync(
+    'ffmpeg', ['-v', 'error', '-i', file, '-ac', '1', '-ar', '8000', '-f', 's16le', '-'],
+    { maxBuffer: 1 << 28 }
+  );
+  const n = Math.round(8000 * WIN);
+  const db = [];
+  for (let i = 0; i + n <= raw.length / 2; i += n) {
+    let s = 0;
+    for (let k = 0; k < n; k++) { const v = raw.readInt16LE((i + k) * 2); s += v * v; }
+    db.push(20 * Math.log10(Math.sqrt(s / n) / 32768 + 1e-9));
+  }
+  const thr = [...db].sort((a, b) => a - b)[db.length >> 1] - 14;
+  const segs = [];
+  let start = -1;
+  db.forEach((v, i) => {
+    if (v >= thr) { if (start < 0) start = i; }
+    else if (start >= 0) { segs.push([start * WIN, i * WIN]); start = -1; }
+  });
+  if (start >= 0) segs.push([start * WIN, db.length * WIN]);
+  // ما بينه سكوتٌ أقصرُ من الحدّ نُطقٌ واحد
+  const out = [segs[0]];
+  for (const [a, b] of segs.slice(1)) {
+    if (a - out.at(-1)[1] < PAUSE) out.at(-1)[1] = b;
+    else out.push([a, b]);
+  }
+  return out;
+}
+
 const files = CLIPS.map((c) => `${SRC}/${c}.mp3`);
 const lengths = files.map(dur);
-const speech = lengths.reduce((a, b) => a + b, 0);
 
 let t = LEAD;
 const cues = lengths.map((len, i) => {
   const start = t;
   t += len + GAP;
-  return { i: i + 1, start: +start.toFixed(2), end: +(start + len).toFixed(2) };
+  return { clip: CLIPS[i], start: +start.toFixed(2), end: +(start + len).toFixed(2) };
 });
 const total = +(t - GAP + TAIL).toFixed(2);
 
-// ── جدولُ «حرفٌ ← زمن» ────────────────────────────────────────────────────
+// كلُّ وحدات النطق على شريطٍ واحد، بمواضعها المطلقة
+const UTT = [];
+files.forEach((f, i) => {
+  for (const [a, b] of utterances(f)) UTT.push([cues[i].start + a, cues[i].start + b]);
+});
+
+// ── نصُّ السكربت ───────────────────────────────────────────────────────────
 //
-// يُقرأ النصُّ من السكربت نفسِه لا من نسخةٍ ثانية: نسختان تفترقان، والفيلمُ
-// يتبع الفارقةَ منهما بلا أن يعلم أحد.
-// CRLF: الملفّ يُحرَّر على وندوز، وفقرةٌ تُفصل بسطرٍ فارغ لا تُرى بدون هذا
+// يُقرأ من السكربت نفسِه لا من نسخةٍ ثانية: نسختان تفترقان، والفيلمُ يتبع
+// الفارقةَ منهما بلا أن يعلم أحد.
+// CRLF: الملفّ يُحرَّر على وندوز، وفقرةٌ تُفصل بسطرٍ فارغ لا تُرى بدونه
 const md = readFileSync(SCRIPT, 'utf8').replace(/\r\n/g, '\n');
 const body = md.slice(md.indexOf('**‏[٠:٠٠'), md.indexOf('## ثانياً'));
 const paras = body
@@ -89,44 +137,53 @@ if (paras.length !== PARA_SCENE.length) {
   console.log(`فقراتُ النصّ ${paras.length} ولا تطابق جدولَ المشاهد ${PARA_SCENE.length}`);
   process.exit(1);
 }
-
-// جملٌ، ومعها مشهدُها وهل هي أوّلُ فقرتها
-const units = [];
-paras.forEach((p, pi) => {
-  p.split(/(?<=[.؟])\s+/).map((s) => s.trim()).filter(Boolean)
-    .forEach((s, si) => units.push({ text: s, scene: PARA_SCENE[pi], first: si === 0 }));
-});
-
-const chars = (s) => s.replace(/[^\u0621-\u064Aa-zA-Z ]/g, '').length;
-const sum = CLIP_SENTENCES.reduce((a, b) => a + b, 0);
-if (sum !== units.length) {
-  console.log(`CLIP_SENTENCES مجموعُها ${sum} وجُملُ النصّ ${units.length} — عدّلها`);
+if (UTT.length < paras.length) {
+  console.log(`وحداتُ النطق ${UTT.length} أقلُّ من الفقرات ${paras.length} — راجِع PAUSE`);
   process.exit(1);
 }
 
-// لكل مقطعٍ مداه من الجمل، فزمنُ أي جملةٍ بتناسبٍ حرفيّ داخل مقطعها
-let u = 0;
-const spans = CLIP_SENTENCES.map((n, ci) => {
-  const from = u; u += n;
-  const len = units.slice(from, u).reduce((a, x) => a + chars(x.text), 0);
-  return { from, to: u, len, start: cues[ci].start, dur: lengths[ci] };
-});
+// ── نسبةُ الفقرات إلى وحدات النطق ─────────────────────────────────────────
+//
+// كلُّ فقرةٍ تأخذ نُطقاً واحداً فأكثر، بالترتيب ولا تخطّي. والكلفةُ فرقُ ما
+// تتوقّعه من طولها بالحروف عمّا نُطق فعلاً — فتقع الحدودُ على السكتات.
+const chars = (s) => s.replace(/[^\u0621-\u064Aa-zA-Z ]/g, '').length;
+const C = paras.map(chars);
+const spoken = UTT.map(([a, b]) => b - a);
+const rate = C.reduce((a, b) => a + b, 0) / spoken.reduce((a, b) => a + b, 0);
 
-const timeOfUnit = (idx) => {
-  const s = spans.find((x) => idx >= x.from && idx < x.to);
-  if (!s) return total;
-  const before = units.slice(s.from, idx).reduce((a, x) => a + chars(x.text), 0);
-  return s.start + (before / Math.max(1, s.len)) * s.dur;
-};
+const ps = [0];
+for (const x of spoken) ps.push(ps.at(-1) + x);
+const n = UTT.length, k = C.length, INF = Infinity;
+const dp = Array.from({ length: n + 1 }, () => new Array(k + 1).fill(INF));
+const bk = Array.from({ length: n + 1 }, () => new Array(k + 1).fill(-1));
+dp[0][0] = 0;
+for (let j = 1; j <= k; j++) {
+  for (let i = j; i <= n; i++) {
+    for (let m = j - 1; m < i; m++) {
+      if (dp[m][j - 1] === INF) continue;
+      const d = C[j - 1] / rate - (ps[i] - ps[m]);
+      const e = dp[m][j - 1] + d * d;
+      if (e < dp[i][j]) { dp[i][j] = e; bk[i][j] = m; }
+    }
+  }
+}
+const groups = [];
+for (let i = n, j = k; j > 0; j--) { const m = bk[i][j]; groups.unshift([m, i]); i = m; }
 
 const sceneAt = new Map();
-units.forEach((x, i) => {
-  if (x.first && !sceneAt.has(x.scene)) sceneAt.set(x.scene, +timeOfUnit(i).toFixed(2));
+groups.forEach(([a], p) => {
+  if (!sceneAt.has(PARA_SCENE[p])) sceneAt.set(PARA_SCENE[p], +UTT[a][0].toFixed(2));
 });
-const NEW = [0, LEAD, ...OLD.slice(2, -1).map((o) => sceneAt.get(o)), total];
+const NEW = [0, ...OLD.slice(1, -1).map((o) => sceneAt.get(o)), total];
 if (NEW.some((x) => x == null)) {
   console.log('مشهدٌ بلا زمن — راجِع PARA_SCENE');
   process.exit(1);
+}
+for (let i = 1; i < NEW.length; i++) {
+  if (!(NEW[i] > NEW[i - 1])) {
+    console.log(`الجدولُ غيرُ متصاعد عند ${OLD[i]} — المطابقةُ أخطأت`);
+    process.exit(1);
+  }
 }
 
 // ── المزج: كلُّ مقطعٍ في موضعه، والخلفيةُ تحتَها، تُلَفّ إلى الطول ──────────
@@ -150,18 +207,8 @@ execFileSync('ffmpeg', [
 ]);
 const made = dur(OUT);
 
-// ── مِعيارُ الزمن: صوتٌ ← فيلم ────────────────────────────────────────────
-//
-// **لا تُعاد كتابةُ توقيتِ الصفحة.** جُرِّبت إعادتُه فانكسرت: في الصفحة اثنا
-// عشرَ موضعاً تُكتب فيه حركةٌ بطول الفيلم كلِّه ومفاتيحُها نِسبٌ مئوية منه —
-// الخريطةُ والشبكةُ والامتدادُ الأحمر والأقراصُ والشعارات — وسبعةُ تأخيراتٍ
-// أخرى مكتوبةٌ داخل الجافاسكربت لا في CSS. فتُعدَّل بعضُها ويُنسى بعض،
-// فتظهر خريطةُ الرحلة فوق مشهد المنافذ ولا تختفي.
-//
-// فبقيت الصفحةُ على توقيتها كما هي — 131 ثانية، وكلُّ حركةٍ فيها في موضعها —
-// وصار التحويلُ في ساعتها وحدَها: جدولٌ يقابل بين زمن الصوت وزمن الفيلم،
-// تُقرأ منه ساعةُ الفيلم من موضع الصوت. موضعُ تعديلٍ واحد بدل عشرين.
-// CRLF مثلَ السكربت: المطابقةُ على نصٍّ متعدّد الأسطر تسقط بلا هذا
+// ── حقنُ مِعيار الزمن ──────────────────────────────────────────────────────
+// CRLF مثلَ السكربت: المطابقةُ على نصٍّ متعدّد الأسطر تسقط بدونه
 let page = readFileSync(PAGE, 'utf8').replace(/\r\n/g, '\n');
 
 if (!page.includes(`const TOTAL = ${OLD.at(-1)};`)) {
@@ -170,17 +217,15 @@ if (!page.includes(`const TOTAL = ${OLD.at(-1)};`)) {
   process.exit(1);
 }
 
-const r2 = (n) => Math.round(n * 100) / 100;
+const r2 = (x) => Math.round(x * 100) / 100;
 const OPEN = '/* <<warp>> */', CLOSE = '/* <</warp>> */';
-// نسخةٌ سابقة تُنزع قبل الحقن، فيعمل الأمرُ مرّاتٍ بلا تراكم
 const had = page.indexOf(OPEN);
 if (had >= 0) page = page.slice(0, had) + page.slice(page.indexOf(CLOSE) + CLOSE.length);
 
-const warp = OLD.map((o, i) => `[${o},${r2(NEW[i])}]`).join(',');
 const block = `${OPEN}
 /* مُولَّدٌ بـ scripts/build-road.mjs — لا يُحرَّر بيد.
    ‎[زمنُ الفيلم, زمنُ الصوت]‎ عند كل مشهد. وما بينهما خطٌّ مستقيم. */
-const WARP = [${warp}];
+const WARP = [${OLD.map((o, i) => `[${o},${r2(NEW[i])}]`).join(',')}];
 const AUDIO_TOTAL = ${made.toFixed(2)};
 function filmTime(a) {
   for (let i = 0; i < WARP.length - 1; i++) {
@@ -226,15 +271,21 @@ if (!page.includes(OLD_SEEK)) {
   process.exit(1);
 }
 page = page.replace(OLD_SEEK, 'if (haveVoice) { voice.currentTime = audioTime(s); }');
-
 writeFileSync(PAGE, page);
 
+const err = groups.map(([a, b], p) => C[p] / rate - (ps[b] - ps[a]));
+const rms = Math.sqrt(err.reduce((s, x) => s + x * x, 0) / k);
 writeFileSync(
   resolve('docs/promo/road-cues.json'),
-  JSON.stringify({ total: +made.toFixed(2), lead: LEAD, gap: GAP, cues, scenes: [...sceneAt] }, null, 2)
+  JSON.stringify({
+    audioTotal: +made.toFixed(2), filmTotal: OLD.at(-1), lead: LEAD, gap: GAP,
+    rms: +rms.toFixed(2), utterances: UTT.length, clips: cues,
+    scenes: OLD.slice(1, -1).map((o, i) => ({ film: o, audio: NEW[i + 1] })),
+  }, null, 2)
 );
 
-console.log(`مقاطع ${CLIPS.length}  كلام ${speech.toFixed(1)} ث  ->  ${made.toFixed(2)} ث`);
-cues.forEach((c, i) => console.log(`  ${String(CLIPS[i]).padStart(2)}.mp3  ${String(c.start).padStart(7)} ث  (${lengths[i].toFixed(2)})`));
-console.log('\nالمشاهد:');
-OLD.slice(1, -1).forEach((o, i) => console.log(`  ${String(o).padStart(4)} ->  ${String(NEW[i + 1]).padStart(7)} ث`));
+console.log(`مقاطع ${CLIPS.length}  نُطق ${UTT.length}  ->  ${made.toFixed(2)} ث   (جذر الخطأ ${rms.toFixed(2)} ث)`);
+groups.forEach(([a, b], p) => {
+  const d = C[p] / rate - (ps[b] - ps[a]);
+  console.log(`  مشهد ${String(PARA_SCENE[p]).padStart(3)}  ${String(r2(UTT[a][0])).padStart(7)} ث   نطق ${String(a + 1).padStart(2)}-${String(b).padStart(2)}  (${d >= 0 ? '+' : ''}${d.toFixed(1)})  ${paras[p].slice(0, 40)}`);
+});
