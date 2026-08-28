@@ -349,15 +349,43 @@ const made = dur(OUT);
 let page = readFileSync(PAGE, 'utf8').replace(/\r\n/g, '\n');
 
 if (!page.includes(`const TOTAL = ${OLD.at(-1)};`)) {
-  console.log(`الصفحةُ ليست على توقيتها الأصلي (${OLD.at(-1)} ث) — استعِدها:`);
-  console.log('  git checkout -- docs/promo/road.html');
+  console.log(`الصفحةُ ليست على توقيتها الأصلي (${OLD.at(-1)} ث) — راجِع TOTAL فيها`);
   process.exit(1);
 }
 
 const r2 = (x) => Math.round(x * 100) / 100;
 const OPEN = '/* <<warp>> */', CLOSE = '/* <</warp>> */';
+
+/** و‎seek()‎ كذلك: تُعطى بزمن الفيلم، ويُطلَب الصوتُ بزمنه هو. */
+const OLD_SEEK = 'if (haveVoice) { voice.currentTime = s; }';
+const NEW_SEEK = 'if (haveVoice) { voice.currentTime = audioTime(s); }';
+
+/** صورةُ `now()` قبل الحقن. وهي المِرساةُ التي يُعرَف بها موضعُ الحقن،
+ *  والصورةُ التي يُردّ إليها عند النزع. */
+const OLD_NOW = `function now() {
+  if (!started) return 0;
+  if (haveVoice && !voice.paused) return voice.currentTime;
+  if (haveVoice && voice.paused && voice.currentTime) return voice.currentTime;
+  if (paused) return pausedAt;
+  return (performance.now() - t0) / 1000;
+}`;
+
+// **والحقنُ يُعكَس، فيُعاد البناءُ على الصفحة المبنيّة.**
+//
+// كان يُستبدل `now()` ولا تعود، فيلزم قبل كلِّ بناءٍ استعادةُ الصفحة من
+// git — خطوةٌ خارج السكربت تُنسى، ومعها يضيع كلُّ تعديلٍ يدويٍّ على
+// الصفحة. فصار المحقونُ كلُّه بين العلامتين، ويُردّ إلى أصله أوّلاً.
 const had = page.indexOf(OPEN);
-if (had >= 0) page = page.slice(0, had) + page.slice(page.indexOf(CLOSE) + CLOSE.length);
+if (had >= 0) {
+  const end = page.indexOf(CLOSE);
+  if (end < 0) {
+    console.log('علامةُ ‎<</warp>>‎ مفقودة والصفحةُ نصفُ محقونة — استعِدها من git');
+    process.exit(1);
+  }
+  page = page.slice(0, had) + OLD_NOW + page.slice(end + CLOSE.length);
+  // و‎seek()‎ خارجَ العلامتين، فتُردّ وحدَها
+  page = page.replace(NEW_SEEK, OLD_SEEK);
+}
 
 // ── طبقةُ الكلمات: ‎?words=1‎ ─────────────────────────────────────────────
 //
@@ -394,7 +422,6 @@ function audioTime(f) {
   }
   return AUDIO_TOTAL;
 }
-${CLOSE}
 /* طبقةُ الكلمات — بمفتاح W، على نمط V وD وR. وسلسلةُ الاستعلام تسقط في بعض
    نوافذ المعاينة، والمفتاحُ لا يسقط. ولا تظهر في التسجيل ما لم تُطلب. */
 let wordsTag = null;
@@ -428,15 +455,9 @@ function now() {
   if (haveVoice) return filmTime(voice.currentTime) + (voice.ended ? 1 : 0);
   if (paused) return pausedAt;
   return (performance.now() - t0) / 1000;
-}`;
+}
+${CLOSE}`;
 
-const OLD_NOW = `function now() {
-  if (!started) return 0;
-  if (haveVoice && !voice.paused) return voice.currentTime;
-  if (haveVoice && voice.paused && voice.currentTime) return voice.currentTime;
-  if (paused) return pausedAt;
-  return (performance.now() - t0) / 1000;
-}`;
 if (!page.includes(OLD_NOW)) {
   console.log('لم أجد دالّة now() كما هي — راجِع الصفحة');
   process.exit(1);
@@ -444,12 +465,11 @@ if (!page.includes(OLD_NOW)) {
 page = page.replace(OLD_NOW, block);
 
 // القفزُ يُعطى بزمن الفيلم، والصوتُ يُطلَب بزمنه هو
-const OLD_SEEK = 'if (haveVoice) { voice.currentTime = s; }';
 if (!page.includes(OLD_SEEK)) {
   console.log('لم أجد seek() كما هي — راجِع الصفحة');
   process.exit(1);
 }
-page = page.replace(OLD_SEEK, 'if (haveVoice) { voice.currentTime = audioTime(s); }');
+page = page.replace(OLD_SEEK, NEW_SEEK);
 
 writeFileSync(PAGE, page);
 

@@ -984,32 +984,50 @@ ends.style.animation = 'routedim 131s linear both';
 // ويُكتب عند 35٪ من الرسم لا في نهايته: أربعُ ثوانٍ من خطٍّ أحمرَ بلا كلمةٍ
 // عليه لا تُميَّز عن رسمٍ معطَّل.
 {
-  const mid = gapline.getPointAtLength(GLEN / 2);
-  const g = el('g', { id: 'gapmark', transform: `translate(${mid.x.toFixed(1)} ${mid.y.toFixed(1)})` });
-  const label = '228 كم بين محطتين';
-  const w = 104, h = 22;
-  g.appendChild(el('rect', { x: -w / 2, y: -h / 2, width: w, height: h, rx: h / 2,
-    fill: '#fff', stroke: '#dc2626', 'stroke-width': 2 }));
-  const tx = el('text', { y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central',
-    fill: '#7f1d1d', 'font-size': 13, 'font-weight': 800, 'font-family': 'Tajawal, sans-serif' });
-  tx.textContent = label;
-  g.appendChild(tx);
+  // **وعرضُ الصندوق يُقاس من نصّه، ولا يُخمَّن.**
+  //
+  // كان ثابتاً عند مئةٍ وأربعةِ بكسلات، و«228 كم بين محطتين» بـTajawal ثقلِ
+  // 800 أعرضُ منه — فخرج الرقمُ من طرفٍ والنونُ من آخر. ولا يُصلحه رقمٌ
+  // أكبر: عرضُ النصّ العربيّ يتغيّر بالخطّ الذي يُحمَّل، وبالبديل إن تأخّر.
+  //
+  // فيُقاس بعد الإدراج — ‎getComputedTextLength‎ لا تعمل على عنصرٍ خارج
+  // الصفحة — ويُعاد قياسُه حين يجهز الخطّ، إذ ‎display=swap‎ يرسم بالبديل
+  // أوّلاً ثمّ يستبدله.
+  const H = 22, PAD = 26, chips = [];
+  const chip = (pt, label, anim) => {
+    const g = el('g', { transform: `translate(${pt.x.toFixed(1)} ${pt.y.toFixed(1)})` });
+    const r = el('rect', { y: -H / 2, height: H, rx: H / 2,
+      fill: '#fff', stroke: '#dc2626', 'stroke-width': 2 });
+    const tx = el('text', { y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+      fill: '#7f1d1d', 'font-size': 13, 'font-weight': 800, 'font-family': 'Tajawal, sans-serif' });
+    tx.textContent = label;
+    g.append(r, tx);
+    g.style.animation = anim;
+    chips.push([r, tx]);
+    return g;
+  };
+  const fitChips = () => {
+    for (const [r, tx] of chips) {
+      const w = tx.getComputedTextLength() + PAD;
+      r.setAttribute('x', -w / 2);
+      r.setAttribute('width', w);
+    }
+  };
+
   // يغيب مع فجوته في مشهد العودة، فلا يبقى رقمُ الذهاب فوق فراغِ العودة
-  g.style.animation = 'chipfwd 131s linear both';
+  const g = chip(gapline.getPointAtLength(GLEN / 2), '228 كم بين محطتين', 'chipfwd 131s linear both');
+  g.id = 'gapmark';
   $('#gapmark').replaceWith(g);
 
-  // وشارةُ العودة: 231 كم، في أوّل الطريق
-  const b = gapback.getPointAtLength(gapback.getTotalLength() / 2);
-  const g2 = el('g', { transform: `translate(${b.x.toFixed(1)} ${b.y.toFixed(1)})` });
-  g2.appendChild(el('rect', { x: -w / 2, y: -h / 2, width: w, height: h, rx: h / 2,
-    fill: '#fff', stroke: '#dc2626', 'stroke-width': 2 }));
-  const t2 = el('text', { y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central',
-    fill: '#7f1d1d', 'font-size': 13, 'font-weight': 800, 'font-family': 'Tajawal, sans-serif' });
-  t2.textContent = '228 كم بين محطتين';
-  g2.appendChild(t2);
+  // وشارةُ العودة: المسافةُ نفسُها — وهي في أوّلِ الطريق لا في آخره، وذلك
+  // معنى المشهد. (وتعليقٌ قديم هنا قال 231، والسكربتُ يقول 228 كما الشاشة.)
+  const g2 = chip(gapback.getPointAtLength(gapback.getTotalLength() / 2),
+    '228 كم بين محطتين', 'chipback 131s linear both');
   g2.style.opacity = 0;
-  g2.style.animation = 'chipback 131s linear both';
   g.parentNode.appendChild(g2);
+
+  fitChips();
+  document.fonts?.ready.then(fitChips);
 }
 
 // ── البطاقات ─────────────────────────────────────────────────────────────
@@ -1109,7 +1127,6 @@ function audioTime(f) {
   }
   return AUDIO_TOTAL;
 }
-/* <</warp>> */
 /* طبقةُ الكلمات — بمفتاح W، على نمط V وD وR. وسلسلةُ الاستعلام تسقط في بعض
    نوافذ المعاينة، والمفتاحُ لا يسقط. ولا تظهر في التسجيل ما لم تُطلب. */
 let wordsTag = null;
@@ -1144,6 +1161,7 @@ function now() {
   if (paused) return pausedAt;
   return (performance.now() - t0) / 1000;
 }
+/* <</warp>> */
 collect();
 stage.classList.add('ready');
 addEventListener('load', () => { collect(); fit(); });
