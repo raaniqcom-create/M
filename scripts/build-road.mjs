@@ -134,6 +134,20 @@ files.forEach((f, i) => {
   }
 });
 
+// **جدولُ النطق حين يُطلَب: `UTT=1`.** المالك يقول «من الثانية 35 يختلّ»،
+// وهذا الجدولُ وحدَه يقول أيُّ سكتةٍ عندها صالحةٌ لأن تكون حدَّ فقرة.
+if (process.env.UTT) {
+  UTT.forEach(([a, b], i) => {
+    const g = i ? a - UTT[i - 1][1] : 0;
+    const bar = i && UTT_CLIP[i] !== UTT_CLIP[i - 1] ? ' ── مقطعٌ جديد' : '';
+    console.log(
+      `  ${String(i + 1).padStart(2)}  ${a.toFixed(2).padStart(6)}–${b.toFixed(2).padStart(6)}` +
+      `  طولٌ ${(b - a).toFixed(2)}  سكتةٌ قبلَه ${g.toFixed(2)}  [${CLIPS[UTT_CLIP[i]]}.mp3]${bar}`
+    );
+  });
+  console.log('');
+}
+
 // ── نصُّ السكربت ───────────────────────────────────────────────────────────
 //
 // يُقرأ من السكربت نفسِه لا من نسخةٍ ثانية: نسختان تفترقان، والفيلمُ يتبع
@@ -176,100 +190,57 @@ const rate = C.reduce((a, b) => a + b, 0) / spoken.reduce((a, b) => a + b, 0);
 const ps = [0];
 for (const x of spoken) ps.push(ps.at(-1) + x);
 
-// ── المطابقة على مرحلتين، لأن الدليلين مختلفا القوّة ────────────────────
+// ── المطابقة: أين تبدأ كلُّ فقرةٍ على شريط الصوت ────────────────────────
 //
-// **حدُّ المقطع يقين، والسكتةُ داخله ترجيح.** هناك أوقف المعلّقُ التسجيل؛
-// وأما السكتةُ فقد تكون نَفَساً. فيُقسَم العمل: أوّلاً كم فقرةً في كلِّ مقطع،
-// ثمّ أين تقع حدودُها بين سكتاته.
+// **وجُرِّب أن تُلزَم كلُّ فقرةٍ بمقطعٍ واحد، فلم يستقم.** فُحصت القسماتُ
+// الأربعُ والتسعون والمئتان التي تجعل كلَّ مقطعٍ عدداً صحيحاً من الفقرات،
+// فلم تخلُ واحدةٌ منها من مقطعٍ يُنطَق فيه ثمانيةٌ وعشرون حرفاً في الثانية
+// فأكثر — والعربيةُ تُقرأ بين سبعةَ عشرَ وأربعةٍ وعشرين. فالقسمةُ ليست
+// واحداً لواحد: في المقطع الخامس فضلةُ كلامٍ لا يفسّرها نصُّه، وفي السابع
+// نقص. أي أن المعلّق لم يقف عند كلِّ فقرةٍ ليبدأ تسجيلاً جديداً.
 //
-// ولولا هذا لوقع ما وقع: المقطعُ الرابع كلُّه «خدمةٌ جديدة تقدّمها المحطةُ
-// التقنية: مساعدُ الطريق» — خمسُ ثوانٍ ونصف فيها سكتةٌ واحدة. فرأت المطابقةُ
-// النصَّ قصيراً بالحروف، فأعطته نصفَ المقطع ودفعت نصفَه الثاني إلى الفقرة
-// التالية. فسبقت الصورةُ الصوتَ ثانيةً ونصفاً عند المشهد الثاني، ثمّ اتّسع.
+// فحدُّ المقطع ترجيحٌ قويّ لا قيدٌ قاطع: **يُكافَأ** الحدُّ الذي يقع عليه
+// بثانيتين من الخطأ المغفور، ولا يُمنَع الذي يقع دونه. وما سمعه المالكُ
+// بأذنه هو وحدَه القيدُ القاطع.
 
-const NC = CLIPS.length;
-const clipSpeech = Array.from({ length: NC }, (_, c) =>
-  UTT.reduce((t, u, i) => (UTT_CLIP[i] === c ? t + (u[1] - u[0]) : t), 0)
-);
-const clipUtts = Array.from({ length: NC }, (_, c) => UTT_CLIP.filter((x) => x === c).length);
+/** ما سُمع فثُبِّت: ‎فقرة -> وحدةُ النطق التي تبدأ عندها‎.
+ *
+ *  المالك قال: «مساعدُ الطريق» تنتهي عند 9.2، و«تُجيبُ سؤالاً واحداً»
+ *  تُقال 10.0–15.5. فالمقطعُ الرابع كلُّه فقرةٌ واحدة، و«تُجيب» تبدأ
+ *  بأوّل المقطع الخامس، و«لكنّ أغلب» بالنطق الذي يليها.
+ *
+ *  وكلُّ خطأٍ يبقى في الفيلم يُصلَح بسطرٍ يُزاد هنا: رقمُ الفقرة، ورقمُ
+ *  وحدةِ النطق التي تبدأ عندها — يُقرآن من `UTT=1 node scripts/build-road.mjs`. */
+const ANCHOR = new Map([[0, 0], [1, 1], [2, 2], [3, 4], [4, 6]]);
 
-// ── ١ · كم فقرةً في كلِّ مقطع ────────────────────────────────────────────
-//
-// ما سُمع يُثبَّت، وما لم يُسمع يُقدَّر. وأيُّ خطأٍ يبقى يُصلَح برقمٍ واحد هنا.
-//
-//   المقطع 1  فقرتان   «المحطة التقنية» · «صنع في الأنبار»
-//   المقطع 4  فقرة     «خدمةٌ جديدة … مساعدُ الطريق» — تنتهي عند 9.2
-//   المقطع 5  فقرتان   «تُجيب …» 10.0-15.5 ثمّ «لكنّ أغلب …»
-const CLIP_PARAS = [2, 1, 2, null, null, 1, null, null];
+/** كم من الخطأ يُغفَر لحدٍّ يقع على أوّلِ مقطع. بالثانية المربّعة، إذ
+ *  الكلفةُ فرقُ ثوانٍ مربّع — فثانيتان تعني «حدُّ المقطع يستحقّ أن نتحمّل
+ *  في سبيله فرقاً قدرُه ثانيةٌ وأربعون بالمئة». */
+const CLIP_BONUS = 2.0;
+const CLIP_HEAD = new Set(CLIPS.map((_, c) => UTT_CLIP.indexOf(c)));
 
-// **ومعدّلٌ للمجهول وحده.** المقاطعُ المثبَّتة تُفسد المعدّل العامّ: الرابع
-// خمسُ ثوانٍ ونصف لخمسةٍ وأربعين حرفاً — بطيءٌ لأنه عنوان. فلو حُسب المعدّل
-// عليه لقُدِّر باقي الفيلم على وتيرة عنوان. فيُحسَب على ما لم يُثبَّت وحدَه.
-const pinnedPrefix = CLIP_PARAS.findIndex((x) => x == null);
-const freeFrom = pinnedPrefix < 0 ? 0 : CLIP_PARAS.slice(0, pinnedPrefix).reduce((a, b) => a + b, 0);
-const freeChars = C.slice(freeFrom).reduce((a, b) => a + b, 0);
-const freeSpeech = clipSpeech.slice(pinnedPrefix < 0 ? 0 : pinnedPrefix).reduce((a, b) => a + b, 0);
-const rateFree = CLIP_PARAS.slice(0, Math.max(0, pinnedPrefix)).every((x) => x != null) && freeSpeech > 0
-  ? freeChars / freeSpeech
-  : rate;
-
-const pcCost = (c, cnt, from) => {
-  const ch = C.slice(from, from + cnt).reduce((a, b) => a + b, 0);
-  const d = ch / (CLIP_PARAS[c] == null ? rateFree : rate) - clipSpeech[c];
-  return d * d;
-};
-const K = C.length, INFC = Infinity;
-const pd = Array.from({ length: NC + 1 }, () => new Array(K + 1).fill(INFC));
-const pb = Array.from({ length: NC + 1 }, () => new Array(K + 1).fill(-1));
-pd[0][0] = 0;
-for (let c = 1; c <= NC; c++) {
-  for (let used = c; used <= K; used++) {
-    const top = Math.min(clipUtts[c - 1], used - (c - 1));
-    for (let cnt = 1; cnt <= top; cnt++) {
-      const prev = used - cnt;
-      if (pd[c - 1][prev] === INFC) continue;
-      const fixed = CLIP_PARAS[c - 1];
-      if (fixed != null && cnt !== fixed) continue;
-      const e = pd[c - 1][prev] + pcCost(c - 1, cnt, prev);
-      if (e < pd[c][used]) { pd[c][used] = e; pb[c][used] = prev; }
+const K = C.length, M = UTT.length, INFC = Infinity;
+const d = Array.from({ length: M + 1 }, () => new Array(K + 1).fill(INFC));
+const bk = Array.from({ length: M + 1 }, () => new Array(K + 1).fill(-1));
+d[0][0] = 0;
+for (let j = 1; j <= K; j++) {
+  const fix = ANCHOR.get(j - 1);
+  for (let i = j; i <= M; i++) {
+    for (let m = j - 1; m < i; m++) {
+      if (fix != null && m !== fix) continue;
+      if (d[m][j - 1] === INFC) continue;
+      const dd = C[j - 1] / rate - (ps[i] - ps[m]);
+      const e = d[m][j - 1] + dd * dd - (CLIP_HEAD.has(m) ? CLIP_BONUS : 0);
+      if (e < d[i][j]) { d[i][j] = e; bk[i][j] = m; }
     }
   }
 }
-if (pd[NC][K] === INFC) {
-  console.log('تعذّر توزيع الفقرات على المقاطع — راجِع CLIP_PARAS');
+if (d[M][K] === INFC) {
+  console.log('تعذّرت المطابقة — راجِع ANCHOR');
   process.exit(1);
 }
-const perClip = [];
-for (let c = NC, used = K; c > 0; c--) { const prev = pb[c][used]; perClip.unshift(used - prev); used = prev; }
-
-// ── ٢ · وأين حدودُها داخل كلِّ مقطع ──────────────────────────────────────
 const groups = [];
-{
-  let pi = 0, ui = 0;
-  for (let c = 0; c < NC; c++) {
-    const cnt = perClip[c], first = ui, last = ui + clipUtts[c];
-    if (cnt === 1) groups.push([first, last]);
-    else {
-      const m0 = clipUtts[c], k0 = cnt;
-      const d2 = Array.from({ length: m0 + 1 }, () => new Array(k0 + 1).fill(INFC));
-      const b2 = Array.from({ length: m0 + 1 }, () => new Array(k0 + 1).fill(-1));
-      d2[0][0] = 0;
-      for (let j = 1; j <= k0; j++)
-        for (let i = j; i <= m0; i++)
-          for (let m = j - 1; m < i; m++) {
-            if (d2[m][j - 1] === INFC) continue;
-            const dd = C[pi + j - 1] / rate - (ps[first + i] - ps[first + m]);
-            const e = d2[m][j - 1] + dd * dd;
-            if (e < d2[i][j]) { d2[i][j] = e; b2[i][j] = m; }
-          }
-      const cuts = [];
-      for (let i = m0, j = k0; j > 0; j--) { const m = b2[i][j]; cuts.unshift([first + m, first + i]); i = m; }
-      groups.push(...cuts);
-    }
-    pi += cnt;
-    ui = last;
-  }
-}
+for (let i = M, j = K; j > 0; j--) { const m = bk[i][j]; groups.unshift([m, i]); i = m; }
 
 const sceneAt = new Map();
 groups.forEach(([a], p) => {
@@ -298,7 +269,9 @@ const bedChain =
   `afade=t=in:st=0:d=1.5,afade=t=out:st=${(total - 2).toFixed(2)}:d=2[bg]`;
 const filter = `${delays};${mixVoice};${bedChain};[voice][bg]amix=inputs=2:normalize=0:duration=longest[out]`;
 
-execFileSync('ffmpeg', [
+// المزجُ يتعلّق بـ CLIPS و LEAD و GAP وحدها — لا بالمطابقة. فتجريبُ
+// CLIP_PARAS لا يحتاج إعادةَ ترميزِ مئةٍ وخمسين ثانية: `SKIP_MIX=1`.
+if (!(process.env.SKIP_MIX && existsSync(OUT))) execFileSync('ffmpeg', [
   '-y', '-loglevel', 'error',
   ...inputs, '-i', BED,
   '-filter_complex', filter,
@@ -433,13 +406,20 @@ console.log(`مقاطع ${CLIPS.length}  نُطق ${UTT.length}  ->  ${made.toFi
 // لما ثُبِّت سماعاً، وفراغٌ لما قدّره الحساب. وخطأُ ثانيتين في مشهدٍ يُرَدّ
 // إلى رقمٍ في هذا السطر، لا إلى المطابقة كلِّها.
 console.log('');
-console.log('الفقراتُ في كلِّ مقطع:');
-perClip.forEach((n, c) => {
-  const pinned = CLIP_PARAS[c] != null ? ' ✓ سماعاً' : '';
-  console.log(`  ${String(CLIPS[c]).padStart(2)}.mp3  ${cues[c].start.toFixed(2)}–${cues[c].end.toFixed(2)} ث  ·  ${clipUtts[c]} نطقاً  ->  ${n} فقرة${pinned}`);
+console.log('المقاطعُ وحدودُ الفقرات فيها:');
+CLIPS.forEach((name, c) => {
+  const utts = UTT_CLIP.filter((x) => x === c).length;
+  const heads = groups.filter(([a]) => UTT_CLIP[a] === c).length;
+  const onHead = groups.some(([a]) => a === UTT_CLIP.indexOf(c));
+  console.log(
+    `  ${String(name).padStart(2)}.mp3  ${cues[c].start.toFixed(2)}–${cues[c].end.toFixed(2)} ث` +
+    `  ·  ${utts} نطقاً  ·  ${heads} بدايةَ فقرة` +
+    `  ·  ${onHead ? 'يبدأ بفقرةٍ جديدة' : 'يُكمل فقرةً بدأت قبله'}`
+  );
 });
 console.log('');
 groups.forEach(([a, b], p) => {
   const d = C[p] / rate - (ps[b] - ps[a]);
-  console.log(`  مشهد ${String(PARA_SCENE[p]).padStart(3)}  ${String(r2(UTT[a][0])).padStart(7)} ث   نطق ${String(a + 1).padStart(2)}-${String(b).padStart(2)}  (${d >= 0 ? '+' : ''}${d.toFixed(1)})  ${paras[p].slice(0, 40)}`);
+  const mark = ANCHOR.has(p) ? '✓' : CLIP_HEAD.has(a) ? '·' : ' ';
+  console.log(`  ${mark} مشهد ${String(PARA_SCENE[p]).padStart(3)}  ${String(r2(UTT[a][0])).padStart(7)} ث   نطق ${String(a + 1).padStart(2)}-${String(b).padStart(2)}  (${d >= 0 ? '+' : ''}${d.toFixed(1)})  ${paras[p].slice(0, 38)}`);
 });
