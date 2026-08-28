@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
     // يُنفَّذ من سطر الأوامر، لا من لوحةٍ يفتحها أحد كلَّ يوم.
     const internal = req.headers.get('x-cron-secret') === Deno.env.get('CRON_SECRET');
     if (!internal && !(await isAdmin(req))) return json({ error: 'غير مصرّح' }, 403);
-    const { action, message, city, senderId } = await req.json();
+    const { action, message, city, senderId, test } = await req.json();
 
     const { data: subs } = await audience(city);
     const list = subs ?? [];
@@ -79,6 +79,26 @@ Deno.serve(async (req) => {
         headers: { Authorization: `Bearer ${OTPIQ_KEY}` },
       });
       const current = await list_.text();
+
+      // رسالةُ إثباتٍ واحدة إلى رقمٍ يُسمّى — لا إلى قائمة. تُثبت أن الاسم
+      // مقبولٌ عند المزوّد فعلاً، لا أنه مكتوبٌ في سرٍّ عندنا.
+      const to = String(test ?? '').replace(/\D/g, '').replace(/^964/, '').replace(/^0/, '');
+      if (to) {
+        if (!/^7\d{9}$/.test(to)) return json({ error: 'رقم غير صحيح' }, 400);
+        if (!OTPIQ_SENDER) return json({ error: 'OTPIQ_SENDER_ID غير مضبوط' }, 400);
+        const r = await fetch('https://api.otpiq.com/api/sms', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${OTPIQ_KEY}`, 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({
+            smsType: 'custom',
+            senderId: OTPIQ_SENDER,
+            phoneNumber: `964${to}`,
+            customMessage: 'المحطة التقنية: رسالة إثبات — قناة الرسائل تعمل الآن.',
+            provider: 'auto',
+          }),
+        });
+        return json({ ok: r.ok, status: r.status, sender: OTPIQ_SENDER, said: safeJson(await r.text()) });
+      }
 
       const name = String((await Promise.resolve(senderId)) ?? '').trim();
       if (!name) return json({ ok: true, current: safeJson(current), configured: OTPIQ_SENDER ?? null });
