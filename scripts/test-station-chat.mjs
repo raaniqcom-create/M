@@ -44,4 +44,23 @@ assert.equal(readableBy('admin', 'owner'), true);
 assert.equal(readableBy('admin', 'admin'), false, 'ولا الإدارةُ رسالتَها هي');
 assert.equal(readableBy('admin', 'system'), false, 'والآليّ ليس موجَّهاً إلى الإدارة');
 
-console.log('✓ محادثة المحطة: 12 فحصاً');
+// ── أيُّ تذكيرٍ يستحقّ صفّاً باقياً ──────────────────────────────────────
+//
+// القرارُ الذي أغرق المجرى: كُتب للجميع، فصار خمسةَ عشرَ «شكراً لالتزامك»
+// من ستّةٍ وعشرين صفّاً، وغرقت تحتها ثلاثُ رسائلَ بشرية ورسالةُ اعتماد.
+const THREAD_KINDS = new Set(['stale_stock', 'stale_withdrawn', 'no_stock']);
+
+for (const k of ['stale_stock', 'stale_withdrawn', 'no_stock'])
+  assert.equal(THREAD_KINDS.has(k), true, `${k} يبقى: يصف حالاً يجب إصلاحه`);
+for (const k of ['closing_thanks', 'opening_first', 'opening_again', 'stock_check', 'traffic_confirm'])
+  assert.equal(THREAD_KINDS.has(k), false, `${k} لا يبقى: مجاملةٌ أو سؤالٌ عن هذه اللحظة`);
+
+// ولا يُقال ما قيل ولم يتغيّر
+const wouldWrite = (base, lastKindForStation) =>
+  THREAD_KINDS.has(base) && lastKindForStation !== base;
+assert.equal(wouldWrite('stale_stock', null), true, 'أوّلُ مرّة يُكتب');
+assert.equal(wouldWrite('stale_stock', 'stale_stock'), false, 'وتكرارُه لا يُكتب');
+assert.equal(wouldWrite('stale_withdrawn', 'stale_stock'), true, 'وتغيّرُ الحال يُكتب');
+assert.equal(wouldWrite('stale_stock', null), true, 'ورسالةٌ بشرية بينهما تُعيد الكتابة');
+
+console.log('✓ محادثة المحطة: 21 فحصاً');

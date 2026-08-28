@@ -40,6 +40,21 @@ const WINDOW_MIN = 20;
  *  هجرةٍ على الجدول، تُحمَل الخانةُ في اسم النوع: `stale_stock#1`. والخانةُ
  *  لا تتقدّم إلا كلَّ ثلاث ساعات، فالفاصلُ والحدُّ كلاهما من الحساب نفسه، لا
  *  من شرطٍ ثانٍ يُنسى. */
+/** أيُّ التذكيرات يستحقّ صفّاً باقياً في المجرى.
+ *
+ *  **الصفُّ لِما يبقى صحيحاً حين يُقرأ غداً.** جُرّبت الكتابةُ للجميع، فبعد
+ *  مساءٍ واحد صار المجرى ستّاً وعشرين رسالة، خمسَ عشرةَ منها «شكراً لالتزامك»
+ *  — فغرقت فيها ثلاثُ رسائلَ كتبتها الإدارةُ بيدها، ورسالةُ اعتمادِ محطةٍ
+ *  جديدة. ومجرًى لا يُرى فيه كلامُ الناس ليس محادثة.
+ *
+ *  فالباقيةُ تصف حالاً يجب إصلاحه، وتبقى صادقةً ما لم يُصلَح: ركودٌ، وسحبٌ،
+ *  ومحطةٌ لا تظهر، واعتمادٌ. والذاهبةُ مجاملةٌ أو سؤالٌ عن هذه اللحظة —
+ *  «صباح الخير»، «شكراً»، «هل ما زال متوفراً؟»، «كيف الازدحام الآن؟» —
+ *  وقراءتُها غداً ضوضاء.
+ *
+ *  ولا يتغيّر شيءٌ في الإيصال: كلُّها تُدفَع كما كانت. */
+const THREAD_KINDS = new Set(['stale_stock', 'stale_withdrawn', 'no_stock']);
+
 const SLOT_MIN = 180;
 const MAX_SLOTS = 3;
 const slotOf = (minutes: number, open: number) =>
@@ -575,6 +590,24 @@ Deno.serve(async (req) => {
 
   if (!due.length) return new Response(`nothing due at ${minutes} (${day})`);
 
+  // **ولا يُقال ما قيل ولم يتغيّر.**
+  //
+  // محطةٌ راكدةٌ أسبوعاً تُذكَّر كلَّ يوم، فتكتب سبعةَ صفوفٍ متطابقة. والحالُ
+  // واحدة، والصفُّ الأوّل يقولها. فإن كان آخرُ ما في المجرى تذكيراً من نوعه
+  // نفسِه، يُدفع الإشعارُ ولا يُكتب صفٌّ ثانٍ.
+  const { data: lastMsgs } = await db
+    .from('station_messages')
+    .select('station_id, sender, kind, created_at')
+    .in('station_id', due.map((d) => d.station.id))
+    .order('created_at', { ascending: false })
+    .limit(300);
+  const lastKind = new Map<string, string | null>();
+  for (const m of lastMsgs ?? []) {
+    if (!lastKind.has(m.station_id)) {
+      lastKind.set(m.station_id, m.sender === 'system' ? m.kind : null);
+    }
+  }
+
   const { data: devices } = await db
     .from('device_tokens')
     .select('token, platform, station_id, keys')
@@ -858,7 +891,11 @@ ${body}`,
       // وهذا هو المقصود بالضبط للستّ محطاتٍ التي لا جهازَ لها ولا تيليغرام:
       // التذكيرُ موجودٌ في لوحتها حين تُفتح، وإن لم يرنّ هاتف. ورسالةُ
       // المحادثة لا تُدرَج هنا لأنها مكتوبةٌ في المجرى قبل النداء أصلاً.
-      thread.push({ station_id: station.id, sender: 'system', kind: baseKind(kind), body });
+      const base = baseKind(kind);
+      if (THREAD_KINDS.has(base) && lastKind.get(station.id) !== base) {
+        thread.push({ station_id: station.id, sender: 'system', kind: base, body });
+        lastKind.set(station.id, base);
+      }
     }
   }
 
