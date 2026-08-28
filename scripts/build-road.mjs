@@ -125,8 +125,13 @@ const total = +(t - GAP + TAIL).toFixed(2);
 
 // كلُّ وحدات النطق على شريطٍ واحد، بمواضعها المطلقة
 const UTT = [];
+/** مقطعُ كلِّ وحدة نطق — والقيدُ الأقوى في المطابقة كلِّها */
+const UTT_CLIP = [];
 files.forEach((f, i) => {
-  for (const [a, b] of utterances(f)) UTT.push([cues[i].start + a, cues[i].start + b]);
+  for (const [a, b] of utterances(f)) {
+    UTT.push([cues[i].start + a, cues[i].start + b]);
+    UTT_CLIP.push(i);
+  }
 });
 
 // ── نصُّ السكربت ───────────────────────────────────────────────────────────
@@ -155,29 +160,116 @@ if (UTT.length < paras.length) {
 //
 // كلُّ فقرةٍ تأخذ نُطقاً واحداً فأكثر، بالترتيب ولا تخطّي. والكلفةُ فرقُ ما
 // تتوقّعه من طولها بالحروف عمّا نُطق فعلاً — فتقع الحدودُ على السكتات.
+//
+// **ولا تعبر فقرةٌ حدَّ مقطع.** وهذا هو القيدُ الذي نقص، وكشفه المالك بأذنه:
+// المقطعُ الرابع كلُّه «خدمةٌ جديدة تقدّمها المحطةُ التقنية: مساعدُ الطريق»،
+// خمسُ ثوانٍ ونصف فيها سكتةٌ واحدة. والمطابقةُ رأت النصَّ قصيراً بالحروف
+// فأعطته نصفَ المقطع ودفعت نصفَه الثاني إلى الفقرة التالية — فسبقت الصورةُ
+// الصوتَ ثانيةً ونصفاً، ثمّ اتّسع الفارق.
+//
+// وحدُّ المقطع أقوى دليلٍ في الملفّ كلِّه: هناك أوقف المعلّقُ التسجيل. أما
+// السكتةُ داخله فقد تكون نَفَساً. فالسكتاتُ تُرشَّح، وحدودُ المقاطع تُلزِم.
 const chars = (s) => s.replace(/[^\u0621-\u064Aa-zA-Z ]/g, '').length;
 const C = paras.map(chars);
 const spoken = UTT.map(([a, b]) => b - a);
 const rate = C.reduce((a, b) => a + b, 0) / spoken.reduce((a, b) => a + b, 0);
-
 const ps = [0];
 for (const x of spoken) ps.push(ps.at(-1) + x);
-const n = UTT.length, k = C.length, INF = Infinity;
-const dp = Array.from({ length: n + 1 }, () => new Array(k + 1).fill(INF));
-const bk = Array.from({ length: n + 1 }, () => new Array(k + 1).fill(-1));
-dp[0][0] = 0;
-for (let j = 1; j <= k; j++) {
-  for (let i = j; i <= n; i++) {
-    for (let m = j - 1; m < i; m++) {
-      if (dp[m][j - 1] === INF) continue;
-      const d = C[j - 1] / rate - (ps[i] - ps[m]);
-      const e = dp[m][j - 1] + d * d;
-      if (e < dp[i][j]) { dp[i][j] = e; bk[i][j] = m; }
+
+// ── المطابقة على مرحلتين، لأن الدليلين مختلفا القوّة ────────────────────
+//
+// **حدُّ المقطع يقين، والسكتةُ داخله ترجيح.** هناك أوقف المعلّقُ التسجيل؛
+// وأما السكتةُ فقد تكون نَفَساً. فيُقسَم العمل: أوّلاً كم فقرةً في كلِّ مقطع،
+// ثمّ أين تقع حدودُها بين سكتاته.
+//
+// ولولا هذا لوقع ما وقع: المقطعُ الرابع كلُّه «خدمةٌ جديدة تقدّمها المحطةُ
+// التقنية: مساعدُ الطريق» — خمسُ ثوانٍ ونصف فيها سكتةٌ واحدة. فرأت المطابقةُ
+// النصَّ قصيراً بالحروف، فأعطته نصفَ المقطع ودفعت نصفَه الثاني إلى الفقرة
+// التالية. فسبقت الصورةُ الصوتَ ثانيةً ونصفاً عند المشهد الثاني، ثمّ اتّسع.
+
+const NC = CLIPS.length;
+const clipSpeech = Array.from({ length: NC }, (_, c) =>
+  UTT.reduce((t, u, i) => (UTT_CLIP[i] === c ? t + (u[1] - u[0]) : t), 0)
+);
+const clipUtts = Array.from({ length: NC }, (_, c) => UTT_CLIP.filter((x) => x === c).length);
+
+// ── ١ · كم فقرةً في كلِّ مقطع ────────────────────────────────────────────
+//
+// ما سُمع يُثبَّت، وما لم يُسمع يُقدَّر. وأيُّ خطأٍ يبقى يُصلَح برقمٍ واحد هنا.
+//
+//   المقطع 1  فقرتان   «المحطة التقنية» · «صنع في الأنبار»
+//   المقطع 4  فقرة     «خدمةٌ جديدة … مساعدُ الطريق» — تنتهي عند 9.2
+//   المقطع 5  فقرتان   «تُجيب …» 10.0-15.5 ثمّ «لكنّ أغلب …»
+const CLIP_PARAS = [2, 1, 2, null, null, 1, null, null];
+
+// **ومعدّلٌ للمجهول وحده.** المقاطعُ المثبَّتة تُفسد المعدّل العامّ: الرابع
+// خمسُ ثوانٍ ونصف لخمسةٍ وأربعين حرفاً — بطيءٌ لأنه عنوان. فلو حُسب المعدّل
+// عليه لقُدِّر باقي الفيلم على وتيرة عنوان. فيُحسَب على ما لم يُثبَّت وحدَه.
+const pinnedPrefix = CLIP_PARAS.findIndex((x) => x == null);
+const freeFrom = pinnedPrefix < 0 ? 0 : CLIP_PARAS.slice(0, pinnedPrefix).reduce((a, b) => a + b, 0);
+const freeChars = C.slice(freeFrom).reduce((a, b) => a + b, 0);
+const freeSpeech = clipSpeech.slice(pinnedPrefix < 0 ? 0 : pinnedPrefix).reduce((a, b) => a + b, 0);
+const rateFree = CLIP_PARAS.slice(0, Math.max(0, pinnedPrefix)).every((x) => x != null) && freeSpeech > 0
+  ? freeChars / freeSpeech
+  : rate;
+
+const pcCost = (c, cnt, from) => {
+  const ch = C.slice(from, from + cnt).reduce((a, b) => a + b, 0);
+  const d = ch / (CLIP_PARAS[c] == null ? rateFree : rate) - clipSpeech[c];
+  return d * d;
+};
+const K = C.length, INFC = Infinity;
+const pd = Array.from({ length: NC + 1 }, () => new Array(K + 1).fill(INFC));
+const pb = Array.from({ length: NC + 1 }, () => new Array(K + 1).fill(-1));
+pd[0][0] = 0;
+for (let c = 1; c <= NC; c++) {
+  for (let used = c; used <= K; used++) {
+    const top = Math.min(clipUtts[c - 1], used - (c - 1));
+    for (let cnt = 1; cnt <= top; cnt++) {
+      const prev = used - cnt;
+      if (pd[c - 1][prev] === INFC) continue;
+      const fixed = CLIP_PARAS[c - 1];
+      if (fixed != null && cnt !== fixed) continue;
+      const e = pd[c - 1][prev] + pcCost(c - 1, cnt, prev);
+      if (e < pd[c][used]) { pd[c][used] = e; pb[c][used] = prev; }
     }
   }
 }
+if (pd[NC][K] === INFC) {
+  console.log('تعذّر توزيع الفقرات على المقاطع — راجِع CLIP_PARAS');
+  process.exit(1);
+}
+const perClip = [];
+for (let c = NC, used = K; c > 0; c--) { const prev = pb[c][used]; perClip.unshift(used - prev); used = prev; }
+
+// ── ٢ · وأين حدودُها داخل كلِّ مقطع ──────────────────────────────────────
 const groups = [];
-for (let i = n, j = k; j > 0; j--) { const m = bk[i][j]; groups.unshift([m, i]); i = m; }
+{
+  let pi = 0, ui = 0;
+  for (let c = 0; c < NC; c++) {
+    const cnt = perClip[c], first = ui, last = ui + clipUtts[c];
+    if (cnt === 1) groups.push([first, last]);
+    else {
+      const m0 = clipUtts[c], k0 = cnt;
+      const d2 = Array.from({ length: m0 + 1 }, () => new Array(k0 + 1).fill(INFC));
+      const b2 = Array.from({ length: m0 + 1 }, () => new Array(k0 + 1).fill(-1));
+      d2[0][0] = 0;
+      for (let j = 1; j <= k0; j++)
+        for (let i = j; i <= m0; i++)
+          for (let m = j - 1; m < i; m++) {
+            if (d2[m][j - 1] === INFC) continue;
+            const dd = C[pi + j - 1] / rate - (ps[first + i] - ps[first + m]);
+            const e = d2[m][j - 1] + dd * dd;
+            if (e < d2[i][j]) { d2[i][j] = e; b2[i][j] = m; }
+          }
+      const cuts = [];
+      for (let i = m0, j = k0; j > 0; j--) { const m = b2[i][j]; cuts.unshift([first + m, first + i]); i = m; }
+      groups.push(...cuts);
+    }
+    pi += cnt;
+    ui = last;
+  }
+}
 
 const sceneAt = new Map();
 groups.forEach(([a], p) => {
@@ -326,7 +418,7 @@ page = page.replace(OLD_SEEK, 'if (haveVoice) { voice.currentTime = audioTime(s)
 writeFileSync(PAGE, page);
 
 const err = groups.map(([a, b], p) => C[p] / rate - (ps[b] - ps[a]));
-const rms = Math.sqrt(err.reduce((s, x) => s + x * x, 0) / k);
+const rms = Math.sqrt(err.reduce((s, x) => s + x * x, 0) / K);
 writeFileSync(
   resolve('docs/promo/road-cues.json'),
   JSON.stringify({
@@ -337,6 +429,16 @@ writeFileSync(
 );
 
 console.log(`مقاطع ${CLIPS.length}  نُطق ${UTT.length}  ->  ${made.toFixed(2)} ث   (جذر الخطأ ${rms.toFixed(2)} ث)`);
+// **توزيعُ الفقرات على المقاطع — وهو ما يُصحَّح بالأذن.** يُطبع ليُقرأ: نجمةٌ
+// لما ثُبِّت سماعاً، وفراغٌ لما قدّره الحساب. وخطأُ ثانيتين في مشهدٍ يُرَدّ
+// إلى رقمٍ في هذا السطر، لا إلى المطابقة كلِّها.
+console.log('');
+console.log('الفقراتُ في كلِّ مقطع:');
+perClip.forEach((n, c) => {
+  const pinned = CLIP_PARAS[c] != null ? ' ✓ سماعاً' : '';
+  console.log(`  ${String(CLIPS[c]).padStart(2)}.mp3  ${cues[c].start.toFixed(2)}–${cues[c].end.toFixed(2)} ث  ·  ${clipUtts[c]} نطقاً  ->  ${n} فقرة${pinned}`);
+});
+console.log('');
 groups.forEach(([a, b], p) => {
   const d = C[p] / rate - (ps[b] - ps[a]);
   console.log(`  مشهد ${String(PARA_SCENE[p]).padStart(3)}  ${String(r2(UTT[a][0])).padStart(7)} ث   نطق ${String(a + 1).padStart(2)}-${String(b).padStart(2)}  (${d >= 0 ? '+' : ''}${d.toFixed(1)})  ${paras[p].slice(0, 40)}`);
