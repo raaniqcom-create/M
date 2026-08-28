@@ -6,7 +6,7 @@
 // والتسجيلاتُ تحمل التوقيت.** فيلمٌ تسبق صورتُه كلامَه أو تتأخّر عنه ليس
 // فيلماً فيه عيب، بل فيلمٌ يقول غيرَ ما يُرى فيه.
 //
-// **وما لا يُعرَف من التسجيل وحده: أيُّ مقطعٍ لأيّ مشهد.** عشرةُ مقاطع
+// **وما لا يُعرَف من التسجيل وحده: أيُّ مقطعٍ لأيّ مشهد.** ثمانيةُ مقاطعَ
 // وأربعةَ عشرَ مشهداً، فالقسمة ليست واحداً لواحد. وحُلَّ بما لا يحتاج إلى
 // تخمين: القراءةُ متّصلةٌ وبترتيب النصّ — وهذا يقينٌ لا افتراض — فيُبنى
 // جدولُ «حرفٌ ← زمن» من أطوال المقاطع، ويُقرأ منه زمنُ كل مشهد بموضع أوّل
@@ -15,7 +15,11 @@
 //
 // و**CLIP_SENTENCES** هو السطرُ الوحيد الذي يُعدَّل إن أخطأتِ المطابقة: عددُ
 // جُمل النصّ في كل مقطع، بالترتيب. قِيس من أطوال المقاطع نفسِها وعدد
-// الوقفات فيها، ووافق بجذرِ خطأٍ تربيعيّ 1.39 ثانية.
+// الوقفات فيها، ووافق بجذرِ خطأٍ تربيعيّ 1.47 ثانية.
+//
+// **ولا يُعاد كتابةُ توقيتِ الصفحة — بل ساعتُها وحدَها.** انظر «مِعيار الزمن»
+// أسفلَ الملفّ: الصفحة تبقى على 131 ثانية بكلّ حركاتها في مواضعها، ويُحقن
+// فيها جدولٌ يقابل زمنَ الصوت بزمن الفيلم.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -26,13 +30,13 @@ const OUT = resolve('docs/promo/road-voice.mp3');
 const PAGE = resolve('docs/promo/road.html');
 const SCRIPT = resolve('docs/promo/road-script.md');
 
-const CLIPS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const CLIPS = [1, 4, 5, 6, 7, 8, 9, 10];   // 2 و3 حُذفتا — إعادتان لما يقوله 4
 
 /** عددُ جُمل النصّ في كل مقطع، بالترتيب — مجموعها 39، وهو عددُ جُمل النصّ */
-const CLIP_SENTENCES = [1, 1, 1, 1, 3, 4, 8, 5, 7, 8];
+const CLIP_SENTENCES = [1, 1, 4, 5, 8, 5, 7, 8];
 
-/** الافتتاحُ صامتٌ بنصِّ السكربت: الشعاران وحدَهما قبل أن يبدأ الكلام */
-const LEAD = 6.0;
+/** الافتتاحُ قبل أوّل كلمة — والشعاران يُضغطان إليه، فهو ساعتُهما */
+const LEAD = 2.0;
 /** فاصلٌ بين مقطعٍ وآخر — ومع صمتِ أطرافِ المقاطع يصير نحوَ 0.9 ث */
 const GAP = 0.45;
 /** ذيلٌ بعد آخر كلمة، لئلّا ينقطع الفيلمُ على حرف */
@@ -146,42 +150,83 @@ execFileSync('ffmpeg', [
 ]);
 const made = dur(OUT);
 
-// ── إعادةُ توقيت الصفحة ───────────────────────────────────────────────────
-let page = readFileSync(PAGE, 'utf8');
-const r2 = (n) => Math.round(n * 100) / 100;
-/** المشهدُ يبقى قائماً بعد أن يسكت المعلّق قليلاً، فلا يُقطع على الكلمة */
-const HOLD = 0.94;
-const at = (x) => {
-  for (let i = 0; i < OLD.length - 1; i++) {
-    if (x >= OLD[i] && x <= OLD[i + 1]) {
-      const f = (x - OLD[i]) / (OLD[i + 1] - OLD[i]);
-      return NEW[i] + f * (NEW[i + 1] - NEW[i]);
-    }
-  }
-  return NEW.at(-1);
-};
-const span = (i) => (i === NEW.length - 2 ? r2(NEW.at(-1) - NEW[i]) : r2((NEW[i + 1] - NEW[i]) / HOLD));
+// ── مِعيارُ الزمن: صوتٌ ← فيلم ────────────────────────────────────────────
+//
+// **لا تُعاد كتابةُ توقيتِ الصفحة.** جُرِّبت إعادتُه فانكسرت: في الصفحة اثنا
+// عشرَ موضعاً تُكتب فيه حركةٌ بطول الفيلم كلِّه ومفاتيحُها نِسبٌ مئوية منه —
+// الخريطةُ والشبكةُ والامتدادُ الأحمر والأقراصُ والشعارات — وسبعةُ تأخيراتٍ
+// أخرى مكتوبةٌ داخل الجافاسكربت لا في CSS. فتُعدَّل بعضُها ويُنسى بعض،
+// فتظهر خريطةُ الرحلة فوق مشهد المنافذ ولا تختفي.
+//
+// فبقيت الصفحةُ على توقيتها كما هي — 131 ثانية، وكلُّ حركةٍ فيها في موضعها —
+// وصار التحويلُ في ساعتها وحدَها: جدولٌ يقابل بين زمن الصوت وزمن الفيلم،
+// تُقرأ منه ساعةُ الفيلم من موضع الصوت. موضعُ تعديلٍ واحد بدل عشرين.
+// CRLF مثلَ السكربت: المطابقةُ على نصٍّ متعدّد الأسطر تسقط بلا هذا
+let page = readFileSync(PAGE, 'utf8').replace(/\r\n/g, '\n');
 
-// مددُ المشاهد أوّلاً — أربعةَ عشرَ إعلاناً بترتيبها في الصفحة
-let idx = 0;
-page = page.replace(/animation:scene [\d.]+s both;animation-delay:[\d.]+s/g, () => {
-  const i = ++idx;
-  return `animation:scene ${span(i)}s both;animation-delay:\u0000${r2(NEW[i])}s`;
-});
-if (idx !== NEW.length - 2) {
-  console.log(`مشاهدُ الصفحة ${idx} ولا تطابق ${NEW.length - 2}`);
+if (!page.includes(`const TOTAL = ${OLD.at(-1)};`)) {
+  console.log(`الصفحةُ ليست على توقيتها الأصلي (${OLD.at(-1)} ث) — استعِدها:`);
+  console.log('  git checkout -- docs/promo/road.html');
   process.exit(1);
 }
-// ثمّ كلُّ تأخيرٍ آخر داخل المشاهد — والمُعلَّمةُ أعلاه محميّةٌ من جولةٍ ثانية
-page = page.replace(/animation-delay:([\d.]+)s/g, (_, d) => `animation-delay:${r2(at(+d))}s`);
-page = page.split('\u0000').join('');
 
-// عتباتُ انكماش الخريطتين تُقرأ بالثواني، فتتبع التوقيت الجديد
-page = page.replace(/const small = s >= [\d.]+ && s < [\d.]+;/,
-  `const small = s >= ${r2(NEW[6])} && s < ${r2(NEW[7])};`);
-page = page.replace(/const gates = s >= [\d.]+ && s < [\d.]+;/,
-  `const gates = s >= ${r2(NEW[8])} && s < ${r2(NEW[9])};`);
-page = page.replace(/const TOTAL = [\d.]+;/, `const TOTAL = ${made.toFixed(2)};`);
+const r2 = (n) => Math.round(n * 100) / 100;
+const OPEN = '/* <<warp>> */', CLOSE = '/* <</warp>> */';
+// نسخةٌ سابقة تُنزع قبل الحقن، فيعمل الأمرُ مرّاتٍ بلا تراكم
+const had = page.indexOf(OPEN);
+if (had >= 0) page = page.slice(0, had) + page.slice(page.indexOf(CLOSE) + CLOSE.length);
+
+const warp = OLD.map((o, i) => `[${o},${r2(NEW[i])}]`).join(',');
+const block = `${OPEN}
+/* مُولَّدٌ بـ scripts/build-road.mjs — لا يُحرَّر بيد.
+   ‎[زمنُ الفيلم, زمنُ الصوت]‎ عند كل مشهد. وما بينهما خطٌّ مستقيم. */
+const WARP = [${warp}];
+const AUDIO_TOTAL = ${made.toFixed(2)};
+function filmTime(a) {
+  for (let i = 0; i < WARP.length - 1; i++) {
+    const [f0, a0] = WARP[i], [f1, a1] = WARP[i + 1];
+    if (a <= a1) return f0 + ((a - a0) / (a1 - a0)) * (f1 - f0);
+  }
+  return TOTAL;
+}
+function audioTime(f) {
+  for (let i = 0; i < WARP.length - 1; i++) {
+    const [f0, a0] = WARP[i], [f1, a1] = WARP[i + 1];
+    if (f <= f1) return a0 + ((f - f0) / (f1 - f0)) * (a1 - a0);
+  }
+  return AUDIO_TOTAL;
+}
+${CLOSE}
+function now() {
+  if (!started) return 0;
+  /* المسجّلُ يقف عند ‎TOTAL + 0.7‎، وساعةُ الصوت تقف عند ‎TOTAL‎ بالضبط —
+     فلولا هذه الزيادةُ بعد انتهاء الصوت لظلّ يسجّل بلا نهاية. */
+  if (haveVoice) return filmTime(voice.currentTime) + (voice.ended ? 1 : 0);
+  if (paused) return pausedAt;
+  return (performance.now() - t0) / 1000;
+}`;
+
+const OLD_NOW = `function now() {
+  if (!started) return 0;
+  if (haveVoice && !voice.paused) return voice.currentTime;
+  if (haveVoice && voice.paused && voice.currentTime) return voice.currentTime;
+  if (paused) return pausedAt;
+  return (performance.now() - t0) / 1000;
+}`;
+if (!page.includes(OLD_NOW)) {
+  console.log('لم أجد دالّة now() كما هي — راجِع الصفحة');
+  process.exit(1);
+}
+page = page.replace(OLD_NOW, block);
+
+// القفزُ يُعطى بزمن الفيلم، والصوتُ يُطلَب بزمنه هو
+const OLD_SEEK = 'if (haveVoice) { voice.currentTime = s; }';
+if (!page.includes(OLD_SEEK)) {
+  console.log('لم أجد seek() كما هي — راجِع الصفحة');
+  process.exit(1);
+}
+page = page.replace(OLD_SEEK, 'if (haveVoice) { voice.currentTime = audioTime(s); }');
+
 writeFileSync(PAGE, page);
 
 writeFileSync(
