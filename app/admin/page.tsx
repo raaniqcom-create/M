@@ -16,6 +16,7 @@ import { AdminStats } from '@/components/AdminStats';
 import { AdminHealth } from '@/components/AdminHealth';
 import { StationAnnouncePanel } from '@/components/StationAnnouncePanel';
 import { UnregisteredAdmin } from '@/components/UnregisteredAdmin';
+import { PlatformNotice } from '@/components/PlatformNotice';
 import { PendingAnnouncements } from '@/components/PendingAnnouncements';
 import { findSimilar } from '@/lib/similar';
 import { announceStation, rebuildSite } from '@/lib/rebuild';
@@ -325,7 +326,7 @@ export default function AdminPage() {
           // بُنيت ونُشرت فلم تُعثَر — فموضعُها هو إصلاحُها.
           ['messages', `الرسائل${totalUnread ? ` (${totalUnread})` : ''}`],
           ['add', 'إضافة محطة'],
-          ['announce', 'إشعارات المحطات'],
+          ['announce', 'الإشعارات'],
           ['system', 'النظام'],
           ['stats', 'الإحصائيات'],
           ['ads', 'الإعلانات'],
@@ -354,6 +355,9 @@ export default function AdminPage() {
 
       {tab === 'announce' && (
         <div className="space-y-4">
+          {/* تنبيهُ المنصّة أوّلاً: هو الذي يُطلب في لحظةٍ ضيّقة — دقائقُ قبل
+              قطع الإنترنت — بينما خبرُ المحطة يحتمل التمهّل. */}
+          <PlatformNotice />
           <StationAnnouncePanel />
           {/* بين الإنشاء والإدارة: ما جُدول ولم يخرج بعد — وهو النافذة الوحيدة
               التي يمكن فيها التراجع. */}

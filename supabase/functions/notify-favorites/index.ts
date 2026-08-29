@@ -80,7 +80,16 @@ Deno.serve(async (req) => {
 
   for (const a of due ?? []) {
     const cities = (a.cities ?? []) as string[];
-    if (!cities.length) continue;
+
+    // A city-less row is a PLATFORM notice — an internet cut during exams, a
+    // service message — and it goes to every device.
+    //
+    // `continue` used to skip it. But the claim above had already stamped
+    // sent_at, so the row was marked sent, vanished from the pending list, and
+    // reached nobody. That is worse than never sending: nothing anywhere said
+    // it had not gone out, and the one screen that could have caught it is the
+    // one the claim removed it from.
+    const everyone = cities.length === 0;
 
     // ONE call, never one per city.
     //
@@ -96,9 +105,13 @@ Deno.serve(async (req) => {
     // deduplicates addresses across them — and the per-city detail lives one tap
     // away on /news, which is the screen built for exactly that.
     const single = cities.length === 1;
-    const body = single
-      ? (cityLine(a.body as string, cities[0]) ?? (a.body as string))
-      : summarise(a.body as string, cities);
+    // A platform notice carries no per-city line to pick out, and no city to
+    // summarise across — its body is already addressed to everyone.
+    const body = everyone
+      ? (a.body as string)
+      : single
+        ? (cityLine(a.body as string, cities[0]) ?? (a.body as string))
+        : summarise(a.body as string, cities);
 
     // The row was claimed before this call, so a failure here would leave it
     // marked sent forever: visible on /news, delivered to nobody, with no
