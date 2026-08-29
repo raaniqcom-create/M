@@ -1,0 +1,97 @@
+{
+  "audioTotal": 160.77,
+  "filmTotal": 87,
+  "lead": 0,
+  "gap": 0.45,
+  "rms": 0.19,
+  "utterances": 61,
+  "clips": [
+    {
+      "clip": 1,
+      "start": 0,
+      "end": 3.37
+    },
+    {
+      "clip": 4,
+      "start": 3.82,
+      "end": 9.12
+    },
+    {
+      "clip": 5,
+      "start": 9.57,
+      "end": 27.18
+    },
+    {
+      "clip": 6,
+      "start": 27.63,
+      "end": 51.14
+    },
+    {
+      "clip": 7,
+      "start": 51.59,
+      "end": 70.68
+    },
+    {
+      "clip": 8,
+      "start": 71.13,
+      "end": 87.8
+    },
+    {
+      "clip": 9,
+      "start": 88.25,
+      "end": 117.06
+    },
+    {
+      "clip": 10,
+      "start": 117.51,
+      "end": 149.02
+    },
+    {
+      "clip": 17,
+      "start": 149.47,
+      "end": 159.97
+    }
+  ],
+  "scenes": [
+    {
+      "film": 2.9,
+      "audio": 2.05
+    },
+    {
+      "film": 6,
+      "audio": 4.07
+    },
+    {
+      "film": 11,
+      "audio": 9.77
+    },
+    {
+      "film": 18,
+      "audio": 15.52
+    },
+    {
+      "film": 24,
+      "audio": 27.93
+    },
+    {
+      "film": 34,
+      "audio": 51.84
+    },
+    {
+      "film": 42,
+      "audio": 71.33
+    },
+    {
+      "film": 51,
+      "audio": 88.45
+    },
+    {
+      "film": 64,
+      "audio": 117.71
+    },
+    {
+      "film": 77,
+      "audio": 149.72
+    }
+  ]
+}

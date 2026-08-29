@@ -1,0 +1,1274 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مساعد الطريق — فيديو الشرح</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ============================================================================
+   فيديو شرح «مساعد الطريق» — يُسجَّل بالشاشة، لا يُصدَّر من برنامج مونتاج.
+   على نفس قالب docs/promo/explainer.html: مسرح ثابت يتقلّص ليملأ النافذة،
+   والتوقيت كلّه animation-delay على خطٍّ زمنيٍّ واحد يُسحب بساعةٍ واحدة.
+
+   **والفرق عن سابقه أن الصوت اختياريّ.** ذاك كان يُجمَّد حتى يبدأ voice.mp3،
+   وهذا يعمل بساعة الجدار إن لم يوجد تعليق — فيُشاهَد اليوم، ويُقفَل على
+   الصوت حين يُسجَّل. وضعُ ملفّ road-voice.mp3 بجانبه يكفي.
+
+   مفاتيح:  المسافة تشغيل/إيقاف · R إعادة · F ملء الشاشة · V أفقي/عمودي
+            D إخفاء الشريط · ← → مشهد
+
+   **وكل رقمٍ في هذا الفيلم مقيسٌ من الشيفرة الشغّالة**، لا مكتوبٌ بيد:
+   المسار من public/road-routes.json، والمحطات من lib/roadStations.ts،
+   والفجوة محسوبةٌ بنفس collectStops. فلا يُعلَن ما لا يُعرض.
+   ========================================================================= */
+:root{
+  --brand:#16a34a; --brand-600:#15803d; --brand-700:#166534; --brand-900:#14532d;
+  --brand-50:#f0fdf4; --brand-100:#dcfce7;
+  --blue:#2563eb; --red:#dc2626; --red-900:#7f1d1d; --amber:#d97706;
+  --ink:#0f172a; --mute:#475569; --faint:#94a3b8; --line:#e2e8f0;
+  --W:1920px; --H:1080px; --band:150px;
+}
+html.v{--W:1080px;--H:1920px;--band:230px}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#000;overflow:hidden;font-family:Tajawal,'Segoe UI',system-ui,sans-serif}
+#fit{position:fixed;inset:0}
+#stage{
+  width:var(--W);height:var(--H);position:absolute;top:50%;left:50%;
+  overflow:hidden;background:#fff;transform-origin:center;
+}
+/* **وميضُ الافتتاح.**
+ *
+ * بين لحظة تحليل الصفحة ولحظة استدعاء collect() تمضي أجزاءٌ من الثانية،
+ * تعمل فيها كلُّ حركات الـCSS بساعتها الحرّة — فيلمعُ نصُّ المشهد الأول
+ * ثمّ يُردّ إلى الصفر. وهو ما رآه المالك: «يظهر الكلام أجزاء من الثانية».
+ *
+ * فالمسرحُ مخفيٌّ حتى تُمسَك الحركاتُ وتُسحَب إلى الصفر، ثمّ يُكشَف.
+ * ولا يُستعمل display:none: الـSVG لا يُقاس وهو غير معروض، فتفشل
+ * getBBox التي يقوم عليها فضُّ تراكب اللافتات. */
+#stage > *{visibility:hidden}
+#stage.ready > *{visibility:visible}
+.scene{position:absolute;inset:0 0 var(--band) 0;opacity:0;display:grid;
+  place-items:center;align-content:center;gap:var(--g,30px);text-align:center;padding:150px 90px 0}
+/* مشاهد الخريطة: النصُّ في عمودٍ جهةَ الانطلاق، والخريطة في العمود الآخر */
+.scene.wm{justify-items:start;text-align:start;align-content:center;
+  padding:150px 90px 0 100px;gap:var(--g,22px)}
+.scene.wm > *{max-width:45%}
+/* **في العمودي طبقتان لا عمودان.** والنصُّ في الأعلى وحده — وكان السطرُ
+   يفرض align-content:center فيغلب الصنف، فيقع النصُّ على الخريطة. */
+html.v .scene.wm{justify-items:center;text-align:center;align-content:start;
+  padding:190px 70px 0;gap:var(--g,20px)}
+html.v .scene.wm > *{max-width:100%}
+
+/* لكل مشهد ظهور واختفاء بنفس المنحنى، فلا يقفز شيء */
+@keyframes scene{0%{opacity:0}4%{opacity:1}92%{opacity:1}100%{opacity:0}}
+/* والمشهدُ الأخير لا يُغمَض: الفيلمُ ينتهي عليه، فلا معنى لمحوِه قبل نهايته
+   بثمانيةِ أعشارِ ثانية — والاسمُ والرابطُ فيه، وهما آخرُ ما يُقرأ. */
+@keyframes scenehold{0%{opacity:0}4%{opacity:1}100%{opacity:1}}
+
+/* ── لغةُ الحركة: كلُّ شيءٍ يُرسَم ────────────────────────────────────────
+   لا شيء يظهر من العدم ولا يكبر من مركزه. كل عنصرٍ يصل بأن يُرسَم أو
+   يُمسَح في اتجاه السير — يميناً إلى يسار، وهو اتجاه القراءة واتجاه الرحلة
+   على الخريطة معاً. فتُقرأ الخريطةُ والجملةُ والبطاقةُ حركةً واحدة.       */
+@keyframes wipe{from{clip-path:inset(0 0 0 100%)}to{clip-path:inset(0 0 0 0)}}
+@keyframes wipeup{from{clip-path:inset(0 0 0 100%);transform:translateY(12px)}
+                  to{clip-path:inset(0 0 0 0);transform:translateY(0)}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes out{to{opacity:0}}
+@keyframes draw{from{stroke-dashoffset:var(--len)}to{stroke-dashoffset:0}}
+@keyframes slidein{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:translateX(0)}}
+/* **الاستثناءُ الوحيد.** المحطةُ مكانٌ لا مرور، فتَظهر ولا تُرسَم. ارتدادةٌ
+   واحدة بلا اهتزاز، ولا تُستعمل هذه المنحنية على شيءٍ آخر في الفيلم كلّه —
+   فلحظةَ تتكرّر تكفّ عن أن تعني «وصلتَ» وتصير زينة. */
+@keyframes pop{0%{opacity:0;transform:scale(0)}60%{opacity:1;transform:scale(1.06)}100%{transform:scale(1)}}
+/* **حركةٌ واحدة لكل خاصّية، لا سلسلة.**
+   كانت الخريطة تُخفى دائماً: أربعُ حركاتٍ على opacity آخرُها بـ‎both‎ تملأ
+   رجوعاً إلى الصفر، فتطمس الثلاثَ قبلها. والصواب خطٌّ زمنيٌّ واحد بطول
+   الفيلم، نسبُه من الثواني: t/78×100. */
+@keyframes mapshow{
+  0%,25.8%{opacity:0}
+  26.41%,48.78%{opacity:1}
+  49.31%,58.47%{opacity:0}
+  59.08%,64.43%{opacity:0}
+  65.19%,69.01%{opacity:1}
+  69.69%,75.11%{opacity:.14}
+  76.03%,82.75%{opacity:1}
+  83.36%,100%{opacity:0}
+}
+/* الأخضر يخفت في مشهد الفراغ فيبقى الأحمرُ وحده يُقرأ، ثم يعود في الختام */
+@keyframes routedim{
+  0%,46.87%{opacity:1}
+  47.56%,64.43%{opacity:.22}
+  65.19%,69.01%{opacity:1}
+  69.69%,75.11%{opacity:.22}
+  76.03%,100%{opacity:1}
+}
+/* **لا تُسَلسَل حركتان بـ‎both‎ على خاصّيةٍ واحدة.** الأخيرةُ تملأ رجوعاً
+   إلى بداية الزمن فتطمس كلَّ ما قبلها — وهو عطلٌ صامت وقع مرّتين هنا:
+   مرّةً أخفى الخريطة كلَّها، ومرّةً أخفى الخطَّ الأحمر. فلكلّ خاصّيةٍ
+   حركةٌ واحدة بطول الفيلم، نسبُها من الثواني: t/78×100. */
+@keyframes gapfwd{
+  0%,40.08%{opacity:0}
+  40.23%,65.04%{opacity:1}
+  65.19%,69.31%{opacity:0}
+  69.47%,100%{opacity:1}
+}
+@keyframes gapback{
+  0%,65.04%{opacity:0}
+  65.19%,69.01%{opacity:1}
+  69.16%,100%{opacity:0}
+}
+@keyframes chipfwd{
+  0%,41.3%{opacity:0}
+  41.45%,65.04%{opacity:1}
+  65.19%,69.31%{opacity:0}
+  69.47%,100%{opacity:1}
+}
+@keyframes chipback{
+  0%,65.95%{opacity:0}
+  66.11%,69.01%{opacity:1}
+  69.16%,100%{opacity:0}
+}
+/* الشبكةُ تعيش في مشهدها الثالث، وتعود في مشهد المنافذ */
+/* حلقةٌ تتّسع حول المنفذ حين يُذكر — ثلاثُ مرّات، واحدةٌ لكلِّ بلد.
+   والموضعُ على الخريطة هو الشرح: «إلى الأردن» تعني هذه النقطة بعينها. */
+@keyframes gatering{
+  0%{r:9;opacity:.55}
+  100%{r:34;opacity:0}
+}
+@keyframes gatelift{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(1.5)}
+}
+@keyframes netshow{
+  0%,19.01%{opacity:0}
+  19.54%,25.65%{opacity:1}
+  26.11%,49.01%{opacity:0}
+  49.54%,58.32%{opacity:1}
+  58.78%,100%{opacity:0}
+}
+@keyframes breathe{0%,100%{filter:drop-shadow(0 0 6px rgba(220,38,38,.4))}
+                   50%{filter:drop-shadow(0 0 10px rgba(220,38,38,.8))}}
+
+.w{animation:wipe .5s cubic-bezier(.22,1,.36,1) both}
+.wu{animation:wipeup .5s cubic-bezier(.22,1,.36,1) both}
+.f{animation:fade .5s both}
+
+h1{font-size:96px;font-weight:900;color:var(--brand-900);line-height:1.28;letter-spacing:-1px}
+h2{font-size:68px;font-weight:800;color:var(--brand-700);line-height:1.34}
+p.sub{font-size:40px;font-weight:400;color:var(--mute);line-height:1.75;max-width:1350px}
+.big{font-size:150px;font-weight:900;color:var(--brand);line-height:1;
+     font-variant-numeric:tabular-nums;letter-spacing:-2px}
+.big.red{color:var(--red)}
+.num{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate;display:inline-block}
+.ltr{direction:ltr;unicode-bidi:isolate;display:inline-block}
+html.v h1{font-size:80px}
+html.v h2{font-size:60px}
+html.v p.sub{font-size:38px;max-width:900px}
+html.v .big{font-size:130px}
+
+/* ---------- 1 · المنصّة اليوم ---------- */
+.stats{display:flex;gap:70px;align-items:flex-start}
+.stat .n{font-size:104px;font-weight:900;color:var(--brand);line-height:1;font-variant-numeric:tabular-nums}
+.stat .l{font-size:30px;font-weight:500;color:var(--mute);margin-top:10px}
+html.v .stats{gap:44px}
+html.v .stat .n{font-size:76px}
+html.v .stat .l{font-size:25px}
+
+/* ---------- الخريطة: مشتركة بين المشاهد 3–5 و7–9 ---------- */
+/* الخريطة تشغل ما دون الترويسة، فلا يقع النصُّ عليها. وفي مشهد البطاقات
+   تنكمش إلى أعلاه ليتّسع لها ما تحتها — بصنفٍ تضعه الساعة لا بحركةٍ على
+   متغيّرٍ لا يُحرَّك. */
+/* **الخريطة في النصف الأسفل، والنصُّ في الأعلى — وقسمةٌ صريحة بينهما.**
+   جُرّبت الخريطةُ ملءَ الإطار والنصُّ فوقها، فوقع الرقمُ الأحمرُ على الخطّ
+   الأحمر فلم يُقرأ أحدُهما. والمشهدُ الذي يحتاج قارئَه أن يفصل طبقتين
+   بعينه مشهدٌ مكسور. */
+/* **عمودان في الأفقي، طبقتان في العمودي.**
+   المسرح 16:9 والخريطة مربّعةٌ تقريباً، فوضعُها في الوسط يترك ثلثين فارغين
+   ويُجلس النصَّ فوقها. والصواب أن تأخذ عمودَ الوجهة — يسارَ الشاشة، حيث
+   ينتهي الطريق فعلاً — ويأخذ النصُّ عمودَ الانطلاق. وفي العمودي تعود
+   الطبقتان: نصٌّ فوق وخريطةٌ تحت. */
+#netwrap{position:absolute;inset:0 0 var(--band) 0;display:grid;align-items:center;
+  justify-items:end;padding-inline-end:70px;pointer-events:none;opacity:0}
+html.v #netwrap{inset:auto 0 var(--band) 0;height:50%;justify-items:center;padding:0}
+/* ثلاثُ بطاقاتٍ وجملةٌ فوق الشبكة في العمودي لا تتّسع لها الشاشة، فتنكمش
+   الشبكةُ في مشهدها ذاك وحدَه. */
+html.v #netwrap.small{height:34%}
+#net{overflow:visible}
+.netline{fill:none;stroke:var(--brand);stroke-width:3.4;stroke-linecap:round;stroke-linejoin:round;opacity:.85}
+.netline.intl{stroke:var(--blue);stroke-width:4.6}
+.netnode circle{fill:#fff;stroke:var(--brand);stroke-width:3}
+.netnode.big circle{fill:var(--brand);stroke:#fff;stroke-width:2.5}
+.netnode.gate circle{fill:var(--blue);stroke:#fff;stroke-width:2.5}
+.netnode text{font-size:19px;font-weight:800;paint-order:stroke;stroke:#fff;stroke-width:4;stroke-linejoin:round;fill:var(--brand-900);font-family:Tajawal,sans-serif}
+.netnode.gate text{fill:#1e40af;font-size:23px}
+.netnode text.sm{font-size:15px;fill:#475569;font-weight:700;stroke-width:3.5}
+
+#mapwrap{position:absolute;inset:0 0 var(--band) 0;display:grid;align-items:center;
+  justify-items:end;padding-inline-end:80px;pointer-events:none;opacity:0}
+#mapwrap.small{padding-inline-end:80px}
+html.v #mapwrap{inset:auto 0 var(--band) 0;height:52%;justify-items:center;padding:0}
+html.v #mapwrap.small{height:42%}
+/* المقاسُ يُحسب بالجافاسكربت: الـSVG عنصرٌ مستبدَل، و«تلقائيّ» في عرضه تعني
+   ملءَ العرض لا اتّباعَ النسبة — فكان المسار يمتدّ عبر الشاشة. */
+#map{overflow:visible}
+.track{fill:none;stroke:var(--line);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+.route{fill:none;stroke:url(#g);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+.gap{fill:none;stroke:var(--red);stroke-width:6;stroke-linecap:round;stroke-linejoin:round}
+.pin circle{stroke:#fff;stroke-width:2.5;fill:var(--brand)}
+.pin.left circle{fill:#fff;stroke:var(--brand)}
+.pin text{font-size:11px;font-weight:800;fill:#fff;text-anchor:middle;dominant-baseline:central}
+.pin.left text{fill:var(--brand-700)}
+.end circle{stroke:#fff;stroke-width:3}
+.endlabel{font-size:13px;font-weight:800;fill:#fff}
+.endbox{rx:9}
+
+/* ---------- بطاقات المحطات ---------- */
+.cards{display:flex;flex-direction:column;gap:8px;width:100%;align-self:stretch}
+html.v .cards{width:900px;align-self:center}
+.card{display:flex;align-items:center;gap:16px;background:var(--brand-50);
+  border:2px solid var(--brand-100);border-radius:18px;padding:11px 20px;text-align:start;
+  box-shadow:0 1px 2px rgba(20,83,45,.05),0 4px 14px rgba(20,83,45,.07)}
+.card .d{width:46px;height:46px;flex:none;border-radius:99px;background:var(--brand);color:#fff;
+  display:grid;place-items:center;font-size:24px;font-weight:800;font-variant-numeric:tabular-nums}
+.card.left .d{background:#fff;color:var(--brand-700);box-shadow:inset 0 0 0 3px var(--brand)}
+.card .t{font-size:25px;font-weight:700;color:var(--ink);line-height:1.3}
+.card .m{font-size:19px;font-weight:400;color:var(--mute);margin-top:3px}
+.leg{align-self:center;font-size:20px;font-weight:700;color:var(--brand-700);
+  background:var(--brand-50);border:2px dashed var(--brand-100);border-radius:99px;padding:5px 20px}
+html.v .cards{width:900px}
+
+/* ---------- 6 · أعمدة الطرق بمقياسٍ حقيقي ---------- */
+/* بطاقاتُ المنافذ الثلاثة: صفٌّ واحد في الأفقي، عمودٌ في العمودي */
+.gates{display:flex;gap:22px;width:100%}
+html.v .gates{flex-direction:column;gap:14px}
+.gate{flex:1;background:#fff;border:2px solid var(--brand-100);border-radius:22px;
+  padding:16px 22px;text-align:start;box-shadow:0 1px 2px rgba(20,83,45,.05),0 4px 14px rgba(20,83,45,.07)}
+.gate .c{font-size:34px;font-weight:900;color:var(--blue);line-height:1.2}
+.gate .r{font-size:24px;font-weight:700;color:var(--ink);margin-top:6px}
+.gate .k{font-size:21px;font-weight:400;color:var(--mute);margin-top:4px;font-variant-numeric:tabular-nums}
+.gate .v{font-size:24px;font-weight:800;color:var(--red);margin-top:10px;
+  border-top:2px dashed var(--line);padding-top:10px;font-variant-numeric:tabular-nums}
+html.v .gate .c{font-size:28px}
+html.v .gate{padding:12px 20px}
+html.v .gate .r{font-size:22px;margin-top:3px}
+html.v .gate .k{font-size:19px}
+html.v .gate .v{font-size:22px;margin-top:7px;padding-top:7px}
+html.v .gates{gap:10px}
+
+.bars{display:flex;flex-direction:column;gap:20px;width:1500px}
+.bar .lbl{font-size:26px;font-weight:700;color:var(--ink);text-align:start;margin-bottom:10px}
+.bar .rail{height:20px;border-radius:99px;background:var(--brand);position:relative;overflow:hidden}
+.bar .void{position:absolute;top:0;bottom:0;background:var(--red)}
+.bar .fig{font-size:22px;font-weight:800;color:var(--red);text-align:start;margin-top:8px;
+  font-variant-numeric:tabular-nums}
+html.v .bars{width:900px}
+
+/* ---------- 8 · حدُّ ما نعرف ---------- */
+.limit{font-size:46px;font-weight:700;color:var(--ink);line-height:1.7;max-width:1400px}
+.limit b{color:var(--brand);font-weight:900}
+html.v .limit{font-size:40px;max-width:900px}
+
+/* ---------- 9 · الختام ---------- */
+.scene.store{align-content:center}
+.scene.intro{align-content:center}
+.scene.intro h1{color:var(--brand)}
+
+.steps{display:flex;flex-direction:column;gap:16px;width:1250px;align-self:center}
+.step{display:flex;align-items:flex-start;gap:20px;background:#fff;
+  border:2px solid var(--brand-100);border-radius:22px;padding:18px 26px;text-align:start;
+  box-shadow:0 1px 2px rgba(20,83,45,.05),0 4px 14px rgba(20,83,45,.07)}
+.step .k{width:52px;height:52px;flex:none;border-radius:99px;background:var(--brand);color:#fff;
+  display:grid;place-items:center;font-size:26px;font-weight:800}
+.step .x{display:flex;flex-direction:column;gap:4px;min-width:0}
+.step .x b{font-size:28px;font-weight:800;color:var(--ink);line-height:1.3}
+.step .x i{font-size:22px;font-style:normal;font-weight:400;color:var(--mute);line-height:1.5}
+.step .x i b{font-size:22px;font-weight:800;color:var(--brand-700)}
+html.v .steps{width:900px;gap:12px}
+html.v .step{padding:14px 20px;gap:16px}
+html.v .step .k{width:46px;height:46px;font-size:23px}
+html.v .step .x b{font-size:25px}
+html.v .step .x i,html.v .step .x i b{font-size:20px}
+.appicon{width:150px;height:150px;border-radius:34px;border:3px solid var(--brand-100);
+  box-shadow:0 10px 30px rgba(20,83,45,.16)}
+.badges{display:flex;gap:20px;margin-top:6px}
+.badge{display:flex;align-items:center;gap:14px;background:var(--ink);color:#fff;
+  border-radius:18px;padding:14px 26px 14px 20px;text-decoration:none}
+.badge svg{width:38px;height:38px;fill:#fff;flex:none}
+.badge span{display:flex;flex-direction:column;line-height:1.15;text-align:start}
+.badge b{font-size:28px;font-weight:800;direction:ltr}
+.badge i{font-size:19px;font-style:normal;font-weight:400;opacity:.75}
+html.v .badges{flex-direction:column;gap:14px}
+html.v .appicon{width:180px;height:180px;border-radius:40px}
+
+.close .name{font-size:126px;font-weight:900;color:var(--brand-900);letter-spacing:-2px}
+.close .rule{height:8px;width:260px;background:var(--brand);border-radius:99px}
+.close .url{font-size:44px;font-weight:700;color:var(--brand)}
+.close .soon{font-size:32px;font-weight:500;color:var(--mute)}
+.by{font-size:26px;font-weight:400;color:var(--faint)}
+html.v .close .name{font-size:84px}
+html.v .scene.close{gap:10px;padding-top:210px}
+html.v .close .url{font-size:38px}
+html.v .close .soon{font-size:28px}
+
+/* ── الخلفية ──────────────────────────────────────────────────────────────
+ *
+ * لطخاتٌ خضراءُ واسعة تسبح ببطءٍ شديد خلف كلّ شيء — نفسُ خلفيّة الفيلم
+ * الأوّل. والحركةُ أبطأ من أن تُلاحَق بالعين: ستٌّ وأربعون ثانيةً للدورة،
+ * فتُحسّ ولا تُرى، ولا تسحب النظر من النصّ. وكلُّها من تدرّج الهوية، لا
+ * لونَ جديد.
+ *
+ * وهي أخفت هنا منها هناك: تلك صفحةُ نصٍّ وبطاقات، وهذه خريطةٌ عليها خطٌّ
+ * رفيعٌ ولافتاتٌ صغيرة — ولطخةٌ قويّة تحتها تبتلعهما.
+ */
+#sky{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+#sky span{position:absolute;border-radius:50%;filter:blur(100px);opacity:.34;will-change:transform}
+#sky .a{width:900px;height:900px;background:var(--brand-200);top:-280px;inset-inline-start:-220px;animation:drift1 46s ease-in-out infinite}
+#sky .b{width:760px;height:760px;background:var(--brand-100);bottom:-260px;inset-inline-end:-180px;animation:drift2 54s ease-in-out infinite}
+#sky .c{width:620px;height:620px;background:var(--brand-400);opacity:.1;top:38%;inset-inline-start:46%;animation:drift3 62s ease-in-out infinite}
+@keyframes drift1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(160px,120px) scale(1.12)}}
+@keyframes drift2{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-150px,-110px) scale(1.08)}}
+@keyframes drift3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-120px,90px) scale(1.15)}}
+/* شريطُ ضوءٍ يمرّ مرّةً كل دورة — حياةٌ بلا وميض */
+#sky i{
+  position:absolute;inset:-30% -60%;
+  background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,.5) 50%,transparent 58%);
+  animation:sheen 28s linear infinite;
+}
+@keyframes sheen{0%{transform:translateX(-40%)}100%{transform:translateX(40%)}}
+
+/* ── الشعارات ─────────────────────────────────────────────────────────────
+ *
+ * ثلاثةٌ لا تتزاحم: شعارُ المنصّة في الزاوية العليا **جهةَ النهاية** — أي
+ * فوق الخريطة لا فوق النصّ، فالعربيّة تبدأ من الجهة الأخرى؛ و«صنع في
+ * الأنبار» علامةً مائيةً خافتة طوال الفيلم وكاملةً في الافتتاح؛ وشريطُها
+ * الأفقيّ وحده في الأسفل وسطاً.
+ */
+#corner{
+  position:absolute;top:40px;left:50%;transform:translateX(-50%);z-index:6;
+  width:92px;height:92px;border-radius:21px;background:#fff;
+  border:2px solid var(--brand-100);box-shadow:0 6px 20px rgba(20,83,45,.12);
+  animation:corner 131s linear both;
+}
+/* يغيب في مشهد التحميل: الأيقونةُ هناك كبيرةٌ في الوسط، فنسختُها الصغيرة
+   في الأعلى تكرارٌ لا يضيف. */
+@keyframes corner{
+  0%,4.66%{opacity:0}
+  5.27%,91.91%{opacity:1}
+  92.52%,100%{opacity:0}
+}
+html.v #corner{width:110px;height:110px;border-radius:25px;top:52px}
+
+/* العلامةُ المائية: خلفَ كلِّ شيء، وبشفافيةٍ لا تُقرأ إلا إن قُصدت */
+#wm{
+  position:absolute;bottom:calc(var(--band) - 20px);inset-inline-end:60px;
+  width:380px;opacity:0;z-index:0;pointer-events:none;filter:grayscale(.25);
+  animation:wmfade .8s both 11.1s;
+}
+@keyframes wmfade{from{opacity:0}to{opacity:.05}}
+html.v #wm{width:480px;bottom:calc(var(--band) + 40px)}
+
+/* الافتتاح على مرحلتين: 0 → 2.6ث شعارُ المنصّة · 2.9 → 5.6 «صنع في الأنبار» */
+#opener,#wmbig{position:absolute;top:50%;left:50%;z-index:8;pointer-events:none}
+#opener{width:230px;border-radius:52px;animation:opener 131s linear both}
+#wmbig{width:400px;animation:wmbig 131s linear both}
+html.v #opener{width:280px;border-radius:64px}
+html.v #wmbig{width:480px}
+@keyframes opener{
+  0%{opacity:0;transform:translate(-50%,-50%) scale(.9)}
+  0.69%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  1.83%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  2.29%,100%{opacity:0;transform:translate(-50%,-50%) scale(1.04)}
+}
+@keyframes wmbig{
+  0%,2.29%{opacity:0;transform:translate(-50%,-50%) scale(.94)}
+  2.98%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  3.97%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  4.5%,100%{opacity:0;transform:translate(-50%,-50%) scale(1.03)}
+}
+
+#madein{
+  position:absolute;bottom:34px;left:50%;transform:translateX(-50%);z-index:5;
+  width:340px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.14));
+  animation:fade .8s both 11.3s;
+}
+html.v #madein{width:440px;bottom:56px}
+
+/* ---------- الشريط السفلي ---------- */
+#prog{position:absolute;bottom:0;inset-inline:0;height:6px;background:var(--line);z-index:6}
+#progfill{height:100%;background:var(--brand);width:0}
+#ticks{position:absolute;bottom:0;inset-inline:0;height:44px;z-index:7;pointer-events:none}
+#ticks i{position:absolute;bottom:0;width:2px;height:6px;background:#fff;opacity:.85}
+
+/* ---------- أدوات التحكّم (تختفي في التسجيل) ---------- */
+#bar{position:fixed;top:14px;inset-inline-end:14px;z-index:20;display:flex;gap:10px}
+#bar button{font-family:inherit;font-size:15px;font-weight:700;border:0;border-radius:11px;
+  padding:11px 18px;background:var(--brand);color:#fff;cursor:pointer}
+#bar button.ghost{background:#fff;color:var(--brand-700);box-shadow:0 0 0 2px var(--brand-100)}
+#bar button[disabled]{opacity:.55;cursor:default}
+#note{position:fixed;top:66px;inset-inline-end:14px;z-index:20;max-width:430px;background:#fff;
+  border-radius:13px;padding:13px 16px;font-size:14px;line-height:1.7;color:var(--ink);
+  box-shadow:0 10px 34px rgba(0,0,0,.2)}
+#hud{position:fixed;inset:0;z-index:19;display:grid;place-items:center;background:rgba(0,0,0,.55);
+  color:#fff;font-size:24px;font-weight:700;cursor:pointer;text-align:center;line-height:2}
+.hidden{display:none !important}
+
+@media(prefers-reduced-motion:reduce){
+  /* المشاهد تبقى بمدّتها، وكلُّ رسمةٍ تُقفل على نهايتها. الذروةُ تنجو لأنها
+     **طولٌ لا حركة**: الخطُّ الأحمر موجودٌ كاملاً لا يزحف. */
+  #stage *{animation-duration:.01ms !important;animation-delay:0ms !important}
+}
+</style>
+</head>
+<body>
+<div id="fit"><div id="stage">
+
+  <div id="sky" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span><i></i></div>
+
+  <!-- الخريطة طبقةٌ واحدة تعيش من المشهد الثالث إلى الأخير، فلا تُرسم مرّتين
+       ولا تُستبدل: هي نفسُها التي رآها المشاهد تُرسم. -->
+  <!-- شبكةُ المحافظة: مسرحٌ ثانٍ، لأن نطاقها أوسع من نطاق رحلةٍ واحدة —
+       من بغداد شرقاً إلى طريبيل غرباً، ومن راوة شمالاً إلى عرعر جنوباً.
+       وإسقاطٌ واحدٌ لهما يجعل رحلةَ الرمادي ← عرعر خطّاً في زاوية. -->
+  <div id="netwrap">
+    <svg id="net" viewBox="0 0 900 560" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <g id="netlines"></g>
+      <g id="netnodes"></g>
+    </svg>
+  </div>
+
+  <div id="mapwrap">
+    <svg id="map" viewBox="0 0 480 500" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <!-- userSpaceOnUse لا objectBoundingBox: بدونها يجري كلُّ جزءٍ من
+             المسار تدرّجَه الخاصّ من الأخضر إلى الأزرق، فيموت معنى اللون
+             صامتاً — الأخضر يقول «قرب انطلاقك» والأزرق «قرب وجهتك». -->
+        <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="399.7" y1="42.2" x2="81" y2="460">
+          <stop offset="0" stop-color="#16a34a"/><stop offset="1" stop-color="#2563eb"/>
+        </linearGradient>
+      </defs>
+      <path id="track" class="track"/>
+      <path id="route" class="route"/>
+      <path id="gapline" class="gap"/>
+      <path id="gapback" class="gap"/>
+      <g id="pins"></g>
+      <g id="ends"></g>
+      <g id="gapmark"></g>
+    </svg>
+  </div>
+
+  <!-- 1 · المنصّة اليوم -->
+  <!-- ★ · خدمةٌ جديدة — بطاقةُ العنوان.
+       تأتي بعد الشعارين مباشرةً: من يشاهد يعرف في الثانية السابعة ماذا
+       يشاهد، لا في الدقيقة الثانية. -->
+  <section class="scene intro" style="animation:scene 5s both;animation-delay:6s;--g:22px">
+    <p class="sub w" style="animation-delay:6.4s">خدمةٌ جديدة تقدّمها</p>
+    <h2 class="w" style="animation-delay:7.0s">المحطةُ التقنية</h2>
+    <div class="f" style="animation-delay:8.0s;height:6px;width:220px;background:var(--brand);border-radius:99px"></div>
+    <h1 class="w" style="animation-delay:8.4s">مساعدُ الطريق</h1>
+  </section>
+
+  <!-- 1 · صنعت في الأنبار، وتُجيب سؤالاً واحداً.
+       رُفعت الإحصائيات من هنا بطلب المالك: المشهدُ الأوّل يقول ما تفعله
+       المنصّة، لا كم تكبُر. والعددُ يُقنع من يقارن، والسؤالُ يُمسك من يشاهد. -->
+  <section class="scene" style="animation:scene 7s both;animation-delay:11.0s">
+    <h2 class="w" style="animation-delay:11.5s">المحطةُ التقنية تُجيبُ سؤالاً واحداً</h2>
+    <h1 class="w" style="animation-delay:12.3s">أين الوقودُ في مدينتي الآن؟</h1>
+  </section>
+
+  <!-- 2 · وخارج المدينة، السؤال غيره -->
+  <section class="scene" style="animation:scene 6s both;animation-delay:18.0s">
+    <p class="sub w" style="animation-delay:18.5s">لكنّ أغلبَ الطرقِ الرئيسية تمرّ بمناطقَ صحراوية</p>
+    <h1 class="w" style="animation-delay:19.4s">وخارجَ المدينةِ يتبدّلُ السؤال</h1>
+    <h2 class="w" style="animation-delay:20.8s">ماذا على طريقي؟<br>وأينَ لا شيء؟</h2>
+  </section>
+
+  <!-- 3 · الطريق يُرسم -->
+  <!-- 3 · الشبكة: مدنُ الأنبار كلُّها ومنافذُها -->
+  <section class="scene wm" style="animation:scene 10s both;animation-delay:24.0s;--g:20px">
+    <h2 class="w" style="animation-delay:24.3s">شبكةُ الأنبار كاملةً</h2>
+    <p class="sub w" style="animation-delay:25.6s">
+      من بغداد شرقاً إلى <b style="color:var(--blue)">طريبيل</b> على حدود الأردن،
+      ومن <b style="color:var(--blue)">القائم</b> و<b style="color:var(--blue)">الوليد</b> على حدود سوريا
+      إلى <b style="color:var(--blue)">عرعر</b> على حدود السعودية.
+    </p>
+    <p class="sub w" style="animation-delay:28.8s;font-size:34px">
+      <b><span class="num" data-count="30" data-from="17.8" data-to="19.2">0</span> مدينةً ومنفذاً</b> ·
+      <b><span class="num" data-count="870" data-from="17.8" data-to="19.6">0</span> رحلةً بين نقطتين</b>
+    </p>
+    <p class="sub f" style="animation-delay:31.2s;font-size:30px">
+      وكلُّ وصلةٍ منها طريقُ قيادةٍ حقيقيّ، لا خطٌّ على ورق.
+    </p>
+  </section>
+
+  <!-- 4 · الطريق يُرسَم -->
+  <section class="scene wm" style="animation:scene 8s both;animation-delay:34.0s;--g:22px">
+    <h2 class="w" style="animation-delay:34.3s">تختارُ من أين، وإلى أين</h2>
+    <p class="sub w" style="animation-delay:35.0s">
+      <span style="color:var(--brand);font-weight:800">الرمادي</span>
+      &nbsp;←&nbsp;
+      <span style="color:var(--blue);font-weight:800">منفذ عرعر</span>
+    </p>
+    <p class="big f" style="animation-delay:36.6s"><span class="num" data-count="426" data-from="25.8" data-to="28.4">0</span> كم</p>
+    <p class="sub f" style="animation-delay:39.6s">5 ساعات و30 دقيقة إلى الحدود السعودية — من محرّكِ توجيهٍ حقيقيّ، لا من سرعةٍ مفترضة</p>
+  </section>
+
+  <!-- 4 · ما على الطريق -->
+  <section class="scene wm" style="animation:scene 9s both;animation-delay:42.0s;--g:14px">
+    <h2 class="w" style="animation-delay:42.4s">محطاتُ هذا الطريق — بالترتيبِ الذي تمرُّ به</h2>
+    <div class="cards" id="cards"></div>
+    <p class="sub w" style="animation-delay:49.4s;font-size:34px">ثمانٍ منها في أوّلِ <span class="num">77</span> كم</p>
+  </section>
+
+  <!-- 5 · الفراغ — الذروة -->
+  <section class="scene wm" style="animation:scene 13s both;animation-delay:51.0s;--g:16px">
+    <h2 class="w" style="animation-delay:51.4s">ثمّ يبدأُ أطولُ امتدادٍ في الرحلة</h2>
+    <p class="big red f" style="animation-delay:53.0s"><span class="num" data-count="228" data-from="47.6" data-to="52.1">0</span> كم بين محطتين</p>
+    <p class="sub wu" style="animation-delay:59.8s">
+      من <b>المحمديات</b> عند الكيلومتر <span class="num">77</span>
+      إلى <b>محطة النخيب الحكومية</b> عند الكيلومتر <span class="num">305</span>.
+    </p>
+    <p class="sub f" style="animation-delay:60.8s;font-size:32px">
+      وبعدها <span class="num">115</span> كم إلى <b>محطة وقود عرعر الجديدة</b>.
+    </p>
+  </section>
+
+  <!-- 7 · المنافذ الثلاثة -->
+  <section class="scene wm" style="animation:scene 13s both;animation-delay:64.0s;--g:16px">
+    <h2 class="w" style="animation-delay:64.4s">وثلاثةُ منافذَ تبدأُ من هنا</h2>
+    <div class="gates">
+      <div class="gate f" style="animation-delay:65.6s">
+        <div class="c">الأردن</div>
+        <div class="r">بغداد ← طريبيل</div>
+        <div class="k"><span class="num">544</span> كم · 6 ساعات و20 دقيقة · <span class="num">20</span> محطة</div>
+        <div class="v">أطولُ امتداد <span class="num">131</span> كم</div>
+      </div>
+      <div class="gate f" style="animation-delay:66.8s">
+        <div class="c">سوريا</div>
+        <div class="r">بغداد ← القائم</div>
+        <div class="k"><span class="num">406</span> كم · 4 ساعات و50 دقيقة · <span class="num">19</span> محطة</div>
+        <div class="v">أطولُ امتداد <span class="num">187</span> كم</div>
+      </div>
+      <div class="gate f" style="animation-delay:68.0s">
+        <div class="c">السعودية</div>
+        <div class="r">بغداد ← عرعر</div>
+        <div class="k"><span class="num">411</span> كم · 5 ساعات و10 دقائق · <span class="num">36</span> محطة</div>
+        <div class="v">أطولُ امتداد <span class="num">137</span> كم</div>
+      </div>
+    </div>
+    <p class="sub wu" style="animation-delay:71.4s;font-size:32px;color:var(--red-900);font-weight:700">
+      ثلاثةُ طرقٍ دولية — تعرفُ محطاتِ كلٍّ منها، وأينَ يطولُ ما بينها.
+    </p>
+  </section>
+
+  <!-- 8 · لكلِّ طريقٍ امتدادُه -->
+
+  <!-- 7 · والعودة ليست الذهاب -->
+
+  <!-- 8 · حدُّ ما نعرف -->
+
+  <!-- 9 · الختام -->
+
+  <!-- **«صنع في الأنبار» طوال الفيلم.**
+       شفافةٌ خافتة خلف كل شيء، فلا تُزاحم مشهداً ولا تُقرأ عبئاً — لكنّها
+       لا تغيب: من يلتقط لقطةً من منتصف الفيلم يراها. وتظهر كاملةً في
+       الثوانيِ الأولى وحدَها، حيث لا شيء بعدُ يزاحمها. -->
+  <img id="wm" src="anbar-splash.webp" alt="" aria-hidden="true">
+  <!-- الافتتاح على مرحلتين: شعارُ المنصّة أوّلاً — فهي صاحبةُ الخدمة —
+       ثمّ «صنع في الأنبار» التي تقول من أين جاءت. -->
+  <img id="opener" src="icon-192.png" alt="المحطة التقنية">
+  <img id="wmbig" src="anbar-splash.webp" alt="صنع في الأنبار">
+
+  <!-- شعارُ التطبيق في الزاوية العليا — ثابتٌ لا يغيب -->
+  <img id="corner" src="icon-192.png" alt="">
+
+  <!-- ★ · كيف تصل إليها وكيف تستعملها.
+       الفيلمُ كلُّه أرى ما تفعله الخدمة ولم يقل كيف تُفتح. وثلاثُ خطوات
+       تكفي — والرابعة تُنسى. -->
+
+  <!-- 12 · حمّل التطبيق — الدعوة الأخيرة -->
+  <section class="scene store" style="animation:scenehold 10s both;animation-delay:77s;--g:16px">
+    <img class="appicon" src="icon-192.png" alt="المحطة التقنية"
+         style="animation:pop .5s cubic-bezier(.34,1.4,.64,1) both;animation-delay:77.4s">
+    <h1 class="w" style="animation-delay:78s">المحطةُ التقنية</h1>
+    <p class="sub w" style="animation-delay:78.5s">ومعها مساعدُ الطريق · مجّاناً وبلا حساب</p>
+    <div class="badges">
+      <span class="badge f" style="animation-delay:79.3s">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.5 12.1c0-2 1.6-3 1.7-3.1-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.2 2-1.4 2.4-.4 6 1 8 .7 1 1.5 2 2.5 2 1 0 1.4-.6 2.6-.6s1.5.6 2.6.6c1.1 0 1.8-1 2.4-2 .8-1.1 1.1-2.2 1.1-2.3 0 0-2.2-.8-2.2-3zM14.6 5.9c.5-.7.9-1.6.8-2.6-.8 0-1.8.5-2.4 1.2-.5.6-1 1.6-.8 2.5.9.1 1.8-.4 2.4-1.1z"/></svg>
+        <span><b>App Store</b><i>لآيفون وآيباد</i></span>
+      </span>
+      <span class="badge f" style="animation-delay:79.7s">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.6 2.3c-.3.3-.5.8-.5 1.4v16.6c0 .6.2 1.1.5 1.4l.1.1 9.3-9.3v-.2L3.6 2.3zM16.2 15.7l-3.1-3.1v-.2l3.1-3.1.1.1 3.7 2.1c1 .6 1 1.6 0 2.2l-3.8 2zM15.9 16l-3.2-3.2-9.1 9.1c.3.4.9.4 1.5.1l10.8-6M15.9 8L5.1 1.9c-.6-.4-1.2-.3-1.5.1l9.1 9.1L15.9 8z"/></svg>
+        <span><b>Google Play</b><i>لأندرويد</i></span>
+      </span>
+    </div>
+    <p class="sub wu" style="animation-delay:81s;font-size:36px;color:var(--brand-700);font-weight:800">
+      كُن مع آلافٍ يعرفون أين الوقودُ قبل أن يتحرّكوا
+    </p>
+    <!-- الاسمُ في الختام لا في وسط الفيلم، والرابطُ تحته.
+         و126.2 للرابط قبل 129.2 للاسم عن قصد: `both` تحجز موضعَ الاسم قبل
+         أن يُرسَم، فالرابطُ يستقرّ تحته من أوّل ظهوره ولا يقفز. -->
+    <p class="by w" style="animation-delay:85.2s">فكرةً وتنفيذاً وبرمجةً: أحمد الرفاعي</p>
+    <p class="sub f" style="animation-delay:82.2s;font-size:28px"><span class="ltr">muhta.online</span></p>
+  </section>
+
+  <!-- **الشريط السفلي: «صنع في الأنبار» وحدها.**
+       كان مربّعُ اسم المنصّة وعنوانها هنا، فحُذف بطلب المالك: الاسمُ يُقال
+       في الختام، والشعارُ في الزاوية العليا طوال الفيلم — فالمربّعُ تكرارٌ
+       ثالث يشغل الأسفل ولا يضيف. -->
+  <img id="madein" src="anbar-footer.webp" alt="صنع في الأنبار">
+
+  <div id="prog"><div id="progfill"></div></div>
+  <div id="ticks"></div>
+</div></div>
+
+<audio id="voice" src="road-voice-short.mp3" preload="auto"></audio>
+
+<div id="bar">
+  <button id="rec"><span id="reclabel">تحميل الفيديو</span></button>
+  <button id="hiderec" class="ghost">إخفاء</button>
+</div>
+<div id="note" class="hidden"></div>
+<div id="hud">اضغط للتشغيل<br><span style="font-size:17px;font-weight:400;opacity:.8">
+  مسافة تشغيل/إيقاف · R إعادة · F ملء الشاشة · V أفقي/عمودي · ← → مشهد</span></div>
+
+<script>
+// ── بيانات الفيلم — مولَّدة من الشيفرة الشغّالة، لا مكتوبة بيد ──────────────
+// المسار من public/road-routes.json بعد فكّ ترميز الفروق، والمحطات من
+// lib/roadStations.ts بعد إسقاطها على المسار بنفس snapAlong، واستبعاد ما وقع
+// ضمن سبعة كيلومترات من طرفَي الرحلة — كما تفعل الصفحة تماماً.
+const MAIN_D = "M399.7 42.2L397.4 42.4L394 40L390.9 43.1L383.8 45.8L377.9 46.1L371.7 47.7L367.7 47.8L367.4 46.9L365.3 48.2L362.1 48.7L359.9 48.5L357.8 47.7L356.1 46.5L352.4 43.2L349 41.8L346.2 41.7L339.8 42.8L332.8 42.2L330 42.4L327.2 43.2L324.4 44.9L318.3 51L312.5 55.2L305.7 63.4L303.2 65.2L300.1 66.3L290.7 67.3L283.5 69.8L280.5 70.4L276.9 70.5L270.7 69.5L268.1 69.4L265.5 69.8L260.4 71.5L258.1 71.8L253.9 71.5L246 71.5L243.8 71L235.1 67.5L232.1 67.1L229.2 67.3L225 68.6L218.2 72.8L215.7 74L212.5 74.7L205.4 75.2L202.8 75.9L200.5 77.1L195.9 80.7L191.9 82.3L189.6 82.6L177.6 82.8L175 83.4L170.4 85.4L167.1 86L164.1 85.8L157.9 84.4L155.3 84.7L149.8 86.2L147.3 86.6L136.7 85.1L134.7 85.2L132.5 85.7L130.6 86.7L129 88.1L126.4 91.3L125.4 91.6L126.8 95.2L134 102.9L143.5 111.4L149.6 117.5L157.3 124L160.1 127.6L171.4 147.5L180.6 160.5L182.1 166.7L184.5 169.4L185.6 180.9L187.9 189.3L194.5 206.5L194.3 222.9L192.9 226.3L190.8 240.9L192.1 253.6L196.4 263.6L209.5 273.1L212.9 278.1L217 292.5L218.3 304.8L220.4 315.6L220 321.9L215 328.6L208.2 335.4L204.6 342.3L203.8 344.5L198.7 348.9L196.8 349.9L192.2 356.6L186.5 363.4L180.8 373.3L175.5 380.5L168.7 387.2L161.3 395.4L154.2 401.4L143.4 407.4L131 408L122.9 407.4L110.6 409.2L106.9 410L105.1 410.9L102 413.4L95.1 417.1L93.8 418.9L93.7 420.8L93.1 422.3L91.3 425.3L87 426.9L86.1 427.8L85.2 429.5L82.7 431.7L82.2 432.6L80.4 439.5L80.3 441.9L83.5 447.4L83.4 451.3L84.4 454L83.9 455.2L81.4 457.9L81 460";
+const STOPS = [
+  {i:1,at:8.4, xy:[386.5,44.6], side:-1, n:"محطة غاز اركان خلف الطرموز", c:"الرمادي"},
+  {i:2,at:9.7, xy:[384.2,44.8], side:-1, n:"محطة وقود البادية الغربية", c:"الرمادي"},
+  {i:3,at:11, xy:[382,46], side: 1, n:"محطة وقود وغاز الاتحاد", c:"الرمادي"},
+  {i:4,at:14.5, xy:[375.6,46.6], side:-1, n:"محطة وقود بوابة الرمادي المشيدة", c:"الرمادي"},
+  {i:5,at:18.7, xy:[368,47.6], side:-1, n:"محطة تعبئة الوقود النافع", c:"الرمادي"},
+  {i:6,at:33.1, xy:[344.7,42.8], side: 1, n:"محطة الريم للوقود", c:"الوفاء"},
+  {i:7,at:33.5, xy:[343.7,41.3], side:-1, n:"محطة تعبئة وقود الزوية", c:"الوفاء"},
+  {i:8,at:76.9, xy:[273.6,70.2], side: 1, n:"محطة وقود المحمديات", c:"كبيسة"},
+  {i:9,at:305.3, xy:[220.1,321.6], side: 1, n:"محطة النخيب الحكومية", c:"النخيب"},
+  {i:10,at:305.7, xy:[219.6,321.9], side:-1, n:"محطة وقود ناحية النخيب", c:"النخيب"},
+  {i:11,at:420.9, xy:[84.1,452.8], side: 1, n:"محطة وقود عرعر الجديدة", c:"منفذ عرعر"},
+];
+const ORIGIN = [399.7,42.2], DEST = [81,460];
+const TOTAL = 87;                       // ثوانٍ — مجموع مدد المشاهد
+const GAP_FROM_KM = 76.9, GAP_TO_KM = 305.3, ROUTE_KM = 425.6;
+
+
+// ── بناء خريطة الرحلة ────────────────────────────────────────────────────
+const $ = (s) => document.querySelector(s);
+const track = $('#track'), route = $('#route'), gapline = $('#gapline'), gapback = $('#gapback');
+track.setAttribute('d', MAIN_D);
+route.setAttribute('d', MAIN_D);
+
+const LEN = track.getTotalLength();
+route.style.setProperty('--len', LEN);
+route.style.strokeDasharray = LEN;
+route.style.strokeDashoffset = LEN;
+// الرسمة تبدأ عند 16.6ث وتستغرق 2.6 — مع عدّاد الكيلومترات تماماً
+route.style.animation = 'draw 2.6s linear both';
+route.style.animationDelay = '36.6s';
+
+// **الفجوة مسارٌ مستقلّ، لا قصٌّ بالتقطيع.**
+// جُرّب dasharray مع dashoffset سالب لعزل الذيل، فأتت رسمةُ draw على
+// dashoffset نفسه فمحت العزل — فامتدّ الأحمرُ على الطريق كلّه. والصواب أن
+// يُبنى للذيل مسارٌ خاصّ من نقاطه، فتبقى الرسمةُ حرّةً في خاصّيتها.
+const gapStart = LEN * (GAP_FROM_KM / ROUTE_KM);
+const gapEnd = LEN * (GAP_TO_KM / ROUTE_KM);
+{
+  const pts = [];
+  for (let i = 0; i <= 160; i++) {
+    const q = track.getPointAtLength(gapStart + (gapEnd - gapStart) * i / 160);
+    pts.push(q.x.toFixed(1) + ' ' + q.y.toFixed(1));
+  }
+  gapline.setAttribute('d', 'M' + pts.join('L'));
+}
+const GLEN = gapline.getTotalLength();
+gapline.style.setProperty('--len', GLEN);
+gapline.style.strokeDasharray = GLEN;
+gapline.style.strokeDashoffset = GLEN;
+gapline.style.opacity = 0;
+// **أبطأُ رسمةٍ في الفيلم، وبتسارعٍ خطّيٍّ صِرف.** الفراغُ يُقاس ولا يُمثَّل،
+// وقياسٌ يتباطأ في نهايته قياسٌ يؤدّي دوراً.
+gapline.style.animation = 'gapfwd 131s linear both, draw 4.5s linear both 52.6s, breathe 3s ease-in-out 1 both 58.0s';
+
+// **امتدادُ العودة في أوّل الطريق لا في آخره.**
+// عرعر ← الرمادي: 228 كم بين محطتين تبدأ قرب النقطة صفر. ولو بقي الأحمر في
+// ذيل الخطّ لكان المشهدُ يقول عكسَ ما ينطق به التعليق.
+{
+  const back = LEN * (228 / 425.1);
+  const pts = [];
+  for (let i = 0; i <= 160; i++) {
+    const q = track.getPointAtLength(LEN - back * i / 160);
+    pts.push(q.x.toFixed(1) + ' ' + q.y.toFixed(1));
+  }
+  gapback.setAttribute('d', 'M' + pts.join('L'));
+  const L2 = gapback.getTotalLength();
+  gapback.style.strokeDasharray = L2;
+  gapback.style.setProperty('--len', L2);
+  gapback.style.strokeDashoffset = L2;
+  gapback.style.opacity = 0;
+  gapback.style.animation = 'gapback 131s linear both, draw 1.2s linear both 85.6s';
+}
+// وفجوةُ الذهاب تغيب في مشهد العودة، فلا يظهر الأحمران معاً
+
+const pins = $('#pins'), ends = $('#ends');
+const NS = 'http://www.w3.org/2000/svg';
+const el = (t, a) => { const n = document.createElementNS(NS, t); for (const k in a) n.setAttribute(k, a[k]); return n; };
+
+// **الموضعُ في غلافٍ والحركةُ في داخله.**
+//
+// حركةُ pop تضع `transform: scale()` بالـCSS، وهي تُلغي `transform="translate()"`
+// الخاصّيةَ على العنصر نفسِه إلغاءً تامّاً — فتنهار كلُّ العلامات إلى النقطة
+// صفر في زاوية الخريطة. وهو ما رآه المالك: «أسماء المدن تتجمّع بمكان واحد».
+// فالغلافُ يحمل الموضع ولا يُحرَّك، والداخلُ يُحرَّك ولا موضعَ له.
+function placed(xy, cls) {
+  const outer = el('g', { transform: `translate(${xy[0]} ${xy[1]})` });
+  const inner = el('g', cls ? { class: cls } : {});
+  outer.appendChild(inner);
+  return { outer, inner };
+}
+
+STOPS.forEach((s, k) => {
+  const { outer, inner } = placed(s.xy, 'pin' + (s.side > 0 ? ' left' : ''));
+  inner.appendChild(el('circle', { r: 9 }));
+  const tx = el('text', { y: 0.5 }); tx.textContent = s.i; inner.appendChild(tx);
+  // تظهر بترتيب المرور، بفارقِ 180 مللي — وهي وحدها التي «تَظهر» لا تُرسَم
+  inner.style.animation = 'pop .32s cubic-bezier(.34,1.4,.64,1) both';
+  inner.style.animationDelay = (43.2 + k * 0.18) + 's';
+  pins.appendChild(outer);
+});
+
+function endMark(xy, color, label, delay) {
+  const { outer, inner: g } = placed(xy, 'end');
+  g.appendChild(el('circle', { r: 11, fill: color }));
+  const w = label.length * 8 + 20;
+  g.appendChild(el('rect', { class: 'endbox', x: -w / 2, y: 16, width: w, height: 24, fill: color }));
+  const t = el('text', { class: 'endlabel', y: 32, 'text-anchor': 'middle' });
+  t.textContent = label; g.appendChild(t);
+  g.style.animation = 'fade .4s both';
+  g.style.animationDelay = delay + 's';
+  ends.appendChild(outer);
+}
+endMark(ORIGIN, '#16a34a', 'الرمادي', 36.4);
+endMark(DEST, '#2563eb', 'منفذ عرعر', 39.2);
+
+// ── شبكةُ المحافظة ────────────────────────────────────────────────────────
+//
+// تسعٌ وعشرون وصلةً تربط ثلاثين نقطة: مدنُ الأنبار كلُّها ومنافذُها الثلاثة
+// وبغداد. وليست رسماً تخطيطياً — كلُّ وصلةٍ منها مسارُ قيادةٍ حقيقيّ من
+// المحرّك نفسه، مبسَّطٌ للعرض فقط. فالخريطةُ التي يراها المشاهد هي الخريطةُ
+// التي يستعملها.
+const NET_D = ["M795.9 221.4L794.5 223.3L781.7 221.7L756.8 224L738.5 215.8L726.6 215.4L721.8 209.5L709 207.5L701.7 201.4L695.3 200.3L689.1 196.5L672.3 192.8L667.3 193.7L659.9 199.6L660.4 204.6", "M660.4 204.6L656.2 203L648.6 207.3L636.3 208.9L630.9 211.3L627.1 210.8L611.1 198.6L608.2 193.1L609.1 184L599.9 172.4", "M599.9 172.4L585.9 161.3L587.4 152.3L585.4 148.2L566.7 142.5L561.4 138L559.6 129.5L555.4 123.5L544.4 116.6L542.1 111.2L536.2 108.4L536.3 106.2L541.3 104L539.9 102L540.6 97L543.1 96.8", "M543.1 96.8L536.2 97.6L532.1 95.9L530.3 97.2L520.3 88.5L512.5 88.4L508 85.9L499.9 86.5L496.5 82.1L495.7 74.8L497.4 69.7L488.6 64.8L493.1 63.2L493 61.1", "M493 61.1L492.9 63.3L488.5 64.7L485.2 61.7L482.3 48.6L482.5 46.1L485.1 44.4", "M485.1 44.4L482.3 46.3L482.4 52.5L477.9 49.7L462 55.5L445.4 51.7L424.4 55.2L413.7 53.7L399.4 57.9L396.2 61.1L382.3 64.6L366.9 57.5", "M366.9 57.5L382.4 64.6L397 60.6L399.9 57.7L395.3 52.2", "M366.9 57.5L373.5 58.3", "M366.9 57.5L374 59.4L377.4 57.7", "M543.1 96.8L544.3 103.1", "M543.1 96.8L540.5 96.9L539.9 102L543.1 108.9", "M599.9 172.4L582 175.3L573.5 179.1", "M599.9 172.4L605.4 177.7L609.5 185.7", "M660.4 204.6L656.2 203L648.8 207.3L636.3 208.9L630.3 211.4L622.6 207.2L603.4 208.9", "M660.4 204.6L669.9 204.1L688.3 209.8L684.2 211.7", "M684.2 211.7L688.3 209.8L693.1 213.9", "M660.4 204.6L669.9 204.1L678.8 206.8L679.8 205.5", "M722.1 215.3L717.6 217.3L715.6 221.6L710.2 224.3L717.8 234.1L731.2 242L732 244.4", "M722.1 215.3L737.9 215.8L738.4 207.8", "M722.1 215.3L721.9 213.3L717.8 213.7L713.6 209.1L709 209.1", "M795.9 221.4L794.5 223.3L781.7 221.7L758.4 224.2L738.3 215.8L722.1 215.3", "M660.4 204.6L656.2 203L648.6 207.3L632.5 209.5L622.9 204.3L608.3 204.8L596.2 213.9L589.2 221.6L572.3 225.6L550.4 226.4L542.8 222L534.4 221.6L519.3 223.3L505.8 230.2L480 231.2L460.9 235.5L444.8 233.6L430.6 238.3L417.2 246.1L408.9 243.4L392.6 249.7L376.4 260L360 261.2L350.3 265.3L346.1 265.2L336.5 273.1L330.4 271.9L325.3 268.7L315.5 268.9L297.3 263.4L276.8 263.3", "M276.8 263.3L274.8 263L275.3 259.3L248.5 261.3L224.8 269.5L202.9 265.4L191.2 266.8L187 264.8L180.4 269L173.5 279L156.9 290.8L145.5 291.8L137.2 296.3L126.1 298.3L114.1 308.7", "M276.8 263.3L274.8 263L275.3 259.3L248.1 261.4L245.2 262L246.6 263.3L221.5 271.8L207.7 267L193.7 266.3L168.4 250.3L163.2 245.1L146.4 236.2L120.8 219L109.3 205.9L104.6 203.5", "M276.8 263.3L274.8 263L275.3 259.3L245.2 262L230 231.5L226.4 227.5L221.8 208.5L223.9 193.6L227.4 181.2L238.7 167.3L236.8 166.5L236.2 168", "M660.4 204.6L656.2 203L648.6 207.3L632.5 209.5L622.9 204.3L608.8 204.7L604.6 206.6L590.8 220.5L586.6 222.6L555.5 226.7L546.5 226.5L534.1 223.3L524.1 228.3L514.5 229.7L506.5 234.5L495.8 234.9L488.1 237.2L464.1 236.6L457.2 241.4L463.6 249.8L480.8 265.5L500.9 299.4L501.8 308L508.4 327.1L505.7 352.7L506.6 362.2L509.7 369.6L519.5 376.7L522 380.4L527.5 408.2L526.7 415.2", "M526.7 415.2L518.6 422.9L515.2 430L510.1 433.9L494.3 456.7L478.3 472.5L470.5 476.8L443.5 478.7L434.7 484L431.9 490.2L428.7 491.3L425.2 495.6L423.8 502.5L426.8 511.5L424.2 516", "M660.4 204.6L655.9 209.3L657.8 212.9L655.1 221L662 233.3L683.5 243.3L671.5 251.9L661.5 254.2L658.2 272.7L665.6 285.6L666.3 300.7L670.1 306.5L671.9 304.7", "M599.9 172.4L585.9 161.3L587.4 152.3L585.3 148.1L579.9 145.4L570.9 144.9L564.8 140"];
+const NET_NODES = {"بغداد": [795.9, 221.4], "الرمادي": [660.4, 204.6], "هيت": [599.9, 172.4], "حديثة": [543.1, 96.8], "عانة": [493.1, 61.1], "راوة": [485.1, 44.3], "القائم": [366.9, 57.6], "العبيدي": [395.3, 52.7], "الكرابلة": [373.5, 58.4], "الرمانة": [377.6, 58], "بروانة": [544.3, 103.1], "الحقلانية": [543.1, 108.9], "كبيسة": [573.5, 179.1], "المحمدي": [609.5, 185.7], "الوفاء": [603.4, 208.9], "الخالدية": [684.2, 211.7], "الحبانية": [693.1, 214.2], "حصيبة الشرقية": [679.7, 205.4], "الفلوجة": [722.1, 215.3], "عامرية الفلوجة": [732, 244.4], "الكرمة": [738.4, 207.8], "الصقلاوية": [709, 209.1], "الرطبة": [276.8, 263.3], "طريبيل (الأردن)": [114.1, 308.7], "الوليد": [104.6, 203.6], "عكاشات": [236.2, 168], "النخيب": [526.7, 415.1], "منفذ عرعر": [424.2, 516], "الرحالية": [671.8, 304.7], "البغدادي": [564.7, 140.1]};
+const NET_INTL = [21, 22, 23, 24, 25, 26];   // الوصلات إلى المنافذ — تُرسم زرقاء وأعرض
+
+{
+  const lines = $('#netlines'), nodes = $('#netnodes');
+  NET_D.forEach((d, i) => {
+    const q = el('path', { class: 'netline' + (NET_INTL.includes(i) ? ' intl' : ''), d });
+    const L = q.getTotalLength();
+    q.style.strokeDasharray = L;
+    q.style.strokeDashoffset = L;
+    q.style.setProperty('--len', L);
+    // تُرسَم من الداخل إلى الأطراف: بغداد والرمادي أوّلاً، ثمّ المنافذ —
+    // فتُقرأ الشبكةُ وهي تنمو، لا تظهرُ دفعةً واحدة.
+    q.style.animation = 'draw 1.3s linear both';
+    q.style.animationDelay = (24.4 + i * 0.09) + 's';
+    lines.appendChild(q);
+  });
+  const BIG = ["بغداد", "الرمادي", "الفلوجة", "هيت", "حديثة", "عانة", "راوة", "القائم", "الرطبة", "النخيب"];
+  const GATE = ["طريبيل (الأردن)", "منفذ عرعر", "الوليد", "القائم"];
+  const SHORT = {"طريبيل (الأردن)": "طريبيل ← الأردن", "منفذ عرعر": "عرعر ← السعودية", "الوليد": "الوليد ← سوريا", "القائم": "القائم ← سوريا"};
+
+  // **اللافتةُ تُوضَع أو تُطوى — ولا تتراكب.**
+  //
+  // ثلاثون اسماً على خريطةٍ واحدة تتزاحم حتماً في وادي الفرات، حيث ستُّ مدنٍ
+  // في خمسين كيلومتراً — وقِيس فكانت ثلاثاً وخمسين حالةَ تراكب. فتُرتَّب
+  // بالأولويّة (المنافذُ ثمّ الكبرى ثمّ الصغرى) وتُوضَع بالترتيب، ويُطوى
+  // اسمُ ما تعارض مع موضوعٍ قبله. فتبقى النقطةُ ويسقط الاسمُ وحده: خريطةٌ
+  // فيها ثلاثون نقطةً وعشرون اسماً مقروءاً خيرٌ من ثلاثين اسماً لا يُقرأ.
+  //
+  // والقياسُ بوحدات viewBox لا بالبكسل، فلا يتعلّق بمقاس النافذة ولا يختلف
+  // بين الأفقيّ والعموديّ.
+  // **أربعةُ مواضعَ لكلِّ اسم، والقياسُ من المرسوم لا من التخمين.**
+  //
+  // جُرّب تقديرُ عرض النصّ بعدد حروفه × حجم الخطّ، فأخطأ: العربيّةُ متفاوتةُ
+  // العرض، وهالةُ البياض حول الحرف تُوسّع المرسوم. فبقي تراكبٌ يظهر ولا
+  // يُحسب. والصوابُ أن تُرسَم الأسماء كلُّها أوّلاً، ثمّ تُقاس بـgetBBox —
+  // وهو المرسوم نفسُه بوحدات viewBox — ثمّ يُطوى المتعارض.
+  //
+  // ولكلِّ اسمٍ أربعُ محاولات: فوق النقطة، ثمّ تحتها، ثمّ يمينَها، ثمّ
+  // يسارَها. لأن ازدحام وادي الفرات رأسيٌّ — ستُّ مدنٍ في خمسين كيلومتراً —
+  // فوضعٌ واحدٌ مهما ضاق هامشُه يُسقط نصفَ الأسماء.
+  const rank = (n) => (GATE.includes(n) ? 0 : BIG.includes(n) ? 1 : 2);
+  const made = [];
+
+  Object.entries(NET_NODES).forEach(([name, xy], i) => {
+    const gate = GATE.includes(name), big = BIG.includes(name);
+    const { outer, inner: g } = placed(xy, 'netnode' + (gate ? ' gate' : big ? ' big' : ''));
+    g.appendChild(el('circle', { r: gate ? 9 : big ? 7 : 4.6 }));
+    const tx = el('text', { 'text-anchor': 'middle', class: gate || big ? '' : 'sm' });
+    tx.textContent = SHORT[name] || name;
+    g.appendChild(tx);
+    g.style.animation = 'pop .3s cubic-bezier(.34,1.4,.64,1) both';
+    g.style.animationDelay = (24.6 + i * 0.07) + 's';
+    nodes.appendChild(outer);
+    made.push({ name, xy, tx, r: gate ? 9 : big ? 7 : 4.6, fs: gate ? 23 : big ? 19 : 15 });
+  });
+
+  {
+    const PAD = 3;               // نصفُ عرض الهالة، بوحدات viewBox
+    const boxes = [];
+    const hit = (b) => boxes.some((o) =>
+      !(b[2] < o[0] || b[0] > o[2] || b[3] < o[1] || b[1] > o[3]));
+    for (const m of [...made].sort((a, b) => rank(a.name) - rank(b.name))) {
+      const spots = [
+        [0, -(m.r + m.fs * 0.55), 'middle'],
+        [0, m.r + m.fs * 0.95, 'middle'],
+        [m.r + 6, m.fs * 0.34, 'start'],
+        [-(m.r + 6), m.fs * 0.34, 'end'],
+      ];
+      let placedIt = false;
+      for (const [dx, dy, anchor] of spots) {
+        m.tx.setAttribute('x', dx);
+        m.tx.setAttribute('y', dy);
+        m.tx.setAttribute('text-anchor', anchor);
+        let bb;
+        try { bb = m.tx.getBBox(); } catch { bb = null; }
+        if (!bb || !bb.width) break;
+        const b = [m.xy[0] + bb.x - PAD, m.xy[1] + bb.y - PAD,
+                   m.xy[0] + bb.x + bb.width + PAD, m.xy[1] + bb.y + bb.height + PAD];
+        if (hit(b)) continue;
+        boxes.push(b);
+        placedIt = true;
+        break;
+      }
+      // النقطةُ تبقى ويسقط الاسمُ وحده: خريطةٌ فيها ثلاثون نقطةً وعشرون
+      // اسماً مقروءاً خيرٌ من ثلاثين اسماً لا يُقرأ منها شيء.
+      if (!placedIt) m.tx.remove();
+      else boxes.push(
+        [m.xy[0] - m.r - 1, m.xy[1] - m.r - 1, m.xy[0] + m.r + 1, m.xy[1] + m.r + 1]);
+    }
+  }
+
+  // **موضعُ المنفذ على الخريطة جزءٌ من شرحه.** حين تُذكر الأردن تتّسع حلقةٌ
+  // حول طريبيل، وحين تُذكر سوريا حول القائم، وحين تُذكر السعودية حول عرعر —
+  // بالترتيب نفسِه الذي تدخل به بطاقاتُها. فيربط المشاهدُ الاسمَ بالمكان.
+  const RING = [['طريبيل (الأردن)', 65.6], ['القائم', 66.8], ['منفذ عرعر', 68.0]];
+  for (const [name, at] of RING) {
+    const xy = NET_NODES[name];
+    if (!xy) continue;
+    for (let k = 0; k < 3; k++) {
+      const c = el('circle', { cx: xy[0], cy: xy[1], r: 9,
+        fill: 'none', stroke: '#2563eb', 'stroke-width': 3 });
+      c.style.animation = 'gatering 1.6s ease-out both';
+      c.style.animationDelay = (at + k * 0.5) + 's';
+      nodes.appendChild(c);
+    }
+    const dot = [...nodes.querySelectorAll('.netnode')]
+      .find((g) => g.querySelector('text')?.textContent === (SHORT[name] || name));
+    if (dot) {
+      const c = dot.querySelector('circle');
+      c.style.transformBox = 'fill-box';
+      c.style.transformOrigin = 'center';
+      c.style.animation = 'gatelift .9s ease-in-out both';
+      c.style.animationDelay = at + 's';
+    }
+  }
+
+  // مسرحُ الشبكة يعيش في مشهده وحده، ويعود لحظةً في مشهد المنافذ
+  $('#netwrap').style.animation = 'netshow 131s linear both';
+}
+
+
+// الخريطة تعيش من المشهد الثالث إلى الأخير: تظهر، وتخفت تحت النصّ في مشهد
+// الاعتراف، ثم تعود كاملةً في الختام. طبقةٌ واحدة لا نسخٌ متعدّدة.
+// الخريطة تعيش من المشهد الثالث إلى الأخير: تظهر، وتخفت تحت النصّ في مشهد
+// الاعتراف — فالحدُّ يُقال فوق الفراغ لا بعيداً عنه — ثم تعود كاملةً في
+// الختام. طبقةٌ واحدة، وحركةٌ واحدة بطول الفيلم.
+$('#mapwrap').style.animation = 'mapshow 131s linear both';
+route.style.animation += ', routedim 131s linear both';
+pins.style.animation = 'routedim 131s linear both';
+ends.style.animation = 'routedim 131s linear both';
+
+// **حكمُ الفجوة داخل الـSVG لا فوقه.**
+//
+// جُرّب عنصرَ HTML يُوضَع بـgetScreenCTM، فوقع في الركن: المسرحُ مُقاسٌ
+// بـtransform، فإحداثياتُ الشاشة لا تساوي إحداثياتِ المسرح، والقسمةُ على
+// المقياس شرطٌ يسهل نسيانه عند كل تغيير. وداخل الـSVG لا تحويلَ أصلاً —
+// يتبع المسارَ مهما تغيّر المقاس أو المقاسان.
+//
+// ويُكتب عند 35٪ من الرسم لا في نهايته: أربعُ ثوانٍ من خطٍّ أحمرَ بلا كلمةٍ
+// عليه لا تُميَّز عن رسمٍ معطَّل.
+{
+  // **وعرضُ الصندوق يُقاس من نصّه، ولا يُخمَّن.**
+  //
+  // كان ثابتاً عند مئةٍ وأربعةِ بكسلات، و«228 كم بين محطتين» بـTajawal ثقلِ
+  // 800 أعرضُ منه — فخرج الرقمُ من طرفٍ والنونُ من آخر. ولا يُصلحه رقمٌ
+  // أكبر: عرضُ النصّ العربيّ يتغيّر بالخطّ الذي يُحمَّل، وبالبديل إن تأخّر.
+  //
+  // فيُقاس بعد الإدراج — ‎getComputedTextLength‎ لا تعمل على عنصرٍ خارج
+  // الصفحة — ويُعاد قياسُه حين يجهز الخطّ، إذ ‎display=swap‎ يرسم بالبديل
+  // أوّلاً ثمّ يستبدله.
+  const H = 22, PAD = 26, chips = [];
+  const chip = (pt, label, anim) => {
+    const g = el('g', { transform: `translate(${pt.x.toFixed(1)} ${pt.y.toFixed(1)})` });
+    const r = el('rect', { y: -H / 2, height: H, rx: H / 2,
+      fill: '#fff', stroke: '#dc2626', 'stroke-width': 2 });
+    const tx = el('text', { y: 1, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+      fill: '#7f1d1d', 'font-size': 13, 'font-weight': 800, 'font-family': 'Tajawal, sans-serif' });
+    tx.textContent = label;
+    g.append(r, tx);
+    g.style.animation = anim;
+    chips.push([r, tx]);
+    return g;
+  };
+  const fitChips = () => {
+    for (const [r, tx] of chips) {
+      const w = tx.getComputedTextLength() + PAD;
+      r.setAttribute('x', -w / 2);
+      r.setAttribute('width', w);
+    }
+  };
+
+  // يغيب مع فجوته في مشهد العودة، فلا يبقى رقمُ الذهاب فوق فراغِ العودة
+  const g = chip(gapline.getPointAtLength(GLEN / 2), '228 كم بين محطتين', 'chipfwd 131s linear both');
+  g.id = 'gapmark';
+  $('#gapmark').replaceWith(g);
+
+  // وشارةُ العودة: المسافةُ نفسُها — وهي في أوّلِ الطريق لا في آخره، وذلك
+  // معنى المشهد. (وتعليقٌ قديم هنا قال 231، والسكربتُ يقول 228 كما الشاشة.)
+  const g2 = chip(gapback.getPointAtLength(gapback.getTotalLength() / 2),
+    '228 كم بين محطتين', 'chipback 131s linear both');
+  g2.style.opacity = 0;
+  g.parentNode.appendChild(g2);
+
+  fitChips();
+  document.fonts?.ready.then(fitChips);
+}
+
+// ── البطاقات ─────────────────────────────────────────────────────────────
+const cards = $('#cards');
+STOPS.forEach((s, k) => {
+  if (k) {
+    const leg = document.createElement('div');
+    leg.className = 'leg f';
+    const d = Math.max(5, Math.round((s.at - STOPS[k - 1].at) / 80 * 60 / 5) * 5);
+    leg.innerHTML = 'خلال <span class="num">' + d + '</span> دقيقة · <span class="num">'
+      + Math.round(s.at - STOPS[k - 1].at) + '</span> كم';
+    leg.style.animationDelay = (43.3 + k * 0.18) + 's';
+    if (k > 3) leg.style.display = 'none';
+    cards.appendChild(leg);
+  }
+  const c = document.createElement('div');
+  c.className = 'card' + (s.side > 0 ? ' left' : '');
+  c.innerHTML = '<div class="d num">' + s.i + '</div><div><div class="t">' + s.n
+    + '</div><div class="m">' + s.c + ' · كم <span class="num">' + Math.round(s.at) + '</span> · '
+    + (s.side > 0 ? 'يسارَ اتجاهك' : 'يمينَ اتجاهك') + '</div></div>';
+  c.style.animation = 'slidein .42s cubic-bezier(.22,1,.36,1) both';
+  c.style.animationDelay = (43.2 + k * 0.18) + 's';
+  // أربعُ بطاقاتٍ تملأ الإطار؛ الباقيةُ على الخريطة، وتزاحمُها في أوّل 77 كم
+  // هو المعنى نفسه.
+  if (k > 3) c.style.display = 'none';
+  cards.appendChild(c);
+});
+
+// ── المسرح ───────────────────────────────────────────────────────────────
+const stage = $('#stage'), root = document.documentElement, voice = $('#voice'), hud = $('#hud');
+if (new URLSearchParams(location.search).get('v') === 'story') root.classList.add('v');
+
+const fit = () => {
+  const s = Math.min(innerWidth / stage.offsetWidth, innerHeight / stage.offsetHeight);
+  stage.style.transform = `translate(-50%, -50%) scale(${s})`;
+  sizeMap();
+};
+// المقاسانِ يُحسبان بالجافاسكربت: الـSVG عنصرٌ مستبدَل، و«تلقائيّ» في عرضه
+// تعني ملءَ العرض لا اتّباعَ النسبة — فكانت الشبكةُ تفيض على عمود النصّ.
+function box(wrapSel, svgSel, vw, vh, capWide) {
+  const w = $(wrapSel), svg = $(svgSel);
+  const wide = !root.classList.contains('v');
+  const h = w.clientHeight * (wide ? 0.9 : 1);
+  const cap = w.clientWidth * (wide ? capWide : 0.92);
+  const width = Math.min(h * vw / vh, cap);
+  svg.style.width = width + 'px';
+  svg.style.height = (width * vh / vw) + 'px';
+}
+function sizeMap() {
+  box('#mapwrap', '#map', 480, 500, 0.46);
+  box('#netwrap', '#net', 900, 560, 0.48);
+}
+addEventListener('resize', fit);
+
+// موضعُ حكمِ الفجوة يُحسب من المسار نفسه، فيتبعه مهما تغيّر المقاس.
+// getScreenCTM يعود null على SVG لم يُخطَّط بعد في سفاري — فيُحرَس.
+
+
+// ── ساعةٌ واحدة ──────────────────────────────────────────────────────────
+//
+// كلُّ الحركات مُجمَّدة، ولا تتقدّم إلا بمقدار ما تُسحَب إليه في كل إطار.
+// فلا ساعةٌ ثانية تسبق أو تتأخّر — وهو العطل الذي أصاب سابقَ هذا الفيلم.
+//
+// **والصوت اختياريّ.** إن وُجد road-voice.mp3 كان هو الساعة، وإن لم يوجد
+// فساعةُ الجدار. فيُشاهَد الفيلم اليوم، ويُقفَل على التعليق حين يُسجَّل.
+let anims = [], started = false, t0 = 0, paused = false, pausedAt = 0;
+let haveVoice = false;
+
+voice.addEventListener('canplay', () => { haveVoice = true; }, { once: true });
+voice.addEventListener('error', () => { haveVoice = false; });
+
+const scrub = (ms) => { for (const a of anims) { try { a.currentTime = ms; } catch {} } };
+
+function collect() {
+  anims = document.getAnimations();
+  for (const a of anims) { try { a.pause(); } catch {} }
+  scrub(now() * 1000);
+}
+/* <<warp>> */
+/* مُولَّدٌ بـ scripts/build-road.mjs — لا يُحرَّر بيد.
+   ‎[زمنُ الفيلم, زمنُ الصوت]‎ عند كل مشهد. وما بينهما خطٌّ مستقيم. */
+const WARP = [[0,0],[2.9,2.05],[6,4.07],[11,9.77],[18,15.52],[24,27.93],[34,51.84],[42,71.33],[51,88.45],[64,117.71],[77,149.72],[87,160.77]];
+const AUDIO_TOTAL = 160.77;
+/* ‎[بدايةُ الفقرة بالصوت, أوّلُ كلماتها]‎ — تُعرض مع ‎?words=1‎ وحدها */
+const PARAS = [[0.2,"المحطة التقنية."],[2.05,"صنع في الأنبار."],[4.07,"خدمة جديدة تقدمها المحطة التقنية: مساعد الطريق."],[9.77,"تجيب المحطة التقنية سؤالا واحدا: أين يوجد"],[15.52,"لكن أغلب الطرق الرئيسية في الأنبار تمر"],[27.93,"فربطنا مدن الأنبار كلها على خريطة واحدة:"],[51.84,"فتختار من أين تنطلق، وإلى أين وجهتك."],[71.33,"والمحطات التي نعرفها تظهر على طريقك مرقمة،"],[88.45,"ثم يبدأ أطول امتداد في الرحلة: مئتان"],[104.55,"وبعدها مئة وخمسة عشر كيلومترا إلى محطة"],[117.71,"وثلاثة منافذ تبدأ من هنا. إلى الأردن:"],[149.72,"حمل المحطة التقنية من App Store أو"]];
+function filmTime(a) {
+  for (let i = 0; i < WARP.length - 1; i++) {
+    const [f0, a0] = WARP[i], [f1, a1] = WARP[i + 1];
+    if (a <= a1) return f0 + ((a - a0) / (a1 - a0)) * (f1 - f0);
+  }
+  return TOTAL;
+}
+function audioTime(f) {
+  for (let i = 0; i < WARP.length - 1; i++) {
+    const [f0, a0] = WARP[i], [f1, a1] = WARP[i + 1];
+    if (f <= f1) return a0 + ((f - f0) / (f1 - f0)) * (a1 - a0);
+  }
+  return AUDIO_TOTAL;
+}
+/* طبقةُ الكلمات — بمفتاح W، على نمط V وD وR. وسلسلةُ الاستعلام تسقط في بعض
+   نوافذ المعاينة، والمفتاحُ لا يسقط. ولا تظهر في التسجيل ما لم تُطلب. */
+let wordsTag = null;
+function toggleWords() {
+  if (wordsTag) { wordsTag.remove(); wordsTag = null; return; }
+  wordsTag = buildWords();
+}
+function buildWords() {
+  const tag = document.createElement('div');
+  tag.style.cssText =
+    'position:absolute;left:0;right:0;bottom:52px;z-index:60;text-align:center;' +
+    'font:700 20px/1.5 system-ui,sans-serif;color:#fff;background:rgba(0,0,0,.62);' +
+    'padding:10px 16px;pointer-events:none;direction:rtl';
+  stage.appendChild(tag);
+  setInterval(() => {
+    const a = haveVoice ? voice.currentTime : 0;
+    let cur = PARAS[0];
+    for (const p of PARAS) if (a >= p[0]) cur = p;
+    // بلا قالبٍ نصّيّ: هذا السطر داخل قالبِ البناء، فمُعامِلُ القالب يُفسَّر مرّتين
+    tag.textContent = a.toFixed(1) + ' ث — يُفترض: ' + (cur ? cur[1] : '—');
+  }, 120);
+  return tag;
+}
+if (new URLSearchParams(location.search).has('words')) wordsTag = buildWords();
+addEventListener('keydown', (e) => { if (e.code === 'KeyW') toggleWords(); });
+
+function now() {
+  if (!started) return 0;
+  /* المسجّلُ يقف عند ‎TOTAL + 0.7‎، وساعةُ الصوت تقف عند ‎TOTAL‎ بالضبط —
+     فلولا هذه الزيادةُ بعد انتهاء الصوت لظلّ يسجّل بلا نهاية. */
+  if (haveVoice) return filmTime(voice.currentTime) + (voice.ended ? 1 : 0);
+  if (paused) return pausedAt;
+  return (performance.now() - t0) / 1000;
+}
+/* <</warp>> */
+collect();
+stage.classList.add('ready');
+addEventListener('load', () => { collect(); fit(); });
+fit();
+
+// ── العدّادات ────────────────────────────────────────────────────────────
+//
+// **بتسارعٍ خطّيٍّ دائماً.** رقمٌ يتباطأ عند نهايته رقمٌ يؤدّي دوراً، ورقمٌ
+// يمضي بوتيرةٍ واحدة قياسٌ وحسب. وهذا هو الفرق بين إعلانٍ وبين تقرير.
+const COUNTERS = [...document.querySelectorAll('[data-count]')].map((n) => ({
+  n, to: +n.dataset.count, a: +n.dataset.from, b: +n.dataset.to, last: -1,
+}));
+function counters(s) {
+  for (const c of COUNTERS) {
+    const p = Math.max(0, Math.min(1, (s - c.a) / Math.max(0.01, c.b - c.a)));
+    const v = Math.round(c.to * p);
+    if (v !== c.last) { c.last = v; c.n.textContent = v.toLocaleString('en-US'); }
+  }
+}
+
+const fill = $('#progfill'), mapwrap = $('#mapwrap'), netwrap = $('#netwrap');
+function tick() {
+  const s = Math.min(now(), TOTAL);
+  scrub(s * 1000);
+  counters(s);
+  fill.style.width = (s / TOTAL * 100) + '%';
+  // مشهد البطاقات وحده تنكمش فيه الخريطة — والساعة أصدق من حركةٍ على
+  // متغيّرٍ لا تُحرِّكه المتصفّحات بلا ‎@property‎.
+  // مشهدُ البطاقات تنكمش فيه خريطةُ الرحلة، ومشهدُ المنافذ تنكمش فيه الشبكة
+  const small = s >= 42 && s < 51;
+  const gates = s >= 64 && s < 77;
+  if (small !== mapwrap.classList.contains('small') ||
+      gates !== netwrap.classList.contains('small')) {
+    mapwrap.classList.toggle('small', small);
+    netwrap.classList.toggle('small', gates);
+    sizeMap();
+  }
+  requestAnimationFrame(tick);
+}
+
+function start() {
+  if (started) return;
+  started = true;
+  hud.classList.add('hidden');
+  t0 = performance.now();
+  if (haveVoice) { voice.currentTime = 0; voice.play().catch(() => {}); }
+  requestAnimationFrame(tick);
+}
+addEventListener('click', (e) => { if (!e.target.closest('#bar, #note')) start(); });
+
+// ── الفصول: تسعُ علاماتٍ على الشريط، ولكلٍّ هدفُ لمسٍ 44 ──────────────────
+const MARKS = [0, 6, 11, 18, 24, 34, 42, 51, 64, 77];
+const ticks = $('#ticks');
+MARKS.forEach((m, i) => {
+  const b = document.createElement('button');
+  b.style.cssText = `position:absolute;bottom:0;height:44px;width:44px;border:0;background:transparent;
+    cursor:pointer;pointer-events:auto;transform:translateX(50%);inset-inline-end:${m / TOTAL * 100}%`;
+  b.setAttribute('aria-label', 'المشهد ' + (i + 1));
+  b.onclick = (e) => { e.stopPropagation(); seek(m); };
+  ticks.appendChild(b);
+  const t = document.createElement('i');
+  t.style.insetInlineEnd = (m / TOTAL * 100) + '%';
+  ticks.appendChild(t);
+});
+ticks.style.pointerEvents = 'none';
+
+function seek(s) {
+  if (!started) { start(); }
+  if (haveVoice) { voice.currentTime = audioTime(s); }
+  else { t0 = performance.now() - s * 1000; pausedAt = s; }
+  scrub(s * 1000);
+}
+function scene(dir) {
+  const s = now();
+  const i = MARKS.findIndex((m, k) => s < (MARKS[k + 1] ?? 1e9));
+  seek(MARKS[Math.max(0, Math.min(MARKS.length - 1, i + dir))]);
+}
+
+addEventListener('keydown', (e) => {
+  if (!started && (e.code === 'Space' || e.code === 'Enter')) { e.preventDefault(); return start(); }
+  switch (e.code) {
+    case 'KeyR': location.reload(); break;
+    case 'KeyF': root.requestFullscreen?.(); break;
+    case 'KeyV': root.classList.toggle('v'); fit(); collect(); break;
+    case 'KeyD': $('#bar').classList.toggle('hidden'); $('#note').classList.add('hidden'); break;
+    case 'ArrowLeft': e.preventDefault(); scene(1); break;
+    case 'ArrowRight': e.preventDefault(); scene(-1); break;
+    case 'Space':
+      e.preventDefault();
+      if (haveVoice) { voice.paused ? voice.play().catch(() => {}) : voice.pause(); }
+      else if (paused) { t0 = performance.now() - pausedAt * 1000; paused = false; }
+      else { pausedAt = now(); paused = true; }
+      break;
+  }
+});
+
+// ── التسجيل من داخل المتصفّح ──────────────────────────────────────────────
+// الصفحة أنيميشن حيّ لا ملف، فالتحميل يعني تسجيلها أولاً. الصورة من
+// getDisplayMedia تُرسم في لوحةٍ بمقاس المسرح تماماً — فلا حوافّ سوداء
+// ولا فقدُ دقّة. والصوت من عنصر الصوت نفسه لا من مخرج الجهاز.
+const rec = $('#rec'), note = $('#note'), reclabel = $('#reclabel');
+const say = (h) => { note.innerHTML = h; note.classList.remove('hidden'); };
+$('#hiderec').addEventListener('click', () => { $('#bar').classList.add('hidden'); note.classList.add('hidden'); });
+
+function bestType() {
+  return ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm']
+    .find((t) => MediaRecorder.isTypeSupported(t)) || '';
+}
+
+rec.addEventListener('click', async () => {
+  if (!navigator.mediaDevices?.getDisplayMedia || !window.MediaRecorder) {
+    return say('هذا المتصفّح لا يدعم التسجيل. استعمل Chrome أو Edge.');
+  }
+  const W = stage.offsetWidth, H = stage.offsetHeight;
+  let display;
+  try {
+    display = await navigator.mediaDevices.getDisplayMedia({
+      preferCurrentTab: true,
+      video: { frameRate: 30, width: { ideal: 3840 }, height: { ideal: 2160 } },
+      audio: false,
+    });
+  } catch { return say('أُلغي اختيار الشاشة. اضغط الزر ثم اختر <b>هذا التبويب</b> ثم Share.'); }
+
+  const src = document.createElement('video');
+  src.srcObject = display; src.muted = true;
+  await src.play().catch(() => {});
+  await new Promise((r) => (src.readyState >= 2 ? r() : (src.onloadedmetadata = r)));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  ctx.imageSmoothingQuality = 'high';
+
+  let drawing = true;
+  (function paint() {
+    if (!drawing) return;
+    const r = stage.getBoundingClientRect();
+    const k = src.videoWidth / (innerWidth || 1);
+    ctx.drawImage(src, r.left * k, r.top * k, r.width * k, r.height * k, 0, 0, W, H);
+    requestAnimationFrame(paint);
+  })();
+
+  const type = bestType();
+  const tracks = [...canvas.captureStream(30).getVideoTracks()];
+  if (haveVoice) { try { tracks.push(...voice.captureStream().getAudioTracks()); } catch {} }
+  const chunks = [];
+  const mr = new MediaRecorder(new MediaStream(tracks),
+    type ? { mimeType: type, videoBitsPerSecond: 12e6, audioBitsPerSecond: 192e3 } : {});
+  mr.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  mr.onstop = () => {
+    drawing = false;
+    display.getTracks().forEach((t) => t.stop());
+    const blob = new Blob(chunks, { type: mr.mimeType || 'video/webm' });
+    const ext = (mr.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `muhta-road-${root.classList.contains('v') ? 'story-1080x1920' : 'wide-1920x1080'}.${ext}`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+    rec.disabled = false;
+    $('#bar').classList.remove('hidden');
+    reclabel.textContent = 'تحميل الفيديو';
+    say(`جاهز — <b>${a.download}</b><br>${W}×${H} · ${(blob.size / 1048576).toFixed(1)} م.ب`);
+  };
+  display.getVideoTracks()[0].addEventListener('ended', () => { if (mr.state !== 'inactive') mr.stop(); });
+
+  rec.disabled = true;
+  note.classList.add('hidden'); hud.classList.add('hidden'); $('#bar').classList.add('hidden');
+
+  started = false; paused = false;
+  if (haveVoice) { voice.pause(); voice.currentTime = 0; }
+  scrub(0);
+  await new Promise((r) => setTimeout(r, 600));
+
+  start();
+  mr.start();
+  const label = () => {
+    if (mr.state === 'inactive') return;
+    reclabel.textContent = `يسجّل… ${Math.min(TOTAL, now()).toFixed(0)}/${TOTAL}`;
+    setTimeout(label, 500);
+  };
+  label();
+  const stopAt = setInterval(() => {
+    if (now() >= TOTAL + 0.7) { clearInterval(stopAt); if (mr.state !== 'inactive') mr.stop(); }
+  }, 200);
+});
+</script>
+</body>
+</html>

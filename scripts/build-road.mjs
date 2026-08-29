@@ -30,10 +30,32 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+/** النسخةُ القصيرة: `SHORT=1 node scripts/build-road.mjs`
+ *
+ *  الطويلةُ أربعُ دقائقَ وإحدى عشرةَ ثانية — وذلك أطولُ ممّا يُشاهَد على
+ *  واتساب أو إنستغرام. فالقصيرةُ تنتهي عند «وثلاثةُ منافذَ تبدأ من هنا»
+ *  وتُتبِعها بشريحة التحميل مباشرةً: المحتوى ثمّ الدعوة، بلا التفاصيل التي
+ *  بينهما.
+ *
+ *  ولا نسخةَ ثانية من الصفحة: تُبنى من `road.html` نفسِها بجراحةٍ موصوفة —
+ *  تُحذف أربعةُ مشاهد، ويُنقل مشهدُ الختام من 121 إلى 77. فنسختان تفترقان في
+ *  أوّل تعديلٍ على الفيلم، وواحدةٌ لا تفترق. */
+const SHORT = !!process.env.SHORT;
+
 const SRC = resolve('mp3/1');
 const BED = 'C:/Users/al3r1/OneDrive/Desktop/MY/new/back.mp3'; // الخلفيةُ نفسُها التي تحت الدليل والإعلان
-const OUT = resolve('docs/promo/road-voice.mp3');
+const OUT = resolve(SHORT ? 'docs/promo/road-voice-short.mp3' : 'docs/promo/road-voice.mp3');
+/** تُقرأ الطويلةُ دائماً — الحقنُ يُعكَس، فتصلح مصدراً للاثنتين */
 const PAGE = resolve('docs/promo/road.html');
+const PAGE_OUT = resolve(SHORT ? 'docs/promo/road-short.html' : 'docs/promo/road.html');
+const CUES = resolve(SHORT ? 'docs/promo/road-cues-short.json' : 'docs/promo/road-cues.json');
+/** مشاهدُ تُحذف من القصيرة، ومقدارُ ما يُنقَل به الختامُ إلى موضعها.
+ *
+ *  و77 منها — وهي التي نُسيت أوّلَ مرّة. الختامُ يُنقَل إليها، فلو بقي
+ *  ساكنُها لاجتمع مشهدان على ثانيةٍ واحدة: «ولكلِّ طريقٍ امتدادُه الأطول»
+ *  فوق شريحة التحميل، والأوّلُ يحجب الثاني حتى يخفت. */
+const CUT_SCENES = [77, 85, 91, 99, 109];
+const MOVE_CLOSE = 121 - 77;
 const SCRIPT = resolve('docs/promo/road-script.md');
 
 /** المقاطع بترتيب قراءتها.
@@ -45,7 +67,14 @@ const SCRIPT = resolve('docs/promo/road-script.md');
  *
  *  والمأخوذُ المتأخّرة، كما أُخذ 4 وتُركت 2 و3. وإن كانت الأولى أحسنَ سماعاً
  *  فالتبديلُ رقمٌ واحد في هذا السطر. */
-const CLIPS = [1, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17];
+const CLIPS = SHORT
+  ? [1, 4, 5, 6, 7, 8, 9, 10, 17]
+  : [1, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17];
+
+/** أيُّ فقرات السكربت تدخل هذه النسخة — بأرقامها في السكربت. */
+const USE_PARAS = SHORT
+  ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16]
+  : [...Array(17).keys()];
 
 /** لا صمتَ في الأوّل: المقطعُ الأوّل يبدأ مع الفيلم عند الصفر.
  *  والشعاران في الافتتاح يُضغطان إلى ما قبل أوّل كلمة — وهو جزءٌ من ثانية. */
@@ -69,17 +98,21 @@ const TAIL = 0.8;
 //  الستِّ الأخيرة صوت — قِيست وتيرةُ الكلام بين ما أثبته المالكُ سماعاً
 //  فكانت 12.1 حرفاً في الثانية، فبان أن النصَّ أطولُ من التسجيل بالثلث.
 //  ثمّ سُجّلت، فعاد الجدولُ كاملاً.
-const PARA_SCENE = [0, 2.9, 6, 11, 18, 24, 34, 42, 51, 51, 64, 77, 85, 91, 99, 109, 121];
+const PARA_SCENE = SHORT
+  ? [0, 2.9, 6, 11, 18, 24, 34, 42, 51, 51, 64, 77]
+  : [0, 2.9, 6, 11, 18, 24, 34, 42, 51, 51, 64, 77, 85, 91, 99, 109, 121];
 /** آخرُ مشهدٍ له تعليقٌ مسجَّل. وما بعده يمضي بزمنِه الطبيعيّ على الموسيقى
  *  وحدَها — لا يُمطُّ ولا يُقصَّر، لأن لا صوتَ يُتبَع.
  *
  *  ويعود هذا سطراً واحداً متى سُجّلت الفقراتُ الستّ: تُزاد مواضعُها إلى
  *  `PARA_SCENE`، ويصير هذا 121. */
-const LAST_VOICED = 121;
+const LAST_VOICED = SHORT ? 77 : 121;
 
 /** مراسي الجدول على شريط الفيلم — مواضعُ المشاهد كما هي في الصفحة، ومعها
  *  ظهورُ «صنع في الأنبار» في الافتتاح. لا تتغيّر. */
-const OLD = [0, 2.9, 6, 11, 18, 24, 34, 42, 51, 64, 77, 85, 91, 99, 109, 121, 131];
+const OLD = SHORT
+  ? [0, 2.9, 6, 11, 18, 24, 34, 42, 51, 64, 77, 87]
+  : [0, 2.9, 6, 11, 18, 24, 34, 42, 51, 64, 77, 85, 91, 99, 109, 121, 131];
 
 /** أقصرُ سكوتٍ يُعَدّ فاصلاً بين نُطقين. أقلُّ منه تنفُّسٌ داخل الجملة. */
 const PAUSE = 0.30;
@@ -179,19 +212,25 @@ if (process.env.UTT) {
 // CRLF: الملفّ يُحرَّر على وندوز، وفقرةٌ تُفصل بسطرٍ فارغ لا تُرى بدونه
 const md = readFileSync(SCRIPT, 'utf8').replace(/\r\n/g, '\n');
 const body = md.slice(md.indexOf('*‏[٠:٠٠'), md.indexOf('## ثانياً'));
-const paras = body
+const all = body
   .split('\n\n')
   .map((p) => p.replace(/\s+/g, ' ').trim())
   .filter((p) => p && !p.startsWith('*‏[') && !p.startsWith('*(') && p !== '---')
   .map((p) => p.replace(/\*\*|\*/g, '').replace(/[\u064B-\u0652\u0670]/g, '').trim());
 
-if (paras.length < PARA_SCENE.length) {
-  console.log(`فقراتُ النصّ ${paras.length} أقلُّ من جدول المشاهد ${PARA_SCENE.length}`);
+if (all.length !== 17) {
+  console.log(`فقراتُ النصّ ${all.length} ولا تساوي سبعَ عشرة — راجِع السكربت`);
   process.exit(1);
 }
-/** ما في النصّ ولا صوتَ له. يُعزَل ويُقال عددُه في التقرير، ولا يُحشَر في
- *  الصوت — فحشرُه هو الذي كان يُنكمِش كلَّ فقرةٍ عن حقّها. */
-const unvoiced = paras.splice(PARA_SCENE.length);
+/** فقراتُ هذه النسخة بترتيبها. القصيرةُ تتخطّى الخمسَ التفصيلية وتقفز إلى
+ *  الختام، فالاختيارُ بالأرقام لا بقصِّ الذيل. */
+const paras = USE_PARAS.map((i) => all[i]);
+if (paras.length !== PARA_SCENE.length) {
+  console.log(`فقراتُ النسخة ${paras.length} ولا تطابق جدولَ المشاهد ${PARA_SCENE.length}`);
+  process.exit(1);
+}
+/** ما في السكربت وليس في هذه النسخة — يُقال لئلّا يُظنّ ضائعاً */
+const skipped = all.filter((_, i) => !USE_PARAS.includes(i));
 if (UTT.length < paras.length) {
   console.log(`وحداتُ النطق ${UTT.length} أقلُّ من الفقرات ${paras.length} — راجِع PAUSE`);
   process.exit(1);
@@ -260,7 +299,9 @@ const ANCHOR = new Map([[0, 0], [1, 1], [2, 2], [3, 4], [4, 6], [6, 21], [7, 28]
  *  عشرةَ لشرح الخطوات. ومع ذلك أخذت المطابقةُ لكلِّ فقرةٍ منها وحدةً زائدة من
  *  المقطع الذي قبلها — فمكافأةُ حدِّ المقطع ثانيتان، وربحُ الحرفِ كان أكبر.
  *  فما عُرف بالقياس يُثبَّت، ولا يُترك للترجيح. */
-const ANCHOR_CLIP = new Map([[10, 10], [11, 12], [12, 13], [13, 14], [14, 15], [15, 16], [16, 17]]);
+const ANCHOR_CLIP = SHORT
+  ? new Map([[10, 10], [11, 17]])
+  : new Map([[10, 10], [11, 12], [12, 13], [13, 14], [14, 15], [15, 16], [16, 17]]);
 for (const [para, clip] of ANCHOR_CLIP) {
   const at = UTT_CLIP.indexOf(CLIPS.indexOf(clip));
   if (at < 0) {
@@ -377,11 +418,6 @@ const made = dur(OUT);
 // CRLF مثلَ السكربت: المطابقةُ على نصٍّ متعدّد الأسطر تسقط بدونه
 let page = readFileSync(PAGE, 'utf8').replace(/\r\n/g, '\n');
 
-if (!page.includes(`const TOTAL = ${OLD.at(-1)};`)) {
-  console.log(`الصفحةُ ليست على توقيتها الأصلي (${OLD.at(-1)} ث) — راجِع TOTAL فيها`);
-  process.exit(1);
-}
-
 const r2 = (x) => Math.round(x * 100) / 100;
 const OPEN = '/* <<warp>> */', CLOSE = '/* <</warp>> */';
 
@@ -414,6 +450,61 @@ if (had >= 0) {
   page = page.slice(0, had) + OLD_NOW + page.slice(end + CLOSE.length);
   // و‎seek()‎ خارجَ العلامتين، فتُردّ وحدَها
   page = page.replace(NEW_SEEK, OLD_SEEK);
+}
+
+// ── جراحةُ النسخة القصيرة ────────────────────────────────────────────────
+//
+// **وTOTAL يُغيَّر بلا خوف.** حسبتُه يجرّ خلفَه اثنتي عشرةَ حركةً طولُها 131
+// ثانية فيختلّ طورُها. وليس كذلك: `scrub` تضع في كلِّ إطار
+// `currentTime = ثانيةُ الفيلم × 1000`، فكلُّ حركةٍ عند موضعها المطلق مهما
+// كان TOTAL. وهو لا يمسّ إلا شريطَ التقدّم، وعلاماتِ الفصول، ولحظةَ توقّف
+// المسجّل — فالقصُّ عنده آمن.
+if (SHORT) {
+  for (const at of CUT_SCENES) {
+    // `String.raw` لا قالبٌ عاديّ. في القالب العاديّ تُفسَّر الهروبات قبل أن
+    // يراها التعبيرُ النمطيّ: صنفُ «أيُّ محرف» يصير حرفَي s وS، وسطرٌ جديد
+    // يصير سطراً حقيقياً. فيُبنى تعبيرٌ لا يطابق شيئاً — **ولا يشكو**.
+    //
+    // و«109s» وحدَها بين المشاهد مكتوبةٌ بلا كسرٍ عشريّ، فالكسرُ اختياريّ.
+    const re = new RegExp(
+      String.raw`\n *<section class="scene[^"]*" style="animation:scene[^"]*animation-delay:` +
+      at + String.raw`(?:\.0)?s[^"]*">[\s\S]*?</section>`
+    );
+    if (!re.test(page)) {
+      console.log(`لم أجد المشهد عند ${at} ث — راجِع الصفحة`);
+      process.exit(1);
+    }
+    page = page.replace(re, '');
+  }
+
+  // ومشهدُ الختام يُنقل إلى موضع أوّلِ المحذوفات: تأخيراتُه كلُّها ناقصَ 44.
+  const open = page.indexOf('<section class="scene store"');
+  if (open < 0) { console.log('لم أجد مشهدَ الختام'); process.exit(1); }
+  const end = page.indexOf('</section>', open) + '</section>'.length;
+  const moved = page
+    .slice(open, end)
+    .replace(/animation-delay:(\d+(?:\.\d+)?)s/g,
+      (_, d) => `animation-delay:${r2(Number(d) - MOVE_CLOSE)}s`);
+  page = page.slice(0, open) + moved + page.slice(end);
+
+  // وشريطُ صوتها هو شريطُها. وهذا السطرُ نُسي في أوّل بناء، فعُرضت القصيرةُ
+  // على صوت الطويلة: الصورةُ تنتهي عند 87 والصوتُ يمضي إلى 251.
+  const SRC_LONG = 'src="road-voice.mp3"';
+  if (!page.includes(SRC_LONG)) {
+    console.log('لم أجد وسمَ الصوت في الصفحة');
+    process.exit(1);
+  }
+  page = page.replace(SRC_LONG, 'src="road-voice-short.mp3"');
+
+  page = page.replace('const TOTAL = 131;', `const TOTAL = ${OLD.at(-1)};`);
+  // وعلاماتُ الفصول لا تشير إلى ما لا وجودَ له
+  page = page.replace(/const MARKS = \[[^\]]*\];/,
+    `const MARKS = [${OLD.slice(0, -1).filter((m) => m !== 2.9).join(', ')}];`);
+}
+
+if (!page.includes(`const TOTAL = ${OLD.at(-1)};`)) {
+  console.log(`الصفحةُ ليست على توقيتها (${OLD.at(-1)} ث) — راجِع TOTAL فيها`);
+  process.exit(1);
 }
 
 // ── طبقةُ الكلمات: ‎?words=1‎ ─────────────────────────────────────────────
@@ -500,12 +591,12 @@ if (!page.includes(OLD_SEEK)) {
 }
 page = page.replace(OLD_SEEK, NEW_SEEK);
 
-writeFileSync(PAGE, page);
+writeFileSync(PAGE_OUT, page);
 
 const err = groups.map(([a, b], p) => C[p] / paraRate[p] - (ps[b] - ps[a]));
 const rms = Math.sqrt(err.reduce((s, x) => s + x * x, 0) / K);
 writeFileSync(
-  resolve('docs/promo/road-cues.json'),
+  CUES,
   JSON.stringify({
     audioTotal: +made.toFixed(2), filmTotal: OLD.at(-1), lead: LEAD, gap: GAP,
     rms: +rms.toFixed(2), utterances: UTT.length, clips: cues,
@@ -513,14 +604,17 @@ writeFileSync(
   }, null, 2)
 );
 
-console.log(`مقاطع ${CLIPS.length}  نُطق ${UTT.length}  ->  ${made.toFixed(2)} ث   (جذر الخطأ ${rms.toFixed(2)} ث)`);
-if (unvoiced.length) {
-  const ch = unvoiced.reduce((a, p) => a + chars(p), 0);
+console.log(
+  `${SHORT ? 'القصيرة' : 'الطويلة'}  ·  مقاطع ${CLIPS.length}  نُطق ${UTT.length}  ->  ` +
+  `${made.toFixed(2)} ث (${Math.floor(made / 60)}:${String(Math.round(made % 60)).padStart(2, '0')})` +
+  `   جذر الخطأ ${rms.toFixed(2)} ث`
+);
+if (skipped.length) {
   console.log('');
-  console.log(`وفي النصّ ${unvoiced.length} فقراتٍ بلا صوت (${ch} حرفاً ≈ ${Math.round(ch / 12.1)} ث):`);
-  unvoiced.forEach((p) => console.log(`  · ${p.slice(0, 56)}`));
-  console.log(`ومشاهدُها تمضي على الموسيقى وحدَها: ${SILENT} ثانيةً من الفيلم.`);
+  console.log(`وخارجَ هذه النسخة ${skipped.length} فقرات من السكربت:`);
+  skipped.forEach((q) => console.log(`  · ${q.slice(0, 54)}`));
 }
+if (SILENT > 0) console.log(`ومشاهدُ ${SILENT} ثانيةً تمضي على الموسيقى وحدَها.`);
 // **توزيعُ الفقرات على المقاطع — وهو ما يُصحَّح بالأذن.** يُطبع ليُقرأ: نجمةٌ
 // لما ثُبِّت سماعاً، وفراغٌ لما قدّره الحساب. وخطأُ ثانيتين في مشهدٍ يُرَدّ
 // إلى رقمٍ في هذا السطر، لا إلى المطابقة كلِّها.
