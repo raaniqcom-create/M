@@ -1,5 +1,5 @@
 import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, expectedLabel, isListed, isOffered, isStaleOffer, trafficSource } from '@/lib/products';
-import { formatTime, isFresh, isOpenNow, openingLine, PERIOD_LABELS, statusNote } from '@/lib/hours';
+import { formatTime, isFresh, isOpenNow, openingLine, PERIOD_LABELS, runsOutLabel, statusNote } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
 import { RouteButton } from './RouteButton';
@@ -157,6 +157,11 @@ export function StationCard({
                 }`}
               >
                 {PRODUCT_LABELS[product]}
+                {/* موعدُ النفاد يُقرأ مع الشريحة الخضراء وحدَها: بعد مروره
+                    يسقط المنتج من isOffered فلا شريحةَ أصلاً. */}
+                {inStock && row.runs_out_at && (
+                  <span className="font-normal"> · حتى {runsOutLabel(row.runs_out_at)}</span>
+                )}
                 {stale && !row.expected_at && (
                   <span className="font-normal"> · {agoLabel(row.updated_at)}</span>
                 )}

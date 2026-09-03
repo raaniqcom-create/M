@@ -233,7 +233,11 @@ async function availability(): Promise<Map<string, string[]>> {
   const { data } = await db
     .from('station_products')
     .select('station_id, product')
-    .eq('is_available', true);
+    .eq('is_available', true)
+    // ينبوعُ ثماني شاشاتٍ في هذا البوت: القائمة، ونوعُ الوقود، وبطاقةُ
+    // المحطة، والقريبة، ولوحةُ المالك. فسطرٌ واحدٌ هنا يُغلقها كلَّها على
+    // وقودٍ أعلن صاحبُه نفادَه.
+    .or(`runs_out_at.is.null,runs_out_at.gt.${new Date().toISOString()}`);
   const map = new Map<string, string[]>();
   for (const p of data ?? []) {
     const list = map.get(p.station_id) ?? [];
@@ -490,16 +494,27 @@ async function toggleProduct(to: string, stationId: string, product: string) {
 
   const { data: row } = await db
     .from('station_products')
-    .select('is_available')
+    .select('is_available, runs_out_at')
     .eq('station_id', stationId)
     .eq('product', product)
     .maybeSingle();
 
-  const next = !row?.is_available;
+  // الحالةُ الظاهرة لا الخام: بعد مرور موعد النفاد يكون المنتج مُطفأً عند
+  // الناس و is_available ما زالت true — فقراءةُ الخام تجعل الضغطةَ الأولى
+  // تُطفئ ما هو مُطفأ، فيحتاج المالكُ ضغطتين.
+  const now = new Date().toISOString();
+  const next = !(row?.is_available && !(row.runs_out_at && row.runs_out_at <= now));
   await db
     .from('station_products')
     .upsert(
-      { station_id: stationId, product, is_available: next, updated_at: new Date().toISOString() },
+      {
+        station_id: stationId,
+        product,
+        is_available: next,
+        // والإشعالُ يُصفّر، وإلا وُلد التفعيلُ ميّتاً
+        runs_out_at: null,
+        updated_at: now,
+      },
       { onConflict: 'station_id,product' }
     );
 

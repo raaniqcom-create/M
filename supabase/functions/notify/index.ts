@@ -617,11 +617,16 @@ Deno.serve(async (req) => {
 
   // only announce fuel that is genuinely in stock right now, so a forged call
   // cannot tell drivers to drive to an empty station
+  //
+  // وموعدُ النفاد المُعلَن حارسٌ ثانٍ هنا: هذه بوّابةُ الفتحات الخمس كلِّها —
+  // دفعُ الويب، وFCM، وAPNs، ومفضّلو تيليجرام، ومفضّلو واتساب — فسطرٌ واحدٌ
+  // يمنع الخمسة من الإعلان عن وقودٍ قال صاحبُه إنه نفد.
   const { data: rows } = await db
     .from('station_products')
     .select('product')
     .eq('station_id', stationId)
     .eq('is_available', true)
+    .or(`runs_out_at.is.null,runs_out_at.gt.${new Date().toISOString()}`)
     .in('product', wanted);
 
   // Order by our own list, not the database's: the message reads in the

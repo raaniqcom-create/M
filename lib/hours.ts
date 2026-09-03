@@ -193,6 +193,35 @@ export function isWithdrawn(updatedAt: string | null | undefined): boolean {
   return Date.now() - new Date(updatedAt).getTime() >= WITHDRAW_HOURS * 3600_000;
 }
 
+/** وثالثٌ يختلف عن الاثنين: النفادُ المُعلَن.
+ *
+ *  `isFresh` و`isWithdrawn` يقيسان **عمرَ الخبر** — تخميناً منّا أن ما لم
+ *  يُصحَّح بعد يومٍ صار مشكوكاً فيه. وهذا يقرأ ما قاله **صاحبُ المحطة** نفسُه:
+ *  «الكاز عندي حتى الثانية عشرة». وحيث خمّنّا نحن يقول هو، والقولُ أصدق.
+ *
+ *  ولا يُلغي الحارسَين: منتجٌ أُعلن قبل ساعةٍ ونفد قبل عشر دقائق حديثٌ ونافدٌ
+ *  معاً. ثلاثةُ مقاييس مستقلّة، وكلٌّ يُسأل على حدة. */
+export function hasRunOut(runsOutAt: string | null | undefined): boolean {
+  return !!runsOutAt && Date.now() >= new Date(runsOutAt).getTime();
+}
+
+/** «حتى ١٢:٣٠ صباحاً» — بتوقيت بغداد لا بساعة الجهاز.
+ *
+ *  الفرقُ ليس نظريّاً: مسافرٌ يعبر إلى الأردن يحمل هاتفاً على توقيت عمّان،
+ *  فلو نُسّقت الساعةُ محليّاً لقرأ موعدَ نفادٍ يسبق الحقيقة بساعة — ولا يعلم. */
+export function runsOutLabel(runsOutAt: string | null | undefined): string {
+  if (!runsOutAt) return '';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: BAGHDAD,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(runsOutAt));
+  const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
+  const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
+  return formatTime(`${hour}:${minute}`);
+}
+
 /** «قبل ٣ ساعات» / «قبل يومين» — the age of the claim, in the driver's words. */
 export function ageLabel(updatedAt: string | null | undefined): string {
   if (!updatedAt) return 'غير معروف';

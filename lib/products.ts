@@ -1,5 +1,5 @@
 import type { FuelProduct, TrafficLevel } from '@/types/database';
-import { isFresh, isOpenNow, isWithdrawn } from './hours';
+import { hasRunOut, isFresh, isOpenNow, isWithdrawn } from './hours';
 
 // single source of truth for the 6 fixed products — mirrors the fuel_product
 // enum in supabase/schema.sql
@@ -179,9 +179,15 @@ export function trafficSource(
  *  ويتحرّك كل سطح معه. */
 export function isOffered(
   station: { is_24h: boolean; opens_at: string; closes_at: string; temp_closed?: boolean },
-  row: { is_available?: boolean | null; updated_at?: string | null } | undefined | null
+  row: { is_available?: boolean | null; updated_at?: string | null; runs_out_at?: string | null } | undefined | null
 ): boolean {
-  return !!row?.is_available && isFresh(row.updated_at) && isOpenNow(station);
+  return (
+    !!row?.is_available &&
+    isFresh(row.updated_at) &&
+    // ما أعلن صاحبُه نفادَه لا يُعرض أخضرَ ولو كان الخبر طازجاً
+    !hasRunOut(row.runs_out_at) &&
+    isOpenNow(station)
+  );
 }
 
 /** هل لهذه المحطة ما تقوله؟
@@ -210,13 +216,30 @@ export function isOffered(
  *
  *  فصارت جملةً واحدة: متوفّرٌ لم يُسحب، أو له موعدُ وصولٍ معلَن. */
 export function isListed(
-  row: { is_available?: boolean | null; updated_at?: string | null; expected_at?: string | null } | undefined | null
+  row:
+    | { is_available?: boolean | null; updated_at?: string | null; expected_at?: string | null; runs_out_at?: string | null }
+    | undefined
+    | null
 ): boolean {
-  return (!!row?.is_available && !isWithdrawn(row.updated_at)) || !!row?.expected_at;
+  // الحارسُ على شطر التوفّر وحدَه: موعدُ الوصول لا يُبطله النفاد بل يُكمله —
+  // «نفد الآن، ويصل غداً» جملةٌ صحيحة، وإخفاؤها يمحو النصف النافع منها.
+  //
+  // **ولا يجوز حراسةُ isOffered وحدها.** منتجٌ نفد وخبرُه حديث يسقط من
+  // isOffered ومن isStaleOffer معاً، فيبقى في `shown` ويهبط إلى فرع
+  // «متوقَّع» الكهرمانيّ في StationCard — شريحةُ ترقّبٍ على وقودٍ نفد.
+  return (
+    (!!row?.is_available && !isWithdrawn(row.updated_at) && !hasRunOut(row.runs_out_at)) ||
+    !!row?.expected_at
+  );
 }
 
 export function hasSomethingToShow(station: {
-  products: { is_available?: boolean | null; expected_at?: string | null; updated_at?: string | null }[];
+  products: {
+    is_available?: boolean | null;
+    expected_at?: string | null;
+    updated_at?: string | null;
+    runs_out_at?: string | null;
+  }[];
 }): boolean {
   // ادّعاءٌ سُحب لا يُبقي محطةً في القائمة: البقاءُ عليه يعني أن يقصدها
   // مسافرٌ على خبرٍ لم نعد نعرضه نحن أنفسنا.
@@ -231,7 +254,14 @@ export function hasSomethingToShow(station: {
  *  يُبقي في الجدول محطةً لا نعرف عنها شيئاً. والسحبُ عرضٌ لا حذف — انظر
  *  `isWithdrawn` في lib/hours.ts. */
 export function isStaleOffer(
-  row: { is_available?: boolean | null; updated_at?: string | null } | undefined | null
+  row: { is_available?: boolean | null; updated_at?: string | null; runs_out_at?: string | null } | undefined | null
 ): boolean {
-  return !!row?.is_available && !isFresh(row.updated_at) && !isWithdrawn(row.updated_at);
+  // والرماديُّ يعني «أُعلن ولم يُصحَّح، وقد يكون قائماً». والنافدُ صُحِّح
+  // بإعلان صاحبه — فعرضُه رماديّاً يُبقي احتمالاً أغلقه المالكُ بيده.
+  return (
+    !!row?.is_available &&
+    !isFresh(row.updated_at) &&
+    !isWithdrawn(row.updated_at) &&
+    !hasRunOut(row.runs_out_at)
+  );
 }

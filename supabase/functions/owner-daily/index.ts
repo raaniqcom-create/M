@@ -298,7 +298,7 @@ async function preview(req: Request, stationId: string): Promise<Response> {
 
   const [{ data: products }, { data: pinged }, { data: watchRows }, { data: devices }] =
     await Promise.all([
-      db.from('station_products').select('updated_at, is_available, expected_at').eq('station_id', st.id),
+      db.from('station_products').select('updated_at, is_available, expected_at, runs_out_at').eq('station_id', st.id),
       db.from('owner_pings').select('kind, sent_at').eq('station_id', st.id).eq('day', day),
       db.rpc('watchers_by_city', { p_cities: [st.city] }),
       db.from('device_tokens').select('token').eq('station_id', st.id),
@@ -313,8 +313,15 @@ async function preview(req: Request, stationId: string): Promise<Response> {
     .at(-1) as string | undefined;
 
   // أحدث ختمٍ على منتج معروضٍ متوفراً — نفس مقياس المُرسِل، لا نسخةً منه.
+  // والشرطُ مكتوبٌ هنا كما هو في المُرسِل حرفاً بحرف، ومنه `runs_out_at`:
+  // لو أُصلح أحدُهما دون الآخر لانحرفت بطاقةُ المعاينة عمّا يُرسَل فعلاً،
+  // فيقرأ المديرُ «ستُرسل» عن رسالةٍ لن تُرسل.
+  const nowPreview = new Date().toISOString();
   const lastAvail = (products ?? [])
-    .filter((p) => (p as { is_available?: boolean }).is_available)
+    .filter((p) => {
+      const r = p as { is_available?: boolean | null; runs_out_at?: string | null };
+      return !!r.is_available && !(r.runs_out_at && r.runs_out_at <= nowPreview);
+    })
     .map((p) => p.updated_at)
     .filter(Boolean)
     .sort()
@@ -447,7 +454,7 @@ Deno.serve(async (req) => {
   const [{ data: products }, { data: pinged }, { data: votes }, { data: watchRows }] = await Promise.all([
     // سبعة صفوف لكل محطة: بلا حدّ صريح تُقرأ المحطات بعد القطع «لم تنشر قطّ»،
     // فتُرحَّب بها يومياً ولا يصلها شكر الإغلاق أبداً.
-    db.from('station_products').select('station_id, updated_at, is_available, expected_at').in('station_id', ids).range(0, 99_999),
+    db.from('station_products').select('station_id, updated_at, is_available, expected_at, runs_out_at').in('station_id', ids).range(0, 99_999),
     // وعلامات اليوم: ضياعها يعني رسالةً مكرّرة لكل مالك.
     db.from('owner_pings').select('station_id, kind').eq('day', day).in('station_id', ids).range(0, 99_999),
     // Only the tail matters: a vote older than 45 minutes lapsed long ago and
@@ -497,11 +504,19 @@ Deno.serve(async (req) => {
   //
   // الفرق يقرّر الحالة: محطةٌ تلمس منتجاً غير متوفر اليوم يبدو لوحها حديثاً،
   // بينما البانزين الذي يقصده الناس معروضٌ بخبرٍ عمره ثلاثة أيام.
+  //
+  // وما مرّ موعدُ نفاده ليس معروضاً: هذا السطرُ جذرُ أربعة قرارات معاً —
+  // رسالةُ «وقودك معروض بخبر قديم»، ورسالةُ «سُحب توفّرك»، وسؤالُ الساعتين،
+  // ورسالةُ «لا شيء معروضاً فلا تظهر محطتك». فمالكٌ أعلن نفادَ الكاز ظهراً
+  // يجب أن يصله مساءً أنه اختفى من القائمة، لا أن يُشكر على خبرٍ حجبناه.
   const lastAvailable = new Map<string, string>();
+  const nowIso = new Date().toISOString();
+  const live = (p: { is_available?: boolean | null; runs_out_at?: string | null }) =>
+    !!p.is_available && !(p.runs_out_at && p.runs_out_at <= nowIso);
   for (const p of products ?? []) {
     const cur = lastUpdate.get(p.station_id);
     if (!cur || p.updated_at > cur) lastUpdate.set(p.station_id, p.updated_at);
-    if (p.is_available) {
+    if (live(p)) {
       const a = lastAvailable.get(p.station_id);
       if (!a || p.updated_at > a) lastAvailable.set(p.station_id, p.updated_at);
     }
