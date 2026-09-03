@@ -141,11 +141,19 @@ export function AdminHealth() {
 
     setPreviewing(true);
     const cities = (data.cities ?? []) as string[];
+    // خبرُ المنصّة بلا مدن — تنبيهُ انقطاع الإنترنت مثلاً — يُعايَن مرّةً
+    // واحدة بنصّه كما هو. وإلّا دارت الحلقةُ صفرَ مرّات وقالت «أُرسلت 0
+    // إشعارات — تحقّق من شاشة القفل»، وهو ما وقع أوّلَ يومٍ لهذه التنبيهات.
+    const targets: (string | null)[] = cities.length ? cities : [null];
     let ok = 0;
-    for (const city of cities) {
+    for (const city of targets) {
       // the same line-per-city split the scheduled send performs
-      const line = (data.body as string).split(String.fromCharCode(10)).find((l) => l.includes(city));
-      const body = line ? line.replace(/^[•\-\s]+/, '').replace(`${city}:`, '').trim() : (data.body as string);
+      const line = city
+        ? (data.body as string).split(String.fromCharCode(10)).find((l) => l.includes(city))
+        : undefined;
+      const body = line && city
+        ? line.replace(/^[•\-\s]+/, '').replace(`${city}:`, '').trim()
+        : (data.body as string);
       const r = await fetch(`${FN}/test-push`, {
         method: 'POST',
         headers: {
@@ -154,7 +162,7 @@ export function AdminHealth() {
         },
         body: JSON.stringify({
           deviceToken,
-          title: `${data.title} — ${city}`.slice(0, 64),
+          title: (city ? `${data.title} — ${city}` : String(data.title)).slice(0, 64),
           body: body.slice(0, 178),
         }),
       }).catch(() => null);
@@ -164,9 +172,9 @@ export function AdminHealth() {
     }
     setPreviewing(false);
     setPreviewNote(
-      ok === cities.length
+      ok === targets.length
         ? `أُرسلت ${ok} إشعارات إلى هذا الجهاز — تحقّق من شاشة القفل.`
-        : `أُرسل ${ok} من ${cities.length}. الباقي لم يصل.`
+        : `أُرسل ${ok} من ${targets.length}. الباقي لم يصل.`
     );
   }
 
