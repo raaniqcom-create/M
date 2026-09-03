@@ -46,6 +46,9 @@ export interface StationProduct {
   is_available: boolean;
   expected_at: string | null; // ISO date: announced arrival for an unavailable product
   expected_period: 'morning' | 'afternoon' | 'evening' | null;
+  // ISO timestamptz: نفادٌ متوقَّع أعلنه صاحبُ المحطة لمنتجٍ متوفّر. بعد
+  // مروره لا يُعرض ولا يُعلَن عنه، ويعود بأيّ تفعيلٍ أو تأكيدٍ يُصفّره.
+  runs_out_at: string | null;
   updated_at: string;
 }
 

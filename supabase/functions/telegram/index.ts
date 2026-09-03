@@ -53,6 +53,20 @@ const PRODUCT_LABELS: Record<string, string> = {
 };
 const PRODUCTS = Object.keys(PRODUCT_LABELS);
 
+/** هل ما زال هذا المنتج معروضاً؟
+ *
+ *  نظيرةُ `isOffered` في lib/products.ts، بقدر ما يخصّ الصفَّ وحدَه: متوفّرٌ،
+ *  ولم يمرّ موعدُ النفاد الذي أعلنه صاحبُه. (الدوامَ يفحصه `isOpenNow` حيث
+ *  يلزم، والحداثةَ لا يفحصها البوتُ أصلاً — عيبٌ قائمٌ قبل هذا العمود.)
+ *
+ *  وستّةُ مواضعَ في هذا الملفّ كانت تكتب `p.is_available` بيدها؛ فدالّةٌ
+ *  واحدة، لأن المنسيَّ منها يقول للسائق «متوفر» عن وقودٍ نفد. */
+function stillLive(
+  p: { is_available?: boolean | null; runs_out_at?: string | null } | null | undefined
+): boolean {
+  return !!p?.is_available && !(p.runs_out_at && p.runs_out_at <= new Date().toISOString());
+}
+
 // Anbar districts with a rough centre each. Duplicated from lib/cities.ts
 // because an Edge Function cannot import from the Next app; the list is
 // administrative geography and does not change.
@@ -1109,15 +1123,16 @@ async function showNearby(chat: number) {
 async function showProducts(chat: number, messageId?: number) {
   const { data: stations } = await db
     .from('stations')
-    .select('id, is_24h, opens_at, closes_at, temp_closed, station_products(product, is_available)')
+    .select('id, is_24h, opens_at, closes_at, temp_closed, station_products(product, is_available, runs_out_at)')
     .eq('status', 'approved');
 
   const counts = new Map<string, number>();
   for (const s of stations ?? []) {
     if (!isOpenNow(s as never)) continue;
-    for (const p of (s as never as { station_products: { product: string; is_available: boolean }[] })
-      .station_products) {
-      if (p.is_available) counts.set(p.product, (counts.get(p.product) ?? 0) + 1);
+    for (const p of (s as never as {
+      station_products: { product: string; is_available: boolean; runs_out_at: string | null }[];
+    }).station_products) {
+      if (stillLive(p)) counts.set(p.product, (counts.get(p.product) ?? 0) + 1);
     }
   }
 
@@ -1137,12 +1152,16 @@ async function showProducts(chat: number, messageId?: number) {
 async function showStationsWithProduct(chat: number, messageId: number, product: string) {
   const { data } = await db
     .from('stations_public')
-    .select('name, city, address, phone, slug, is_24h, opens_at, closes_at, temp_closed, station_products!inner(product, is_available)')
+    .select('name, city, address, phone, slug, is_24h, opens_at, closes_at, temp_closed, station_products!inner(product, is_available, runs_out_at)')
     .eq('status', 'approved')
     .eq('station_products.product', product)
     .eq('station_products.is_available', true);
 
-  const open = (data ?? []).filter((s) => isOpenNow(s as never));
+  const open = (data ?? []).filter(
+    (s) =>
+      isOpenNow(s as never) &&
+      (s as never as { station_products: { runs_out_at: string | null }[] }).station_products.some(stillLive)
+  );
   const label = PRODUCT_LABELS[product] ?? product;
 
   const text = open.length
@@ -1200,14 +1219,16 @@ async function showOwnerPanel(chat: number, stationId: string, messageId?: numbe
 
   const { data: rows } = await db
     .from('station_products')
-    .select('product, is_available, expected_at')
+    .select('product, is_available, expected_at, runs_out_at')
     .eq('station_id', stationId);
 
-  const byProduct = new Map((rows ?? []).map((r) => [r.product, r.is_available]));
+  // والمقياسُ هو المقياسُ العامّ: لولاه لرأى المالكُ ✅ بلا تحذير، ومحطتُه
+  // قد اختفت من القائمة لأن موعدَ النفاد الذي ضبطه بنفسه قد مرّ.
+  const byProduct = new Map((rows ?? []).map((r) => [r.product, stillLive(r)]));
   // القاعدة نفسها التي تُخفي البطاقة في التطبيق (hasSomethingToShow في
   // lib/products.ts): متوفرٌ الآن، أو متوقّعٌ لاحقاً. ومن لا هذا ولا ذاك
   // لا يظهر — ويجب أن يعلم، لا أن يكتشف.
-  const shows = (rows ?? []).some((r) => r.is_available || r.expected_at);
+  const shows = (rows ?? []).some((r) => stillLive(r) || r.expected_at);
   const open = station ? isOpenNow(station as never) : false;
 
   const keyboard = PRODUCTS.map((p) => [
@@ -1310,10 +1331,19 @@ async function confirmStock(
     }
   }
 
+  // ويُحيي ما فات موعدُ نفاده — «ما زال متوفراً» تُكذّب نفاداً مضى. ولولا
+  // ذلك لختمت الضغطةُ الوقتَ ولم تُعِد شيئاً معروضاً، وقال البوتُ للمالك
+  // «حالتك صارت محدّثة ✅» عن محطةٍ ما زالت مخفيّة.
+  const nowStamp = new Date().toISOString();
   const { error } = await db
     .from('station_products')
-    .update({ updated_at: new Date().toISOString() })
+    .update({ updated_at: nowStamp })
     .eq('station_id', stationId);
+  await db
+    .from('station_products')
+    .update({ runs_out_at: null })
+    .eq('station_id', stationId)
+    .lt('runs_out_at', nowStamp);
 
   if (error) {
     await answer(queryId, 'تعذّر الحفظ — أعد المحاولة');
@@ -1347,18 +1377,29 @@ async function toggleProduct(
 
   const { data: row } = await db
     .from('station_products')
-    .select('is_available')
+    .select('is_available, runs_out_at')
     .eq('station_id', stationId)
     .eq('product', product)
     .single();
 
-  const next = !row?.is_available;
+  // الحالةُ الظاهرة لا الخام: بعد مرور موعد النفاد يكون المنتج مُطفأً عند
+  // الناس و is_available ما زالت true — فلو قُرئت الخام لأطفأت الضغطةُ
+  // الأولى ما هو مُطفأٌ أصلاً، واحتاج المالكُ ضغطتين ليُشعله.
+  const next = !stillLive(row);
   // upsert لا update: منتجٌ لم يُنشأ صفُّه بعد كان يُبدَّل فلا يتغيّر شيء،
   // والبوت يجيب «متوفر ✅» عن كتابةٍ لم تقع. (واتساب يفعلها صحيحاً منذ البداية.)
   const { error: saveErr } = await db
     .from('station_products')
     .upsert(
-      { station_id: stationId, product, is_available: next, updated_at: new Date().toISOString() },
+      {
+        station_id: stationId,
+        product,
+        is_available: next,
+        // والإشعالُ يُصفّر: بلا هذا يُولد كلُّ تفعيلٍ بعد نفادٍ سابق ميّتاً —
+        // البوتُ يقول «أصبح متوفراً» والمنصّةُ لا تعرضه.
+        runs_out_at: null,
+        updated_at: new Date().toISOString(),
+      },
       { onConflict: 'station_id,product' }
     );
 
@@ -1672,15 +1713,16 @@ Deno.serve(async (req) => {
     if (q.length >= 2) {
       const { data } = await db
         .from('stations_public')
-        .select('id, name, city, address, phone, slug, is_24h, opens_at, closes_at, temp_closed, station_products(product, is_available)')
+        .select('id, name, city, address, phone, slug, is_24h, opens_at, closes_at, temp_closed, station_products(product, is_available, runs_out_at)')
         .eq('status', 'approved')
         .or(`name.ilike.%${q}%,city.ilike.%${q}%,address.ilike.%${q}%`)
         .limit(5);
 
       const results = (data ?? []).map((s) => ({
         ...s,
-        products: (s as never as { station_products: { product: string; is_available: boolean }[] })
-          .station_products.filter((p) => p.is_available).map((p) => p.product),
+        products: (s as never as {
+          station_products: { product: string; is_available: boolean; runs_out_at: string | null }[];
+        }).station_products.filter(stillLive).map((p) => p.product),
       }));
 
       if (!results.length) {

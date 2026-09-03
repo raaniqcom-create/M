@@ -1,7 +1,7 @@
 'use client';
 
 import { PRODUCT_LABELS, expectedLabel, isoDateIn } from '@/lib/products';
-import { PERIODS, PERIOD_LABELS, type ExpectedPeriod } from '@/lib/hours';
+import { PERIODS, PERIOD_LABELS, runsOutLabel, type ExpectedPeriod } from '@/lib/hours';
 import { CheckIcon, SpinnerIcon, XIcon } from './icons';
 import type { FuelProduct, StationProduct } from '@/types/database';
 
@@ -9,6 +9,18 @@ const WHEN = [
   { label: 'اليوم', days: 0 },
   { label: 'غداً', days: 1 },
   { label: 'بعد غد', days: 2 },
+];
+
+/** ساعاتٌ من الآن، لا ساعةُ حائط.
+ *
+ *  صاحبُ المحطة يعرف كم بقي عنده لا متى ينتهي بالضبط، وأربعةُ أزرارٍ أسرعُ
+ *  من حقل وقتٍ يُملأ بإصبعٍ على هاتفٍ في ساحةٍ مزدحمة. والحصصُ تُوزَّع في
+ *  الغالب على ساعتين إلى ستّ — وهو مدى هذه الأزرار. */
+const RUNS_OUT = [
+  { label: 'ساعة', hours: 1 },
+  { label: 'ساعتان', hours: 2 },
+  { label: '3 ساعات', hours: 3 },
+  { label: '6 ساعات', hours: 6 },
 ];
 
 // Two labelled buttons instead of a switch: a switch makes the owner infer
@@ -20,16 +32,19 @@ export function ProductControl({
   saving,
   onSetAvailable,
   onSetExpected,
+  onSetRunsOut,
 }: {
   product: FuelProduct;
   row: StationProduct | undefined;
   saving: boolean;
   onSetAvailable: (available: boolean) => void;
   onSetExpected: (date: string | null, period: ExpectedPeriod | null) => void;
+  onSetRunsOut: (hours: number | null) => void;
 }) {
   const available = row?.is_available ?? false;
   const expectedAt = row?.expected_at ?? null;
   const expectedPeriod = (row?.expected_period ?? null) as ExpectedPeriod | null;
+  const runsOutAt = row?.runs_out_at ?? null;
 
   return (
     <li className="py-3.5">
@@ -68,6 +83,42 @@ export function ProductControl({
           غير متوفر
         </button>
       </div>
+
+      {available && (
+        <div className="mt-2.5 rounded-xl bg-brand-50 p-2.5">
+          <p className="text-[11px] font-semibold text-brand-800">متى تتوقع نفاده؟ (اختياري)</p>
+
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {RUNS_OUT.map((opt) => (
+              <button
+                key={opt.hours}
+                type="button"
+                disabled={saving}
+                onClick={() => onSetRunsOut(opt.hours)}
+                className="min-h-[34px] rounded-lg bg-white px-3 text-[12px] font-semibold text-brand-800 disabled:opacity-50"
+              >
+                {opt.label}
+              </button>
+            ))}
+            {runsOutAt && (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => onSetRunsOut(null)}
+                className="min-h-[34px] px-2 text-[12px] font-semibold text-traffic-red disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+            )}
+          </div>
+
+          <p className="mt-2 text-[11px] leading-relaxed font-bold text-brand-900">
+            {runsOutAt
+              ? `يظهر للمستخدمين: حتى ${runsOutLabel(runsOutAt)} — وبعدها يختفي من القائمة حتى تؤكّده.`
+              : 'بلا موعد يبقى معروضاً حتى تُطفئه بنفسك.'}
+          </p>
+        </div>
+      )}
 
       {!available && (
         <div className="mt-2.5 rounded-xl bg-amber-50 p-2.5">

@@ -121,12 +121,23 @@ export default function OwnerPage() {
     if (!station) return;
     setSavingProduct(product);
     setProducts((prev) =>
-      prev.map((p) => (p.product === product ? { ...p, is_available: next } : p))
+      prev.map((p) =>
+        p.product === product
+          ? { ...p, is_available: next, ...(next ? { runs_out_at: null } : {}) }
+          : p
+      )
     );
 
     const { error } = await supabase
       .from('station_products')
-      .update({ is_available: next, updated_at: new Date().toISOString() })
+      // والإشعالُ يُصفّر موعدَ النفاد: من يقول «متوفّر» الآن يُبطل بقولِه
+      // نفاداً أعلنه قبل ساعة — ولولا التصفير لوُلد التفعيلُ ميّتاً، فالبوت
+      // يقول «أصبح متوفراً» والمنصّةُ لا تعرضه.
+      .update({
+        is_available: next,
+        updated_at: new Date().toISOString(),
+        ...(next ? { runs_out_at: null } : {}),
+      })
       .eq('station_id', station.id)
       .eq('product', product);
 
@@ -153,6 +164,24 @@ export default function OwnerPage() {
       return n;
     });
     setSavingProduct(null);
+  }
+
+  /** «متى تتوقّع نفاده؟» — مرآةُ setExpected للمنتج المتوفّر.
+   *
+   *  ساعاتٌ من الآن لا ساعةُ حائط: صاحبُ المحطة يعرف كم بقي عنده، لا متى
+   *  ينتهي بالضبط — ولأن المدخل زرٌّ واحد لا حقلُ وقتٍ يُملأ بإصبعٍ على
+   *  هاتفٍ في ساحةٍ مزدحمة. */
+  async function setRunsOut(product: FuelProduct, hours: number | null) {
+    if (!station) return;
+    const runs_out_at = hours === null ? null : new Date(Date.now() + hours * 3600_000).toISOString();
+    setProducts((prev) =>
+      prev.map((p) => (p.product === product ? { ...p, runs_out_at } : p))
+    );
+    await supabase
+      .from('station_products')
+      .update({ runs_out_at })
+      .eq('station_id', station.id)
+      .eq('product', product);
   }
 
   async function setExpected(
@@ -198,6 +227,21 @@ export default function OwnerPage() {
       .from('station_products')
       .update({ updated_at: now })
       .eq('station_id', station.id);
+
+    // ويُحيي ما فات موعدُ نفاده — ولا يمسّ ما لم يفت.
+    //
+    // «تأكيد» يقول: ما تراه صحيحٌ الآن. فموعدُ نفادٍ مضى تُكذّبه هذه
+    // الضغطة، وموعدٌ لم يحن لا تمسّه — ولو صُفّرت كلُّها لضاع على المالك ما
+    // ضبطه قبل دقيقة. وبلا الإحياء يختم الزرُّ الوقتَ ولا يُعيد شيئاً
+    // معروضاً، ويقول له «حالتك محدّثة ✅» عن محطةٍ ما زالت مخفيّة.
+    await supabase
+      .from('station_products')
+      .update({ runs_out_at: null })
+      .eq('station_id', station.id)
+      .lt('runs_out_at', now);
+    setProducts((prev) =>
+      prev.map((p) => (p.runs_out_at && p.runs_out_at < now ? { ...p, runs_out_at: null } : p))
+    );
     setConfirmedAt(now);
     setNotifyNote(null);
 
@@ -561,6 +605,7 @@ export default function OwnerPage() {
                     saving={savingProduct === product}
                     onSetAvailable={(next) => setAvailable(product, next)}
                     onSetExpected={(date, period) => setExpected(product, date, period)}
+                    onSetRunsOut={(hours) => setRunsOut(product, hours)}
                   />
                 ))}
               </ul>
