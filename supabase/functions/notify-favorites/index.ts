@@ -22,34 +22,43 @@ const PRODUCT_LABELS: Record<string, string> = {
 };
 
 
-/** Pulls one city's line out of the notice body.
+/** المتنُ الذي يخرج إلى شاشة القفل — من متن الصفّ كما هو في القاعدة.
  *
- *  The body lists every city, one per line, because the news page shows the
- *  whole notice. A notification must not: someone in Falluja does not need to
- *  read about Karma to learn their own petrol arrived. */
-const SPLIT = String.fromCharCode(10);
-const BULLET = String.fromCharCode(0x2022);
-
-/** One sentence for an announcement spanning several cities.
+ *  **والمناطقُ توجيهٌ لا نصّ.** كان هنا `summarise` يطبع قائمةَ المدن في
+ *  المتن حين تتعدّد، ويخمّن عددَ المحطات بعدّ ورودِ لفظة «محطة» فيه. فوصل
+ *  الناسَ فجرَ الرابع من أيلول: «16 محطات في الفلوجة والرمادي والخالدية…»
+ *  عن **محطةٍ واحدة**. والستّةَ عشرَ لم تكن محطات: ثمانيةُ أسطرِ مدنٍ ×
+ *  وردتَي «محطة» في السطر — واحدة من القالب، وواحدة داخل الاسم الذي كتبه
+ *  المدير. ضاع الخبرُ وبقي التوجيه.
  *
- *  It must fit 178 characters, and the full list rarely does — today's notice
- *  is six stations across three cities, about two hundred. So it names the
- *  scale and the places, and sends the reader to the page that holds the rest.
- *  A truncated list is worse than a short one: it stops mid-station-name. */
-function summarise(body: string, cities: string[]): string {
-  // كل محطة تبدأ بكلمة «محطة» في المتن، فالعدّ عليها لا على أسطر المدن —
-  // ثلاث مدن قد تحمل ستّ محطات، والرقم هو ما يجعل الخبر يستحق الفتح.
-  const stations = (body.match(/محطة/g) ?? []).length;
-  // ' و' لا ' و ': الواو تتصل بما بعدها، وفصلها يقرأ كخطأ إملائي
-  const places = cities.join(' و');
-  const count = stations > 1 ? `${stations} محطات` : 'محطة';
-  return `${count} في ${places} — اضغط لعرض الأسماء والمواقع`.slice(0, 178);
-}
-
-function cityLine(body: string, city: string): string | null {
-  const line = body.split(/\r?\n/).find((l) => l.includes(city));
-  if (!line) return null;
-  return line.replace(/^[•\-\s]+/, '').replace(`${city}:`, '').trim().slice(0, 178);
+ *  والصفُّ لا يحمل إلا محطةً واحدة (`station_name` عمودٌ مفرد)، فأسطرُ
+ *  المدن كلُّها جملةٌ واحدة مكرّرة. فتُنزع بادئةُ المدينة وتُزال المكرّرات:
+ *  سطرٌ فريدٌ واحد يصل الجميعَ سواء — وهي حالُ كلِّ إعلانٍ متعدّد المدن في
+ *  تاريخ المنصّة.
+ *
+ *  والشكلان معاً: القديمُ «• مدينة: …» والجديدُ الجملةَ وحدها — وقد ينتظر
+ *  في الجدول صفٌّ كُتب بالقديم ولم يخرج بعد.
+ *
+ *  ونظيرتُها `announceBody` في lib/announceTemplates.ts تقرؤها المعاينةُ في
+ *  اللوحة، فيتطابق ما يراه المديرُ وما يصل الناس. نسختان لأن الحافّة لا
+ *  تستورد من lib، و scripts/test-announce-body.mjs يُثبت أنهما لا تفترقان. */
+function oneLine(body: string): string {
+  const lines = body
+    .split(/\r?\n/)
+    .map((l) => {
+      // البادئةُ لا تُنزع إلا بعد نقطةٍ صريحة.
+      //
+      // الشكلُ القديم كتبها دائماً: «• الرمادي: …». ونزعُ «ما قبل النقطتين»
+      // بلا هذا الشرط يبتلع الساعةَ من «الإنترنت ينقطع 6:00 صباحاً» فيبقى
+      // «00 صباحاً» — وتنبيهُ المنصّة نصٌّ حرٌّ يكتبه المدير كما يشاء.
+      const bulleted = /^[•\-]/.test(l.trim());
+      const t = l.replace(/^[•\-\s]+/, '');
+      return (bulleted ? t.replace(/^[^:\n—]{1,20}:\s*/, '') : t).trim();
+    })
+    .filter(Boolean);
+  const unique = [...new Set(lines)];
+  if (!unique.length) return body.trim().slice(0, 178);
+  return unique.join(' · ').slice(0, 178);
 }
 
 Deno.serve(async (req) => {
@@ -71,7 +80,7 @@ Deno.serve(async (req) => {
     .lte('send_at', new Date().toISOString())
     .is('sent_at', null)
     .eq('active', true)
-    .select('id, title, body, cities, product');
+    .select('id, title, body, cities, product, linked_station_id');
 
   // A discarded error here is the worst possible failure: `due` comes back
   // null, the loop runs zero times, and the function reports success. The
@@ -104,14 +113,9 @@ Deno.serve(async (req) => {
     // So one message goes to everyone across all the cities — announce already
     // deduplicates addresses across them — and the per-city detail lives one tap
     // away on /news, which is the screen built for exactly that.
-    const single = cities.length === 1;
-    // A platform notice carries no per-city line to pick out, and no city to
-    // summarise across — its body is already addressed to everyone.
-    const body = everyone
-      ? (a.body as string)
-      : single
-        ? (cityLine(a.body as string, cities[0]) ?? (a.body as string))
-        : summarise(a.body as string, cities);
+    // خبرُ المنصّة (بلا مدن) يُرسل بأسطره كما كتبها المدير؛ وخبرُ المحطة
+    // تُشتقّ منه الجملةُ الواحدة أياً كان عددُ المدن التي وُجّه إليها.
+    const body = everyone ? (a.body as string) : oneLine(a.body as string);
 
     // The row was claimed before this call, so a failure here would leave it
     // marked sent forever: visible on /news, delivered to nobody, with no
@@ -125,11 +129,17 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-cron-secret': CRON_SECRET },
         body: JSON.stringify({
-          title: single ? `${a.title} — ${cities[0]}`.slice(0, 64) : String(a.title).slice(0, 64),
+          // ولا لاحقةَ «— المدينة» في العنوان: مدينةُ المحطة صارت في المتن،
+          // وكانت اللاحقةُ تضع مدينةَ **المستلم** فتقول عن محطةٍ في الفلوجة
+          // إنها في الرمادي لمن يسكنها.
+          title: String(a.title).slice(0, 64),
           body,
           cities,
           products: a.product ? [a.product] : [],
-          url: '/news',
+          // والوجهةُ تفي بما يقوله النصّ: صفحةُ المحطة إن كانت مسجّلة،
+          // وإلّا الصفحةُ الرئيسة — وفيها اللوحةُ الحمراء مصفّاةً بمدن
+          // القارئ، أي الأسماءُ والمواقع. و/news نصٌّ خام بلا موقع.
+          url: a.linked_station_id ? `/station/${a.linked_station_id}` : '/',
         }),
       });
       ok = res.ok;

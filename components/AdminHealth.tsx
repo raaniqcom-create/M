@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { callFn } from '@/lib/fn';
 import { ageLabel, isFresh, isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS } from '@/lib/products';
+import { announceBody } from '@/lib/announceTemplates';
 import { CheckIcon, SpinnerIcon, XIcon } from './icons';
 import type { Station } from '@/types/database';
 
@@ -140,41 +141,31 @@ export function AdminHealth() {
     }
 
     setPreviewing(true);
-    const cities = (data.cities ?? []) as string[];
-    // خبرُ المنصّة بلا مدن — تنبيهُ انقطاع الإنترنت مثلاً — يُعايَن مرّةً
-    // واحدة بنصّه كما هو. وإلّا دارت الحلقةُ صفرَ مرّات وقالت «أُرسلت 0
-    // إشعارات — تحقّق من شاشة القفل»، وهو ما وقع أوّلَ يومٍ لهذه التنبيهات.
-    const targets: (string | null)[] = cities.length ? cities : [null];
-    let ok = 0;
-    for (const city of targets) {
-      // the same line-per-city split the scheduled send performs
-      const line = city
-        ? (data.body as string).split(String.fromCharCode(10)).find((l) => l.includes(city))
-        : undefined;
-      const body = line && city
-        ? line.replace(/^[•\-\s]+/, '').replace(`${city}:`, '').trim()
-        : (data.body as string);
-      const r = await fetch(`${FN}/test-push`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        },
-        body: JSON.stringify({
-          deviceToken,
-          title: (city ? `${data.title} — ${city}` : String(data.title)).slice(0, 64),
-          body: body.slice(0, 178),
-        }),
-      }).catch(() => null);
-      if (r?.ok) ok++;
-      // a small gap so three notifications arrive as three, not one stack
-      await new Promise((res) => setTimeout(res, 1200));
-    }
+    // **إشعارٌ واحد، بالدالّة التي يبني بها المُرسِلُ متنَه.**
+    //
+    // كانت الحلقةُ تدور على مدن الخبر وتُرسل إشعاراً لكلٍّ منها، لأن المتنَ
+    // كان سطراً لكلِّ مدينة. وقد صار جملةً واحدة — فثمانُ مدنٍ كانت تعني ثمانيةَ
+    // إشعاراتٍ متطابقة إلى هاتف المدير، ولاحقةَ «— المدينة» في العنوان لم يعد
+    // الإنتاجُ يضعها. والمعاينةُ التي تُخالف المُرسَل أسوأُ من لا معاينة.
+    const body = announceBody(data.body as string);
+    const r = await fetch(`${FN}/test-push`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      },
+      body: JSON.stringify({
+        deviceToken,
+        title: String(data.title).slice(0, 64),
+        body,
+      }),
+    }).catch(() => null);
+    const ok = r?.ok ? 1 : 0;
     setPreviewing(false);
     setPreviewNote(
-      ok === targets.length
-        ? `أُرسلت ${ok} إشعارات إلى هذا الجهاز — تحقّق من شاشة القفل.`
-        : `أُرسل ${ok} من ${targets.length}. الباقي لم يصل.`
+      ok
+        ? 'أُرسل إشعارٌ واحد إلى هذا الجهاز — وهو نصُّ ما سيصل الناس حرفاً بحرف.'
+        : 'لم يصل. تحقّق من ربط الجهاز، ثمّ أعد المحاولة.'
     );
   }
 

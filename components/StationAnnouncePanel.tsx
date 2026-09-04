@@ -40,6 +40,8 @@ export function StationAnnouncePanel() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  /** تحذيرُ التكرار. وجودُه يوقف النشرة الأولى ويحوّل الزرّ إلى «انشر رغم ذلك». */
+  const [dupWarn, setDupWarn] = useState<string | null>(null);
   // يبقى بين الضغطات ولا يُمسح إلا بعد حفظٍ مؤكَّد، فإعادة المحاولة — تلقائية
   // كانت أو بيد المدير — تحمل المفتاح نفسه ولا تُنشئ خبراً ثانياً.
   const keyRef = useRef<string | null>(null);
@@ -65,6 +67,10 @@ export function StationAnnouncePanel() {
     setStation('');
   }, [city]);
 
+  // تغيّرَ ما يُحذَّر منه، فيسقط التحذير: من بدّل المحطة أو المنتج أو الموعد
+  // لم يعد أمام القرار الذي حُذِّر منه.
+  useEffect(() => setDupWarn(null), [station, city, product, when, at]);
+
   const input: TemplateInput = { station: station.trim() || '…', city, product };
 
   // Everyone who will be notified: the station's own city, plus any neighbour
@@ -76,7 +82,9 @@ export function StationAnnouncePanel() {
 
   const title = template.title(input);
   const line = template.line(input);
-  const ticker = audience.map(() => template.ticker(input));
+  // مصفوفةٌ من عنصرٍ واحد: العمودُ `ticker` نصوصٌ، وسطرُ الشريط عن المحطة
+  // لا عن مدينة القارئ. وكانت تُبنى بطول الجمهور ولا يُقرأ منها إلا الأوّل.
+  const ticker = [template.ticker(input)];
   const lengthError = station.trim() ? tooLong(template, input) : null;
 
   function toggleExtra(c: string) {
@@ -123,6 +131,42 @@ export function StationAnnouncePanel() {
       return setErr('الوقت المختار في الماضي.');
     }
 
+    // ── تحذيرُ التكرار ───────────────────────────────────────────────────
+    //
+    // فجرَ الرابع من أيلول جُدول الخبرُ مرّتين بفارق دقيقتين: الأولى وصلت
+    // 995 جهازاً بنصٍّ خاطئ، والثانية بالنصّ الصحيح وصلت **خمسة** — لأن مهلةَ
+    // الخمس والأربعين دقيقة تُقاس على الشخص لا على الخبر، فمن وصله الأوّلُ
+    // سكت عن الثاني.
+    //
+    // ويحذّر ولا يمنع: المدير قد يقصد التكرار. ويفشل **مفتوحاً** — تحذيرٌ
+    // يصير مانعاً عند تعثّر شبكةٍ أسوأُ من غياب التحذير.
+    if (!dupWarn) {
+      const w = 45 * 60_000;
+      const { data: near } = await supabase
+        .from('announcements')
+        .select('send_at, sent_at')
+        .eq('station_name', station.trim())
+        .eq('origin_city', city)
+        .eq('product', product)
+        .eq('active', true)
+        .gte('send_at', new Date(sendAt.getTime() - w).toISOString())
+        .lte('send_at', new Date(sendAt.getTime() + w).toISOString())
+        .order('send_at', { ascending: false })
+        .limit(1)
+        .abortSignal(timeoutSignal(8_000) as AbortSignal);
+
+      const prev = (near ?? [])[0];
+      if (prev) {
+        const gap = Math.max(1, Math.round(Math.abs(sendAt.getTime() - new Date(prev.send_at).getTime()) / 60_000));
+        setDupWarn(
+          prev.sent_at
+            ? `أُرسل خبرٌ لهذه المحطة وهذا المنتج قبل ${gap} دقيقة. ومهلةُ الشخص الواحد ٤٥ دقيقة — فمن وصله الأوّلُ لن يصله هذا، وتعود المهلة بعد ${Math.max(1, 45 - gap)} دقيقة.`
+            : `خبرٌ آخر لهذه المحطة وهذا المنتج ينتظر الإرسال ${new Date(prev.send_at).toLocaleString('ar-IQ')} — وبينه وبين هذا ${gap} دقيقة. سيخرج أحدهما أوّلاً فيبتلع المهلة، ولن يصل الثاني أحداً تقريباً. الأفضلُ إلغاءُ أحدهما من «ما ينتظر الإرسال» أدناه.`
+        );
+        return;
+      }
+    }
+
     setBusy(true);
 
     // مفتاحٌ واحد لكل ضغطة، يُعاد به في كل محاولة. فإن كانت محاولةٌ سابقة قد
@@ -139,11 +183,21 @@ export function StationAnnouncePanel() {
 
     const row = {
       title,
-      // one line per city, so the sweep can hand each city its own sentence
-      // المدينة في السطر مدينة المستلم، لا مدينة المحطة. تمرير مدينة الجمهور
-      // إلى القالب كان يكتب «محطة الأوائل — الفلوجة» لمحطة في الرمادي — خبر
-      // كاذب عن موقعها.
-      body: audience.map((c) => `• ${c}: ${template.line(input)}`).join('\n'),
+      // **جملةٌ واحدة، لا سطرٌ لكلِّ مدينة.**
+      //
+      // كان المتنُ يُكتب سطراً لكلِّ مدينةِ جمهور. والصفُّ لا يحمل إلا محطةً
+      // واحدة (`station_name` عمودٌ مفرد)، فالأسطرُ كلُّها الجملةُ نفسُها
+      // مكرّرة — ثمّ يقرؤها المُرسِلُ فيحسبها محطاتٍ عدّة، فيستبدل بها قائمةَ
+      // المدن: «16 محطات في الفلوجة والرمادي…» عن محطةٍ واحدة، إلى تسعِ مئةٍ
+      // وخمسةٍ وتسعين جهازاً. ضاع الخبرُ وبقي التوجيه.
+      //
+      // والمدينةُ في الجملة مدينةُ **المحطة** لا مدينةُ المستلم — وهي ما
+      // يحتاجه قارئٌ في الكرمة ليقرّر أيقود أم لا. والمناطقُ تبقى في `cities`
+      // أدناه: توجيهاً لا نصّاً، كما أراد المالك.
+      //
+      // وبهذا صار المحفوظُ هو المُعايَنُ هو المُرسَلُ هو ما تعرضه ‎/news‎ وما
+      // يقيسه `tooLong` — أربعُ صورٍ كانت تفترق، صارت واحدة.
+      body: line,
       note: 'هذه المحطة لم تسجّل في التطبيق بعد. ننشر الخبر لأن وصول المعلومة إليكم أهمّ من انتظارها. وإن كنت صاحب محطة أو تعرف صاحبها فالتسجيل مجاني، ويجعل خبر محطتك يصل أهل مدينتك بنفسه لحظة تعلنه.',
       source: 'إدارة المحطة التقنية',
       product,
@@ -466,8 +520,22 @@ export function StationAnnouncePanel() {
           disabled={busy || !station.trim() || !!lengthError}
           className="btn-primary w-full disabled:opacity-50"
         >
-          {busy ? <SpinnerIcon className="mx-auto h-5 w-5" /> : when === 'now' ? 'انشر الآن' : 'جدول النشر'}
+          {busy ? (
+            <SpinnerIcon className="mx-auto h-5 w-5" />
+          ) : dupWarn ? (
+            'انشر رغم ذلك'
+          ) : when === 'now' ? (
+            'انشر الآن'
+          ) : (
+            'جدول النشر'
+          )}
         </button>
+
+        {dupWarn && (
+          <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-bold leading-relaxed text-amber-900">
+            ⚠️ {dupWarn}
+          </p>
+        )}
 
         {err && (
           <p className="mt-3 rounded-xl bg-red-50 p-3 text-xs font-semibold text-traffic-red">{err}</p>
