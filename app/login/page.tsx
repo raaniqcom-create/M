@@ -26,7 +26,9 @@ export default function LoginPage() {
       ? value
       : /^[0-9+\s()-]+$/.test(value)
         ? phoneToEmail(value)
-        : `${value}@muhta.app`;
+        : // اسمُ المستخدم يُصغَّر: من يُملى عليه «anbar1» قد يكتبها بحرفٍ كبير،
+          // ولا يوجد اليوم عنوانٌ واحدٌ فيه حرفٌ كبير (فُحصت السبعون).
+          `${value.toLowerCase()}@muhta.app`;
 
     const { data: signIn, error: signInError } = await supabase.auth.signInWithPassword({
       email,
@@ -43,7 +45,7 @@ export default function LoginPage() {
           ? 'محاولات كثيرة خلال وقت قصير. انتظر دقيقة ثم حاول مجدداً.'
           : raw.includes('fetch') || raw.includes('network')
             ? 'تعذّر الاتصال بالخادم. تحقق من الإنترنت وحاول مجدداً.'
-            : 'رقم الهاتف أو كلمة المرور غير صحيحة. تأكد من البيانات وحاول مجدداً.'
+            : 'البيانات غير صحيحة. تأكد من الرقم أو اسم المستخدم ومن كلمة المرور.'
       );
       return;
     }
@@ -86,12 +88,19 @@ export default function LoginPage() {
 
           <div>
             <label htmlFor="identifier" className="label">
-              رقم الهاتف <span className="text-traffic-red">*</span>
+              رقم الهاتف أو اسم المستخدم <span className="text-traffic-red">*</span>
             </label>
+            {/* **حقلُ نصٍّ لا هاتف.** الشيفرةُ أدناه تقبل اسمَ مستخدمٍ منذ
+                البداية، لكنّ `type="tel"` كان يفتح لوحةَ الأرقام على الهاتف —
+                فحسابُ الفرع «anbar1» لا يمكن كتابتُه أصلاً. وصاحبُ المحطة
+                يكتب رقمه على لوحةٍ كاملةٍ بلا ضرر؛ والعكسُ مستحيل. */}
             <input
               id="identifier"
-              type="tel"
-              inputMode="numeric"
+              type="text"
+              inputMode="text"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               required
               autoComplete="username"
               value={identifier}

@@ -270,6 +270,16 @@ export default function AdminPage() {
           <a href="/?view=user" className="text-[11px] font-bold text-slate-400">
             عرض المنصة كمستخدم ↗
           </a>
+          {/* والصلاحيةُ قائمةٌ سلفاً — is_branch_viewer() تُجيب المديرَ بنعم
+              (20260906_branch_viewer.sql:88). الناقصُ كان البابَ لا المفتاح.
+              وهنا وحدَه: القائمةُ الجانبية تفرّع «المديرَ أوّلاً» عمداً، ووضعُ
+              البند فيها أيضاً طريقٌ ثانٍ إلى الصفحة نفسِها. */}
+          <a
+            href="/branch"
+            className="mt-0.5 block text-[11px] font-bold text-brand-700"
+          >
+            لوحة الفرع — التوزيع في عموم الأنبار ↗
+          </a>
         </div>
         <button
           type="button"
