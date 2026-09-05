@@ -59,16 +59,19 @@ export default function LoginPage() {
       return;
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', uid)
-      .maybeSingle();
+    // ودورُ موظّف الفرع في القاعدة `owner`، فلولا هذا السؤال لاستُقبل بلوحة
+    // محطةٍ لا يملكها ودُعي إلى «إكمال تسجيل محطتك».
+    const [{ data: profile }, { data: branch }] = await Promise.all([
+      supabase.from('profiles').select('role').eq('id', uid).maybeSingle(),
+      supabase.rpc('is_branch_viewer'),
+    ]);
 
     setBusy(false);
     // replace, not push: the back button should not return to a login form the
     // person has already passed
-    router.replace(profile?.role === 'admin' ? '/admin' : '/owner');
+    router.replace(
+      profile?.role === 'admin' ? '/admin' : branch === true ? '/branch' : '/owner',
+    );
   }
 
   return (

@@ -332,7 +332,8 @@ begin
     -- claiming one would own a link that never opens
     while candidate in ('login','register','owner','admin','station','offline','api',
                         'icons','ads','alerts','download','privacy','subscribe',
-                        'reset','test-push','manifest.json','sw.js')
+                        'reset','test-push','about','news','road','branch','sounds',
+                        'manifest.json','sw.js')
           or exists (select 1 from stations s where s.slug = candidate and s.id <> new.id)
     loop
       n := n + 1;

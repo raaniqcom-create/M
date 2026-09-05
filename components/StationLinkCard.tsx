@@ -6,18 +6,34 @@ import { CheckIcon, ShareIcon, SpinnerIcon } from './icons';
 
 // Reserved because Next resolves these static routes before the /[slug]
 // catch-all — a station claiming one would get an unreachable link.
+//
+// **والقائمةُ تُقرأ من `app/` لا من الذاكرة.** كانت أحدَ عشرَ اسماً بينما في
+// `app/` ستّةَ عشرَ مجلّداً — فستّةٌ منها (`about`, `alerts`, `download`,
+// `news`, `privacy`, `reset`, `road`, `subscribe`, `test-push`) كانت متاحةً
+// لمحطةٍ تحجزها، فتطبع لاصقتَها ويفتح الرابطُ صفحةً أخرى تماماً. وكلُّ مسارٍ
+// جديد يُزاد هنا يومَ يُنشأ — و`branch` أوّلُ ما زيد بهذه القاعدة.
 const RESERVED = new Set([
-  'login',
-  'register',
-  'owner',
+  'about',
   'admin',
-  'station',
-  'offline',
-  'api',
-  'icons',
   'ads',
+  'alerts',
+  'api',
+  'branch',
+  'download',
+  'icons',
+  'login',
   'manifest.json',
+  'news',
+  'offline',
+  'owner',
+  'privacy',
+  'register',
+  'reset',
+  'road',
+  'station',
+  'subscribe',
   'sw.js',
+  'test-push',
 ]);
 
 function clean(input: string): string {

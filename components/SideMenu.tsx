@@ -55,7 +55,7 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
   // `ready` matters: reading the session is two network round trips, and
   // without it a returning owner watched "register your station" sit there
   // for a second before it was replaced by their own panel.
-  const { signedIn, role, ready } = useSession();
+  const { signedIn, role, branch, ready } = useSession();
   const native = useNativeApp();
 
   useEffect(() => {
@@ -264,6 +264,9 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
               {/* Nothing renders until the session is known — offering "sign in"
                   to someone already signed in is the fastest way to make a
                   returning user feel lost. */}
+              {/* قبل «لوحة محطتي»: الرايةُ تُقرأ قبل الدور لأن موظّف الفرع
+                  دورُه `owner` أيضاً — ولو رُتّبا بالعكس لَقُدّم إليه بندُ محطةٍ
+                  لا يملكها. والمديرُ أوّلاً على كلٍّ، فله البندان في لوحته. */}
               {ready &&
                 (signedIn ? (
                   role === 'admin' ? (
@@ -272,6 +275,14 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                       icon={ShieldIcon}
                       title="لوحة التحكم"
                       note="المحطات والطلبات والإحصائيات"
+                      accent
+                    />
+                  ) : branch ? (
+                    <Item
+                      href="/branch"
+                      icon={ShieldIcon}
+                      title="لوحة الفرع"
+                      note="حالة التوفر في عموم الأنبار — لحظة بلحظة"
                       accent
                     />
                   ) : (

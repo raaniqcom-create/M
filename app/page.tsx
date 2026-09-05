@@ -148,7 +148,7 @@ export default function HomePage() {
     );
   }
   const native = useNativeApp();
-  const { signedIn, role, ready } = useSession();
+  const { signedIn, role, branch, ready } = useSession();
 
   // Send an owner or admin to their panel on open. Only once, and never when
   // they asked for the visitor view — a redirect they cannot escape is worse
@@ -156,7 +156,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!signedIn) return;
     if (new URLSearchParams(window.location.search).has('view')) return;
-    const target = homeFor(role);
+    const target = homeFor(role, branch);
     if (target) router.replace(target);
   }, [signedIn, role, router]);
 
@@ -507,13 +507,18 @@ export default function HomePage() {
               screen, not by hunting through a drawer. */}
           {signedIn && (
             <a
-              href={role === 'admin' ? '/admin' : '/owner'}
+              href={homeFor(role, branch) ?? '/owner'}
               className="mt-2 flex items-center justify-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-extrabold text-brand-700"
             >
               {role === 'admin' ? (
                 <>
                   <ShieldIcon className="h-4 w-4" />
                   فتح لوحة التحكم
+                </>
+              ) : branch ? (
+                <>
+                  <ShieldIcon className="h-4 w-4" />
+                  العودة إلى لوحة الفرع
                 </>
               ) : (
                 <>
