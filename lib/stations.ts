@@ -27,8 +27,37 @@ export function distanceKm(
  *  Reads `stations_public`, the view that returns null for a phone its owner
  *  chose to hide and that filters to approved stations itself. There is no
  *  fallback to the table: anon no longer holds SELECT on it, so a fallback
- *  would only turn one error into two. */
+ *  would only turn one error into two.
+ *
+ *  ── وثلاثُ محاولاتٍ لا واحدة ───────────────────────────────────────────
+ *
+ *  طلبٌ ساقطٌ واحد كان يكفي ليرى المستعمل «تعذّر تحميل المحطات» — وهو أوّلُ
+ *  شاشةٍ يراها. وقع فعلاً يوم ٢٠٢٦-٠٩-٠٧ الساعة ٠٠:٤٤: قُيست سجلّاتُ
+ *  الخادم في تلك الدقيقة بعينها فإذا هي ١٨٦ طلباً كلُّها ناجحة، فالمنصّة لم
+ *  تكن معطّلة — سقط طلبُ جهازٍ واحد على شبكة 4G.
+ *
+ *  والمنطقُ نفسُه مكتوبٌ في public/sw.js لملفّات `_next/static`: «One dropped
+ *  request is enough, and there are two ways to get one». وهو أصدقُ على
+ *  البيانات منه على الحزم: بلا الحزمة لا يُرسم شيء، وبلا البيانات يُرسم
+ *  خطأٌ يقرؤه المستعمل عطلاً في المنصّة.
+ *
+ *  ولا مهلةَ لكلّ محاولةٍ هنا: النداءُ في app/page.tsx محدودٌ بخمسَ عشرةَ
+ *  ثانية أصلاً، فالتعليقُ الوقتيُّ يقع هناك مرّةً واحدة. وهذه تعالج الطلبَ
+ *  الذي يسقط سريعاً — وهو الشكلُ الغالب. */
 export async function loadStations(): Promise<StationWithStatus[]> {
+  let last: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await fetchStations();
+    } catch (e) {
+      last = e;
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+    }
+  }
+  throw last;
+}
+
+async function fetchStations(): Promise<StationWithStatus[]> {
   const [stationsRes, productsRes, trafficRes, laneRes] = await Promise.all([
     // Belt and braces on the status filter. Dropping it here because "the view
     // filters it" put every rejected and suspended station on the public list
