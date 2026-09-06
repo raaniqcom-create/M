@@ -22,7 +22,34 @@ export type SiteStatus = {
   /** ISO — بعده يعود الموقع من تلقائه. فارغةٌ تعني «لا صيانة». */
   until: string;
   message: string;
+  /** إنذارٌ **قبل** التوقّف، لا أثناءه. */
+  notice: SiteNotice | null;
 };
+
+/** شاشةٌ تُعرض مرّةً في الجلسة ثمّ تنصرف وحدَها.
+ *
+ *  والفرقُ بينها وبين الصيانة فرقُ زمنٍ لا شكل: هذه تقول «سيقع»، وتلك تقول
+ *  «واقعٌ الآن». ولذلك تُتخطّى وتنتهي بعدّاد، ولا تحجب شيئاً. */
+export type SiteNotice = {
+  title: string;
+  body: string;
+  /** ISO — تتوقّف عن الظهور بعده. وهو موعدُ الصيانة نفسُه في الغالب:
+   *  إنذارٌ يبقى بعد وقوع ما أنذر به يصير كذباً. */
+  until: string;
+  /** ثوانٍ قبل الانصراف التلقائيّ. */
+  seconds: number;
+};
+
+/** الإنذارُ القائم، أو `null`.
+ *
+ *  ويسقط متى مضى وقتُه بلا تدخّل — كالصيانة سواءً بسواء، وللسبب نفسِه:
+ *  ما يُقلب في وقتٍ حرج يجب أن يعرف كيف ينصرف وحدَه. */
+export function activeNotice(s: SiteStatus | null, now = Date.now()): SiteNotice | null {
+  const n = s?.notice;
+  if (!n?.title?.trim() || !n.until) return null;
+  const t = new Date(n.until).getTime();
+  return Number.isFinite(t) && t > now ? n : null;
+}
 
 export function isDown(s: SiteStatus | null, now = Date.now()): boolean {
   if (!s?.maintenance || !s.until) return false;

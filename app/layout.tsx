@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Tajawal } from 'next/font/google';
 import './globals.css';
 import { Maintenance } from '@/components/Maintenance';
+import { SiteNotice } from '@/components/SiteNotice';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { NativePush } from '@/components/NativePush';
 import { APPLE_APP_ID } from '@/lib/stores';
@@ -74,6 +75,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* نقطةُ تركيبٍ واحدةٌ تغطّي كلَّ مسار — أصغرُ من حراسةٍ في كلّ صفحة،
             وتشمل /owner و/admin اللتين تُنسيان في أيّ حلٍّ صفحةً صفحة. */}
         <Maintenance />
+        {/* بعد Maintenance: الواقعُ يسبق الإنذارَ به، والمكوّنُ نفسُه يمتنع
+            إن كانت الصيانةُ قائمة. */}
+        <SiteNotice />
         {children}
       </body>
     </html>

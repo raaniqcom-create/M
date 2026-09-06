@@ -202,6 +202,77 @@ try {
     !(await evalJs(`document.body.innerText.includes('المنصّة في صيانة الآن')`)),
     'وصيانةٌ مضت نهايتُها لا تُعرض — المفتاحُ يُطفئ نفسَه'
   );
+  // ── ٤ ـ الإنذارُ السابق للصيانة ──────────────────────────────────────
+  console.log('');
+  console.log('٤ ـ الإنذار السابق');
+  const at = new Date(Date.now() + 3600_000);
+  writeFileSync(
+    STATUS,
+    JSON.stringify(
+      {
+        maintenance: false,
+        until: '',
+        message: '',
+        notice: {
+          title: 'تحديثٌ قصير للمنصّة',
+          body: 'نصُّ فحص.' + '\n\n' + 'سطرٌ ثانٍ.',
+          until: at.toISOString(),
+          seconds: 5,
+        },
+      },
+      null,
+      2
+    )
+  );
+  await sleep(1500);
+  await send('Page.navigate', { url: BASE + '/' });
+  await sleep(3200);
+  ok(
+    await evalJs(`document.body.innerText.includes('تحديثٌ قصير للمنصّة')`),
+    'الإنذار ظهر ملءَ الشاشة'
+  );
+  ok(
+    await evalJs(
+      `[...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'تخطّي')`
+    ),
+    'ومعه زرُّ التخطّي'
+  );
+  ok(
+    await evalJs(`!!document.querySelector('[role="dialog"] svg circle')`),
+    'وعدّادٌ دائريّ بجانبه'
+  );
+  await sleep(4500);
+  ok(
+    !(await evalJs(`document.body.innerText.includes('تحديثٌ قصير للمنصّة')`)),
+    'وينصرف وحدَه بعد انتهاء العدّاد'
+  );
+
+  // وإنذارٌ مضى موعدُه لا يُعرض — وإلّا صار كذباً بعد وقوع ما أنذر به
+  writeFileSync(
+    STATUS,
+    JSON.stringify(
+      {
+        maintenance: false,
+        until: '',
+        message: '',
+        notice: {
+          title: 'إنذارٌ فات',
+          body: '—',
+          until: new Date(Date.now() - 60_000).toISOString(),
+          seconds: 5,
+        },
+      },
+      null,
+      2
+    )
+  );
+  await sleep(1500);
+  await send('Page.navigate', { url: BASE + '/' });
+  await sleep(3200);
+  ok(
+    !(await evalJs(`document.body.innerText.includes('إنذارٌ فات')`)),
+    'وإنذارٌ مضى موعدُه لا يُعرض'
+  );
 } finally {
   writeFileSync(STATUS, original);
   ws.close();

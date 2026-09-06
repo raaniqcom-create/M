@@ -11,7 +11,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 // وليس btoa: العنوانُ والرسالةُ عربيّة، وbtoa يرمي على أيّ حرفٍ فوق ٢٥٥.
 // وهو السطرُ الوحيد الذي كان سينكسر عند أوّل استعمالٍ حقيقيّ لا في الفحص.
-import { encodeBase64 } from 'jsr:@std/encoding/base64';
+import { decodeBase64, encodeBase64 } from 'jsr:@std/encoding/base64';
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -80,19 +80,14 @@ Deno.serve(async (req) => {
       maintenance?: boolean;
       message?: string;
       hours?: number;
+      notice?: { title?: string; body?: string; until?: string; seconds?: number } | null;
     };
 
-    if (typeof body.maintenance === 'boolean') {
-      if (!isAdmin) return json({ error: 'غير مصرّح' }, 403);
+    const setsMaintenance = typeof body.maintenance === 'boolean';
+    const setsNotice = body.notice !== undefined;
 
-      // و`until` تُحسب هنا لا في المتصفّح: ساعةُ الهاتف قد تكون مضبوطةً خطأً،
-      // وهي التي تُطفئ الصيانةَ وحدَها إن تعذّر إطفاؤها بيد.
-      const hours = Math.min(Math.max(body.hours ?? 2, 1), 24);
-      const status = {
-        maintenance: body.maintenance,
-        until: body.maintenance ? new Date(Date.now() + hours * 3600_000).toISOString() : '',
-        message: (body.message ?? '').slice(0, 300),
-      };
+    if (setsMaintenance || setsNotice) {
+      if (!isAdmin) return json({ error: 'غير مصرّح' }, 403);
 
       const PATH = 'public/status.json';
       const gh = (extra: RequestInit = {}) => ({
@@ -110,7 +105,48 @@ Deno.serve(async (req) => {
         gh()
       );
       if (!cur.ok) return json({ error: `GitHub ${cur.status}: ${await cur.text()}` }, 502);
-      const { sha } = (await cur.json()) as { sha: string };
+      const got = (await cur.json()) as { sha: string; content?: string };
+
+      // **يُقرأ القائمُ ثمّ يُدمج، ولا يُكتب من الصفر.** الملفُّ يحمل حقلين
+      // مستقلّين — صيانةٌ واقعة، وإنذارٌ بها قبل وقوعها — وكتابةُ أحدهما من
+      // الصفر تمحو الآخر صامتةً. أي أنّ قلبَ الصيانة كان سيمحو الإنذارَ الذي
+      // أعلن عنها.
+      let prev: Record<string, unknown> = {};
+      try {
+        // وTextDecoder لا atob: الأخيرةُ تردّ بايتاتٍ لا نصّاً، فالعربيُّ
+        // المحمولُ (الرسالةُ ونصُّ الإنذار) كان يتشوّه في كلّ حفظ — وهو عيبُ
+        // btoa نفسُه من الجهة المقابلة.
+        const raw = decodeBase64((got.content ?? '').replace(/\s/g, ''));
+        prev = JSON.parse(new TextDecoder().decode(raw)) as Record<string, unknown>;
+      } catch {
+        /* ملفٌّ مكسورٌ يُستبدل بسليم */
+      }
+
+      // و`until` تُحسب هنا لا في المتصفّح: ساعةُ الهاتف قد تكون مضبوطةً خطأً،
+      // وهي التي تُطفئ الصيانةَ وحدَها إن تعذّر إطفاؤها بيد.
+      const hours = Math.min(Math.max(body.hours ?? 2, 1), 24);
+      const status = {
+        maintenance: setsMaintenance ? body.maintenance : prev.maintenance === true,
+        until: setsMaintenance
+          ? body.maintenance
+            ? new Date(Date.now() + hours * 3600_000).toISOString()
+            : ''
+          : ((prev.until as string) ?? ''),
+        message: setsMaintenance
+          ? (body.message ?? '').slice(0, 300)
+          : ((prev.message as string) ?? ''),
+        notice: setsNotice
+          ? body.notice && body.notice.title?.trim()
+            ? {
+                title: body.notice.title.trim().slice(0, 120),
+                body: (body.notice.body ?? '').trim().slice(0, 600),
+                until: body.notice.until ?? '',
+                seconds: Math.min(Math.max(Math.round(body.notice.seconds ?? 5), 3), 15),
+              }
+            : null
+          : (prev.notice ?? null),
+      };
+      const sha = got.sha;
 
       const put = await fetch(`https://api.github.com/repos/${REPO}/contents/${PATH}`, {
         method: 'PUT',
@@ -121,7 +157,13 @@ Deno.serve(async (req) => {
           'User-Agent': 'muhta-rebuild',
         },
         body: JSON.stringify({
-          message: body.maintenance ? 'صيانة: إيقاف مؤقّت' : 'صيانة: عودة',
+          message: setsNotice
+            ? body.notice
+              ? 'إنذار: تحديثٌ قادم'
+              : 'إنذار: رفع'
+            : body.maintenance
+              ? 'صيانة: إيقاف مؤقّت'
+              : 'صيانة: عودة',
           content: encodeBase64(new TextEncoder().encode(JSON.stringify(status, null, 2) + '
 ')),
           sha,
@@ -130,7 +172,7 @@ Deno.serve(async (req) => {
       if (!put.ok) return json({ error: `GitHub ${put.status}: ${await put.text()}` }, 502);
 
       // الإيداعُ نفسُه يُطلق النشر، فلا حاجةَ إلى repository_dispatch.
-      return json({ ok: true, until: status.until });
+      return json({ ok: true, until: status.until, notice: status.notice });
     }
 
     const res = await fetch(`https://api.github.com/repos/${REPO}/dispatches`, {
