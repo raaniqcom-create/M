@@ -88,7 +88,20 @@ export function Maintenance() {
       className="fixed inset-0 z-[80] flex items-center justify-center bg-gradient-to-b from-brand to-brand-700 px-6 text-center text-white"
     >
       <div className="max-w-sm">
-        <h1 className="text-lg font-extrabold">المنصّة في صيانة الآن</h1>
+        {/* الشعارُ أوّلاً — والسابقةُ SplashScreen: أيقونةُ التطبيق على أبيضها
+            لا شفّافةً، فتقف على الأخضر بطاقةً مضيئة. وبدونه تُقرأ الشاشةُ
+            الخضراءُ صفحةَ خطأٍ من مزوّد الشبكة لا رسالةً من المنصّة. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/icons/icon-192.png"
+          alt=""
+          width={80}
+          height={80}
+          className="mx-auto h-20 w-20 rounded-[20px] shadow-[0_10px_26px_rgba(0,0,0,.32)] ring-1 ring-white/15"
+        />
+        <p className="mt-3 text-base font-extrabold tracking-tight">المحطة التقنية</p>
+
+        <h1 className="mt-4 text-lg font-extrabold">المنصّة في صيانة الآن</h1>
         <p className="mt-2 text-[13px] leading-relaxed text-white/90">
           {status?.message?.trim() || 'نُجري تحديثاً قصيراً على الخدمة.'}
         </p>
