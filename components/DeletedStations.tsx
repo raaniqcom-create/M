@@ -13,6 +13,8 @@ interface Gone {
   status: string;
   deleted_at: string;
   lost: { followers?: number; devices?: number; reviews?: number; messages?: number } | null;
+  /** حسابُ صاحبها زال بعد الأرشفة، فتعود باسم المدير المسترجِع. */
+  owner_gone?: boolean;
 }
 
 /** المحطاتُ المحذوفة، وبابُ عودتها.
@@ -40,7 +42,14 @@ export function DeletedStations() {
   }, [load]);
 
   async function restore(g: Gone) {
-    if (!confirm(`استرجاع «${g.name}»؟ تعود ببياناتها ومنتجاتها ومعرّفها القديم.`)) return;
+    // النصُّ يُقال قبل الضغط لا بعده: زرٌّ ينقل المِلكيّة ثمّ يُخبر أسوأ من
+    // زرٍّ يقول ماذا سيفعل.
+    const ask = g.owner_gone
+      ? `استرجاع «${g.name}»؟ تعود ببياناتها ومنتجاتها ومعرّفها القديم.
+
+وصاحبُها حُذف حسابُه، فتعود باسمك أنت — ثمّ تُسلَّم إليه بربط رقمه.`
+      : `استرجاع «${g.name}»؟ تعود ببياناتها ومنتجاتها ومعرّفها القديم.`;
+    if (!confirm(ask)) return;
     setBusy(g.id);
     const { error } = await supabase.rpc('restore_station', { p_id: g.id });
     setBusy(null);
@@ -48,7 +57,11 @@ export function DeletedStations() {
       setNote(`تعذّر الاسترجاع: ${error.message}`);
       return;
     }
-    setNote(`عادت «${g.name}». حدّث الصفحة لتظهر في القائمة.`);
+    setNote(
+      g.owner_gone
+        ? `عادت «${g.name}» باسمك — صاحبُها لا حسابَ له. اربط رقمه من «تعديل محطة» ليعود إليها.`
+        : `عادت «${g.name}». حدّث الصفحة لتظهر في القائمة.`
+    );
     void load();
   }
 
@@ -87,6 +100,11 @@ export function DeletedStations() {
                   {bits.length > 0 && (
                     <p className="mt-0.5 text-[10px] text-traffic-red">
                       ضاع معها {bits.join(' و')} — لا تعود بالاسترجاع
+                    </p>
+                  )}
+                  {g.owner_gone && (
+                    <p className="mt-0.5 text-[10px] font-bold text-amber-800">
+                      صاحبُها حُذف حسابُه — تعود باسمك
                     </p>
                   )}
                 </div>
