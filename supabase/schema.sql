@@ -324,6 +324,13 @@ declare
   candidate text;
   n int := 0;
 begin
+  -- اسمٌ بلا كلمة «محطة» يُقرأ حيّاً أو شارعاً حين يصل في إشعار — وعشرٌ من
+  -- ثمانٍ وثلاثين كانت كذلك. والاختبارُ «يحوي» لا «يبدأ بـ»، وبإملاءَي التاء.
+  new.name := btrim(new.name);
+  if new.name <> '' and new.name !~ 'محط[ةه]' then
+    new.name := 'محطة ' || new.name;
+  end if;
+
   -- Every insert passes here, whoever makes it, so this is the one place a
   -- missing slug can be caught for good.
   if new.slug is null or btrim(new.slug) = '' then
