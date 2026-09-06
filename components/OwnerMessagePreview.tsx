@@ -1,5 +1,6 @@
 'use client';
 
+import { num } from '@/lib/num';
 import { useEffect, useState } from 'react';
 import { callFn } from '@/lib/fn';
 import { CheckIcon, SpinnerIcon } from './icons';
@@ -72,7 +73,7 @@ export function OwnerMessagePreview({ stationId }: { stationId: string }) {
 
           <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
             <span className="rounded-full bg-brand-50 px-2.5 py-1 font-bold text-brand-900">
-              {data.watchers.toLocaleString('en-US')} مهتمّاً في {data.city}
+              {num(data.watchers)} مهتمّاً في {data.city}
             </span>
             <span
               className={`rounded-full px-2.5 py-1 font-bold ${

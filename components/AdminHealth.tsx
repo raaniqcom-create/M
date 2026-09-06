@@ -1,5 +1,6 @@
 'use client';
 
+import { num } from '@/lib/num';
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { callFn } from '@/lib/fn';
@@ -487,7 +488,7 @@ export function AdminHealth() {
 function Mini({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl bg-slate-50 py-2.5 text-center">
-      <p className="text-lg font-extrabold leading-none text-slate-700">{value}</p>
+      <p className="text-lg font-extrabold leading-none text-slate-700 tabular-nums">{num(value)}</p>
       <p className="mt-1 text-[11px] font-semibold text-slate-500">{label}</p>
     </div>
   );

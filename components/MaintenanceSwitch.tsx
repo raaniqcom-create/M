@@ -238,6 +238,10 @@ export function MaintenanceSwitch() {
         البيانات هي المتوقّفة — فحرِّر <b>public/status.json</b> من github.com
         بالهاتف واجعل <code dir="ltr">maintenance</code> تساوي{' '}
         <code dir="ltr">false</code>.
+        <br />
+        ولفحص المنصّة والصيانةُ قائمة: افتح{' '}
+        <code dir="ltr">muhta.online/?live=1</code> — تُتخطّى الشاشتان في هذا
+        المتصفّح وحدَه.
       </p>
     </section>
   );

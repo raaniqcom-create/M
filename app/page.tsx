@@ -1,6 +1,7 @@
 'use client';
 
 import { StaleBanner } from '@/components/StaleBanner';
+import { STATUS_RECHECK } from '@/lib/status';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
@@ -209,6 +210,8 @@ export default function HomePage() {
         })
         .catch(() => {
           setFailed(true);
+          // ربّما ليست شبكةً بل صيانةٌ بدأت والتبويبُ مفتوح — تُسأل مرّةً.
+          window.dispatchEvent(new Event(STATUS_RECHECK));
           // **وهنا كان الصمت.** الشرطُ في الأسفل كان يعرض بطاقةَ الخطأ حين
           // `stations === null` وحدَها، فسقوطُ الشبكة بعد تحميلٍ ناجح لم يكن
           // يعرض شيئاً: لا خطأ ولا مغزل، والأرقامُ القديمة تُقرأ حاضرة.

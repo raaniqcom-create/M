@@ -1,5 +1,6 @@
 'use client';
 
+import { num } from '@/lib/num';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { isFresh } from '@/lib/hours';
@@ -49,7 +50,7 @@ export function AudienceBanner({
     (p) => p.updated_at && isFresh(p.updated_at) && new Date(p.updated_at).toDateString() === new Date().toDateString()
   );
 
-  const n = audience.watchers.toLocaleString('en-US');
+  const n = num(audience.watchers);
   const f = audience.followers;
 
   if (!updatedToday && !muted) {

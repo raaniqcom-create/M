@@ -30,6 +30,8 @@ export function SiteNotice() {
   useEffect(() => {
     let alive = true;
     void (async () => {
+      // الرابطُ نفسُه يتخطّى الاثنتين: من يفحص لا يريد شاشةً من أيّ نوع.
+      if (new URLSearchParams(window.location.search).get('live') === '1') return;
       const status = await readStatus();
       if (!alive) return;
       // الصيانةُ الواقعةُ تسبق الإنذارَ بها: شاشتان معاً عبثٌ، والواقعُ أولى.

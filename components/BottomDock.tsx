@@ -1,5 +1,6 @@
 'use client';
 
+import { num } from '@/lib/num';
 import { useEffect, useState } from 'react';
 import { useSiteStats } from '@/lib/useSiteStats';
 import { NewsTicker } from './NewsTicker';
@@ -82,7 +83,7 @@ export function BottomDock({
 
         {/* رقمٌ واحد يتبدّل، لا رقمان متجاوران. والنقطة تنبض للمتصلين
             وحدهم — «زائر» رقمٌ تراكمي لا حالة لحظية، ونبضُه يكذب. */}
-        <Tab label={`${value ?? '—'} ${word}`} onClick={onAccount} muted>
+        <Tab label={`${num(value)} ${word}`} onClick={onAccount} muted>
           <span key={flip} className="flex items-center gap-1 animate-[fade-slide_.45s_ease]">
             {live && <span className="h-1.5 w-1.5 rounded-full bg-brand animate-blink" />}
             <UserIcon className="h-5 w-5" />

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { isDown, readStatus, type SiteStatus } from '@/lib/status';
+import { STATUS_RECHECK, isDown, readStatus, type SiteStatus } from '@/lib/status';
 import { loadCachedStations } from '@/lib/stations';
 import { readChoice } from '@/lib/alerts';
 
@@ -33,8 +33,18 @@ export function Maintenance() {
   }, []);
 
   useEffect(() => {
+    // ── بابُ الإدارة ────────────────────────────────────────────────────
+    //
+    // بعد النقل تُفحص المنصّةُ **والصيانةُ ما زالت قائمة**: تُقرأ الصفحاتُ
+    // على القاعدة الجديدة قبل أن تُفتح للناس. فبلا مدخلٍ يتخطّاها يُضطرّ
+    // المدير إلى رفعها ليفحص — أي أن يفتحها على الناس قبل أن يتأكّد.
+    //
+    // ورابطٌ لا حارس: كلُّ ما تحجبه هذه الشاشةُ عامٌّ أصلاً، فهي إعلانٌ لا
+    // قفل. ويُحفظ للجلسة، فيُكتب مرّةً ثمّ يُتنقَّل بحرّية.
     try {
-      setHidden(sessionStorage.getItem(DISMISSED) === '1');
+      const bypass = new URLSearchParams(window.location.search).get('live') === '1';
+      if (bypass) sessionStorage.setItem(DISMISSED, '1');
+      setHidden(bypass || sessionStorage.getItem(DISMISSED) === '1');
     } catch {
       setHidden(false);
     }
@@ -43,7 +53,11 @@ export function Maintenance() {
       if (document.visibilityState === 'visible') void check();
     };
     document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
+    window.addEventListener(STATUS_RECHECK, check);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener(STATUS_RECHECK, check);
+    };
   }, [check]);
 
   const down = isDown(status);

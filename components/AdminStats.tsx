@@ -1,5 +1,6 @@
 'use client';
 
+import { num } from '@/lib/num';
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { isFresh, isOpenNow } from '@/lib/hours';
@@ -389,13 +390,13 @@ export function AdminStats() {
           {reach && (
             <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
               <span className="rounded-full bg-brand-50 px-2.5 py-1 font-bold text-brand-900">
-                {reach.people.toLocaleString('en-US')} شخصاً — العدد الحقيقي بلا تكرار
+                {num(reach.people)} شخصاً — العدد الحقيقي بلا تكرار
               </span>
               <span className="rounded-full bg-slate-100 px-2.5 py-1 font-bold text-slate-600">
-                {byCity.reduce((n, c) => n + c.people, 0).toLocaleString('en-US')} اشتراكاً بالمدن
+                {num(byCity.reduce((n, c) => n + c.people, 0))} اشتراكاً بالمدن
               </span>
               <span className="rounded-full bg-amber-50 px-2.5 py-1 font-bold text-amber-800">
-                {reach.allCities.toLocaleString('en-US')} اختاروا كل المدن
+                {num(reach.allCities)} اختاروا كل المدن
               </span>
             </div>
           )}
@@ -480,8 +481,8 @@ export function AdminStats() {
 function Stat({ label, value, tone }: { label: string; value: number; tone?: 'brand' }) {
   return (
     <div className={`rounded-xl py-2.5 text-center ${tone === 'brand' ? 'bg-brand-50' : 'bg-slate-50'}`}>
-      <p className={`text-lg font-extrabold leading-none ${tone === 'brand' ? 'text-brand-700' : 'text-slate-700'}`}>
-        {value}
+      <p className={`text-lg font-extrabold leading-none tabular-nums ${tone === 'brand' ? 'text-brand-700' : 'text-slate-700'}`}>
+        {num(value)}
       </p>
       <p className="mt-1 text-[11px] font-semibold text-slate-500">{label}</p>
     </div>
