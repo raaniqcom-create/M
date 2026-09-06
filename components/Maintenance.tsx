@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isDown, readStatus, type SiteStatus } from '@/lib/status';
 import { loadCachedStations } from '@/lib/stations';
+import { readChoice } from '@/lib/alerts';
 
 const DISMISSED = 'maintenance-dismissed';
 
@@ -63,6 +64,15 @@ export function Maintenance() {
       })
     : null;
 
+  // ── «سنُعلمك عند العودة» — وعدٌ يُقال لمن يصحّ في حقّه وحدَه ────────────
+  //
+  // إرسالُ الإشعار يحتاج أن يكون الجهازُ مشتركاً سلفاً؛ وتسجيلُ مشتركٍ جديد
+  // كتابةٌ في قاعدة البيانات — وهي بعينها ما يكون متوقّفاً وقت الصيانة. فلا
+  // يُعرض زرُّ «أعلمني» هنا: زرٌّ يَعِد بما لا يقع أسوأُ من لا زرّ.
+  //
+  // و`readChoice` تقرأ من الجهاز لا من الشبكة، فتعمل والقاعدةُ مطفأة.
+  const subscribed = readChoice() !== null;
+
   const snap = loadCachedStations();
   const snapClock = snap
     ? new Date(snap.at).toLocaleTimeString('ar-IQ', {
@@ -110,6 +120,12 @@ export function Maintenance() {
             نتوقّع العودة الساعة <span dir="ltr">{back}</span>
           </p>
         )}
+
+        <p className="mt-3 text-[11.5px] leading-relaxed text-white/75">
+          {subscribed
+            ? 'وتنبيهاتك مفعّلة على هذا الجهاز — سيصلك إشعارٌ عند العودة.'
+            : 'ولا تنبيهات على هذا الجهاز. فعّلها بعد العودة ليصلك خبر الوقود أوّلاً بأوّل.'}
+        </p>
 
         {snapClock ? (
           <>

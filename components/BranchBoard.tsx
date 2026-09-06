@@ -338,13 +338,22 @@ export function BranchBoard() {
           </div>
           <div className="text-left">
             <p className="text-[11.5px] font-bold text-slate-600">{at}</p>
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="branch-hide btn-ghost mt-1 px-3 py-1.5 text-[11.5px]"
-            >
-              طباعة تقرير اليوم
-            </button>
+            {/* بابُ خروج. اللوحةُ تُفتح من رابطٍ مباشرٍ ومن القائمة، ولم يكن
+                فيها ما يعود بالناظر إلى المنصّة — فيُغلق التبويبَ أو يضغط
+                رجوعاً لا يعرف أين يقف. وكلاهما branch-hide: أزرارٌ لا معنى
+                لها على الورق. */}
+            <div className="branch-hide mt-1 flex items-center justify-end gap-2">
+              <a href="/" className="btn-ghost px-3 py-1.5 text-[11.5px]">
+                الرئيسة
+              </a>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="btn-ghost px-3 py-1.5 text-[11.5px]"
+              >
+                طباعة تقرير اليوم
+              </button>
+            </div>
           </div>
         </div>
 
