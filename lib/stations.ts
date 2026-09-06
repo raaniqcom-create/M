@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { WITHDRAW_HOURS } from './hours';
 import type {
   ProductTraffic,
   Station,
@@ -48,13 +49,76 @@ export async function loadStations(): Promise<StationWithStatus[]> {
   let last: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      return await fetchStations();
+      const rows = await fetchStations();
+      cacheStations(rows);
+      return rows;
     } catch (e) {
       last = e;
       if (attempt < 2) await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
     }
   }
   throw last;
+}
+
+/** ــ آخرُ حالةٍ وصلت الجهاز ــــــــــــــــــــــــــــــــــــــــــــــــــ
+ *
+ *  **لأن المنصّة تُستعمل حيث ينقطع الإنترنت.** قبل هذا لم يكن في الجهاز صفُّ
+ *  محطةٍ واحد — `localStorage` كلُّه تفضيلاتٌ ومعرّفات، والعاملُ يمتنع عن
+ *  تخزين نداءات Supabase قصداً (public/sw.js:25). فحين تسقط الشبكة لم يكن
+ *  ثمّة ما يُعرض إطلاقاً.
+ *
+ *  وموضعُها هنا لا في نداءاتها: `loadStations` لها أربعةُ قرّاء — الصفحة
+ *  الرئيسة ولوحةُ الفرع ولوحةُ التوفّر ومساعدُ الطريق — وكتابةُ اللقطة في
+ *  أحدهم تترك الباقين بلا شيء.
+ *
+ *  والحجمُ مقيس: أربعون محطةً وأربعُمئة صفِّ منتجٍ تقع دون ثلاثمئة كيلوبايت،
+ *  فلا حاجةَ إلى IndexedDB لِما يسعه مفتاحٌ واحد.
+ *
+ *  والفشلُ في الكتابة يُبتلع عمداً: اللقطةُ ترفٌ يُحسّن الانقطاع، وليست شرطاً
+ *  لعرض البيانات التي وصلت للتوّ. */
+const SNAP_KEY = 'stations-snapshot';
+
+/** يُرفع عند أيّ تغييرٍ في شكل الصفّ.
+ *
+ *  بدونه تُقرأ لقطةٌ كُتبت بشكلٍ قديم فتُرسم بأعمدةٍ لم تعد موجودة — وهو عطلٌ
+ *  يظهر بعد أسابيع في جهازٍ واحد ولا يُعاد إنتاجه. */
+const SNAP_VERSION = 2;
+
+export function cacheStations(rows: StationWithStatus[]): void {
+  try {
+    localStorage.setItem(
+      SNAP_KEY,
+      JSON.stringify({ v: SNAP_VERSION, at: new Date().toISOString(), rows })
+    );
+  } catch {
+    /* حصّةٌ ممتلئة، أو تخزينٌ محجوب في تصفّحٍ خاصّ */
+  }
+}
+
+/** اللقطةُ وساعتُها — والساعةُ لازمة: بياناتٌ بلا وقتٍ تُقرأ حاضرةً. */
+export function loadCachedStations(): { rows: StationWithStatus[]; at: string } | null {
+  try {
+    const raw = localStorage.getItem(SNAP_KEY);
+    if (!raw) return null;
+    const snap = JSON.parse(raw) as { v?: number; at?: string; rows?: unknown };
+    if (snap.v !== SNAP_VERSION || !snap.at || !Array.isArray(snap.rows)) return null;
+
+    // والشكلُ يُفحص لا يُفترض: الرسمُ ينادي `s.products.some(...)` بلا حارس،
+    // فلقطةٌ من بناءٍ سابقٍ فقدت العمود تُسقط الصفحةَ إلى app/error.tsx —
+    // وهو بعينه ما وُضعت اللقطةُ لتمنعه.
+    const first = snap.rows[0] as { products?: unknown } | undefined;
+    if (first && !Array.isArray(first.products)) return null;
+
+    // وفوق حدّ السحب لا تُعرض أصلاً: الحدُّ القائم في المنصّة (lib/hours.ts)،
+    // وهو نفسُه الذي يُسقط ادّعاءَ المحطة عن الجدول. وساعةٌ في المستقبل تعني
+    // ساعةَ جهازٍ مضبوطةً خطأً، فتُرفض كما تُرفض في `isFresh`.
+    const age = (Date.now() - new Date(snap.at).getTime()) / 3600_000;
+    if (!(age >= 0) || age >= WITHDRAW_HOURS) return null;
+
+    return { rows: snap.rows as StationWithStatus[], at: snap.at };
+  } catch {
+    return null;
+  }
 }
 
 async function fetchStations(): Promise<StationWithStatus[]> {

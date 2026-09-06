@@ -9,6 +9,9 @@
 // through here. Admin-only: a rebuild is cheap but not free, and an open
 // endpoint is a free CI-minute faucet for anyone holding the anon key.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+// وليس btoa: العنوانُ والرسالةُ عربيّة، وbtoa يرمي على أيّ حرفٍ فوق ٢٥٥.
+// وهو السطرُ الوحيد الذي كان سينكسر عند أوّل استعمالٍ حقيقيّ لا في الفحص.
+import { encodeBase64 } from 'jsr:@std/encoding/base64';
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -32,6 +35,7 @@ Deno.serve(async (req) => {
     // cron secret because a bot has no session to hold.
     const secret = Deno.env.get('CRON_SECRET');
     const isCron = !!secret && req.headers.get('x-cron-secret') === secret;
+    let isAdmin = false;
 
     if (!isCron) {
       const jwt = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
@@ -48,7 +52,8 @@ Deno.serve(async (req) => {
       // ويُطلق هذا النداء فيردّ 403، والنداء بلا await ونتيجته مُهمَلة — فلا
       // يُبنى شيء، ورقمه يبقى مقروءاً في الصفحة المنشورة إلى الأبد بينما
       // لوحته تقول له إنه مخفيّ.
-      if (profile?.role !== 'admin') {
+      isAdmin = profile?.role === 'admin';
+      if (!isAdmin) {
         const { count } = await db
           .from('stations')
           .select('id', { count: 'exact', head: true })
@@ -62,6 +67,71 @@ Deno.serve(async (req) => {
 
     const token = Deno.env.get('GH_DISPATCH_TOKEN');
     if (!token) return json({ error: 'GH_DISPATCH_TOKEN غير مضبوط' }, 500);
+
+    // ── وضعُ الصيانة ────────────────────────────────────────────────────
+    //
+    // **هنا لا في دالّةٍ ثانية.** الحراسةُ والعميلُ وكتلةُ CORS والرمزُ كلُّها
+    // مكتوبةٌ فوق؛ ودالّةٌ جديدة تنسخها وتضيف سرّاً يُنقل في كلّ هجرة.
+    //
+    // **وللإدارة وحدَها.** البابُ أعلاه يقبل صاحبَ محطةٍ معتمدة عمداً — لأن
+    // البناءَ رخيص. وإطفاءُ الموقع ليس كذلك. والكرونُ مرفوضٌ أيضاً: لا معنى
+    // لمهمّةٍ مجدولةٍ تُطفئ الموقع.
+    const body = (await req.json().catch(() => ({}))) as {
+      maintenance?: boolean;
+      message?: string;
+      hours?: number;
+    };
+
+    if (typeof body.maintenance === 'boolean') {
+      if (!isAdmin) return json({ error: 'غير مصرّح' }, 403);
+
+      // و`until` تُحسب هنا لا في المتصفّح: ساعةُ الهاتف قد تكون مضبوطةً خطأً،
+      // وهي التي تُطفئ الصيانةَ وحدَها إن تعذّر إطفاؤها بيد.
+      const hours = Math.min(Math.max(body.hours ?? 2, 1), 24);
+      const status = {
+        maintenance: body.maintenance,
+        until: body.maintenance ? new Date(Date.now() + hours * 3600_000).toISOString() : '',
+        message: (body.message ?? '').slice(0, 300),
+      };
+
+      const PATH = 'public/status.json';
+      const gh = (extra: RequestInit = {}) => ({
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'muhta-rebuild',
+        },
+        ...extra,
+      });
+
+      // GitHub يطلب sha الملفّ القائم وإلّا ردّ 409 — والملفُّ مشحونٌ دائماً.
+      const cur = await fetch(
+        `https://api.github.com/repos/${REPO}/contents/${PATH}`,
+        gh()
+      );
+      if (!cur.ok) return json({ error: `GitHub ${cur.status}: ${await cur.text()}` }, 502);
+      const { sha } = (await cur.json()) as { sha: string };
+
+      const put = await fetch(`https://api.github.com/repos/${REPO}/contents/${PATH}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+          'User-Agent': 'muhta-rebuild',
+        },
+        body: JSON.stringify({
+          message: body.maintenance ? 'صيانة: إيقاف مؤقّت' : 'صيانة: عودة',
+          content: encodeBase64(new TextEncoder().encode(JSON.stringify(status, null, 2) + '
+')),
+          sha,
+        }),
+      });
+      if (!put.ok) return json({ error: `GitHub ${put.status}: ${await put.text()}` }, 502);
+
+      // الإيداعُ نفسُه يُطلق النشر، فلا حاجةَ إلى repository_dispatch.
+      return json({ ok: true, until: status.until });
+    }
 
     const res = await fetch(`https://api.github.com/repos/${REPO}/dispatches`, {
       method: 'POST',

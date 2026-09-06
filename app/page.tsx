@@ -1,10 +1,11 @@
 'use client';
 
+import { StaleBanner } from '@/components/StaleBanner';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { distanceKm, loadStations } from '@/lib/stations';
+import { distanceKm, loadCachedStations, loadStations } from '@/lib/stations';
 import { useNativeApp } from '@/lib/useNativeApp';
 import { homeFor, useSession } from '@/lib/useSession';
 import { playAlert, unlockAudio } from '@/lib/alertSound';
@@ -69,6 +70,14 @@ export default function HomePage() {
   const router = useRouter();
   const [stations, setStations] = useState<StationWithStatus[] | null>(null);
   const [failed, setFailed] = useState(false);
+  /** ساعةُ وصول ما هو معروضٌ الآن — تُملأ حين يسقط الاتصال ويبقى المعروض قديماً.
+   *  و`null` تعني «حيّ»، فلا يظهر الشريط في الحال الطبيعيّة. */
+  const [staleAt, setStaleAt] = useState<string | null>(null);
+  /** يُقرآن داخل ردٍّ أُنشئ مرّةً مع الأثر، فقراءةُ الحالة هناك تُرجع قيمةَ
+   *  أوّل رسمٍ إلى الأبد. */
+  const failedRef = useRef(false);
+  failedRef.current = failed;
+  const refreshRef = useRef<() => void>(() => {});
   const [origin, setOrigin] = useState<{ lat: number; lng: number } | null>(null);
   const [query, setQuery] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
@@ -185,13 +194,36 @@ export default function HomePage() {
         p.then(resolve, reject).finally(() => clearTimeout(t));
       });
 
+    // آخرُ لحظةٍ وصلت فيها بياناتٌ حيّة. في ref لا في state: تُقرأ داخل مُعالِج
+    // الفشل الذي أُنشئ مرّةً واحدةً مع التأثير، فقراءةُ state هناك تُرجع قيمةَ
+    // أوّل رسمٍ إلى الأبد.
+    const okAt = { current: null as string | null };
+
     const refresh = () =>
       withDeadline(loadStations(), 15000)
         .then((rows) => {
           setStations(rows);
           setFailed(false);
+          setStaleAt(null);
+          okAt.current = new Date().toISOString();
         })
-        .catch(() => setFailed(true));
+        .catch(() => {
+          setFailed(true);
+          // **وهنا كان الصمت.** الشرطُ في الأسفل كان يعرض بطاقةَ الخطأ حين
+          // `stations === null` وحدَها، فسقوطُ الشبكة بعد تحميلٍ ناجح لم يكن
+          // يعرض شيئاً: لا خطأ ولا مغزل، والأرقامُ القديمة تُقرأ حاضرة.
+          if (okAt.current) {
+            setStaleAt(okAt.current);
+            return;
+          }
+          // ولم يصل شيءٌ قطّ في هذه الجلسة: تُعرض آخرُ لقطةٍ في الجهاز إن
+          // وُجدت — معلومةٌ مؤرَّخةٌ خيرٌ من شاشةٍ فارغة.
+          const snap = loadCachedStations();
+          if (snap) {
+            setStations(snap.rows);
+            setStaleAt(snap.at);
+          }
+        });
 
     refresh();
 
@@ -220,9 +252,35 @@ export default function HomePage() {
       )
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'traffic_votes' }, refresh)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'stations' }, refresh)
-      .subscribe();
+      // ── الزناد ─────────────────────────────────────────────────────────
+      //
+      // **بدونه لا يُعلن الانقطاعُ أبداً.** `refresh` تُنادى مرّةً عند الفتح،
+      // ثمّ من أحداث هذه القناة وحدَها — وهي بعينها ما ينقطع حين ينقطع النت.
+      // فتبقى `failed` كاذبةً واللوحةُ قديمةً بلا قول، وهي الحالُ التي وُضع
+      // لها الشريطُ أصلاً.
+      //
+      // والقناةُ تعرف قبل الصفحة: نبضُها يكشف الموتَ خلال ثلاثين ثانيةً إلى
+      // ستّين، ويكشف العودةَ كذلك — فيزول الشريطُ وحدَه بلا لمسة.
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          // مرّةً واحدة: لإعادة الاشتراك تراجعٌ يبلغ عشرَ ثوانٍ، ونداءٌ بلا
+          // حارسٍ يرمي أربعةَ طلباتٍ في كلّ دورةٍ على شبكةٍ ميّتة.
+          if (!failedRef.current) refresh();
+        } else if (status === 'SUBSCRIBED' && failedRef.current) {
+          refresh();
+        }
+      });
+
+    refreshRef.current = refresh;
+
+    // والهاتفُ الذي كان في الجيب طوالَ القطع: العودةُ إلى الصفحة تسأل من جديد.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', onVisible);
 
     return () => {
+      document.removeEventListener('visibilitychange', onVisible);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -540,6 +598,14 @@ export default function HomePage() {
         className="mx-auto max-w-md px-4 pt-4"
         style={{ paddingBottom: 'calc(9rem + env(safe-area-inset-bottom))' }}
       >
+        {/* **أوّلُ شيءٍ في الصفحة، لا فوق القائمة وحدَها.** لوحةُ المنتجات
+            تحته تقول «لا يتوفر أي منتج في المحطات المفتوحة الآن» — وهي محسوبةٌ
+            من الصفوف القديمة نفسِها. فتحذيرٌ يأتي بعدها يصل بعد أن تكوّن
+            الاعتقادُ الخاطئ. قِيس في المتصفّح: كان يقع تحتها فعلاً. */}
+        {staleAt && stations && (
+          <StaleBanner at={staleAt} onRetry={() => refreshRef.current()} />
+        )}
+
         <TripAsk stations={stations} />
         {/* لوحة المنتجات والشريط الترويجي للقائمة وحدها.
             في وضع الخريطة كانا يدفعانها 424 بكسلاً لأسفل، فلا يظهر منها

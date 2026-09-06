@@ -1,5 +1,6 @@
 'use client';
 
+import { readFailure } from '@/lib/fn';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -38,6 +39,7 @@ const LEVELS: TrafficLevel[] = ['green', 'yellow', 'red'];
 export default function OwnerPage() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
+  const [netErr, setNetErr] = useState<string | null>(null);
   const [station, setStation] = useState<Station | null>(null);
   const [products, setProducts] = useState<StationProduct[]>([]);
   /** ما أشعله المالك في هذه الجلسة وحده — وهو وحده ما يُعلَن. */
@@ -113,8 +115,16 @@ export default function OwnerPage() {
         return;
       }
       setUserId(user.id);
-      load(user.id);
-    });
+      // بـ`return`: بدونه يخرج رفضُ `load` من هذه السلسلة فلا يمسكه شيء،
+      // فيبقى `loading` صحيحاً ويدور المغزلُ أبداً بلا نصٍّ ولا زرّ.
+      return load(user.id);
+    })
+      .catch((e) => {
+        // ولا يُحوَّل إلى /login: سقوطُ الشبكة ليس انتهاءَ جلسة، وطردُ صاحب
+        // محطةٍ إلى نموذج دخولٍ أتمّه للتوّ هو العطلُ الذي حُرس منه أعلاه.
+        setNetErr(readFailure(e));
+        setLoading(false);
+      });
   }, [router, load]);
 
   async function setAvailable(product: FuelProduct, next: boolean) {
@@ -383,6 +393,22 @@ export default function OwnerPage() {
   async function signOut() {
     await supabase.auth.signOut();
     router.replace('/login');
+  }
+
+  if (netErr) {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
+        <h1 className="text-base font-bold">تعذّر فتح لوحتك</h1>
+        <p className="mt-2 text-sm text-slate-500">{netErr}</p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="btn-ghost mt-5 px-6"
+        >
+          إعادة المحاولة
+        </button>
+      </main>
+    );
   }
 
   if (loading) {

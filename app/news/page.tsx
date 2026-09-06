@@ -1,5 +1,6 @@
 'use client';
 
+import { readFailure } from '@/lib/fn';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { FuelIcon, InfoIcon, PlusIcon, SpinnerIcon } from '@/components/icons';
@@ -22,18 +23,33 @@ interface Announcement {
  *  notification alone cannot say all that; a screen can. */
 export default function NewsPage() {
   const [items, setItems] = useState<Announcement[] | null>(null);
+  const [netErr, setNetErr] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase
-      .from('announcements')
-      .select('*')
-      .eq('active', true)
-      // كما في الشريط: المدير يرى ما لم يُرسل بحكم سياسته، والجدول يجب أن
-      // يسري عليه أيضاً وإلا رأى الخبر قبل الناس وحسبه منشوراً
-      .not('sent_at', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(10)
-      .then(({ data }) => setItems((data as Announcement[]) ?? []));
+    // **الفشلُ ليس فراغاً — وهنا أخصُّ من كلّ موضع.** كانت `data` تُقرأ بلا
+    // فحص `error`، فتقول هذه الصفحةُ «لا توجد أخبار حالياً» حين تسقط الشبكة.
+    // وهي الصفحةُ التي يُنشر فيها تنبيهُ انقطاع الإنترنت — فتُخفي الخبرَ
+    // بالعلّة التي كُتب الخبرُ عنها.
+    //
+    // ودالّةٌ لا سلسلة: باني الاستعلام يردّ `PromiseLike` لا وعداً كاملاً،
+    // فلا `.catch` عليه.
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('announcements')
+          .select('*')
+          .eq('active', true)
+          // كما في الشريط: المدير يرى ما لم يُرسل بحكم سياسته، والجدول يجب أن
+          // يسري عليه أيضاً وإلا رأى الخبر قبل الناس وحسبه منشوراً
+          .not('sent_at', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(10);
+        if (error) throw error;
+        setItems((data as Announcement[]) ?? []);
+      } catch (e) {
+        setNetErr(readFailure(e));
+      }
+    })();
   }, []);
 
   return (
@@ -45,7 +61,20 @@ export default function NewsPage() {
 
       <h1 className="text-center text-xl font-extrabold">آخر الأخبار</h1>
 
-      {items === null && (
+      {netErr && (
+        <div className="card mt-8 p-6 text-center">
+          <p className="text-sm text-slate-600">{netErr}</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="btn-ghost mt-4 px-6"
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      )}
+
+      {!netErr && items === null && (
         <div className="mt-8 flex justify-center">
           <SpinnerIcon className="h-6 w-6 text-brand" />
         </div>

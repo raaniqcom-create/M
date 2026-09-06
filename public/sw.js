@@ -1,10 +1,21 @@
 // Hand-written service worker. Replaced next-pwa/workbox: that pulled ~500
 // packages and 7 high-severity advisories to generate what these ~70 lines do.
-const CACHE = 'mahatta-v5';
-const OFFLINE_URL = '/offline';
+// v6: يُمسح ما خزّنه v5 من /offline المُحوَّلة — جوابٌ مُحوَّلٌ لا يصلح
+// جواباً لتنقّل، فكان الاحتياطُ يسقط إلى صفحة المتصفّح بدل صفحتنا.
+const CACHE = 'mahatta-v6';
+// بشرطةٍ مائلة: trailingSlash يُخرج out/offline/index.html، و«/offline»
+// تحويلٌ ٣٠١ — والجوابُ المُحوَّل يُرفض جواباً لتنقّل في المواصفة.
+const OFFLINE_URL = '/offline/';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll([OFFLINE_URL, '/manifest.json'])));
+  // و`.catch` لا تجميلاً: `addAll` ذرّيّة، فسقوطُ أحد الطلبين كان يُفشل
+  // التنصيبَ كلَّه — فيضيع معه مخزنُ `_next/static` بإعاداته الثلاث، وهو
+  // أثمنُ ما في هذا العامل. أن نخسر صفحةَ عدم الاتصال خيرٌ من أن نخسرهما.
+  event.waitUntil(
+    caches
+      .open(CACHE)
+      .then((c) => c.addAll([OFFLINE_URL, '/manifest.json']).catch(() => {}))
+  );
   self.skipWaiting();
 });
 
@@ -74,6 +85,10 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
+
+  // مفتاحُ الصيانة لا يُخبَّأ. الفرعُ تحته يردّ النسخةَ المخزَّنة أوّلاً، فتبقى
+  // «الصيانة» معروضةً بعد انتهائها — أو أسوأ: لا تبدأ حين تُقلب.
+  if (url.pathname === '/status.json') return;
 
   // Everything else (icons, ad images, manifest) keeps its filename across
   // deploys, so cache-first would pin the first version forever. Serve the

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Tajawal } from 'next/font/google';
 import './globals.css';
+import { Maintenance } from '@/components/Maintenance';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { NativePush } from '@/components/NativePush';
 import { APPLE_APP_ID } from '@/lib/stores';
@@ -70,6 +71,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-gray-50 font-sans text-gray-900 antialiased">
         <ServiceWorkerRegister />
         <NativePush />
+        {/* نقطةُ تركيبٍ واحدةٌ تغطّي كلَّ مسار — أصغرُ من حراسةٍ في كلّ صفحة،
+            وتشمل /owner و/admin اللتين تُنسيان في أيّ حلٍّ صفحةً صفحة. */}
+        <Maintenance />
         {children}
       </body>
     </html>

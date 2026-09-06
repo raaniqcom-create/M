@@ -1,9 +1,9 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { loadStations } from '@/lib/stations';
+import { loadCachedStations, loadStations } from '@/lib/stations';
 import { randomId } from '@/lib/uid';
 import { FRESH_HOURS, PERIOD_LABELS, WITHDRAW_HOURS, formatTime, isFresh, isOpenNow } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
@@ -16,6 +16,7 @@ import {
 import { CITY_NAMES } from '@/lib/cities';
 import { ProductsDashboard } from './ProductsDashboard';
 import { SpinnerIcon } from './icons';
+import { StaleBanner } from './StaleBanner';
 import type { FuelProduct, StationWithStatus } from '@/types/database';
 
 // ليفلت يلمس window وقتَ الاستيراد، والمشروعُ تصديرٌ ساكن يُصيَّر في Node —
@@ -123,11 +124,15 @@ export function BranchBoard() {
   const [failed, setFailed] = useState(false);
   const [at, setAt] = useState<string>('');
   const [filter, setFilter] = useState<FuelProduct | null>(null);
+  const [staleAt, setStaleAt] = useState<string | null>(null);
+  const okAt = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       setStations(await loadStations());
       setFailed(false);
+      setStaleAt(null);
+      okAt.current = new Date().toISOString();
       setAt(
         new Date().toLocaleString('ar-IQ', {
           timeZone: 'Asia/Baghdad',
@@ -137,6 +142,22 @@ export function BranchBoard() {
       );
     } catch {
       setFailed(true);
+      if (okAt.current) {
+        setStaleAt(okAt.current);
+        return;
+      }
+      const snap = loadCachedStations();
+      if (snap) {
+        setStations(snap.rows);
+        setStaleAt(snap.at);
+        setAt(
+          new Date(snap.at).toLocaleString('ar-IQ', {
+            timeZone: 'Asia/Baghdad',
+            weekday: 'long', day: 'numeric', month: 'long',
+            hour: 'numeric', minute: '2-digit',
+          })
+        );
+      }
     }
   }, []);
 
@@ -244,7 +265,10 @@ export function BranchBoard() {
       .map((c) => ({ city: c, ...m.get(c)! }));
   }, [rows]);
 
-  if (failed) {
+  // **`failed` وحدَها كانت تمحو لوحةً محمَّلةً كاملة.** سقوطُ طلبِ تحديثٍ واحد
+  // كان يُلغي تقريرَ المشرف الذي بين يديه ويستبدله بسطر خطأ. فلا يُمحى إلا إذا
+  // لم يصل شيءٌ أصلاً؛ وما عدا ذلك يبقى معروضاً تحت شريط القِدَم.
+  if (failed && !stations) {
     return (
       <section className="card p-5">
         <p className="text-xs font-bold text-traffic-red">تعذّر تحميل المحطات. أعد فتح الصفحة.</p>
@@ -261,6 +285,10 @@ export function BranchBoard() {
 
   return (
     <div className="branch space-y-4">
+      {staleAt && stations && (
+        <StaleBanner at={staleAt} onRetry={() => void load()} />
+      )}
+
       {/* الطباعةُ بالمتصفّح لا برسمٍ على canvas: الوجهةُ ورقةٌ في ملفّ الفرع،
           والجدولُ HTML حقيقيّ. ولا مكتبةَ ولا سطرَ بناء. */}
       <style>{`

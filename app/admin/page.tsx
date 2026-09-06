@@ -13,7 +13,9 @@ import { DeletedStations } from '@/components/DeletedStations';
 import { ReviewsPanel } from '@/components/ReviewsPanel';
 import { AvailabilityBoard } from '@/components/AvailabilityBoard';
 import { AdminStats } from '@/components/AdminStats';
+import { readFailure } from '@/lib/fn';
 import { AdminHealth } from '@/components/AdminHealth';
+import { MaintenanceSwitch } from '@/components/MaintenanceSwitch';
 import { StationAnnouncePanel } from '@/components/StationAnnouncePanel';
 import { UnregisteredAdmin } from '@/components/UnregisteredAdmin';
 import { PlatformNotice } from '@/components/PlatformNotice';
@@ -36,6 +38,7 @@ export default function AdminPage() {
   const router = useRouter();
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [adminId, setAdminId] = useState<string | null>(null);
+  const [netErr, setNetErr] = useState<string | null>(null);
   // Stations first. The list used to be buried inside the "add a station"
   // tab, so the one thing an admin opens this page to look at was two taps
   // and a scroll past a registration form.
@@ -88,11 +91,19 @@ export default function AdminPage() {
         router.replace('/login');
         return;
       }
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', user.id)
         .maybeSingle();
+
+      // **الفشلُ ليس رفضاً.** طلبٌ ساقطٌ كان يُقرأ `profile = null` فيُطبع
+      // «هذه الصفحة للإدارة فقط» — أي تُتَّهم الجلسةُ بذنب الشبكة، وهو بعينه
+      // ما كُتبت lib/fn.ts لإزالته.
+      if (error) {
+        setNetErr(readFailure(error));
+        return;
+      }
 
       if (profile?.role !== 'admin') {
         setAllowed(false);
@@ -111,7 +122,10 @@ export default function AdminPage() {
       }
       setAdminId(user.id);
       load();
-    })();
+    })().catch((e) => {
+      // وبلا هذا يبقى `allowed === null` أبداً، فمغزلٌ يدور بلا نصٍّ ولا زرّ.
+      setNetErr(readFailure(e));
+    });
   }, [router, load]);
 
   async function decide(id: string, status: 'approved' | 'rejected') {
@@ -237,6 +251,22 @@ export default function AdminPage() {
   async function toggleAd(ad: Ad) {
     setAds((prev) => prev.map((a) => (a.id === ad.id ? { ...a, active: !a.active } : a)));
     await supabase.from('ads').update({ active: !ad.active }).eq('id', ad.id);
+  }
+
+  if (netErr) {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
+        <h1 className="text-base font-bold">تعذّر فتح اللوحة</h1>
+        <p className="mt-2 text-sm text-slate-500">{netErr}</p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="btn-ghost mt-5 px-6"
+        >
+          إعادة المحاولة
+        </button>
+      </main>
+    );
   }
 
   if (allowed === null) {
@@ -381,6 +411,7 @@ export default function AdminPage() {
       {tab === 'system' && (
         <div className="mt-4">
           <AdminHealth />
+          <MaintenanceSwitch />
         </div>
       )}
 

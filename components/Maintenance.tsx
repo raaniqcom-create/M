@@ -1,0 +1,126 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { isDown, readStatus, type SiteStatus } from '@/lib/status';
+import { loadCachedStations } from '@/lib/stations';
+
+const DISMISSED = 'maintenance-dismissed';
+
+/** شاشةُ الصيانة — تُركَّب مرّةً في التخطيط فتغطّي كلَّ مسار.
+ *
+ *  ── ولماذا تُغلق ولا تُقفل ───────────────────────────────────────────────
+ *
+ *  حين تُنقل قاعدةُ البيانات، الجزءُ الوحيد من الموقع الذي ما زال يعمل هو
+ *  صفحاتُ المحطات الساكنة: العنوان، والدوام، **ورقم الهاتف**. ومن يحتاج أن
+ *  يتّصل بمحطةٍ في تلك اللحظة يجب أن يستطيع. فالشاشةُ تُعلن وتحجب، ولا تمنع
+ *  من أصرّ — والزرُّ يكتب في `sessionStorage` فلا يُسأل في الجلسة نفسِها مرّتين.
+ *
+ *  ── وفوق شاشة الافتتاح ───────────────────────────────────────────────────
+ *
+ *  `SplashScreen` عند `z-[70]`، ولولا ما فوقها لَغطّت الإعلانَ أربعَ ثوانٍ.
+ *
+ *  ── والسؤالُ يتكرّر وهي قائمةٌ فقط ────────────────────────────────────────
+ *
+ *  فتنتهي الصيانةُ فيعود الموقعُ وحدَه بلا إعادة تحميل. وحين لا تكون صيانةً لا
+ *  يُسأل الملفُّ إطلاقاً: هاتفٌ على شبكةٍ عراقيّة لا يُشغَّل بسؤالٍ كلَّ دقيقة. */
+export function Maintenance() {
+  const [status, setStatus] = useState<SiteStatus | null>(null);
+  const [hidden, setHidden] = useState(true);
+
+  const check = useCallback(async () => {
+    setStatus(await readStatus());
+  }, []);
+
+  useEffect(() => {
+    try {
+      setHidden(sessionStorage.getItem(DISMISSED) === '1');
+    } catch {
+      setHidden(false);
+    }
+    void check();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void check();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [check]);
+
+  const down = isDown(status);
+
+  useEffect(() => {
+    if (!down) return;
+    const t = setInterval(() => void check(), 60_000);
+    return () => clearInterval(t);
+  }, [down, check]);
+
+  if (!down || hidden) return null;
+
+  const back = status?.until
+    ? new Date(status.until).toLocaleTimeString('ar-IQ', {
+        timeZone: 'Asia/Baghdad',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : null;
+
+  const snap = loadCachedStations();
+  const snapClock = snap
+    ? new Date(snap.at).toLocaleTimeString('ar-IQ', {
+        timeZone: 'Asia/Baghdad',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : null;
+
+  const dismiss = () => {
+    try {
+      sessionStorage.setItem(DISMISSED, '1');
+    } catch {
+      /* تصفّحٌ خاصّ — يُغلق للجلسة في الذاكرة وحدها */
+    }
+    setHidden(true);
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-gradient-to-b from-brand to-brand-700 px-6 text-center text-white"
+    >
+      <div className="max-w-sm">
+        <h1 className="text-lg font-extrabold">المنصّة في صيانة الآن</h1>
+        <p className="mt-2 text-[13px] leading-relaxed text-white/90">
+          {status?.message?.trim() || 'نُجري تحديثاً قصيراً على الخدمة.'}
+        </p>
+        {back && (
+          <p className="mt-2 text-[12px] font-bold text-white/80">
+            نتوقّع العودة الساعة <span dir="ltr">{back}</span>
+          </p>
+        )}
+
+        {snapClock ? (
+          <>
+            <p className="mt-5 text-[11.5px] text-white/70">
+              آخرُ حالةٍ وصلت جهازك كانت الساعة <span dir="ltr">{snapClock}</span>
+            </p>
+            <button
+              type="button"
+              onClick={dismiss}
+              className="mt-2 rounded-full bg-white px-5 py-2 text-[12.5px] font-extrabold text-brand-900"
+            >
+              اعرض آخر حالة
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={dismiss}
+            className="mt-5 rounded-full bg-white/15 px-5 py-2 text-[12.5px] font-bold text-white"
+          >
+            تصفّح على أي حال
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
