@@ -1916,8 +1916,18 @@ Deno.serve(async (req) => {
     if (!text.startsWith('/') && text !== '⬅️ رجوع') {
       const draft = await getDraft(from);
       if (draft) {
-        if (draft.step === 'sched') await correctSchedule(chat, from, draft.data, text);
-        else await wizardText(chat, from, draft.step, draft.data, text);
+        // **منشورٌ جديدٌ يَجُبُّ المسوّدةَ، ولا يُقرأ تصحيحاً لها.**
+        //
+        // وقع: عرض الرصدُ جدولاً، ثمّ لصق صاحبُ المنصّة منشوراً كاملاً — فذهب
+        // إلى مُصحِّح الأسطر، فردّ «ابدأ برقم السطر». والتصحيحُ سطرٌ قصير،
+        // والمنشورُ يُعرَف بشكله؛ فالتمييزُ بينهما ممكنٌ بلا سؤال.
+        if (draft.step === 'sched' && looksLikeSchedule(text)) {
+          await proposeSchedule(chat, from, text);
+        } else if (draft.step === 'sched') {
+          await correctSchedule(chat, from, draft.data, text);
+        } else {
+          await wizardText(chat, from, draft.step, draft.data, text);
+        }
         return new Response('ok');
       }
     }
