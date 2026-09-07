@@ -79,8 +79,8 @@ const stations = await all('stations?select=status,city,is_demo&order=id');
 const addr = new Set(alerts.map((a) => a.address));
 const perCity = new Map();
 for (const a of alerts) {
-  if (a.station_id) continue; // متابعةُ محطةٍ بعينها، لا اشتراكُ ناحية
-  const c = a.city ?? '(كل النواحي)';
+  if (a.station_id) continue; // متابعةُ محطةٍ بعينها، لا اشتراكُ منطقة
+  const c = a.city ?? '(كل المناطق)';
   if (!perCity.has(c)) perCity.set(c, new Set());
   perCity.get(c).add(a.address);
 }
@@ -133,7 +133,7 @@ const TIGHT = `<style>
   .box{margin:7px 0;padding:8px 11px}
   .two{column-count:2;column-gap:8mm}
   .two table{margin:0;break-inside:avoid}
-  /* تسعٌ وعشرون ناحيةً في عمودين فاضت ٥٢ بكسلاً — قِيست بـprint-pdf لا
+  /* تسعٌ وعشرون منطقةً في عمودين فاضت ٥٢ بكسلاً — قِيست بـprint-pdf لا
      خُمّنت. والحشوُ يُقلَّص، فالورقةُ الرابعة جدولٌ ولا نصَّ فيها يُختصر. */
   .two th,.two td{padding:2.4px 8px}
 </style>`;
@@ -144,7 +144,7 @@ const collected = [
    'إيصال خبر توفّر الوقود لمن طلبه',
    'مفتاح الخدمة وحده — لا يُعرض في أي واجهة',
    'حتى يُلغي صاحبه الإشعارات أو يحذف التطبيق'],
-  ['النواحي والمنتجات المختارة',
+  ['المناطق والمنتجات المختارة',
    'ألّا يصل الخبر إلا لمن يعنيه',
    'مفتاح الخدمة وحده',
    'مع عنوان الإشعار نفسه'],
@@ -241,7 +241,7 @@ const p3 = `
   <table>
     <tr><th>البيان</th><th>العدد</th><th>ما يعنيه بالضبط</th></tr>
     <tr><td>المشتركون بالتنبيهات</td><td class="ltr">${ar(n.subscribers)}</td>
-        <td>عنوان إشعار <b>مميَّز</b> — لا صفوف الاشتراك، فمن اختار ثلاث نواحٍ وأربعة منتجات له اثنا عشر صفّاً وهو واحد (مجموع الصفوف ${ar(n.alertRows)}).</td></tr>
+        <td>عنوان إشعار <b>مميَّز</b> — لا صفوف الاشتراك، فمن اختار ثلاث مناطق وأربعة منتجات له اثنا عشر صفّاً وهو واحد (مجموع الصفوف ${ar(n.alertRows)}).</td></tr>
     <tr><td>الأجهزة المسجَّلة</td><td class="ltr">${ar(n.devices)}</td>
         <td>${ar(n.android)} أندرويد · ${ar(n.ios)} آيفون</td></tr>
     <tr><td>مستخدمو بوت تيليجرام</td><td class="ltr">${ar(n.telegram)}</td><td>محادثات فُتحت مع البوت</td></tr>
@@ -266,12 +266,12 @@ const p3 = `
 
 // ── ورقة ٤: التوزيع على النواحي ──
 const p4 = `
-  <h1>المشتركون على نواحي الأنبار</h1>
-  <p>ومن اختار «كلّ النواحي» يُحتسب في كلّ ناحية ينتظرها، فمجموع الجدول يفوق
+  <h1>المشتركون على مناطق الأنبار</h1>
+  <p>ومن اختار «كلّ المناطق» يُحتسب في كلّ منطقة ينتظرها، فمجموع الجدول يفوق
   العدد الكلّيّ <span class="ltr">(${ar(n.subscribers)})</span>.</p>
   <div class="two">
     <table>
-      <tr><th>الناحية</th><th>مشتركون</th></tr>
+      <tr><th>المنطقة</th><th>مشتركون</th></tr>
       ${cities.map((c) => `<tr><td>${esc(c.city)}</td><td class="ltr">${ar(c.n)}</td></tr>`).join('')}
     </table>
   </div>`;
@@ -291,4 +291,4 @@ writeFileSync(new URL('../docs/anbar-oil/data-governance.html', import.meta.url)
 
 console.log(`بُنيت الوثيقة — ٤ أوراق.`);
 console.log(`  مشتركون ${ar(n.subscribers)} (من ${ar(n.alertRows)} صفّاً) · أجهزة ${ar(n.devices)}`);
-console.log(`  محطات ${ar(n.approved)} معتمدة · ${ar(n.pending)} بانتظار · نواحٍ ${cities.length}`);
+console.log(`  محطات ${ar(n.approved)} معتمدة · ${ar(n.pending)} بانتظار · مناطق ${cities.length}`);

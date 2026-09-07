@@ -53,8 +53,8 @@ const SEEN = 'tomorrow-seen';
  *  مفتوحٌ غطّته. */
 const HOUR_FLOOR = 20;
 
-/** ناحيتان على الأكثر في الشاشة. والثالثةُ فما فوق في «الجدول كاملاً» —
- *  شاشةٌ تُملأ بستّ نواحٍ ليست خبراً بل حاجز. */
+/** منطقتان على الأكثر في الشاشة. والثالثةُ فما فوق في «الجدول كاملاً» —
+ *  شاشةٌ تُملأ بستّ مناطق ليست خبراً بل حاجز. */
 const MAX_GROUPS = 2;
 
 export function TomorrowScreen() {
@@ -182,7 +182,7 @@ export function TomorrowScreen() {
               className="rounded-2xl bg-white/12 p-3 text-right"
             >
               <h2 className="text-[12.5px] font-extrabold">
-                {g.city ?? 'ناحيةٌ لم تُذكر'}
+                {g.city ?? 'منطقةٌ لم تُذكر'}
                 <span className="mr-1.5 text-[10.5px] font-bold text-white/60">
                   {plural(g.rows.length, 'محطة واحدة', 'محطتان', 'محطات', 'محطة')}
                 </span>
@@ -215,7 +215,7 @@ export function TomorrowScreen() {
 
           {more > 0 && (
             <p className="text-[11px] text-white/70">
-              و{plural(more, 'محطة أخرى', 'محطتان أخريان', 'محطات أخرى', 'محطة أخرى')} في نواحٍ
+              و{plural(more, 'محطة أخرى', 'محطتان أخريان', 'محطات أخرى', 'محطة أخرى')} في مناطق
               أخرى — في الجدول كاملاً.
             </p>
           )}

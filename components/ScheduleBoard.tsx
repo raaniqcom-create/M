@@ -9,7 +9,7 @@ import { baghdadDate, type ScheduleGroup, type ScheduleRow } from '@/lib/schedul
  *  وكلُّ ما عداه في هذه المنصّة يصف الحاضر: أين الوقودُ الآن. وهذا يصف الغد،
  *  فيُكتب بلفظٍ آخر ويُحاط بتحفّظٍ آخر.
  *
- *  ── جدولٌ لكلّ ناحية، ولو بمحطةٍ واحدة ───────────────────────────────────
+ *  ── جدولٌ لكلّ منطقة، ولو بمحطةٍ واحدة ───────────────────────────────────
  *
  *  قرارُ صاحب المنصّة: من يسكن الرمادي يقرأ جدولَ الرمادي كاملاً — بمنتجاته
  *  كلِّها — ثمّ يجد جدولَ الخالدية تحته مستقلّاً، ولو لم يكن فيه إلا محطة.
@@ -102,7 +102,7 @@ export function ScheduleBoard({ groups }: { groups: ScheduleGroup[] }) {
         <section key={`${g.for_date}|${g.city ?? '؟'}`} className="card overflow-x-auto p-4">
           <h2 className="text-sm font-extrabold leading-relaxed text-brand-900">
             المحطات التي يصلها وقود {dayLabel(g.for_date)}
-            {g.city ? ` — ${g.city}` : ' — ناحيةٌ لم تُذكر'}
+            {g.city ? ` — ${g.city}` : ' — منطقةٌ لم تُذكر'}
           </h2>
           <p className="mt-0.5 text-[11px] font-bold text-slate-500">
             {plural(g.rows.length, 'محطة واحدة', 'محطتان', 'محطات', 'محطة')} ·{' '}

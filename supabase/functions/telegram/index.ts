@@ -1536,7 +1536,7 @@ async function showSchedule(chat: number, d: { product: string; lines: ScheduleL
 
   const rows = d.lines.map((l, i) => {
     const mark = l.stationId ? '✅' : l.city ? '⚪️' : '❓';
-    const where = l.city ?? 'مدينةٌ لم أعرفها';
+    const where = l.city ?? 'منطقةٌ لم أعرفها';
     const tail = l.stationId ? 'مسجّلة' : 'خارج المنصّة';
     return `${i + 1} ${mark} ${esc(l.name)} — ${esc(where)} · ${tail}`;
   });
@@ -1545,14 +1545,14 @@ async function showSchedule(chat: number, d: { product: string; lines: ScheduleL
     ? reach === null
       ? `المدن: ${esc(cities.join(' · '))}`
       : `يصل الإشعارُ إلى ${reach} مشتركاً في ${esc(cities.join(' · '))}.`
-    : '⚠️ لا مدينةَ معروفةً في الجدول — يُنشر بلا إشعار.';
+    : '⚠️ لا منطقةَ معروفةً في الجدول — يُنشر بلا إشعار.';
 
   await send(
     chat,
     `<b>جدولُ ${dayWord}</b> — ${esc(label)} · ${day}${NL}${NL}` +
       rows.join(NL) +
       `${NL}${NL}${foot}${NL}${NL}` +
-      `<i>للتصحيح: «٣ الرمادي» تضبط المدينة، و«٣ حذف» تُسقط السطر،${NL}` +
+      `<i>للتصحيح: «٣ الرمادي» تضبط المنطقة، و«٣ حذف» تُسقط السطر،${NL}` +
       `و«اليوم» أو «غدا» تضبط اليومَ الذي يخصّه الجدول.</i>`,
     {
       reply_markup: {
@@ -1602,7 +1602,7 @@ async function correctSchedule(chat: number, userId: number, d: Draft, raw: stri
     return void (await send(chat, '⚠️ ابدأ برقم السطر، مثل: «٣ الرمادي».'));
   }
   const rest = parts.slice(1).join(' ').trim();
-  if (!rest) return void (await send(chat, '⚠️ بعد الرقم: اسمُ المدينة، أو «حذف».'));
+  if (!rest) return void (await send(chat, '⚠️ بعد الرقم: اسمُ المنطقة، أو «حذف».'));
 
   if (rest === 'حذف') sched.lines.splice(n - 1, 1);
   else sched.lines[n - 1].city = rest;
@@ -1656,7 +1656,7 @@ async function publishSchedule(chat: number, userId: number, queryId: string) {
     n === 1 ? 'محطة واحدة' : n === 2 ? 'محطتين' : n <= 10 ? `${n} محطات` : `${n} محطة`;
   const cities = schedCities(d.lines);
   if (!cities.length) {
-    await send(chat, `✅ نُشر الجدول (${d.lines.length} محطة). ولا إشعار: لا مدينةَ معروفة.`);
+    await send(chat, `✅ نُشر الجدول (${d.lines.length} محطة). ولا إشعار: لا منطقةَ معروفة.`);
     return;
   }
 
@@ -1873,7 +1873,10 @@ Deno.serve(async (req) => {
       return new Response('ok');
     }
 
-    const text: string = msg.text ?? '';
+    // والتعليقُ تحت الصورة نصٌّ أيضاً: منشورُ القناة قد يصل صورةً بجدولٍ في
+    // تعليقها، وقراءةُ `text` وحدَها كانت تُسقطه صامتاً — يُحوّله صاحبُ المنصّة
+    // فلا يردّ البوتُ بشيء ولا يقول لماذا.
+    const text: string = msg.text ?? msg.caption ?? '';
     if (text === '⬅️ رجوع' || text.startsWith('/start') || text.startsWith('/menu')) {
       // leaving the menu abandons a half-finished registration, otherwise the
       // next thing typed would be swallowed by a draft the user forgot about

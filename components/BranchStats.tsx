@@ -16,7 +16,7 @@ import { SpinnerIcon } from '@/components/icons';
  *
  *  ── والرقمُ الذي جاء الفرعُ من أجله ─────────────────────────────────────
  *
- *  ليس «كم مشتركاً» بل **أين ينتظر الناسُ بلا محطة**: ثلاثَ عشرةَ ناحيةً فيها
+ *  ليس «كم مشتركاً» بل **أين ينتظر الناسُ بلا محطة**: ثلاثَ عشرةَ منطقةً فيها
  *  منتظرون ولا محطةَ واحدةٌ معتمدةٌ فيها. وهو قرارُ توسّعٍ يخصّ فرعَ التوزيع
  *  وحدَه، ولا يُقرأ من جدولٍ مرتَّبٍ بالاسم — فيُفرَز ويُقدَّم. */
 
@@ -114,10 +114,10 @@ export function BranchStats() {
 
       {waiting.length > 0 && (
         <section className="card p-4">
-          <h2 className="text-sm font-extrabold text-brand-900">نواحٍ تنتظر ولا محطةَ فيها</h2>
+          <h2 className="text-sm font-extrabold text-brand-900">مناطق تنتظر ولا محطةَ فيها</h2>
           <p className="mt-1 text-[11.5px] leading-relaxed text-slate-500">
             فيها مشتركون في المنصّة، ولا محطةَ معتمدةً واحدة — فلا يصلهم خبرُ توفّرٍ عن
-            ناحيتهم.
+            منطقتهم.
           </p>
           <ul className="mt-3 space-y-1">
             {waiting.map((c) => (
@@ -136,11 +136,11 @@ export function BranchStats() {
       )}
 
       <section className="card overflow-x-auto p-4">
-        <h2 className="text-sm font-extrabold text-brand-900">التوزيع على النواحي</h2>
+        <h2 className="text-sm font-extrabold text-brand-900">التوزيع على المناطق</h2>
         <table className="mt-3 w-full min-w-[18rem] text-right text-[12.5px]">
           <thead>
             <tr className="text-[11px] text-slate-500">
-              <th className="pb-1 font-bold">الناحية</th>
+              <th className="pb-1 font-bold">المنطقة</th>
               <th className="pb-1 font-bold">محطات</th>
               <th className="pb-1 font-bold">مشتركون</th>
             </tr>
@@ -161,12 +161,12 @@ export function BranchStats() {
         </table>
       </section>
 
-      {/* من اختار «كلَّ المدن» يُحتسب في كلّ ناحية، فمجموعُ الأعمدة يفوق العدد
+      {/* من اختار «كلَّ المدن» يُحتسب في كلّ منطقة، فمجموعُ الأعمدة يفوق العدد
           الكلّيّ. ويُقال صراحةً: ورقةٌ يجمع قارئُها عمودَها فلا يطابق العنوانَ
           تفقد ثقتَه في بقيّة أرقامها. */}
       <p className="px-1 text-[11px] leading-relaxed text-slate-400">
-        قُرئت {at}. ومن اختار «كلَّ المدن» يُحتسب في كلّ ناحيةٍ ينتظرها، فمجموعُ
-        النواحي يفوق العددَ الكلّيّ.
+        قُرئت {at}. ومن اختار «كلَّ المدن» يُحتسب في كلّ منطقةٍ ينتظرها، فمجموعُ
+        المناطق يفوق العددَ الكلّيّ.
       </p>
     </div>
   );
