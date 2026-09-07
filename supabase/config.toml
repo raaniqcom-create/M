@@ -85,3 +85,7 @@ verify_jwt = false
 
 [functions.test-push]
 verify_jwt = false
+
+# رصدُ القنوات — يُنادى بمِفتاح cron لا بجلسة، فلا JWT
+[functions.poll-channel]
+verify_jwt = false
