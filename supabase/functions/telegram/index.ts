@@ -1652,12 +1652,18 @@ async function publishSchedule(chat: number, userId: number, queryId: string) {
       station_name: l.name,
       city: l.city,
       linked_station_id: l.stationId,
-      match_score: l.score,
+      // `match_score` عمودٌ صحيح، ودرجةُ التشابه كسريّة: نسبةُ الكلمات من
+      // خمسٍ وخمسين تُخرج ٢٧٫٥ و٣٦٫٦٦٦. فردّت القاعدةُ «invalid input syntax
+      // for type integer» وضاع النشرُ كلُّه على منزلةٍ عشريّة لا تُقرأ أصلاً.
+      match_score: Math.round(l.score),
     }))
   );
   if (error) {
+    // المسوّدةُ تُعاد: مُسحت قبل الكتابة منعاً للنشر مرّتين، فلو تُركت ممحوّةً
+    // بعد فشلٍ لَضاع الجدولُ كلُّه ولزم لصقُه من جديد.
+    await saveDraft(userId, chat, 'sched', { sched: d });
     await answer(queryId, 'تعذّر النشر');
-    await send(chat, `⚠️ ${esc(error.message)}`);
+    await send(chat, `⚠️ ${esc(error.message)}${NL}المسوّدةُ محفوظة — أعد المحاولة.`);
     return;
   }
   await answer(queryId, 'نُشر ✅');
