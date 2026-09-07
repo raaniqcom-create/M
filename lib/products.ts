@@ -1,5 +1,5 @@
 import type { FuelProduct, TrafficLevel } from '@/types/database';
-import { hasRunOut, isFresh, isOpenNow, isWithdrawn } from './hours';
+import { hasRunOut, isFresh, isOpenNow, isWithdrawn } from './hours.ts';
 
 // single source of truth for the 6 fixed products — mirrors the fuel_product
 // enum in supabase/schema.sql

@@ -13,6 +13,10 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
+    // لاحقةُ .ts في الاستيراد النسبيّ — يسمح بها bundler بهذا العَلَم وحدَه
+    // (ويشترط noEmit، وهو مضبوط). وبدونها لا يستطيع node تحميلَ ملفّات lib
+    // في الفحوص، فكانت تُحاكى فيها بدل أن تُستورَد.
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
