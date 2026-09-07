@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PrintButton } from '@/components/PrintButton';
 
 export const metadata: Metadata = {
   title: 'سياسة الخصوصية',
@@ -12,9 +13,27 @@ export default function PrivacyPage() {
   const updated = '8 آب 2026';
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-10">
+    <main className="privacy mx-auto max-w-2xl px-4 py-10">
+      {/* الطباعةُ بالمتصفّح لا بملفٍّ مبنيّ: النصُّ هو النصّ، فلا نسختان
+          تفترقان. والقاعدةُ الوحيدة التي تُهِمّ هنا `break-inside` — طُلب
+          صراحةً أن تخرج الصفحاتُ غيرَ متداخلة، وعنوانٌ في آخر ورقةٍ وفقرتُه
+          في التي بعدها هو التداخلُ بعينه. */}
+      <style>{`
+        @media print {
+          @page { size: A4; margin: 14mm 12mm }
+          html, body { background: #fff !important }
+          header, nav, footer, .print-hide { display: none !important }
+          .privacy { max-width: none !important; padding: 0 !important }
+          .privacy section { break-inside: avoid; page-break-inside: avoid }
+          .privacy h2 { break-after: avoid; page-break-after: avoid }
+          .privacy a { color: inherit !important; text-decoration: none }
+        }
+      `}</style>
+
       <h1 className="text-2xl font-extrabold">سياسة الخصوصية</h1>
       <p className="mt-1 text-sm text-slate-500">آخر تحديث: {updated}</p>
+
+      <PrintButton />
 
       <section className="mt-8 space-y-3">
         <h2 className="text-lg font-bold">من نحن</h2>
@@ -106,9 +125,19 @@ export default function PrivacyPage() {
         <h2 className="text-lg font-bold">حذف بياناتك</h2>
         <p className="text-sm leading-relaxed text-slate-700">
           صاحب المحطة يحذف حسابه ومحطته بنفسه من داخل التطبيق: لوحة المحطة ←{' '}
-          <b>بيانات الحساب</b> ← <b>حذف حسابي ومحطتي</b>. الحذف فوري ونهائي، ويشمل
-          المحطة ومنتجاتها وتقييمات الازدحام والشكاوى واشتراكات الإشعارات وحساب الدخول
-          نفسه.
+          <b>بيانات الحساب</b> ← <b>حذف حسابي ومحطتي</b>. تختفي المحطة من التطبيق فوراً،
+          ويشمل الحذف منتجاتها وتقييمات الازدحام والشكاوى واشتراكات الإشعارات وحساب
+          الدخول نفسه.
+        </p>
+        {/* **هذه الفقرة تصحيح.** كانت الصفحة تقول إن الحذف «فوري ونهائي»، بينما
+            المُشغّل `archive_station` (20260829b:47) ينسخ صفّ المحطة كاملاً إلى
+            `station_archive` — بالهاتف واسم المسؤول — في كل حذف، أيّاً كان
+            الحاذف، وبلا انتهاء. فإما أن يُعطى الأرشيف مدّة، وإما أن تقول
+            السياسة الحقيقة. وقد صار الأمران: مهمّةٌ يوميّة تمحو ما تجاوز
+            ثلاثين يوماً (20260908b)، وهذه الفقرة تقولها. */}
+        <p className="text-sm leading-relaxed text-slate-700">
+          وتُحفظ نسخة من بيانات المحطة <b>ثلاثين يوماً</b> بعد الحذف، لا تظهر لأحد،
+          وغرضها استرجاع محطة حُذفت بالخطأ. تُمحى بعدها آلياً ولا يبقى منها شيء.
         </p>
         <p className="text-sm leading-relaxed text-slate-700">
           وإن تعذّر الدخول إلى الحساب، يمكن طلب الحذف عبر بوت المنصة على تيليجرام{' '}
@@ -135,7 +164,7 @@ export default function PrivacyPage() {
         </p>
       </section>
 
-      <a href="/" className="mt-10 block text-center text-sm text-brand">
+      <a href="/" className="print-hide mt-10 block text-center text-sm text-brand">
         العودة للصفحة الرئيسية
       </a>
     </main>

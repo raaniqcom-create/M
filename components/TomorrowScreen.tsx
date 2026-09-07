@@ -28,6 +28,13 @@ const SEEN = 'tomorrow-seen';
  *  ثابتة تؤخّر الخبرَ بلا أن تمنع شيئاً. ويبقى حدٌّ أدنى عند الثامنة كي لا
  *  يفاجئ نشرٌ نهاريٌّ أحداً في وسط يومه.
  *
+ *  ── ولا عدّادَ ينصرف به ──────────────────────────────────────────────────
+ *
+ *  كان فيها عدّادُ خمسِ ثوانٍ يُغلقها وحدَه، كما في `SiteNotice`. وقرارُ صاحب
+ *  المنصّة رفعُه: الإنذارُ يُقرأ في ثانية، وهذا **قائمةُ محطاتٍ تُقرأ بالإصبع**
+ *  — وقارئٌ يبحث عن اسم ناحيته في سبعة أسطرٍ لا يُنتزع منها بعدّاد. فتبقى
+ *  حتى يُغلقها هو، أو ينتقل إلى الجدول كاملاً.
+ *
  *  ── ومرّةً في كلّ فتحةِ تطبيق ────────────────────────────────────────────
  *
  *  `sessionStorage` بمفتاحٍ يحمل تاريخَ الجدول: فمن أغلق التطبيقَ وفتحه رآها،
@@ -41,7 +48,7 @@ const HOUR_FLOOR = 20;
 
 export function TomorrowScreen() {
   const [group, setGroup] = useState<ScheduleGroup | null>(null);
-  const [left, setLeft] = useState(0);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -62,14 +69,43 @@ export function TomorrowScreen() {
         if (!alive || isDown(status)) return;
 
         const tomorrow = baghdadDate(1);
-        const groups = groupSchedule(await loadSchedule()).filter(
-          (g) => g.for_date === tomorrow
-        );
-        if (!alive || !groups.length) return;
+        const all = groupSchedule(await loadSchedule()).filter((g) => g.for_date === tomorrow);
+        if (!alive || !all.length) return;
+
+        // ── وبمدنِ صاحب الجهاز، لا بكلّ ما نُشر ─────────────────────────
+        //
+        // **الشاشةُ تتبع الإشعارَ حرفيّاً.** إشعارُ النشر يمرّ بـ`alerts_for`
+        // فلا يصل إلا من اختار تلك المدينة وذلك الوقود — قِيس: جدولُ الرمادي
+        // بلغ ٤٬٩٥٨ شخصاً، منهم ٤٬٩٣٥ اختاروا الرمادي و٢٣ اختاروا «كلَّ المدن»،
+        // ولا واحدَ ممّن اختار غيرَها. فلو ظهرت الشاشةُ للجميع لَناقضت الإشعارَ
+        // على الجهاز نفسِه: مَن في القائم لا يُشعَر بجدول الرمادي ثمّ يُحبَس
+        // خلفه ملءَ الشاشة.
+        //
+        // ومن لم يختر شيئاً يرى كلَّ شيء: لم يقل لنا ما يعنيه، وحجبُ الكلّ عنه
+        // يتركه بلا خبر. والصفوفُ مجهولةُ المدينة تُحجب عمّن اختار مدنَه — لا
+        // تُنسب إليه بلا سند — وتبقى في «الجدول كاملاً».
+        const choice = readChoice();
+        const myCities = new Set(choice?.cities ?? []);
+        const myProducts = new Set<string>(choice?.products ?? []);
+
+        let mine = myProducts.size ? all.filter((g) => myProducts.has(g.product)) : all;
+        if (myCities.size) {
+          mine = mine
+            .map((g) => {
+              const rows = g.rows.filter((r) => r.city && myCities.has(r.city));
+              return {
+                ...g,
+                rows,
+                cities: [...new Set(rows.map((r) => r.city).filter(Boolean) as string[])],
+              };
+            })
+            .filter((g) => g.rows.length > 0);
+        }
+        if (!mine.length) return;
 
         // أكبرُ جدولٍ لغدٍ يُعرض. وواحدٌ لا كلُّها: خمسُ شاشاتٍ متتاليةٍ ليست
         // خبراً بل حاجز، والبقيّةُ على بُعد لمسةٍ في «محطات غداً».
-        const g = [...groups].sort((a, b) => b.rows.length - a.rows.length)[0];
+        const g = [...mine].sort((a, b) => b.rows.length - a.rows.length)[0];
 
         const key = `${tomorrow}|${g.product}`;
         try {
@@ -80,7 +116,7 @@ export function TomorrowScreen() {
         }
 
         setGroup(g);
-        setLeft(5);
+        setOpen(true);
       } catch {
         /* الشاشةُ ترفٌ: فشلُ جلبها لا يُظهر خطأً لأحد */
       }
@@ -90,13 +126,7 @@ export function TomorrowScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!group || left <= 0) return;
-    const t = setTimeout(() => setLeft((v) => v - 1), 1000);
-    return () => clearTimeout(t);
-  }, [group, left]);
-
-  if (!group || left <= 0) return null;
+  if (!group || !open) return null;
 
   // مدنُ المستخدم أوّلاً — قراءةٌ من الجهاز بلا شبكة، فتعمل ولو تعطّل كلُّ شيء.
   const mine = new Set(readChoice()?.cities ?? []);
@@ -106,7 +136,6 @@ export function TomorrowScreen() {
       (a.city ?? 'ي').localeCompare(b.city ?? 'ي', 'ar')
   );
   const shown = rows.slice(0, 7);
-  const C = 2 * Math.PI * 16;
 
   return (
     <div
@@ -159,32 +188,11 @@ export function TomorrowScreen() {
         </a>
         <button
           type="button"
-          onClick={() => setLeft(0)}
+          onClick={() => setOpen(false)}
           className="rounded-full bg-white/15 px-5 py-2.5 text-[12.5px] font-bold text-white"
         >
-          تخطّي
+          إغلاق
         </button>
-
-        <span className="relative flex h-10 w-10 items-center justify-center">
-          <svg viewBox="0 0 40 40" className="absolute inset-0 -rotate-90">
-            <circle cx="20" cy="20" r="16" fill="none" stroke="rgba(255,255,255,.25)" strokeWidth="3" />
-            <circle
-              cx="20"
-              cy="20"
-              r="16"
-              fill="none"
-              stroke="#fff"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeDasharray={C}
-              strokeDashoffset={C * (1 - left / 5)}
-              style={{ transition: 'stroke-dashoffset 1s linear' }}
-            />
-          </svg>
-          <b className="text-[13px] font-extrabold tabular-nums" dir="ltr">
-            {left}
-          </b>
-        </span>
       </div>
     </div>
   );

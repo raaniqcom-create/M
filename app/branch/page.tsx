@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { BranchBoard } from '@/components/BranchBoard';
+import { BranchStats } from '@/components/BranchStats';
+import { ScheduleBoard } from '@/components/ScheduleBoard';
 import { SpinnerIcon } from '@/components/icons';
+import { groupSchedule, loadSchedule, type ScheduleGroup } from '@/lib/scheduleData';
 
 /** لوحةُ فرع شركة توزيع المنتجات النفطية — الوعدُ الذي في الكتاب، مُنجَزاً.
  *
@@ -27,10 +30,64 @@ import { SpinnerIcon } from '@/components/icons';
  *  `user_role` نوعٌ مُعدَّد بقيمتين، وإضافةُ ثالثةٍ لا رجعةَ فيها في Postgres
  *  وتكسر توجيهَ الجلسة (lib/useSession.ts يصنّف كلَّ ما ليس admin مالكاً،
  *  فيُرسَل موظّفُ الفرع إلى /owner فيجده بلا محطة). فجدولُ `branch_viewers`،
- *  والسحبُ حذفُ صفّ. */
+ *  والسحبُ حذفُ صفّ.
+ *
+ *  ── ورابطٌ واحدٌ لا ثلاثة ─────────────────────────────────────────────
+ *
+ *  طلب الفرعُ «تنظيمَ روابط الدخول». فالثلاثةُ التي كانت ستُسلَّم — لوحةٌ
+ *  وإحصائيّاتٌ وجدول — تبويباتٌ في صفحةٍ واحدة: رابطٌ يُكتب في كتابٍ رسميٍّ
+ *  مرّةً ولا يُصحَّح بعدها.
+ *
+ *  ولا زرَّ يكتب في أيٍّ منها. وهو شرطُ بقاء الحساب مشترَكاً أصلاً — مكتوبٌ
+ *  في `scripts/add-branch-viewer.mjs:11-14`: «ولو صار للوحة زرٌّ يكتب في
+ *  القاعدة، وجب حسابٌ لكلِّ شخص». */
+
+type Tab = 'board' | 'stats' | 'schedule';
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'board', label: 'نظرة' },
+  { id: 'stats', label: 'إحصائيّات' },
+  { id: 'schedule', label: 'جدول الغد' },
+];
+
+/** تبويبُ الجدول: القراءةُ نفسُها التي تقرؤها صفحةُ `/schedule` العامّة.
+ *
+ *  ولا دالّةَ خاصّةً بالفرع: الجدولُ منشورٌ للناس كلِّهم، فمصدرٌ ثانٍ له كان
+ *  سيسمح بأن يفترقا. */
+function BranchSchedule() {
+  const [groups, setGroups] = useState<ScheduleGroup[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setGroups(groupSchedule(await loadSchedule()));
+      } catch {
+        setFailed(true);
+      }
+    })();
+  }, []);
+
+  if (failed) {
+    return (
+      <section className="card p-5 text-center">
+        <p className="text-xs font-bold text-slate-600">تعذّر تحميل الجدول. أعد فتح الصفحة.</p>
+      </section>
+    );
+  }
+  if (!groups) {
+    return (
+      <div className="flex justify-center py-16">
+        <SpinnerIcon className="h-6 w-6 text-brand" />
+      </div>
+    );
+  }
+  return <ScheduleBoard groups={groups} />;
+}
 export default function BranchPage() {
   const router = useRouter();
   const [state, setState] = useState<'checking' | 'yes' | 'no'>('checking');
+  const [tab, setTab] = useState<Tab>('board');
 
   useEffect(() => {
     // الجلسةُ المخزَّنة لا نداءٌ للخادم: طلبٌ ساقطٌ كان يُقرأ «غير مسجَّل»
@@ -77,7 +134,28 @@ export default function BranchPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-5">
-      <BranchBoard />
+      {/* `branch-hide`: الطباعةُ تُخرج ما في التبويب المفتوح وحدَه، وشريطُ
+          التبويبات على الورقة زخرفةٌ لا تُنقَر. وهو الصنفُ نفسُه الذي
+          يستعمله BranchBoard في أنماط الطباعة. */}
+      <div className="branch-hide mb-4 flex gap-1 rounded-full bg-slate-100 p-1">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            aria-current={tab === t.id ? 'page' : undefined}
+            className={`flex-1 rounded-full px-3 py-2 text-[12.5px] font-bold transition ${
+              tab === t.id ? 'bg-white text-brand-900 shadow-sm' : 'text-slate-500'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'board' && <BranchBoard />}
+      {tab === 'stats' && <BranchStats />}
+      {tab === 'schedule' && <BranchSchedule />}
     </main>
   );
 }
