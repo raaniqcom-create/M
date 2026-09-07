@@ -1479,8 +1479,9 @@ const baghdadHour = () =>
 
 /** أيَّ يومٍ يعني «غدا» في المنشور؟
  *
- *  القناةُ تنشر نحوَ الثامنة والنصف مساءً، فـ«غدا» عندها يومٌ يبدأ بعد ساعاتٍ
- *  قليلة. لكنّ المنشورَ قد يُحوَّل بعد منتصف الليل — والليلةُ قد صارت غداً —
+ *  القناةُ تنشر نحوَ الحاديةَ عشرةَ والنصف ليلاً بتوقيت بغداد (مقيسٌ من طوابع
+ *  صفحتها، وهي UTC فتُقرأ ناقصةً ثلاثَ ساعاتٍ إن غُفل عنها)، فـ«غدا» عندها يومٌ
+ *  يبدأ بعد نصف ساعة. لكنّ المنشورَ قد يُحوَّل بعد منتصف الليل — والليلةُ قد صارت غداً —
  *  فتاريخُ «اليوم + ١» يقفز يوماً كاملاً ويُخفي الجدولَ عن نهاره كلِّه.
  *
  *  فالفجرُ والصباحُ يعنيان اليوم، وما بعد الظهر يعني الغد. وهو ترجيحٌ لا يقين،
@@ -1500,7 +1501,7 @@ async function platformStations(): Promise<PlatformStation[]> {
 /** كم شخصاً سيصله الإشعار — قبل الضغط لا بعده.
  *
  *  `dryRun` يعدّ بلا ختم، فلا يحرق مهلةَ الخمس والأربعين دقيقة عند أحد. */
-async function scheduleReach(cities: string[], product: string): Promise<number | null> {
+async function scheduleReach(cities: string[], products: string[]): Promise<number | null> {
   const cron = Deno.env.get('CRON_SECRET');
   if (!cron || !cities.length) return null;
   try {
@@ -1511,7 +1512,7 @@ async function scheduleReach(cities: string[], product: string): Promise<number 
         title: 'معاينة',
         body: 'معاينة',
         cities,
-        products: [product],
+        products,
         dryRun: true,
       }),
     });
@@ -1527,18 +1528,29 @@ const schedCities = (lines: ScheduleLine[]) =>
   [...new Set(lines.map((l) => l.city).filter(Boolean) as string[])];
 
 /** ما فهمه البوت، سطراً سطراً، مع ما ينقصه. */
+const schedProducts = (lines: ScheduleLine[]) => [...new Set(lines.map((l) => l.product))];
+
+const productsLabel = (lines: ScheduleLine[]) =>
+  schedProducts(lines)
+    .map((p) => PRODUCT_LABELS[p] ?? p)
+    .join(' و');
+
 async function showSchedule(chat: number, d: { product: string; lines: ScheduleLine[]; for_date?: string }) {
-  const label = PRODUCT_LABELS[d.product] ?? d.product;
+  const label = productsLabel(d.lines);
+  // وقودُ السطر يُكتب مع اسمه حين يحمل المنشورُ أكثرَ من وقود — وهو يقع:
+  // منشورا الليلة يُلصقان أحياناً في رسالةٍ واحدة.
+  const mixed = schedProducts(d.lines).length > 1;
   const day = d.for_date ?? scheduleDay();
   const dayWord = day === baghdadDay() ? 'اليوم' : day === baghdadDay(1) ? 'غداً' : day;
   const cities = schedCities(d.lines);
-  const reach = await scheduleReach(cities, d.product);
+  const reach = await scheduleReach(cities, schedProducts(d.lines));
 
   const rows = d.lines.map((l, i) => {
     const mark = l.stationId ? '✅' : l.city ? '⚪️' : '❓';
     const where = l.city ?? 'منطقةٌ لم أعرفها';
     const tail = l.stationId ? 'مسجّلة' : 'خارج المنصّة';
-    return `${i + 1} ${mark} ${esc(l.name)} — ${esc(where)} · ${tail}`;
+    const pr = mixed ? ` · <b>${esc(PRODUCT_LABELS[l.product] ?? l.product)}</b>` : '';
+    return `${i + 1} ${mark} ${esc(l.name)} — ${esc(where)}${pr} · ${tail}`;
   });
 
   const foot = cities.length
@@ -1631,7 +1643,10 @@ async function publishSchedule(chat: number, userId: number, queryId: string) {
   const { error } = await db.from('fuel_schedule').insert(
     d.lines.map((l) => ({
       for_date,
-      product: d.product,
+      // **وقودُ الصفّ لا وقودُ المنشور.** كان `d.product` يُكتب للجميع، فسطرٌ
+      // آخرُه «تجهيز بنزين محسن» يُنشر عاديّاً — خبرٌ خطأ عن وقودٍ يقطع الناسُ
+      // إليه الطريق.
+      product: l.product,
       batch_id,
       raw_name: l.raw,
       station_name: l.name,
@@ -1647,7 +1662,7 @@ async function publishSchedule(chat: number, userId: number, queryId: string) {
   }
   await answer(queryId, 'نُشر ✅');
 
-  const label = PRODUCT_LABELS[d.product] ?? d.product;
+  const label = productsLabel(d.lines);
   // «غداً» في نصِّ الإشعار كانت ثابتةً، فجدولٌ يخصّ اليومَ كان يُعلَن للغد.
   const when = for_date === baghdadDay() ? 'اليوم' : 'غداً';
   // العربيةُ تعدّ على أربعة وجوه، و«7 محطة» تُقرأ خطأً.
@@ -1680,7 +1695,8 @@ async function publishSchedule(chat: number, userId: number, queryId: string) {
         title: `${label} ${when}`,
         body: `يصل ${label} ${when} إلى ${countLabel} في ${cities.join(' و')} — افتح التطبيق لترى القائمة.`,
         cities,
-        products: [d.product],
+        // كلُّ وقودٍ في الجدول: من اختار المحسّن وحدَه يجب أن يصله خبرُه.
+        products: schedProducts(d.lines),
         url: '/schedule',
       }),
     });

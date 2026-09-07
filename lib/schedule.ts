@@ -36,6 +36,8 @@ export interface ScheduleLine {
   stationId: string | null;
   /** ثقةُ المطابقة بالاسم. صفرٌ يعني لم يُطابَق شيء. */
   score: number;
+  /** وقودُ هذا السطر — قد يخالف وقودَ بقيّة المنشور. */
+  product: FuelProduct;
 }
 
 export interface ParsedSchedule {
@@ -61,14 +63,46 @@ const SCHEDULE_HINTS = ['المحطات التاليه', 'المحطات الت�
  *
  *  بالتطبيع نفسِه الذي تستعمله المطابقة، فـ«البنزين العادي» و«بانزين عادي»
  *  و«البنزين العادى» شيءٌ واحد. */
+// الأطولُ أوّلاً: «بانزين محسن» تحوي «بانزين»، فلو فُحص القصيرُ أوّلاً لَغلب.
+const PRODUCTS_BY_LENGTH = (Object.entries(PRODUCT_LABELS) as [FuelProduct, string][]).sort(
+  (a, b) => b[1].length - a[1].length
+);
+
 export function readProduct(text: string): FuelProduct | null {
   const t = normalizeName(text);
-  // الأطولُ أوّلاً: «بانزين محسن» تحوي «بانزين»، فلو فُحص القصيرُ أوّلاً لَغلب.
-  const byLength = (Object.entries(PRODUCT_LABELS) as [FuelProduct, string][]).sort(
-    (a, b) => b[1].length - a[1].length
-  );
-  for (const [key, label] of byLength) {
+  for (const [key, label] of PRODUCTS_BY_LENGTH) {
     if (t.includes(normalizeName(label))) return key;
+  }
+  return null;
+}
+
+/** بلا أداةِ تعريف: القناةُ تكتب «البنزين العادي» والوسمُ «بانزين عادي». */
+function bareWord(w: string): string {
+  const n = normalizeName(w);
+  return n.startsWith('ال') ? n.slice(2) : n;
+}
+
+/** وقودُ سطرٍ بعينه — إن سمّاه.
+ *
+ *  ── ولماذا لا يكفي وقودُ العنوان ────────────────────────────────────────
+ *
+ *  لأنّ صاحبَ المنصّة قد يلصق المنشورين معاً في رسالةٍ واحدة، وهذا ما وقع:
+ *  عنوانٌ يقول «البنزين العادي» ثمّ سبعةُ أسماء، ثمّ سطرٌ ثامنٌ آخرُه «تجهيز
+ *  بنزين محسن». فقُرئ الثامنُ عاديّاً — وهو محسّن — وبقيت كلمةُ «محسن» في
+ *  اسمه لأنّ المُسقَط كان كلماتِ «عادي» لا كلماتِه. خبرٌ خطأ واسمٌ مشوَّه في
+ *  عطلٍ واحد.
+ *
+ *  ── وبمطابقةِ كلمةٍ لا باحتواءِ نصّ ─────────────────────────────────────
+ *
+ *  «كاز» و«غاز» ثلاثةُ أحرف، ولو فُحص الاحتواءُ لَصار كلُّ اسمٍ فيه هذه
+ *  الحروفُ إعلانَ كاز. فالكلمةُ تُطابَق كلمةً، بعد إسقاط أداة التعريف. */
+export function lineProduct(line: string): FuelProduct | null {
+  const words = new Set(
+    normalizeName(line).split(' ').filter(Boolean).map((w) => (w.startsWith('ال') ? w.slice(2) : w))
+  );
+  for (const [key, label] of PRODUCTS_BY_LENGTH) {
+    const parts = normalizeName(label).split(' ').filter(Boolean).map(bareWord);
+    if (parts.length && parts.every((x) => words.has(x))) return key;
   }
   return null;
 }
@@ -87,7 +121,14 @@ const PREAMBLE =
   /(غدا|غداً)\s*(ان\s*شاء\s*الله|إن\s*شاء\s*الله)?|في\s*المحطات\s*التاليه?|المحطات\s*التاليه?|تجهيز/g;
 
 /** يقرأ المنشورَ ويُخرج الوقودَ وأسماءَ المحطات — بلا مطابقة. */
-export function parseSchedule(text: string): { product: FuelProduct; names: string[] } | null {
+export interface ParsedRow {
+  name: string;
+  product: FuelProduct;
+}
+
+export function parseSchedule(
+  text: string
+): { product: FuelProduct; rows: ParsedRow[] } | null {
   const product = readProduct(text);
   if (!product) return null;
 
@@ -98,13 +139,8 @@ export function parseSchedule(text: string): { product: FuelProduct; names: stri
   if (!rows.length) return null;
 
   const label = normalizeName(PRODUCT_LABELS[product]);
-  // بلا أداةِ تعريف: القناةُ تكتب «البنزين العادي» والوسمُ «بانزين عادي»،
-  // فمقارنةٌ حرفيّةٌ تُبقي «العادي» في السطر فتُحسب محطةً اسمُها «العادي».
-  const bare = (w: string) => {
-    const n = normalizeName(w);
-    return n.startsWith('ال') ? n.slice(2) : n;
-  };
-  const labelWords = new Set(label.split(' ').filter(Boolean).map(bare));
+  const wordsOf = (pr: FuelProduct) =>
+    new Set(normalizeName(PRODUCT_LABELS[pr]).split(' ').filter(Boolean).map(bareWord));
 
   /** يُسقط الصدرَ واسمَ الوقود — **ويُبقي الحروفَ كما كُتبت.**
    *
@@ -115,16 +151,18 @@ export function parseSchedule(text: string): { product: FuelProduct; names: stri
    *  والفلترةُ بالكلمات لا بتعبيرٍ نمطيّ: «ال ال» متجاورتان لا يلتقطهما
    *  تعبيرٌ يشترط فراغاً قبل وبعد — يبتلع الأوّلُ الفراغَ فتنجو الثانية.
    *  و«ال» بقيّةُ «البنزين» بعد إسقاط «بنزين» من داخلها: أداةٌ يتيمة. */
-  const strip = (s: string) =>
-    s
+  const strip = (s: string, pr: FuelProduct) => {
+    const drop = wordsOf(pr);
+    return s
       .replace(PREAMBLE, ' ')
       .split(/\s+/)
       .filter((w) => {
         const n = normalizeName(w);
-        return n && n !== 'ال' && !labelWords.has(bare(w));
+        return n && n !== 'ال' && !drop.has(bareWord(w));
       })
       .join(' ')
       .trim();
+  };
 
   const marker = normalizeName('المحطات التاليه');
 
@@ -132,8 +170,8 @@ export function parseSchedule(text: string): { product: FuelProduct; names: stri
   // بقائمةٍ لم تصل، فذاك عنوانٌ بلا جسم ولا يُنشر منه شيء.
   if (rows.length === 1) {
     if (normalizeName(rows[0]).includes(marker)) return null;
-    const one = strip(rows[0]);
-    return one ? { product, names: [one] } : null;
+    const one = strip(rows[0], product);
+    return one ? { product, rows: [{ name: one, product }] } : null;
   }
 
   // **العنوانُ يُعرَف بما فيه لا بما يبقى منه.** كان يُحكم عليه بالبقيّة، فسطرُ
@@ -143,8 +181,15 @@ export function parseSchedule(text: string): { product: FuelProduct; names: stri
     const n = normalizeName(line);
     return n.includes(label) || n.includes(marker);
   };
-  const names = rows.filter((l) => !isHead(l)).map(strip).filter((s) => s.length >= 2);
-  return names.length ? { product, names } : null;
+  const out: ParsedRow[] = [];
+  for (const line of rows) {
+    if (isHead(line)) continue;
+    // وقودُ السطر إن سمّاه، وإلّا فوقودُ العنوان. والإسقاطُ بكلماتِ وقودِه هو.
+    const pr = lineProduct(line) ?? product;
+    const name = strip(line, pr);
+    if (name.length >= 2) out.push({ name, product: pr });
+  }
+  return out.length ? { product, rows: out } : null;
 }
 
 /** يطابق اسماً واحداً: مرشَّحٌ مسحيٌّ يعطي المدينة، ثمّ محطةٌ مسجّلةٌ إن وُجدت.
@@ -224,7 +269,11 @@ function cityInText(raw: string): string | null {
 
 export const MATCH_FLOOR = 55;
 
-export function matchLine(raw: string, platform: PlatformStation[]): ScheduleLine {
+export function matchLine(
+  raw: string,
+  platform: PlatformStation[],
+  product: FuelProduct = 'gasoline_regular'
+): ScheduleLine {
   const [top] = searchKnownFuel(ALIASES.get(normalizeName(raw)) ?? raw, 1);
   // **دون الحدّ لا مرشَّح.**
   //
@@ -247,10 +296,11 @@ export function matchLine(raw: string, platform: PlatformStation[]): ScheduleLin
     return {
       raw,
       name: direct?.name ?? raw,
-      // ولو لم يُطابَق اسمٌ، فقد تكون الناحيةُ مكتوبةً في السطر نفسِه.
+      // ولو لم يُطابَق اسمٌ، فقد تكون المنطقةُ مكتوبةً في السطر نفسِه.
       city: cityInText(raw),
       stationId: direct?.id ?? null,
       score: direct ? 100 : (top?.score ?? 0),
+      product,
     };
   }
 
@@ -269,6 +319,7 @@ export function matchLine(raw: string, platform: PlatformStation[]): ScheduleLin
     city: c || cityInText(raw),
     stationId: near?.id ?? null,
     score: hit.score,
+    product,
   };
 }
 
@@ -278,6 +329,6 @@ export function readSchedule(text: string, platform: PlatformStation[]): ParsedS
   if (!parsed) return null;
   return {
     product: parsed.product,
-    lines: parsed.names.map((n) => matchLine(n, platform)),
+    lines: parsed.rows.map((r) => matchLine(r.name, platform, r.product)),
   };
 }

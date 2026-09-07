@@ -60,26 +60,26 @@ assert.equal(looksLikeSchedule(''), false);
 const a = parseSchedule(POST_A);
 assert.ok(a, 'لم يُقرأ المنشور الأوّل');
 assert.equal(a.product, 'gasoline_regular');
-assert.equal(a.names.length, 7, `سبعةُ أسماء، وقُرئ ${a.names.length}`);
-assert.ok(!a.names.some((n) => n.includes('غدا')), 'صدرُ المنشور يجب أن يُسقَط');
+assert.equal(a.rows.length, 7, `سبعةُ أسماء، وقُرئ ${a.rows.length}`);
+assert.ok(!a.rows.some(({ name: n }) => n.includes('غدا')), 'صدرُ المنشور يجب أن يُسقَط');
 assert.ok(
-  !a.names.some((n) => n.includes('المحطات')),
+  !a.rows.some(({ name: n }) => n.includes('المحطات')),
   'وسطرُ العنوان لا يُعدّ محطة'
 );
-assert.ok(a.names.some((n) => n.includes('الامن')), 'الامن من الأسماء');
-assert.ok(a.names.some((n) => n.includes('السينما')), 'السينما من الأسماء');
+assert.ok(a.rows.some(({ name: n }) => n.includes('الامن')), 'الامن من الأسماء');
+assert.ok(a.rows.some(({ name: n }) => n.includes('السينما')), 'السينما من الأسماء');
 
 const b = parseSchedule(POST_B);
 assert.ok(b, 'لم يُقرأ منشورُ السطر الواحد');
 assert.equal(b.product, 'gasoline_premium');
-assert.equal(b.names.length, 1, 'سطرٌ واحدٌ = محطةٌ واحدة');
-assert.ok(b.names[0].includes('مها'), `بقي الاسم: «${b.names[0]}»`);
-assert.ok(!b.names[0].includes('تجهيز'), 'كلمةُ «تجهيز» تُسقط');
+assert.equal(b.rows.length, 1, 'سطرٌ واحدٌ = محطةٌ واحدة');
+assert.ok(b.rows[0].name.includes('مها'), `بقي الاسم: «${b.rows[0].name}»`);
+assert.ok(!b.rows[0].name.includes('تجهيز'), 'كلمةُ «تجهيز» تُسقط');
 
 const c = parseSchedule(POST_C);
 assert.ok(c);
-assert.equal(c.names.length, 7);
-assert.ok(c.names.some((n) => n.includes('الواحه') || n.includes('الواحة')));
+assert.equal(c.rows.length, 7);
+assert.ok(c.rows.some(({ name: n }) => n.includes('الواحه') || n.includes('الواحة')));
 
 // ــ وما ليس جدولاً لا يُقرأ ــــــــــــــــــــــــــــــــــــــــــــــــ
 assert.equal(parseSchedule('محطة السينما'), null, 'بلا وقودٍ لا يُقرأ');
@@ -87,3 +87,32 @@ assert.equal(parseSchedule(''), null);
 assert.equal(parseSchedule('غدا ان شاء الله البنزين العادي'), null, 'عنوانٌ بلا أسماء');
 
 console.log('schedule parse: all assertions passed');
+
+
+// ــ ومنشوران في رسالةٍ واحدة، وقودان ــــــــــــــــــــــــــــــــــــــ
+//
+// **وقع فعلاً.** لصق صاحبُ المنصّة المنشورين معاً، فقرأ البوتُ الثمانيةَ
+// «عاديّاً» — والثامنُ محسّن — وبقيت كلمةُ «محسن» في اسمه لأنّ المُسقَط كان
+// كلماتِ «عادي» لا كلماتِه. خبرٌ خطأ عن وقودٍ يقطع الناسُ إليه الطريق، واسمٌ
+// مشوَّه، في عطلٍ واحد.
+const MIXED = `${POST_A}
+محطة مها البادية البعبود العيادة تجهيز بنزين محسن`;
+const m = parseSchedule(MIXED);
+assert.ok(m, 'لم يُقرأ المنشور المُلصَق');
+assert.equal(m.rows.length, 8, `ثمانيةُ أسماء، وقُرئ ${m.rows.length}`);
+assert.equal(
+  m.rows.filter((r) => r.product === 'gasoline_regular').length,
+  7,
+  'سبعةٌ على العادي'
+);
+const prem = m.rows.filter((r) => r.product === 'gasoline_premium');
+assert.equal(prem.length, 1, 'وواحدةٌ على المحسّن');
+assert.ok(prem[0].name.includes('مها'), `اسمُ المحسّن: «${prem[0].name}»`);
+assert.ok(!prem[0].name.includes('محسن'), `«محسن» بقيت في الاسم: «${prem[0].name}»`);
+assert.ok(!prem[0].name.includes('بنزين'), `«بنزين» بقيت في الاسم: «${prem[0].name}»`);
+
+// وسطرٌ لا يسمّي وقوداً يأخذ وقودَ العنوان — لا وقودَ السطر الذي قبله.
+assert.equal(m.rows[0].product, 'gasoline_regular');
+assert.equal(m.rows[6].product, 'gasoline_regular');
+
+console.log('قراءةُ الجدول: كلُّ الفحوص سليمة.');
