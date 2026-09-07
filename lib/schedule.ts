@@ -1,5 +1,6 @@
 import { PRODUCT_LABELS } from './products.ts';
 import { metresBetween, normalizeName, searchKnownFuel } from './nearbyFuel.ts';
+import { CITY_NAMES } from './cities.ts';
 import type { FuelProduct } from '../types/database.ts';
 
 /** جدولُ الغد — قراءةُ منشورٍ يصل كما هو، ومطابقةُ أسمائه.
@@ -97,14 +98,31 @@ export function parseSchedule(text: string): { product: FuelProduct; names: stri
   if (!rows.length) return null;
 
   const label = normalizeName(PRODUCT_LABELS[product]);
+  // بلا أداةِ تعريف: القناةُ تكتب «البنزين العادي» والوسمُ «بانزين عادي»،
+  // فمقارنةٌ حرفيّةٌ تُبقي «العادي» في السطر فتُحسب محطةً اسمُها «العادي».
+  const bare = (w: string) => {
+    const n = normalizeName(w);
+    return n.startsWith('ال') ? n.slice(2) : n;
+  };
+  const labelWords = new Set(label.split(' ').filter(Boolean).map(bare));
+
+  /** يُسقط الصدرَ واسمَ الوقود — **ويُبقي الحروفَ كما كُتبت.**
+   *
+   *  كان يُطبّع ثمّ يردّ المطبَّع، فيخرج «الخالديه» و«الحبانيه» بالهاء إلى
+   *  الناس. والتطبيعُ مفتاحُ مطابقةٍ لا نصٌّ يُعرض: يُقارَن به ويُرمى، ويبقى
+   *  المعروضُ ما كتبته القناة.
+   *
+   *  والفلترةُ بالكلمات لا بتعبيرٍ نمطيّ: «ال ال» متجاورتان لا يلتقطهما
+   *  تعبيرٌ يشترط فراغاً قبل وبعد — يبتلع الأوّلُ الفراغَ فتنجو الثانية.
+   *  و«ال» بقيّةُ «البنزين» بعد إسقاط «بنزين» من داخلها: أداةٌ يتيمة. */
   const strip = (s: string) =>
-    normalizeName(s.replace(PREAMBLE, ' '))
-      .replace(label, ' ')
-      // بالكلمات لا بتعبيرٍ نمطيّ: «ال ال» متجاورتان لا يلتقطهما تعبيرٌ
-      // يشترط فراغاً قبل وبعد — يبتلع الأوّلُ الفراغَ فتنجو الثانية.
-      // و«ال» بقيّةُ «البنزين» بعد إسقاط «بنزين» من داخلها: أداةٌ يتيمة.
-      .split(' ')
-      .filter((w) => w && w !== 'ال')
+    s
+      .replace(PREAMBLE, ' ')
+      .split(/\s+/)
+      .filter((w) => {
+        const n = normalizeName(w);
+        return n && n !== 'ال' && !labelWords.has(bare(w));
+      })
       .join(' ')
       .trim();
 
@@ -143,16 +161,35 @@ export function parseSchedule(text: string): { product: FuelProduct; names: stri
  *
  *  **فالجوابُ جدولُ مرادفاتٍ يكتبه إنسان، لا حدٌّ يُخفَّض.** خفضُ الحدّ يُدخل
  *  التخمينَ كلَّه ليصحّح اسماً واحداً؛ والمرادفُ يصحّح ما نعرفه ولا يمسّ غيره.
- *  ويطول هذا الجدولُ كلَّما صحّح صاحبُ المنصّة سطراً في البوت. */
+ *  ويطول هذا الجدولُ كلَّما صحّح صاحبُ المنصّة سطراً في البوت.
+ *
+ *  **والوجهةُ اسمٌ من قائمة المسح حرفيّاً**، ليكون التطابقُ تامّاً (١٠٠) لا
+ *  تشابهاً. فإن أُعيدت تسميةُ محطةٍ في `roadStations.ts` وجب تعديلُ مرادفها
+ *  هنا — و`test-schedule-match.mjs` يسقط إن نُسي، وهو المقصود. */
 const ALIAS_PAIRS: [string, string][] = [
-  ['السريع البو ريشه', 'محطة تعبئة وقود الرمادي الحكومية الطريق السريع'],
-  ['السريع البريشة', 'محطة تعبئة وقود الرمادي الحكومية الطريق السريع'],
-  ['البو ريشة', 'محطة تعبئة وقود الرمادي الحكومية الطريق السريع'],
-  ['البو يشة', 'محطة تعبئة وقود الرمادي الحكومية الطريق السريع'],
+  ['السريع البو ريشه', 'محطة تعبئة وقود الرمادي الحكومية الطريق السريع (البو ريشة)'],
+  ['السريع البريشة', 'محطة تعبئة وقود الرمادي الحكومية الطريق السريع (البو ريشة)'],
+  ['البو ريشة', 'محطة تعبئة وقود الرمادي الحكومية الطريق السريع (البو ريشة)'],
+  ['البو يشة', 'محطة تعبئة وقود الرمادي الحكومية الطريق السريع (البو ريشة)'],
 ];
 
 // بالمفتاح المطبَّع: «البريشة» و«البريشه» و«البريشـة» مفتاحٌ واحد.
 const ALIASES = new Map(ALIAS_PAIRS.map(([k, v]) => [normalizeName(k), v]));
+
+/** الناحيةُ إن كانت مكتوبةً في السطر نفسِه.
+ *
+ *  **قراءةٌ لا تخمين.** القناةُ تكتب أحياناً «الخالدية قرب مركز الخالدية»
+ *  و«الحبانية القديمة يم سيطرة الخالدية» — فالناحيةُ في النصّ حرفيّاً، ثمّ
+ *  تُهمَل لأنّ المطابقةَ بالاسم لم تبلغ الحدَّ فلم يبقَ من يقرأ السطر.
+ *
+ *  والأطولُ أوّلاً: «عامرية الفلوجة» تحوي «الفلوجة»، فلو فُحص القصيرُ أوّلاً
+ *  لَنُسبت محطةُ العامريّة إلى الفلوجة. */
+const CITIES_BY_LENGTH = [...CITY_NAMES].sort((a, b) => b.length - a.length);
+
+function cityInText(raw: string): string | null {
+  const t = normalizeName(raw);
+  return CITIES_BY_LENGTH.find((c) => t.includes(normalizeName(c))) ?? null;
+}
 
 export const MATCH_FLOOR = 55;
 
@@ -179,7 +216,8 @@ export function matchLine(raw: string, platform: PlatformStation[]): ScheduleLin
     return {
       raw,
       name: direct?.name ?? raw,
-      city: null,
+      // ولو لم يُطابَق اسمٌ، فقد تكون الناحيةُ مكتوبةً في السطر نفسِه.
+      city: cityInText(raw),
       stationId: direct?.id ?? null,
       score: direct ? 100 : (top?.score ?? 0),
     };
@@ -197,7 +235,7 @@ export function matchLine(raw: string, platform: PlatformStation[]): ScheduleLin
   return {
     raw,
     name: near?.name ?? n,
-    city: c || null,
+    city: c || cityInText(raw),
     stationId: near?.id ?? null,
     score: hit.score,
   };

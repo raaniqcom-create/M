@@ -109,7 +109,10 @@ export function Maintenance() {
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-gradient-to-b from-brand to-brand-700 px-6 text-center text-white"
+      /* z-[90] فوق الجميع: كانت 80 وشاشةُ الغد 84، فلو أُعلنت الصيانةُ
+         والجدولُ مفتوحٌ لَغطّاه على خبر التوقّف. وبوّابةُ TomorrowScreen
+         تمنع الحالةَ الشائعة لا هذه. */
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-gradient-to-b from-brand to-brand-700 px-6 text-center text-white"
     >
       <div className="max-w-sm">
         {/* الشعارُ أوّلاً — والسابقةُ SplashScreen: أيقونةُ التطبيق على أبيضها

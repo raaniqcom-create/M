@@ -619,7 +619,7 @@ type Draft = {
   contact?: string;
   contact_phone?: string;
   // جدولُ الغد يركب آلةَ المسوّدات نفسَها: منشورٌ مقروءٌ ينتظر «انشر».
-  sched?: { product: string; lines: ScheduleLine[] };
+  sched?: { product: string; lines: ScheduleLine[]; for_date?: string };
 };
 
 const PROVINCES = ['الأنبار'];
@@ -1463,8 +1463,29 @@ const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
 const latinDigits = (v: string) =>
   [...v].map((c) => (AR_DIGITS.indexOf(c) < 0 ? c : String(AR_DIGITS.indexOf(c)))).join('');
 
-const baghdadTomorrow = () =>
-  new Date(Date.now() + 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Baghdad' });
+const baghdadDay = (plus = 0) =>
+  new Date(Date.now() + plus * 86_400_000).toLocaleDateString('en-CA', {
+    timeZone: 'Asia/Baghdad',
+  });
+
+const baghdadHour = () =>
+  Number(
+    new Date().toLocaleString('en-US', {
+      timeZone: 'Asia/Baghdad',
+      hour: '2-digit',
+      hour12: false,
+    })
+  );
+
+/** أيَّ يومٍ يعني «غدا» في المنشور؟
+ *
+ *  القناةُ تنشر نحوَ الثامنة والنصف مساءً، فـ«غدا» عندها يومٌ يبدأ بعد ساعاتٍ
+ *  قليلة. لكنّ المنشورَ قد يُحوَّل بعد منتصف الليل — والليلةُ قد صارت غداً —
+ *  فتاريخُ «اليوم + ١» يقفز يوماً كاملاً ويُخفي الجدولَ عن نهاره كلِّه.
+ *
+ *  فالفجرُ والصباحُ يعنيان اليوم، وما بعد الظهر يعني الغد. وهو ترجيحٌ لا يقين،
+ *  ولذلك يُطبع التاريخُ في المعاينة ويُصحَّح بكلمةٍ واحدة قبل النشر. */
+const scheduleDay = () => baghdadDay(baghdadHour() < 12 ? 0 : 1);
 
 /** المحطاتُ المعتمدة بإحداثيّاتها — منها يأتي الربطُ ومنها «مسجّلة». */
 async function platformStations(): Promise<PlatformStation[]> {
@@ -1506,8 +1527,10 @@ const schedCities = (lines: ScheduleLine[]) =>
   [...new Set(lines.map((l) => l.city).filter(Boolean) as string[])];
 
 /** ما فهمه البوت، سطراً سطراً، مع ما ينقصه. */
-async function showSchedule(chat: number, d: { product: string; lines: ScheduleLine[] }) {
+async function showSchedule(chat: number, d: { product: string; lines: ScheduleLine[]; for_date?: string }) {
   const label = PRODUCT_LABELS[d.product] ?? d.product;
+  const day = d.for_date ?? scheduleDay();
+  const dayWord = day === baghdadDay() ? 'اليوم' : day === baghdadDay(1) ? 'غداً' : day;
   const cities = schedCities(d.lines);
   const reach = await scheduleReach(cities, d.product);
 
@@ -1526,10 +1549,11 @@ async function showSchedule(chat: number, d: { product: string; lines: ScheduleL
 
   await send(
     chat,
-    `<b>جدولُ غدٍ</b> — ${esc(label)} · ${baghdadTomorrow()}${NL}${NL}` +
+    `<b>جدولُ ${dayWord}</b> — ${esc(label)} · ${day}${NL}${NL}` +
       rows.join(NL) +
       `${NL}${NL}${foot}${NL}${NL}` +
-      '<i>للتصحيح: «٣ الرمادي» تضبط المدينة، و«٣ حذف» تُسقط السطر.</i>',
+      `<i>للتصحيح: «٣ الرمادي» تضبط المدينة، و«٣ حذف» تُسقط السطر،${NL}` +
+      `و«اليوم» أو «غدا» تضبط اليومَ الذي يخصّه الجدول.</i>`,
     {
       reply_markup: {
         inline_keyboard: [
@@ -1550,7 +1574,11 @@ async function proposeSchedule(chat: number, userId: number, text: string) {
     await send(chat, '⚠️ لم أتعرّف على جدولٍ في هذا المنشور.');
     return;
   }
-  const d = { product: parsed.product as string, lines: parsed.lines };
+  const d = {
+    product: parsed.product as string,
+    lines: parsed.lines,
+    for_date: scheduleDay(),
+  };
   await saveDraft(userId, chat, 'sched', { sched: d });
   await showSchedule(chat, d);
 }
@@ -1560,7 +1588,15 @@ async function correctSchedule(chat: number, userId: number, d: Draft, raw: stri
   const sched = d.sched;
   if (!sched) return void (await send(chat, 'انتهت الجلسة. أعِد تحويلَ المنشور.'));
 
-  const parts = latinDigits(raw.trim()).split(' ').filter(Boolean);
+  // اليومُ يُصحَّح بكلمةٍ لا برقم: هو خاصّيّةُ الجدول كلِّه لا خاصّيّةُ سطر.
+  const word = raw.trim();
+  if (word === 'اليوم' || word === 'غدا' || word === 'غداً') {
+    sched.for_date = baghdadDay(word === 'اليوم' ? 0 : 1);
+    await saveDraft(userId, chat, 'sched', { sched });
+    return void (await showSchedule(chat, sched));
+  }
+
+  const parts = latinDigits(word).split(' ').filter(Boolean);
   const n = Number(parts[0]);
   if (!Number.isInteger(n) || n < 1 || n > sched.lines.length) {
     return void (await send(chat, '⚠️ ابدأ برقم السطر، مثل: «٣ الرمادي».'));
@@ -1590,7 +1626,7 @@ async function publishSchedule(chat: number, userId: number, queryId: string) {
   // تُمسح أوّلاً: ضغطتان متتاليتان على الزرّ نفسِه كانتا ستكتبان الجدولَ مرّتين.
   await clearDraft(userId);
 
-  const for_date = baghdadTomorrow();
+  const for_date = d.for_date ?? scheduleDay();
   const batch_id = crypto.randomUUID();
   const { error } = await db.from('fuel_schedule').insert(
     d.lines.map((l) => ({
@@ -1612,6 +1648,12 @@ async function publishSchedule(chat: number, userId: number, queryId: string) {
   await answer(queryId, 'نُشر ✅');
 
   const label = PRODUCT_LABELS[d.product] ?? d.product;
+  // «غداً» في نصِّ الإشعار كانت ثابتةً، فجدولٌ يخصّ اليومَ كان يُعلَن للغد.
+  const when = for_date === baghdadDay() ? 'اليوم' : 'غداً';
+  // العربيةُ تعدّ على أربعة وجوه، و«7 محطة» تُقرأ خطأً.
+  const n = d.lines.length;
+  const countLabel =
+    n === 1 ? 'محطة واحدة' : n === 2 ? 'محطتين' : n <= 10 ? `${n} محطات` : `${n} محطة`;
   const cities = schedCities(d.lines);
   if (!cities.length) {
     await send(chat, `✅ نُشر الجدول (${d.lines.length} محطة). ولا إشعار: لا مدينةَ معروفة.`);
@@ -1635,8 +1677,8 @@ async function publishSchedule(chat: number, userId: number, queryId: string) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-cron-secret': cron },
       body: JSON.stringify({
-        title: `${label} غداً`,
-        body: `يصل ${label} غداً إلى ${d.lines.length} محطة في ${cities.join(' و')} — افتح التطبيق لترى القائمة.`,
+        title: `${label} ${when}`,
+        body: `يصل ${label} ${when} إلى ${countLabel} في ${cities.join(' و')} — افتح التطبيق لترى القائمة.`,
         cities,
         products: [d.product],
         url: '/schedule',

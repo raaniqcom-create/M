@@ -42,30 +42,65 @@ export async function loadSchedule(): Promise<ScheduleRow[]> {
   return (data ?? []) as ScheduleRow[];
 }
 
-/** مجموعةٌ واحدة: وقودٌ ليومٍ واحد، ومحطاتُه مرتَّبةً بالمدينة. */
+/** مجموعةٌ واحدة: **ناحيةٌ في يوم**، ومنتجاتُها عمودٌ داخلها. */
 export interface ScheduleGroup {
   for_date: string;
-  product: FuelProduct;
+  /** `null` ناحيةٌ لم تُعرف — تُعرض آخراً ولا تُنسب إلى أحد. */
+  city: string | null;
   rows: ScheduleRow[];
-  cities: string[];
+  products: FuelProduct[];
 }
 
-/** يُجمَع بالوقود داخل اليوم — لا بالمحطة.
+/** يُجمَع بالناحية داخل اليوم — لا بالمنتج.
  *
- *  لأنّ السؤالَ الذي يُفتح له التطبيقُ «أين البانزين العادي غداً؟» لا «ماذا
- *  في محطة السينما؟». والمحطةُ لها صفحتُها. */
-export function groupSchedule(rows: ScheduleRow[]): ScheduleGroup[] {
+ *  ── ولماذا تبدّل الجمع ──────────────────────────────────────────────────
+ *
+ *  كان الجمعُ بالمنتج: «بانزين عادي — غداً» ثمّ قائمةُ محطاتٍ من نواحٍ شتّى.
+ *  وهو يجيب سؤالاً لا يسأله أحد. والسؤالُ الذي يُفتح له التطبيقُ ناحيةٌ لا
+ *  منتج: **«ما الذي يصل ناحيتي غداً؟»** — ومن يسكن الرمادي لا يقرأ سطراً عن
+ *  الخالدية ولو كان المنتجُ نفسَه.
+ *
+ *  وقرارُ صاحب المنصّة نصَّ عليه: جدولٌ لكلّ ناحيةٍ ولو بمحطةٍ واحدة، والمنتجُ
+ *  عمودٌ فيه. فليلةٌ فيها محطةٌ على المحسّن وسبعٌ على العادي تُقرأ في جدولٍ
+ *  واحدٍ لا في جدولين متباعدين.
+ *
+ *  و`prefer` نواحي القارئ: تُرفع إلى الأعلى ولا يُحجب غيرُها — الترتيبُ
+ *  خدمةٌ، والحجبُ قرارٌ آخر يُتّخذ في مكانه. */
+export function groupSchedule(rows: ScheduleRow[], prefer: string[] = []): ScheduleGroup[] {
+  const mine = new Set(prefer);
   const map = new Map<string, ScheduleGroup>();
+
   for (const r of rows) {
-    const key = `${r.for_date}|${r.product}`;
-    const g =
-      map.get(key) ?? { for_date: r.for_date, product: r.product, rows: [], cities: [] };
+    const key = `${r.for_date}|${r.city ?? ''}`;
+    const g = map.get(key) ?? {
+      for_date: r.for_date,
+      city: r.city ?? null,
+      rows: [],
+      products: [],
+    };
     g.rows.push(r);
     map.set(key, g);
   }
+
   for (const g of map.values()) {
-    g.rows.sort((a, b) => (a.city ?? 'ي').localeCompare(b.city ?? 'ي', 'ar'));
-    g.cities = [...new Set(g.rows.map((r) => r.city).filter(Boolean) as string[])];
+    // المسجّلةُ أوّلاً: لها صفحةٌ وحالةٌ تُقرأ الآن، وغيرُها اسمٌ وصلنا.
+    g.rows.sort(
+      (a, b) =>
+        Number(Boolean(b.linked_station_id)) - Number(Boolean(a.linked_station_id)) ||
+        a.station_name.localeCompare(b.station_name, 'ar')
+    );
+    g.products = [...new Set(g.rows.map((r) => r.product))];
   }
-  return [...map.values()].sort((a, b) => a.for_date.localeCompare(b.for_date));
+
+  return [...map.values()].sort(
+    (a, b) =>
+      a.for_date.localeCompare(b.for_date) ||
+      // ناحيةٌ مجهولةٌ آخراً دائماً، ثمّ نواحي القارئ، ثمّ الباقي بالأبجدية.
+      Number(a.city === null) - Number(b.city === null) ||
+      Number(mine.has(b.city ?? '')) - Number(mine.has(a.city ?? '')) ||
+      // ثمّ الأكبرُ خبراً: من لم يختر نواحيَه يرى أكثرَها محطاتٍ أوّلاً بدل
+      // أن تتقدّمه ناحيةٌ بمحطةٍ واحدةٍ لأنّ حرفَها أسبقُ في الأبجدية.
+      b.rows.length - a.rows.length ||
+      (a.city ?? '').localeCompare(b.city ?? '', 'ar')
+  );
 }
