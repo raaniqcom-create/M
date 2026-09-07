@@ -3,6 +3,7 @@ import { Tajawal } from 'next/font/google';
 import './globals.css';
 import { Maintenance } from '@/components/Maintenance';
 import { SiteNotice } from '@/components/SiteNotice';
+import { TomorrowScreen } from '@/components/TomorrowScreen';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { NativePush } from '@/components/NativePush';
 import { APPLE_APP_ID } from '@/lib/stores';
@@ -78,6 +79,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* بعد Maintenance: الواقعُ يسبق الإنذارَ به، والمكوّنُ نفسُه يمتنع
             إن كانت الصيانةُ قائمة. */}
         <SiteNotice />
+        {/* تحتها في الترتيب: الصيانةُ ثمّ الإنذارُ بها ثمّ خبرُ الغد.
+            والمكوّنُ نفسُه يمتنع إن كانت المنصّةُ في صيانة. */}
+        <TomorrowScreen />
         {children}
       </body>
     </html>

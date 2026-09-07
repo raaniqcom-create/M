@@ -2,6 +2,15 @@
 // Runs as a Supabase Edge Function: always on, and in the same place as the
 // data, so a "which station has petrol near me" answer is one query away.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+// المحلِّلُ والمطابقُ يُستوردان من `lib/` ولا يُنسخان: نسخةٌ ثانيةٌ من قائمة
+// المسح أو من تطبيع الأسماء تعني أن البوت والموقع يفهمان الاسمَ نفسَه فهمين.
+// وهي ملفّاتٌ خالصةٌ بلا شبكةٍ ولا React، تُرفع مع هذه الدالّة عند كلّ نشر.
+import {
+  looksLikeSchedule,
+  readSchedule,
+  type PlatformStation,
+  type ScheduleLine,
+} from '../../../lib/schedule.ts';
 
 const TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
 const SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')!;
@@ -609,6 +618,8 @@ type Draft = {
   phone?: string;
   contact?: string;
   contact_phone?: string;
+  // جدولُ الغد يركب آلةَ المسوّدات نفسَها: منشورٌ مقروءٌ ينتظر «انشر».
+  sched?: { product: string; lines: ScheduleLine[] };
 };
 
 const PROVINCES = ['الأنبار'];
@@ -1439,6 +1450,215 @@ async function toggleProduct(
   await showOwnerPanel(chat, stationId, messageId);
 }
 
+// ---------- جدولُ الغد ----------
+//
+// يصل صاحبَ المنصّة كلَّ مساءٍ منشورٌ بمحطاتٍ يصلها وقودٌ غداً، فيُحوَّل إلى
+// هنا بلمسة. والبوت يقرأ ما فيه ويعرض ما فهمه — ولا يكتب حرفاً في القاعدة قبل
+// ضغطة «انشر».
+//
+// وهذا ليس تحفّظاً زائداً: 20260823c يسجّل أن المطابقةَ بالاسم جُرّبت في هذه
+// المنصّة ورُفضت لأنها تُخطئ في الجهتين. فالمطابقةُ تقترح، والإنسانُ يقرّر.
+
+const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+const latinDigits = (v: string) =>
+  [...v].map((c) => (AR_DIGITS.indexOf(c) < 0 ? c : String(AR_DIGITS.indexOf(c)))).join('');
+
+const baghdadTomorrow = () =>
+  new Date(Date.now() + 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Baghdad' });
+
+/** المحطاتُ المعتمدة بإحداثيّاتها — منها يأتي الربطُ ومنها «مسجّلة». */
+async function platformStations(): Promise<PlatformStation[]> {
+  const { data } = await db
+    .from('stations_public')
+    .select('id, name, lat, lng')
+    .eq('status', 'approved')
+    .range(0, 99_999);
+  return (data ?? []) as PlatformStation[];
+}
+
+/** كم شخصاً سيصله الإشعار — قبل الضغط لا بعده.
+ *
+ *  `dryRun` يعدّ بلا ختم، فلا يحرق مهلةَ الخمس والأربعين دقيقة عند أحد. */
+async function scheduleReach(cities: string[], product: string): Promise<number | null> {
+  const cron = Deno.env.get('CRON_SECRET');
+  if (!cron || !cities.length) return null;
+  try {
+    const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/announce`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-cron-secret': cron },
+      body: JSON.stringify({
+        title: 'معاينة',
+        body: 'معاينة',
+        cities,
+        products: [product],
+        dryRun: true,
+      }),
+    });
+    if (!r.ok) return null;
+    const a = (await r.json())?.audience ?? {};
+    return (a.ios ?? 0) + (a.android ?? 0) + (a.web ?? 0);
+  } catch {
+    return null;
+  }
+}
+
+const schedCities = (lines: ScheduleLine[]) =>
+  [...new Set(lines.map((l) => l.city).filter(Boolean) as string[])];
+
+/** ما فهمه البوت، سطراً سطراً، مع ما ينقصه. */
+async function showSchedule(chat: number, d: { product: string; lines: ScheduleLine[] }) {
+  const label = PRODUCT_LABELS[d.product] ?? d.product;
+  const cities = schedCities(d.lines);
+  const reach = await scheduleReach(cities, d.product);
+
+  const rows = d.lines.map((l, i) => {
+    const mark = l.stationId ? '✅' : l.city ? '⚪️' : '❓';
+    const where = l.city ?? 'مدينةٌ لم أعرفها';
+    const tail = l.stationId ? 'مسجّلة' : 'خارج المنصّة';
+    return `${i + 1} ${mark} ${esc(l.name)} — ${esc(where)} · ${tail}`;
+  });
+
+  const foot = cities.length
+    ? reach === null
+      ? `المدن: ${esc(cities.join(' · '))}`
+      : `يصل الإشعارُ إلى ${reach} مشتركاً في ${esc(cities.join(' · '))}.`
+    : '⚠️ لا مدينةَ معروفةً في الجدول — يُنشر بلا إشعار.';
+
+  await send(
+    chat,
+    `<b>جدولُ غدٍ</b> — ${esc(label)} · ${baghdadTomorrow()}${NL}${NL}` +
+      rows.join(NL) +
+      `${NL}${NL}${foot}${NL}${NL}` +
+      '<i>للتصحيح: «٣ الرمادي» تضبط المدينة، و«٣ حذف» تُسقط السطر.</i>',
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '📣 انشر', callback_data: 'sch:go' },
+            { text: '✖️ ألغِ', callback_data: 'wx' },
+          ],
+        ],
+      },
+    }
+  );
+}
+
+/** منشورٌ وصل: يُقرأ ويُطابق ويُحفظ مسوّدةً — بلا صفٍّ واحدٍ في القاعدة. */
+async function proposeSchedule(chat: number, userId: number, text: string) {
+  const parsed = readSchedule(text, await platformStations());
+  if (!parsed || !parsed.lines.length) {
+    await send(chat, '⚠️ لم أتعرّف على جدولٍ في هذا المنشور.');
+    return;
+  }
+  const d = { product: parsed.product as string, lines: parsed.lines };
+  await saveDraft(userId, chat, 'sched', { sched: d });
+  await showSchedule(chat, d);
+}
+
+/** «٣ الرمادي» أو «٣ حذف» — تصحيحُ سطرٍ واحدٍ قبل النشر. */
+async function correctSchedule(chat: number, userId: number, d: Draft, raw: string) {
+  const sched = d.sched;
+  if (!sched) return void (await send(chat, 'انتهت الجلسة. أعِد تحويلَ المنشور.'));
+
+  const parts = latinDigits(raw.trim()).split(' ').filter(Boolean);
+  const n = Number(parts[0]);
+  if (!Number.isInteger(n) || n < 1 || n > sched.lines.length) {
+    return void (await send(chat, '⚠️ ابدأ برقم السطر، مثل: «٣ الرمادي».'));
+  }
+  const rest = parts.slice(1).join(' ').trim();
+  if (!rest) return void (await send(chat, '⚠️ بعد الرقم: اسمُ المدينة، أو «حذف».'));
+
+  if (rest === 'حذف') sched.lines.splice(n - 1, 1);
+  else sched.lines[n - 1].city = rest;
+
+  if (!sched.lines.length) {
+    await clearDraft(userId);
+    return void (await send(chat, 'حُذفت كلُّ الأسطر. أُلغي الجدول.'));
+  }
+  await saveDraft(userId, chat, 'sched', { sched });
+  await showSchedule(chat, sched);
+}
+
+/** الضغطة: صفوفُ الجدول تُكتب، ثمّ إشعارٌ واحدٌ لا واحدٌ لكلّ محطة. */
+async function publishSchedule(chat: number, userId: number, queryId: string) {
+  const draft = await getDraft(userId);
+  const d = draft?.data?.sched;
+  if (!d?.lines?.length) {
+    await answer(queryId, 'انتهت الجلسة');
+    return;
+  }
+  // تُمسح أوّلاً: ضغطتان متتاليتان على الزرّ نفسِه كانتا ستكتبان الجدولَ مرّتين.
+  await clearDraft(userId);
+
+  const for_date = baghdadTomorrow();
+  const batch_id = crypto.randomUUID();
+  const { error } = await db.from('fuel_schedule').insert(
+    d.lines.map((l) => ({
+      for_date,
+      product: d.product,
+      batch_id,
+      raw_name: l.raw,
+      station_name: l.name,
+      city: l.city,
+      linked_station_id: l.stationId,
+      match_score: l.score,
+    }))
+  );
+  if (error) {
+    await answer(queryId, 'تعذّر النشر');
+    await send(chat, `⚠️ ${esc(error.message)}`);
+    return;
+  }
+  await answer(queryId, 'نُشر ✅');
+
+  const label = PRODUCT_LABELS[d.product] ?? d.product;
+  const cities = schedCities(d.lines);
+  if (!cities.length) {
+    await send(chat, `✅ نُشر الجدول (${d.lines.length} محطة). ولا إشعار: لا مدينةَ معروفة.`);
+    return;
+  }
+
+  // **نداءٌ واحدٌ بكلّ المدن، لا نداءٌ لكلّ مدينة.**
+  //
+  // ليس اختصاراً: announce يوحّد العناوين عبر المدن في النداء الواحد، ومهلةُ
+  // الخمس والأربعين دقيقة في alerts_for تعني أن نداءً ثانياً بعد الأوّل لا يصل
+  // أحداً — وهو منصوصٌ في تعليق announce نفسِه. فمدينتان في جدولٍ واحدٍ لا
+  // تُرسلان رسالتين، وثماني محطاتٍ لا تُرسل ثمانيةَ إشعارات.
+  const cron = Deno.env.get('CRON_SECRET');
+  if (!cron) {
+    await send(chat, `✅ نُشر الجدول (${d.lines.length} محطة). والإشعارُ لم يخرج: CRON_SECRET غائب.`);
+    return;
+  }
+  let sent = 0;
+  try {
+    const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/announce`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-cron-secret': cron },
+      body: JSON.stringify({
+        title: `${label} غداً`,
+        body: `يصل ${label} غداً إلى ${d.lines.length} محطة في ${cities.join(' و')} — افتح التطبيق لترى القائمة.`,
+        cities,
+        products: [d.product],
+        url: '/schedule',
+      }),
+    });
+    if (r.ok) {
+      const a = (await r.json())?.audience ?? {};
+      sent = (a.ios ?? 0) + (a.android ?? 0) + (a.web ?? 0);
+    } else {
+      console.error('announce', r.status, await r.text());
+    }
+  } catch (e) {
+    console.error('announce fetch', e);
+  }
+
+  await send(
+    chat,
+    `✅ نُشر جدولُ ${esc(label)} — ${d.lines.length} محطة.${NL}` +
+      (sent ? `ووصل الإشعارُ إلى ${sent} مشتركاً.` : 'ولم يخرج الإشعار — راجع السجلّ.')
+  );
+}
+
 // ---------- Router ----------
 
 Deno.serve(async (req) => {
@@ -1550,6 +1770,8 @@ Deno.serve(async (req) => {
       } else if (data.startsWith('r:')) {
         await answer(cb.id, 'تم التحديث');
         await showOwnerPanel(chat, data.slice(2), messageId);
+      } else if (data === 'sch:go') {
+        await publishSchedule(chat, from, cb.id);
       } else if (data.startsWith('t:')) {
         const [, stationId, product] = data.split(':');
         await toggleProduct(chat, messageId, from, stationId, product, cb.id);
@@ -1633,12 +1855,21 @@ Deno.serve(async (req) => {
     if (!text.startsWith('/') && text !== '⬅️ رجوع') {
       const draft = await getDraft(from);
       if (draft) {
-        await wizardText(chat, from, draft.step, draft.data, text);
+        if (draft.step === 'sched') await correctSchedule(chat, from, draft.data, text);
+        else await wizardText(chat, from, draft.step, draft.data, text);
         return new Response('ok');
       }
     }
 
     if (isAdmin(from)) {
+      // منشورُ الجدول يُعرَف بشكله لا بأمرٍ يُكتب — وهو كسبُ الوقت كلُّه:
+      // تحويلٌ بلمسة ثمّ ضغطة. والفحصُ يسبق البحثَ الحرَّ أدناه، وإلّا صار
+      // المنشورُ كلُّه اسمَ محطةٍ يُبحث عنه.
+      if (!text.startsWith('/') && looksLikeSchedule(text)) {
+        await proposeSchedule(chat, from, text);
+        return new Response('ok');
+      }
+
       if (text.startsWith('/rename')) {
         const { data: list } = await db
           .from('stations')

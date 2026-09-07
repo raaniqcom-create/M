@@ -1,4 +1,4 @@
-import type { FuelProduct, TrafficLevel } from '@/types/database';
+import type { FuelProduct, TrafficLevel } from '../types/database.ts';
 import { hasRunOut, isFresh, isOpenNow, isWithdrawn } from './hours.ts';
 
 // single source of truth for the 6 fixed products — mirrors the fuel_product

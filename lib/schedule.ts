@@ -1,6 +1,6 @@
 import { PRODUCT_LABELS } from './products.ts';
 import { metresBetween, normalizeName, searchKnownFuel } from './nearbyFuel.ts';
-import type { FuelProduct } from '@/types/database';
+import type { FuelProduct } from '../types/database.ts';
 
 /** جدولُ الغد — قراءةُ منشورٍ يصل كما هو، ومطابقةُ أسمائه.
  *
@@ -134,8 +134,22 @@ export function parseSchedule(text: string): { product: FuelProduct; names: stri
  *  **الجغرافيا أوّلاً، والاسمُ احتياطاً** — وهو حكمُ `onPlatform` القائم في
  *  نموذج التسجيل، وحدُّ الخمسمئة متر مقيسٌ هناك لا مخمَّن: أبعدُ تطابقٍ صحيحٍ
  *  كان ٤٢٤ متراً وأقربُ خاطئٍ ٥٨٠. */
+export const MATCH_FLOOR = 55;
+
 export function matchLine(raw: string, platform: PlatformStation[]): ScheduleLine {
-  const [hit] = searchKnownFuel(raw, 1);
+  const [top] = searchKnownFuel(raw, 1);
+  // **دون الحدّ لا مرشَّح.**
+  //
+  // قِيس على أسماء القناة نفسِها: الصحيحُ يقع بين ٧٥ و١٠٠، و«البو يشة» تُطابق
+  // «البوذياب — الكورنيش» بـ٢٧٫٥. وسُلَّمُ searchKnownFuel يفسّر الرقمين:
+  // مئةٌ تطابقٌ تامّ، وسبعونَ فما فوق احتواءُ الاسم للاسم، وما دونه نسبةُ
+  // الكلمات المشتركة من خمسٍ وخمسين — فخمسةٌ وخمسون تعني «كلُّ كلماتِه وردت»
+  // ونصفُها يعني كلمةً من كلمتين. ودونها تخمينٌ يُلبَس ثوبَ المعرفة: اسمٌ
+  // يُستبدل بغيره ومدينةٌ تُنسب بلا سند.
+  //
+  // فما دون الحدّ يبقى كما وصل، بلا مدينة، ويُعلَّم ❓ ليكتبها إنسان. وتُحفظ
+  // الدرجةُ المرفوضة في match_score كي يُقاس لاحقاً أين يُخطئ المطابق.
+  const hit = top && top.score >= MATCH_FLOOR ? top : null;
   const key = normalizeName(raw);
 
   const byName = () => platform.find((s) => normalizeName(s.name) === key) ?? null;
@@ -147,7 +161,7 @@ export function matchLine(raw: string, platform: PlatformStation[]): ScheduleLin
       name: direct?.name ?? raw,
       city: null,
       stationId: direct?.id ?? null,
-      score: direct ? 100 : 0,
+      score: direct ? 100 : (top?.score ?? 0),
     };
   }
 

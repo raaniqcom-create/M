@@ -15,6 +15,7 @@ import { useNativeApp } from '@/lib/useNativeApp';
 import { shareApp } from '@/lib/shareApp';
 import {
   BellRingIcon,
+  CalendarIcon,
   DownloadIcon,
   FuelIcon,
   InfoIcon,
@@ -247,6 +248,18 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                   accent
                 />
               )}
+
+              {/* «غداً» قبل «الآن» في هذا القسم عمداً: من يفتح القائمةَ مساءً
+                  يسأل عن الغد، ومن يسأل عن الآن يراه في الصفحة أمامه بلا
+                  قائمة. ويُعرض دائماً — الجدولُ يمتلئ كلَّ مساء، فليس بنداً
+                  فارغاً دائماً، والصفحةُ تقول «لا جدولَ بعد» بصدق. */}
+              <Item
+                href="/schedule"
+                icon={CalendarIcon}
+                title="محطات غداً"
+                note="أين يصل الوقود غداً — قبل أن يصل"
+                accent
+              />
 
               <Row
                 icon={FuelIcon}
