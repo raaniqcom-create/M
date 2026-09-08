@@ -2014,7 +2014,7 @@ async function publishSchedule(
     chat,
     `✅ نُشر جدولُ ${esc(productsLabel(d.lines))} — ${countWord(d.lines.length)}.${NL}` +
       (sent
-        ? `ووصل الإشعارُ إلى ${sent} مشتركاً.`
+        ? `📣 يخرج الإشعارُ إلى ${sent} مشتركاً.`
         : `⚠️ ولم يخرج الإشعار: ${esc(why)}${NL}أعِده بأمر /اشعار.`)
   );
 }
@@ -2297,7 +2297,7 @@ Deno.serve(async (req) => {
         await send(
           chat,
           sent
-            ? `📣 وصل الإشعارُ إلى ${sent} مشتركاً في ${esc(cities.join(' · '))}.`
+            ? `📣 يخرج الإشعارُ إلى ${sent} مشتركاً في ${esc(cities.join(' · '))}.`
             : `⚠️ لم يخرج الإشعار: ${esc(why)}`
         );
         return new Response('ok');

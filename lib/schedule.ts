@@ -207,6 +207,24 @@ export function parseSchedule(
  *  **الجغرافيا أوّلاً، والاسمُ احتياطاً** — وهو حكمُ `onPlatform` القائم في
  *  نموذج التسجيل، وحدُّ الخمسمئة متر مقيسٌ هناك لا مخمَّن: أبعدُ تطابقٍ صحيحٍ
  *  كان ٤٢٤ متراً وأقربُ خاطئٍ ٥٨٠. */
+/** كلماتُ اللهجة في أسماء المحطات ↤ فصيحُها.
+ *
+ *  القناةُ تكتب كما يتكلّم الناس: «الحبانية القديمة **يم** سيطرة الخالدية».
+ *  و«يم» عراقيّةٌ بمعنى «عند»، تُقرأ في الجدول المنشور فتبدو خطأً مطبعيّاً.
+ *  فتُبدَّل كلمةً بكلمة — لا داخل الكلمات — ويبقى ما عداها كما وصل.
+ *
+ *  وهي أوّلُ ما يُصحَّح من اللهجة، ويطول الجدولُ كلَّما وقعت كلمةٌ أخرى. */
+const DIALECT: Record<string, string> = {
+  'يم': 'عند',
+};
+
+function fixDialect(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((w) => DIALECT[w] ?? w)
+    .join(' ');
+}
+
 /** ما تكتبه القناةُ ↤ الاسمُ الذي نعرفه.
  *
  *  القناةُ تكتب باللهجة وبأسماءِ المعالم: «السريع البو ريشه» هي عند الناس
@@ -305,7 +323,7 @@ export function matchLine(
     const direct = byName();
     return {
       raw,
-      name: direct?.name ?? raw,
+      name: direct?.name ?? fixDialect(raw),
       // ولو لم يُطابَق اسمٌ، فقد تكون المنطقةُ مكتوبةً في السطر نفسِه.
       city: cityInText(raw),
       stationId: direct?.id ?? null,
@@ -325,7 +343,7 @@ export function matchLine(
 
   return {
     raw,
-    name: near?.name ?? n,
+    name: near?.name ?? fixDialect(n),
     city: c || cityInText(raw),
     stationId: near?.id ?? null,
     score: hit.score,

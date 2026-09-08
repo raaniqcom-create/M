@@ -229,7 +229,27 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── الإرسالُ يبدأ، والردُّ لا ينتظره ────────────────────────────────
+  //
+  // **قُتل العاملُ مرّةً وهو يُرسل.** سبعةُ آلاف دفعةٍ إلى APNs وFCM وwebpush
+  // في `Promise.allSettled` واحدة، والدالّةُ تنتظرها كلَّها قبل أن تردّ —
+  // فردّت المنصّةُ 546 WORKER_RESOURCE_LIMIT. والإشعارُ **وصل** فعلاً، لكنّ
+  // الردَّ لم يعد، فقال البوتُ لصاحب المنصّة «لم يخرج الإشعار»: خبرٌ كاذبٌ
+  // عن خبرٍ صحيح.
+  //
+  // فالجمهورُ يُحسب ويُختم أوّلاً — وهو ما يهمّ المُنادي — ثمّ يُردّ، ثمّ
+  // يُكمَل الإرسالُ في الخلفيّة بدفعاتٍ محدودة.
+  const CHUNK = 200;
+
+  async function inChunks<T>(items: T[], fn: (x: T) => Promise<void>) {
+    for (let i = 0; i < items.length; i += CHUNK) {
+      await Promise.allSettled(items.slice(i, i + CHUNK).map(fn));
+    }
+  }
+
   const results = { ok: 0, failed: 0, pruned: 0, errors: [] as string[] };
+
+  const deliver = async () => {
 
   const jwtApns = await apnsJwt();
   const topic = Deno.env.get('APNS_TOPIC') ?? 'online.muhta.app';
@@ -244,8 +264,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  await Promise.allSettled(
-    devices.map(async (d) => {
+  await inChunks(devices, async (d) => {
       try {
         if (d.platform === 'ios') {
           if (!jwtApns) throw new Error('APNs secrets missing');
@@ -298,8 +317,7 @@ Deno.serve(async (req) => {
         results.failed++;
         results.errors.push(String(e).slice(0, 70));
       }
-    })
-  );
+  });
 
   if (web.size) {
     webpush.setVapidDetails(
@@ -308,8 +326,7 @@ Deno.serve(async (req) => {
       Deno.env.get('VAPID_PRIVATE_KEY')!
     );
     const payload = JSON.stringify({ title, body: text, url });
-    await Promise.allSettled(
-      [...web.entries()].map(async ([endpoint, keys]) => {
+    await inChunks([...web.entries()], async ([endpoint, keys]) => {
         try {
           await webpush.sendNotification({ endpoint, keys }, payload);
           results.ok++;
@@ -324,9 +341,20 @@ Deno.serve(async (req) => {
             results.errors.push(`web ${code}`);
           }
         }
-      })
-    );
+    });
   }
 
-  return json({ ...results, audience, errors: results.errors.slice(0, 5) });
+  console.log('announce', JSON.stringify({ ...results, errors: results.errors.slice(0, 5) }));
+  };
+
+  // `EdgeRuntime.waitUntil` تُبقي العاملَ حيّاً بعد الردّ. وإن غابت — بيئةٌ
+  // أخرى أو نسخةٌ أقدم — يُنتظَر الإرسالُ كما كان، فالسلوكُ يتراجع ولا ينكسر.
+  const task = deliver();
+  const rt = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } })
+    .EdgeRuntime;
+  if (typeof rt?.waitUntil === 'function') rt.waitUntil(task);
+  else await task;
+
+  // `sending` لا `sent`: الردُّ يقول إنّ الإرسالَ بدأ ولمن — لا إنّه انتهى.
+  return json({ sending: true, audience });
 });

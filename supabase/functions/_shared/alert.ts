@@ -67,6 +67,9 @@ export async function sendScheduleAlert(
     } catch {
       return { sent: 0, why: `ردٌّ غيرُ مفهوم: ${raw.slice(0, 160)}` };
     }
+    // **الردُّ يقول «بدأ» لا «انتهى».** `announce` صار يردّ بعد حساب الجمهور
+    // وختمِه ثمّ يُكمل الإرسالَ في الخلفيّة — لأنّ انتظارَ سبعةِ آلاف دفعةٍ
+    // قتل العاملَ مرّةً فقيل «لم يخرج» وقد خرج ووصل.
     const sent = (audience.ios ?? 0) + (audience.android ?? 0) + (audience.web ?? 0);
     return { sent, why: sent ? '' : `الردُّ بلا جمهور: ${raw.slice(0, 160)}` };
   } catch (e) {
