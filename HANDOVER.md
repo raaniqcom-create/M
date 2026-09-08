@@ -36,12 +36,33 @@
   ولذلك يمرّ بـ `station-phone` لا بتحديث حقل.
 - **التصدير ساكن**: أي مسار ديناميكي يحتاج `generateStaticParams`. لذلك صفحة محطة الإدارة
   هي `/admin/station/?id=` لا `[id]`.
+- **شاشةُ السيارة لا تحسب «متوفّرٌ الآن»، بل تسألها.** القاعدةُ أربعةُ شروط
+  (`isOffered`)، ولها في المشروع ثلاثُ نسخ — `lib/hours.ts`، و`station_open_now`
+  في SQL، وثالثةٌ في بوت تلغرام **تتجاهل `temp_closed` وهي خطأٌ قائم**. فنسختا
+  Swift وJava كانتا ستجعلانها خمساً. لذلك `car_nearby` تردّ صفوفاً صادقةً وقتَ
+  ردّها، وشيفرةُ السيارة ترسم ولا تحكم.
+- **ولا Capacitor في مسار السيارة.** `CarPlaySceneDelegate` و`car/` في أندرويد
+  لا يستوردان الجسرَ ولا `MainActivity` ولا WebView. وليس ذلك أناقةً:
+  `SceneDelegate` يبني WebView، ولو وصل إليه مشهدُ السيارة لسقط التطبيقُ عند
+  الوصل؛ وفتحُ الهاتف من شاشة السيارة رفضٌ مؤكَّد في مراجعة Google.
 - **حقول الإدخال ١٦ بكسل على الأقل**: iOS يكبّر الصفحة عند التركيز على أصغر منها ولا يعيدها.
 
 ## أسرار — أين تعيش
 
 لا شيء منها في المستودع (عام). أسرار Supabase تُضبط بـ `supabase secrets set`،
 وأسرار GitHub بـ `scripts/set-gh-secret.py`.
+
+> **وخُرقت هذه القاعدة يوم ٢٠٢٦-٠٩-٠٨.** كتابُ قسم الدراسات
+> (`docs/anbar-oil/letter-studies.html` و`.pdf`، ويولّدهما
+> `scripts/build-studies-letter.mjs`) يحمل كلمةَ مرور حساب الفرع نصّاً صريحاً.
+> وقِيس: الملفُّ يُقرأ من `raw.githubusercontent.com` بلا توثيقٍ ويردّ ٢٠٠.
+> والعلاجُ شيئان معاً لأنّ التاريخ يحتفظ بها — تبديلُ الكلمة، وإخراجُ الملفّات
+> أو جعلُ المستودع خاصّاً — ولم يقع أيٌّ منهما بعد. وحدُّ الضرر: الحسابُ قراءةٌ
+> فقط ومجاميعُ بلا بيانات شخصيّة.
+>
+> والدرسُ مطبَّقٌ في `android/app/build.gradle`: عنوانُ Supabase ومفتاحُه العامّ
+> يُحقنان عند البناء من متغيّر بيئةٍ أو `local.properties`، ولا يُكتبان في المصدر
+> — ولو كانا عامَّين بطبعهما.
 
 `OTPIQ_API_KEY` · `APNS_KEY_ID` · `APNS_TEAM_ID` · `APNS_PRIVATE_KEY` · `APNS_TOPIC` ·
 `FIREBASE_SERVICE_ACCOUNT` · `TELEGRAM_BOT_TOKEN` · `TELEGRAM_ADMIN_IDS` · `PRE_LAUNCH`
@@ -73,6 +94,36 @@ GitHub: `APPSTORE_KEY_ID` · `APPSTORE_ISSUER_ID` · `APPSTORE_PRIVATE_KEY_B64` 
 - **الحزمة كانت universal** بلا لقطات iPad ولا تصميم لها → صارت للآيفون فقط.
 - **`status` بلا حماية في RLS**: أي صاحب حساب كان يستطيع نشر محطته فوراً بـ
   `status:'approved'`. الحل: مُشغِّل `stations_guard_trg`.
+
+
+## شاشات السيارات — أين وصلت
+
+**لا يعرض CarPlay ولا Android Auto صفحةَ ويب.** قوالبُ يرسمها النظام، تُغذّى
+بشيفرةٍ أصليّة. فقشرةُ Capacitor — وهي نافذةٌ على `muhta.online` — لا تظهر في
+السيارة بحال.
+
+| | |
+|---|---|
+| البيانات | `car_nearby(lat, lng, product, limit)` — نداءٌ واحد، ٢٬٧٥٠ بايت في ٠٫٤٣ ثانية مقابل ٨٢٬٥٧٧ تجلبها الصفحة الرئيسة |
+| أندرويد | `android/app/src/main/java/online/muhta/app/car/` — جافا لا كوتلن، وفئة `androidx.car.app.category.POI` |
+| iOS | `ios/App/App/CarPlaySceneDelegate.swift` + `CarData.swift`، وتفريقُ الدور في `AppDelegate` |
+| الأرقام المخفيّة | تبقى مخفيّة: `car_nearby` تنادي `station_phone_for` ولا تنسخها، ومعها حارسُ عشرة كيلومترات — **أضيقُ من الباب القائم لا أوسع**، ويُثبته `scripts/check-car-privacy.mjs` |
+| حارسُ النطاق | أبعدُ من ٣٠٠ كم من الأنبار ⇒ يُقاس من مركز الرمادي ويُكتب ذلك. لعراقيٍّ مغترب، ولمراجع متجرٍ لا يرى قائمةً فارغة |
+
+**وما لم يقع بعد:**
+
+- **تصريحُ Apple لم يُطلب** — النموذج على `developer.apple.com/contact/carplay/`
+  فئة **Fueling** (وليس في App Store Connect). ولا يُضاف
+  `com.apple.developer.carplay-fueling` إلى `App.entitlements` قبل الموافقة:
+  إضافتُه تمنع `-allowProvisioningUpdates` من إصدار تعريفٍ صالح فيسقط كلُّ بناءِ
+  TestFlight.
+- **وPlay لا يقبل إعلانَ Android Auto قبل رفع حزمةٍ فيها `CarAppService`** —
+  الترتيب: حزمة إلى مسار اختبار ← Advanced settings ← Form factors ← Android
+  Auto ← فئة POI ← لقطاتٌ **حقيقيّةٌ من DHU** (المصنوعةُ تُرفض) ← مراجعةُ سيّارات.
+- **ولم تُجرَّب على عتادٍ حقيقيّ**: لا JDK ولا Android SDK على جهاز التطوير،
+  والمسارُ الآليّ هو المصرِّف. يلزم DHU أو رأسٌ لاسلكيٌّ رخيص قبل أيّ تقديم.
+- ولا مساعدَ طريقٍ في السيارة — قرارُ صاحب المنصّة، والميزةُ نفسُها ما تزال
+  محجوبةً خلف `AdminOnly` في `app/road/page.tsx`.
 
 ## ما تبقّى
 
