@@ -61,9 +61,12 @@
     <!-- قوالبُ الخرائط في السيارة — يلزم لـPlaceListMapTemplate. -->
     <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
 
-    <!-- الشاشاتُ المدمَجة في السيارات (Google built-in): غيرُ مشروطة، فالتطبيق
-         تطبيقُ هاتفٍ أوّلاً ولا يُحجب عن أجهزةٍ بلا عتاد سيّارة. -->
-    <uses-feature
-        android:name="android.hardware.type.automotive"
-        android:required="false" />
+    <!-- ولا `android.hardware.type.automotive` هنا.
+         رفضت Play الحزمةَ صراحةً: «The app cannot declare
+         'android.hardware.type.automotive' device feature and
+         'com.google.android.gms.car.application' metadata at the same time».
+         والاثنان نظامان مختلفان لا وجهان لواحد: تلك الميزةُ تعني **Android
+         Automotive OS** — نظامُ سيّارةٍ مدمَجٌ يعمل التطبيقُ داخله؛ وهذه
+         البياناتُ تعني **Android Auto** — عرضٌ من الهاتف على شاشة السيارة.
+         والمطلوبُ الثاني، فتُحذف الأولى. -->
 </manifest>
