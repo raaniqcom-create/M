@@ -1,33 +1,26 @@
 'use client';
 
 import { PRODUCT_LABELS } from '@/lib/products';
+import { PERIOD_LABELS } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
-import { baghdadDate, type ScheduleGroup, type ScheduleRow } from '@/lib/scheduleData';
+import { baghdadDate, type BoardGroup, type BoardRow } from '@/lib/scheduleData';
 
-/** «محطات غداً» — الخبرُ الوحيد الذي يُقال قبل وقوعه.
+/** جدولُ الوقود — الخبرُ الوحيد الذي يُقال قبل وقوعه.
  *
- *  وكلُّ ما عداه في هذه المنصّة يصف الحاضر: أين الوقودُ الآن. وهذا يصف الغد،
- *  فيُكتب بلفظٍ آخر ويُحاط بتحفّظٍ آخر.
+ *  وكلُّ ما عداه في هذه المنصّة يصف الحاضر: أين الوقودُ الآن. وهذا يصف ما
+ *  سيصل، فيُكتب بلفظٍ آخر ويُحاط بتحفّظٍ آخر.
  *
  *  ── جدولٌ لكلّ منطقة، ولو بمحطةٍ واحدة ───────────────────────────────────
  *
  *  قرارُ صاحب المنصّة: من يسكن الرمادي يقرأ جدولَ الرمادي كاملاً — بمنتجاته
- *  كلِّها — ثمّ يجد جدولَ الخالدية تحته مستقلّاً، ولو لم يكن فيه إلا محطة.
- *  والمنتجُ عمودٌ لا عنوان: ليلةٌ فيها واحدةٌ على المحسّن وسبعٌ على العادي
- *  خبرٌ واحدٌ لا خبران.
+ *  كلِّها — ثمّ يجد جدولَ الخالدية تحته مستقلّاً. والمنتجُ عمودٌ لا عنوان.
  *
- *  ── والاسمُ يُكتب كاملاً ولو نزل سطرين ──────────────────────────────────
+ *  ── ومحطاتُ المنصّة أوّلاً، وحالتُها حيّة ────────────────────────────────
  *
- *  «محطة تعبئة وقود الرمادي الجديد…» ليست اسمَ محطة. والقصُّ يوفّر سطراً
- *  ويُتلف الخبرَ: من لا يعرف أيَّ محطةٍ قُصدت لا ينتفع بالجدول أصلاً. ومعه
- *  الاسمُ كما وصل حين يختلف — به يعرف القارئُ ما اعتاده في الشارع، وبه يُكشف
- *  خطأُ المطابقة إن أخطأت.
- *
- *  ── والمعتمدةُ تُميَّز عن غيرها ──────────────────────────────────────────
- *
- *  محطةٌ معتمدةٌ لها صفحةٌ وصاحبٌ يُحدّثها ورقمٌ يُتّصل به. وغيرُ المسجّلة اسمٌ
- *  وردنا، لا نملك عنه إلا ما وصل. والفرقُ يُقال صراحةً — وهو تمييزُ
- *  `UnregisteredBoard` نفسُه، بلفظٍ يناسب خبراً عن الغد لا عن الآن. */
+ *  محطةٌ في المنصّة لها صفحةٌ وصاحبٌ يُحدّثها: وعدُها يصير «وصل ✓» بضغطةٍ منه،
+ *  وإن نفد بقي السطرُ مكتوباً عليه «نفد» ولم يُمحَ — فمن قرأ الجدولَ صباحاً
+ *  يعرف لماذا اختفت، ولا يظنّ المنصّةَ كذبت. وغيرُها اسمٌ وردنا في الجدول
+ *  المنشور، لا نملك عنه إلا ما وصل. */
 
 function dayLabel(iso: string): string {
   if (iso === baghdadDate()) return 'اليوم';
@@ -40,54 +33,68 @@ function dayLabel(iso: string): string {
   });
 }
 
-function Row({ r }: { r: ScheduleRow }) {
-  const name = r.linked_station_id ? (
+const STATE = {
+  arrived: { text: 'وصل ✓', cls: 'bg-brand-50 text-brand-700' },
+  expected: { text: 'متوقّع', cls: 'bg-amber-50 text-amber-700' },
+  out: { text: 'نفد', cls: 'bg-slate-100 text-slate-500' },
+} as const;
+
+function Row({ r }: { r: BoardRow }) {
+  const s = STATE[r.state];
+  const dim = r.state === 'out';
+
+  const name = r.stationId ? (
     <a
-      href={`/station/${r.linked_station_id}`}
-      className="font-bold text-brand-900 underline-offset-2 hover:underline"
+      href={`/station/${r.stationId}`}
+      className={`font-bold underline-offset-2 hover:underline ${
+        dim ? 'text-slate-400 line-through' : 'text-brand-900'
+      }`}
     >
-      {r.station_name}
+      {r.name}
     </a>
   ) : (
-    <span className="font-bold text-slate-700">{r.station_name}</span>
+    <span className={`font-bold ${dim ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+      {r.name}
+    </span>
   );
 
   return (
     <tr className="border-t border-slate-100 align-top">
       <td className="py-2.5 pl-2 text-[12.5px] leading-snug">
         {name}
-        {r.raw_name && r.raw_name !== r.station_name && (
-          <span className="mt-0.5 block text-[10.5px] text-slate-400">
-            وردت باسم: {r.raw_name}
+        {r.period && r.state === 'expected' && (
+          <span className="mr-1.5 text-[10.5px] text-amber-700">
+            {' '}
+            · {PERIOD_LABELS[r.period]}
           </span>
         )}
-        {r.note && <span className="mt-0.5 block text-[10.5px] text-amber-700">{r.note}</span>}
+        {r.source === 'station' ? (
+          <span className="mt-0.5 block text-[10.5px] text-brand-700">
+            من لوحة المحطة{r.alsoInChannel ? ' وجدول التوزيع' : ''}
+          </span>
+        ) : (
+          <span className="mt-0.5 block text-[10.5px] text-slate-400">من جدول التوزيع</span>
+        )}
       </td>
       <td className="w-[5.6rem] py-2.5 pl-2 text-[11.5px] font-bold text-brand-700">
         {PRODUCT_LABELS[r.product]}
       </td>
-      <td className="w-[5.4rem] py-2.5 text-left">
-        {r.linked_station_id ? (
-          <span className="inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700">
-            معتمدة
-          </span>
-        ) : (
-          <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
-            غير مسجّلة
-          </span>
-        )}
+      <td className="w-[4.8rem] py-2.5 text-left">
+        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${s.cls}`}>
+          {s.text}
+        </span>
       </td>
     </tr>
   );
 }
 
-export function ScheduleBoard({ groups }: { groups: ScheduleGroup[] }) {
+export function ScheduleBoard({ groups, day }: { groups: BoardGroup[]; day: string }) {
   if (!groups.length) {
     return (
       <div className="card p-8 text-center">
-        <p className="text-sm text-slate-600">لا جدولَ لغدٍ بعد.</p>
+        <p className="text-sm text-slate-600">لا جدولَ {dayLabel(day)} بعد.</p>
         <p className="mt-2 text-[11.5px] leading-relaxed text-slate-400">
-          يصل الجدولُ عادةً بعد الثامنة مساءً.
+          يصل الجدولُ عادةً بعد التاسعة مساءً.
         </p>
         <a href="/alerts" className="btn-ghost mt-4 inline-flex px-6">
           فعّل التنبيهات ليصلك أوّلَ ما يصل
@@ -99,9 +106,9 @@ export function ScheduleBoard({ groups }: { groups: ScheduleGroup[] }) {
   return (
     <div className="space-y-4">
       {groups.map((g) => (
-        <section key={`${g.for_date}|${g.city ?? '؟'}`} className="card overflow-x-auto p-4">
+        <section key={g.city ?? '؟'} className="card overflow-x-auto p-4">
           <h2 className="text-sm font-extrabold leading-relaxed text-brand-900">
-            المحطات التي يصلها وقود {dayLabel(g.for_date)}
+            المحطات التي يصلها وقود {dayLabel(day)}
             {g.city ? ` — ${g.city}` : ' — منطقةٌ لم تُذكر'}
           </h2>
           <p className="mt-0.5 text-[11px] font-bold text-slate-500">
@@ -114,12 +121,12 @@ export function ScheduleBoard({ groups }: { groups: ScheduleGroup[] }) {
               <tr className="text-[10.5px] text-slate-400">
                 <th className="pb-1 pl-2 font-bold">المحطة</th>
                 <th className="pb-1 pl-2 font-bold">المنتج</th>
-                <th className="pb-1 text-left font-bold">في المنصّة</th>
+                <th className="pb-1 text-left font-bold">الحالة</th>
               </tr>
             </thead>
             <tbody>
               {g.rows.map((r) => (
-                <Row key={r.id} r={r} />
+                <Row key={r.key} r={r} />
               ))}
             </tbody>
           </table>
@@ -130,9 +137,9 @@ export function ScheduleBoard({ groups }: { groups: ScheduleGroup[] }) {
           وهو صادقٌ لا تجميليّ: الجدولُ خطّةٌ تُعلن قبل يوم، والخططُ تتغيّر —
           ومن يقطع الطريقَ بناءً عليه يستحقّ أن يعرف ذلك قبل أن يتحرّك. */}
       <p className="px-1 text-[11px] leading-relaxed text-slate-400">
-        جدولٌ مُعلَنٌ مسبقاً وقد يتغيّر. و<b className="text-brand-700">المعتمدة</b> محطاتٌ على
-        المنصّة تُحدّث توفّرها بنفسها — افتح صفحتها لترى حالتها الآن. و<b>غير المسجّلة</b> اسمٌ
-        وصلنا في الجدول، لا نملك عنه أكثر.
+        جدولٌ مُعلَنٌ مسبقاً وقد يتغيّر. و<b className="text-brand-700">محطاتُ المنصّة</b> تُحدّث
+        حالتَها بنفسها — افتح صفحتها لترى ما عندها الآن. وما جاء من{' '}
+        <b>جدول التوزيع</b> اسمٌ وصلنا، لا نملك عنه أكثر.
       </p>
     </div>
   );

@@ -2,14 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { PRODUCT_LABELS } from '@/lib/products';
+import { PERIOD_LABELS } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
 import { readChoice } from '@/lib/alerts';
 import { isDown, readStatus } from '@/lib/status';
+import { loadStations } from '@/lib/stations';
 import {
   baghdadDate,
-  groupSchedule,
+  boardDate,
+  buildBoard,
+  groupBoard,
   loadSchedule,
-  type ScheduleGroup,
+  type BoardGroup,
 } from '@/lib/scheduleData';
 
 const SEEN = 'tomorrow-seen';
@@ -22,44 +26,41 @@ const SEEN = 'tomorrow-seen';
  *  الغد: أين يذهب المواطنُ صباحاً، وهل يخرج أصلاً. وشريطٌ في أعلى صفحةٍ يُمرَّر
  *  عليه؛ وهذا يُقرأ مرّةً ويُغلق.
  *
- *  ── ومتى ────────────────────────────────────────────────────────────────
+ *  ── واليومُ الذي تعرضه ───────────────────────────────────────────────────
  *
- *  يومان لا يومٌ واحد، ولكلٍّ بوّابتُه:
+ *  `boardDate()` — بعد التاسعة مساءً الغد، وما دونها اليوم. وهي القاعدةُ
+ *  نفسُها في `/schedule`، فلا يقرأ سطحان يومين.
  *
- *  **جدولُ الغد** يُعرض بعد الثامنة مساءً. وقِيس أنّ القناةَ تنشر نحوَ الحاديةَ
- *  عشرةَ والنصف ليلاً بتوقيت بغداد — لا الثامنة والنصف كما ظُنَّ أوّلاً: طوابعُ
- *  صفحة القناة بتوقيت UTC، فقُرئت كأنّها بغداديّة وأخطأت بثلاث ساعات. فالبوّابةُ
- *  لا تؤخّر شيئاً، وتمنع نشراً نهاريّاً أن يفاجئ أحداً في وسط يومه.
- *
- *  **وجدولُ اليوم يُعرض في أيّ ساعة** — بلا بوّابة. لأنّ منشورَ الليلة يُحوَّل
- *  أحياناً بعد منتصف الليل، فيصير «غدُه» يومَنا هذا؛ وبوّابةُ المساء كانت
- *  ستُخفي خبرَ اليوم عن نهاره كلِّه ثمّ تعرضه حين لا ينفع.
+ *  ولها بوّابةٌ واحدة: **جدولُ الغد** لا يُعرض قبل الثامنة مساءً كي لا يفاجئ
+ *  نشرٌ نهاريٌّ أحداً في وسط يومه. و**جدولُ اليوم يُعرض في أيّ ساعة** — فخبرُ
+ *  اليوم لا ينفع بعد انقضائه.
  *
  *  ── ولا عدّادَ ينصرف به ──────────────────────────────────────────────────
  *
- *  كان فيها عدّادُ خمسِ ثوانٍ يُغلقها وحدَه، كما في `SiteNotice`. وقرارُ صاحب
- *  المنصّة رفعُه: الإنذارُ يُقرأ في ثانية، وهذا **جدولٌ يُقرأ بالإصبع** —
- *  وقارئٌ يبحث عن اسم ناحيته لا يُنتزع منه بعدّاد. فتبقى حتى يُغلقها هو.
+ *  كان فيها عدّادُ خمسِ ثوانٍ يُغلقها وحدَه. وقرارُ صاحب المنصّة رفعُه:
+ *  الإنذارُ يُقرأ في ثانية، وهذا **جدولٌ يُقرأ بالإصبع** — وقارئٌ يبحث عن اسم
+ *  منطقته لا يُنتزع منه بعدّاد. فتبقى حتى يُغلقها هو.
  *
  *  ── ومرّةً في كلّ فتحةِ تطبيق ────────────────────────────────────────────
  *
- *  `sessionStorage` بمفتاحٍ يحمل تاريخَ الجدول ونواحيَه: فمن أغلق التطبيقَ
- *  وفتحه رآها، ومن تنقّل بين صفحتين لم يُحبَس مرّتين، وجدولٌ جديدٌ يُعرض ولو
- *  في الجلسة نفسِها. النمطُ نفسُه في `SiteNotice`.
+ *  `sessionStorage` بمفتاحٍ يحمل اليومَ ومناطقَه: فمن أغلق التطبيقَ وفتحه رآها،
+ *  ومن تنقّل بين صفحتين لم يُحبَس مرّتين، وجدولٌ جديدٌ يُعرض ولو في الجلسة
+ *  نفسِها.
  *
  *  ── والواقعُ يسبق الخبرَ عنه ─────────────────────────────────────────────
  *
- *  إن كانت المنصّةُ في صيانةٍ فلا تُعرض: شاشتان معاً عبثٌ، والصيانةُ أولى.
- *  وشاشةُ الصيانة `z-[90]` فوقها على كلّ حال، فلو أُعلنت الصيانةُ والجدولُ
- *  مفتوحٌ غطّته. */
+ *  إن كانت المنصّةُ في صيانةٍ فلا تُعرض، وشاشةُ الصيانة `z-[90]` فوقها. */
 const HOUR_FLOOR = 20;
 
 /** منطقتان على الأكثر في الشاشة. والثالثةُ فما فوق في «الجدول كاملاً» —
  *  شاشةٌ تُملأ بستّ مناطق ليست خبراً بل حاجز. */
 const MAX_GROUPS = 2;
 
+const MARK = { arrived: '✓', expected: '', out: 'نفد' } as const;
+
 export function TomorrowScreen() {
-  const [groups, setGroups] = useState<ScheduleGroup[] | null>(null);
+  const [groups, setGroups] = useState<BoardGroup[] | null>(null);
+  const [day, setDay] = useState('');
   const [more, setMore] = useState(0);
   const [open, setOpen] = useState(false);
 
@@ -72,13 +73,7 @@ export function TomorrowScreen() {
         const status = await readStatus();
         if (!alive || isDown(status)) return;
 
-        const rows = await loadSchedule();
-        if (!alive || !rows.length) return;
-
-        const choice = readChoice();
-        const myCities = new Set(choice?.cities ?? []);
-        const myProducts = new Set<string>(choice?.products ?? []);
-
+        const target = boardDate();
         const hour = Number(
           new Date().toLocaleString('en-US', {
             timeZone: 'Asia/Baghdad',
@@ -86,45 +81,30 @@ export function TomorrowScreen() {
             hour12: false,
           })
         );
+        // جدولُ الغد ينتظر المساء؛ وجدولُ اليوم لا ينتظر شيئاً.
+        if (target !== baghdadDate() && hour < HOUR_FLOOR) return;
 
-        const today = baghdadDate();
-        // اليومُ أولى بالعرض من الغد: خبرٌ يقع بعد ساعاتٍ أقربُ من خبرٍ يقع غداً.
-        const day = rows.some((r) => r.for_date === today)
-          ? today
-          : hour >= HOUR_FLOOR
-            ? baghdadDate(1)
-            : null;
-        if (!day) return;
+        const [schedule, stations] = await Promise.all([loadSchedule(), loadStations()]);
+        if (!alive) return;
 
-        let mine = groupSchedule(
-          rows.filter((r) => r.for_date === day),
-          choice?.cities ?? []
-        );
+        const choice = readChoice();
+        const myCities = new Set(choice?.cities ?? []);
+        const myProducts = new Set<string>(choice?.products ?? []);
 
+        let rows = buildBoard(schedule, stations, target);
         // ── والشاشةُ تتبع الإشعارَ حرفيّاً ──────────────────────────────
         //
-        // إشعارُ النشر يمرّ بـ`alerts_for` فلا يصل إلا من اختار تلك الناحية
-        // وذلك الوقود — قِيس: جدولُ الرمادي بلغ ٤٬٩٥٨ شخصاً، منهم ٤٬٩٣٥
-        // اختاروا الرمادي و٢٣ اختاروا «كلَّ المدن»، ولا واحدَ ممّن اختار
-        // غيرَها. فلو ظهرت الشاشةُ للجميع لَناقضت الإشعارَ على الجهاز نفسِه.
+        // إشعارُ النشر يمرّ بـ`alerts_for` فلا يصل إلا من اختار تلك المنطقة
+        // وذلك الوقود. فلو ظهرت الشاشةُ للجميع لَناقضت الإشعارَ على الجهاز
+        // نفسِه: مَن في القائم لا يُشعَر بجدول الرمادي ثمّ يُحبَس خلفه.
         //
-        // ومن لم يختر شيئاً يرى كلَّ شيء: لم يقل لنا ما يعنيه، وحجبُ الكلّ عنه
-        // يتركه بلا خبر. والناحيةُ المجهولةُ تُحجب عمّن اختار نواحيَه — لا
-        // تُنسب إليه بلا سند — وتبقى في «الجدول كاملاً».
-        if (myProducts.size) {
-          mine = mine
-            .map((g) => {
-              const kept = g.rows.filter((r) => myProducts.has(r.product));
-              return { ...g, rows: kept, products: [...new Set(kept.map((r) => r.product))] };
-            })
-            .filter((g) => g.rows.length > 0);
-        }
-        if (myCities.size) {
-          mine = mine.filter((g) => g.city && myCities.has(g.city));
-        }
-        if (!alive || !mine.length) return;
+        // ومن لم يختر شيئاً يرى كلَّ شيء: لم يقل لنا ما يعنيه.
+        if (myProducts.size) rows = rows.filter((r) => myProducts.has(r.product));
+        if (myCities.size) rows = rows.filter((r) => r.city && myCities.has(r.city));
+        if (!rows.length) return;
 
-        const key = `${day}|${mine.map((g) => g.city ?? '؟').join(',')}`;
+        const mine = groupBoard(rows, choice?.cities ?? []);
+        const key = `${target}|${mine.map((g) => g.city ?? '؟').join(',')}`;
         try {
           if (sessionStorage.getItem(SEEN) === key) return;
           sessionStorage.setItem(SEEN, key);
@@ -134,6 +114,7 @@ export function TomorrowScreen() {
 
         setGroups(mine.slice(0, MAX_GROUPS));
         setMore(mine.slice(MAX_GROUPS).reduce((n, g) => n + g.rows.length, 0));
+        setDay(target);
         setOpen(true);
       } catch {
         /* الشاشةُ ترفٌ: فشلُ جلبها لا يُظهر خطأً لأحد */
@@ -146,7 +127,7 @@ export function TomorrowScreen() {
 
   if (!groups || !open) return null;
 
-  const when = groups[0].for_date === baghdadDate() ? 'اليوم' : 'غداً';
+  const when = day === baghdadDate() ? 'اليوم' : 'غداً';
 
   return (
     <div
@@ -160,8 +141,7 @@ export function TomorrowScreen() {
        *  كانت `justify-center` و`overflow-y-auto` على العنصر نفسِه، وهي عقدةٌ
        *  معروفة: حين يفيض المحتوى يخرج نصفُ الفائض فوق حافّة التمرير — فلا
        *  يُبلَغ بسحبٍ ولا بغيره. أي أنّ جدولاً طويلاً، أو خطَّ نظامٍ مكبَّراً، أو
-       *  هاتفاً قصيراً، كان يبتلع الشعارَ وسطرَ العنوان، فيبدأ القارئُ من وسط
-       *  أسماءٍ بلا عنوانٍ يقول ما هي. */}
+       *  هاتفاً قصيراً، كان يبتلع الشعارَ وسطرَ العنوان. */}
       <div className="flex min-h-full flex-col items-center justify-center px-5 py-8">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -178,10 +158,7 @@ export function TomorrowScreen() {
 
         <div className="mt-5 w-full max-w-[21rem] space-y-3">
           {groups.map((g) => (
-            <section
-              key={`${g.for_date}|${g.city ?? '؟'}`}
-              className="rounded-2xl bg-white/12 p-3 text-right"
-            >
+            <section key={g.city ?? '؟'} className="rounded-2xl bg-white/12 p-3 text-right">
               <h2 className="text-[12.5px] font-extrabold">
                 {g.city ?? 'منطقةٌ لم تُذكر'}
                 <span className="mr-1.5 text-[10.5px] font-bold text-white/60">
@@ -192,15 +169,23 @@ export function TomorrowScreen() {
               <table className="mt-1.5 w-full text-right">
                 <tbody>
                   {g.rows.map((r) => (
-                    <tr key={r.id} className="border-t border-white/10 align-top">
-                      {/* الاسمُ كاملاً ولو نزل سطرين — لا قصَّ بثلاث نقاط.
-                          «محطة تعبئة وقود الرمادي الجديد…» ليست اسمَ محطة،
-                          ومن لا يعرف أيَّ محطةٍ قُصدت لا ينتفع بالجدول. */}
-                      <td className="py-1.5 pl-2 text-[12px] font-bold leading-snug">
-                        {r.station_name}
-                        {r.linked_station_id && (
+                    <tr key={r.key} className="border-t border-white/10 align-top">
+                      {/* الاسمُ كاملاً ولو نزل سطرين — لا قصَّ بثلاث نقاط. */}
+                      <td
+                        className={`py-1.5 pl-2 text-[12px] font-bold leading-snug ${
+                          r.state === 'out' ? 'text-white/45 line-through' : ''
+                        }`}
+                      >
+                        {r.name}
+                        {r.source === 'station' && (
                           <span className="mr-1 inline-block rounded-full bg-white/20 px-1.5 align-middle text-[9px] font-bold">
-                            معتمدة
+                            المنصّة {MARK[r.state]}
+                          </span>
+                        )}
+                        {r.period && r.state === 'expected' && (
+                          <span className="mr-1.5 text-[10px] text-white/60">
+                            {' '}
+                            · {PERIOD_LABELS[r.period]}
                           </span>
                         )}
                       </td>

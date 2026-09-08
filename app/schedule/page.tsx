@@ -5,35 +5,47 @@ import { ScheduleBoard } from '@/components/ScheduleBoard';
 import { SpinnerIcon, FuelIcon } from '@/components/icons';
 import { readFailure } from '@/lib/fn';
 import { readChoice } from '@/lib/alerts';
+import { loadStations } from '@/lib/stations';
 import {
   baghdadDate,
-  groupSchedule,
+  boardDate,
+  buildBoard,
+  groupBoard,
   loadSchedule,
-  type ScheduleGroup,
+  type BoardGroup,
 } from '@/lib/scheduleData';
 
-/** صفحةُ «محطات غداً».
+/** صفحةُ جدول الوقود.
  *
  *  صفحةٌ لا مرشِّح: الجدولُ كائنٌ آخر لا حالةٌ أخرى للقائمة — له يومٌ ووقودٌ
- *  ومحطاتٌ قد لا تكون على المنصّة أصلاً. ولو حُشر في الرئيسة لَنازع سؤالَها. */
+ *  ومحطاتٌ قد لا تكون على المنصّة أصلاً. ولو حُشر في الرئيسة لَنازع سؤالَها.
+ *
+ *  ── ومصدران لا مصدر ─────────────────────────────────────────────────────
+ *
+ *  ما يُنشر من تلغرام، وما تعلنه محطاتُ المنصّة في لوحاتها. والثاني كان
+ *  مكتوباً في القاعدة منذ زمنٍ ولا يقرؤه هذا الجدول. */
 export default function SchedulePage() {
-  const [groups, setGroups] = useState<ScheduleGroup[] | null>(null);
+  const [groups, setGroups] = useState<BoardGroup[] | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const day = boardDate();
 
   useEffect(() => {
     void (async () => {
       try {
-        // نواحي القارئ ترتفع ولا يُحجب غيرُها: من فتح هذه الصفحة فتحها بنفسه،
-        // فيرى الأنبارَ كلَّها — لكنّ ناحيتَه أوّلاً. والحجبُ قرارُ الشاشة
-        // المسائيّة لا قرارُ الصفحة.
-        setGroups(groupSchedule(await loadSchedule(), readChoice()?.cities ?? []));
+        // نداءان متوازيان: الجدولُ المنشور، ولوحاتُ المحطات. والثاني هو
+        // `loadStations` نفسُها التي تناديها الصفحةُ الرئيسة — بلا استعلامٍ
+        // جديدٍ ولا دالّةِ قاعدة.
+        const [schedule, stations] = await Promise.all([loadSchedule(), loadStations()]);
+        setGroups(groupBoard(buildBoard(schedule, stations, day), readChoice()?.cities ?? []));
       } catch (e) {
-        // والفشلُ ليس فراغاً: «لا جدولَ لغد» و«تعذّر الجلب» خبران مختلفان،
+        // والفشلُ ليس فراغاً: «لا جدولَ بعد» و«تعذّر الجلب» خبران مختلفان،
         // وخلطُهما يجعل انقطاعَ الشبكة يبدو خبراً عن الوقود.
         setFailed(readFailure(e));
       }
     })();
-  }, []);
+  }, [day]);
+
+  const title = day === baghdadDate() ? 'محطات اليوم' : 'محطات غداً';
 
   return (
     <main className="mx-auto max-w-md px-4 pb-16 pt-6">
@@ -42,13 +54,11 @@ export default function SchedulePage() {
         <span className="text-lg font-extrabold">المحطة التقنية</span>
       </a>
 
-      <h1 className="text-center text-xl font-extrabold">محطات غداً</h1>
-      {/* العنوانُ اسمُ الصفحة فلا يتبدّل، والسطرُ تحته يصف ما فيها فعلاً:
-          منشورُ الليلة يُحوَّل أحياناً بعد منتصف الليل فيصير جدولَ اليوم،
-          وصفحةٌ تقول «غداً» وفيها جدولُ اليوم تكذب على قارئها. */}
+      {/* العنوانُ يتبع الساعة: بعد التاسعة مساءً «غداً»، وما دونها «اليوم».
+          فمن يفتحها ظهراً لا يقرأ عنواناً عن يومٍ لم يأتِ والوقودُ يصل الآن. */}
+      <h1 className="text-center text-xl font-extrabold">{title}</h1>
       <p className="mt-1 text-center text-[12px] leading-relaxed text-slate-500">
-        أين يصل الوقود {groups?.some((g) => g.for_date === baghdadDate()) ? 'اليوم وغداً' : 'غداً'} —
-        قبل أن يصل
+        أين يصل الوقود — قبل أن يصل
       </p>
 
       <div className="mt-5">
@@ -71,7 +81,7 @@ export default function SchedulePage() {
           </div>
         )}
 
-        {groups && <ScheduleBoard groups={groups} />}
+        {groups && <ScheduleBoard groups={groups} day={day} />}
       </div>
 
       <a href="/" className="btn-ghost mt-6 w-full text-center">

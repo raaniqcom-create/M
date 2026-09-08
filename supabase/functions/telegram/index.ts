@@ -1935,6 +1935,75 @@ async function editRoute(chat: number, userId: number, data: string, msgId?: num
   }
 }
 
+/** يكتب «متوقَّع» في لوحات المحطات المسجّلة، ويُشعر أصحابَها. */
+async function linkBack(chat: number, lines: ScheduleLine[], forDate: string) {
+  const linked = lines.filter((l) => l.stationId);
+  if (!linked.length) return;
+
+  const ids = [...new Set(linked.map((l) => l.stationId as string))];
+  const { data: cur } = await db
+    .from('station_products')
+    .select('station_id, product, expected_at')
+    .in('station_id', ids);
+
+  const have = new Map(
+    (cur ?? []).map((r) => [`${r.station_id}|${r.product}`, r.expected_at as string | null])
+  );
+
+  let written = 0;
+  for (const l of linked) {
+    const key = `${l.stationId}|${l.product}`;
+    const mine = have.get(key);
+    if (mine && mine >= forDate) continue;
+
+    // تحديثٌ لا upsert: الإدراجُ بمفتاحٍ متعارضٍ يكتب `is_available` افتراضيّاً
+    // فيُطفئ منتجاً متوفّراً. فما وُجد يُحدَّث، وما لم يوجد يُدرَج مطفأً.
+    const res = have.has(key)
+      ? await db
+          .from('station_products')
+          .update({ expected_at: forDate })
+          .eq('station_id', l.stationId!)
+          .eq('product', l.product)
+      : await db
+          .from('station_products')
+          .insert({
+            station_id: l.stationId,
+            product: l.product,
+            is_available: false,
+            expected_at: forDate,
+          });
+    if (res.error) console.error('linkBack', res.error.message);
+    else written++;
+  }
+
+  // ثمّ يُخبَر أصحابُها — من ربط محطتَه بالبوت. وفشلُ الرسالة لا يمسّ ما كُتب.
+  const { data: links } = await db
+    .from('telegram_links')
+    .select('telegram_id, station_id')
+    .in('station_id', ids);
+
+  const when = forDate === baghdadDay() ? 'اليوم' : 'غداً';
+  for (const link of links ?? []) {
+    const mine = linked.filter((l) => l.stationId === link.station_id);
+    if (!mine.length) continue;
+    const what = [...new Set(mine.map((l) => PRODUCT_LABELS[l.product] ?? l.product))].join(' و');
+    await send(
+      link.telegram_id,
+      `📋 ورد في جدول ${when} أنّ عندكم <b>${esc(what)}</b>.${NL}` +
+        `سجّلناه في لوحتك «متوقَّعاً» — وحين يصل فعلاً فعّله من اللوحة ليظهر للناس.`,
+      {
+        reply_markup: {
+          inline_keyboard: [[{ text: '🏪 افتح لوحتي', callback_data: 'manage' }]],
+        },
+      }
+    ).catch(() => {});
+  }
+
+  if (written) {
+    await send(chat, `📋 كُتب «متوقَّع» في لوحة ${written} محطةٍ مسجّلة.`);
+  }
+}
+
 async function publishSchedule(
   chat: number,
   userId: number,
@@ -1979,6 +2048,16 @@ async function publishSchedule(
     return;
   }
   await answer(queryId, 'نُشر ✅');
+
+  // ── والخبرُ يعود إلى لوحة المحطة ────────────────────────────────────────
+  //
+  // طلبُ صاحب المنصّة: «إذا عن طريق التليغرام ينشر ويحدّث بلوحتهم». فمحطةٌ
+  // مسجّلةٌ ورد اسمُها في الجدول يُكتب في لوحتها «متوقَّع» لذلك اليوم — فيراه
+  // صاحبُها ويؤكّده بضغطة، وعندها يصير سطرُه في الجدول «وصل ✓» وحدَه.
+  //
+  // **ولا يُمحى وعدٌ كتبه هو.** إن كان في لوحته موعدٌ أحدثُ أو مساوٍ تُرك،
+  // فادّعاؤه عن محطته أولى من خبرٍ عنها.
+  await linkBack(chat, d.lines, for_date);
 
   const when = for_date === baghdadDay() ? 'اليوم' : 'غداً';
 

@@ -7,7 +7,14 @@ import { BranchBoard } from '@/components/BranchBoard';
 import { BranchStats } from '@/components/BranchStats';
 import { ScheduleBoard } from '@/components/ScheduleBoard';
 import { SpinnerIcon } from '@/components/icons';
-import { groupSchedule, loadSchedule, type ScheduleGroup } from '@/lib/scheduleData';
+import { loadStations } from '@/lib/stations';
+import {
+  boardDate,
+  buildBoard,
+  groupBoard,
+  loadSchedule,
+  type BoardGroup,
+} from '@/lib/scheduleData';
 
 /** لوحةُ فرع شركة توزيع المنتجات النفطية — الوعدُ الذي في الكتاب، مُنجَزاً.
  *
@@ -55,18 +62,21 @@ const TABS: { id: Tab; label: string }[] = [
  *  ولا دالّةَ خاصّةً بالفرع: الجدولُ منشورٌ للناس كلِّهم، فمصدرٌ ثانٍ له كان
  *  سيسمح بأن يفترقا. */
 function BranchSchedule() {
-  const [groups, setGroups] = useState<ScheduleGroup[] | null>(null);
+  const [groups, setGroups] = useState<BoardGroup[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const day = boardDate();
 
   useEffect(() => {
     void (async () => {
       try {
-        setGroups(groupSchedule(await loadSchedule()));
+        const [schedule, stations] = await Promise.all([loadSchedule(), loadStations()]);
+        // ولا ترتيبَ بمناطق أحد: الفرعُ يقرأ الأنبار كلَّها بلا تفضيل.
+        setGroups(groupBoard(buildBoard(schedule, stations, day), []));
       } catch {
         setFailed(true);
       }
     })();
-  }, []);
+  }, [day]);
 
   if (failed) {
     return (
@@ -82,7 +92,7 @@ function BranchSchedule() {
       </div>
     );
   }
-  return <ScheduleBoard groups={groups} />;
+  return <ScheduleBoard groups={groups} day={day} />;
 }
 export default function BranchPage() {
   const router = useRouter();

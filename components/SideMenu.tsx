@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ComponentType } from 'react';
+import { baghdadDate, boardDate } from '@/lib/scheduleData';
 import {
   getTone,
   isMuted,
@@ -256,8 +257,8 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
               <Item
                 href="/schedule"
                 icon={CalendarIcon}
-                title="محطات غداً"
-                note="أين يصل الوقود غداً — قبل أن يصل"
+                title={boardDate() === baghdadDate() ? 'محطات اليوم' : 'محطات غداً'}
+                note="أين يصل الوقود — قبل أن يصل"
                 accent
               />
 
