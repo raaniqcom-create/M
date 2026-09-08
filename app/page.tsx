@@ -189,8 +189,14 @@ export default function HomePage() {
     // الفشل الذي أُنشئ مرّةً واحدةً مع التأثير، فقراءةُ state هناك تُرجع قيمةَ
     // أوّل رسمٍ إلى الأبد.
     const okAt = { current: null as string | null };
+    // **وساعةٌ ثانيةٌ للمحاولة لا للنجاح.** `okAt` تُكتب في فرع النجاح وحدَه،
+    // فهي المقياسُ الصحيح لِما يُعرض للناس («البيانات من قبل ساعة») والمقياسُ
+    // الخاطئُ تماماً لكبح الطلبات: يومَ تسقط القاعدةُ لا نجاحَ يقع، فتبقى
+    // صفراً، فيمرّ كلُّ كبحٍ مبنيٍّ عليها. انظر `.subscribe` أدناه.
+    const triedAt = { current: 0 };
 
-    const refresh = () =>
+    const refresh = () => (
+      (triedAt.current = Date.now()),
       withDeadline(loadStations(), 15000)
         .then((rows) => {
           setStations(rows);
@@ -222,7 +228,8 @@ export default function HomePage() {
             setStations(snap.rows);
             setStaleAt(snap.at);
           }
-        });
+        })
+    );
 
     refresh();
 
@@ -308,8 +315,15 @@ export default function HomePage() {
         if (status === 'SUBSCRIBED' && failedRef.current) {
           refresh();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          const last = okAt.current ? Date.parse(okAt.current) : 0;
-          if (Date.now() - last >= DEAF_POLL_MS) refresh();
+          // **بآخر محاولةٍ لا بآخر نجاح.** كُتب هذا أوّلاً على `okAt`، وهو
+          // كبحٌ يعمل وقتَ الصحّة ويتوقّف وقتَ المرض: يومَ سقطت القاعدةُ في
+          // ٢٠٢٦-٠٩-٠٨ لم تنجح جلبةٌ واحدة، فبقيت `okAt` فارغةً، فمرّ الشرطُ
+          // في كلّ حدث — وأحداثُ CHANNEL_ERROR تتوالى مع تراجعِ إعادة
+          // الاشتراك حتى عشر ثوانٍ سقفاً، أي ستٌّ في الدقيقة × أربعةِ
+          // استعلامات = أربعةٌ وعشرون طلباً في الدقيقة من الجهاز الواحد،
+          // **وقتَ العطل بالذات**. حلقةٌ موجبة: القاعدةُ تبطئ فتسقط القنوات،
+          // فتقصف الأجهزةُ، فتبطئ أكثر.
+          if (Date.now() - triedAt.current >= DEAF_POLL_MS) refresh();
         }
       });
 
@@ -324,7 +338,9 @@ export default function HomePage() {
     const REVISIT_FLOOR_MS = 60_000;
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
-      if (okAt.current && Date.now() - Date.parse(okAt.current) < REVISIT_FLOOR_MS) return;
+      // وبالمحاولة كذلك: بالنجاح وحدَه كانت كلُّ عودةٍ إلى التبويب تجلب من
+      // جديد ما دامت الجلبةُ تفشل — وهو ما يفعله من ينتظر عودةَ الخدمة.
+      if (Date.now() - triedAt.current < REVISIT_FLOOR_MS) return;
       refresh();
     };
     document.addEventListener('visibilitychange', onVisible);
