@@ -44,3 +44,6 @@ graphify-out/.graphify_analysis.json
 graphify-out/.graphify_cached.json
 graphify-out/.graphify_uncached.txt
 graphify-out/.graphify_labels_draft.json
+
+# حزمُ البناء لا تُتتبَّع — تُبنى في المسار الآليّ
+dist/
