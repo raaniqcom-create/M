@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import CarPlay
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -48,9 +49,25 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
     }
 
+    /// أيُّ مندوبٍ لأيّ مشهد؟
+    ///
+    /// **وهذه كانت العقدة.** كانت تردّ `SceneDelegate` لكلّ دورٍ كان — و
+    /// `SceneDelegate` يبني `CAPBridgeViewController`، أي WebView. فلو وُصلت
+    /// السيّارةُ لحاول النظامُ أن يضع صفحةَ ويبٍ على شاشتها: لا CarPlay يقبلها،
+    /// والتطبيقُ يسقط عند الوصل. وهو أوّلُ ما تُرفض عليه مراجعةُ CarPlay.
+    ///
+    /// فيُفرَّق بالدور: شاشةُ السيارة قوالبُ يرسمها النظام، وشاشةُ الهاتف نافذةٌ
+    /// على الموقع. ومندوبُ السيارة لا يستورد Capacitor بحال.
     func application(_ application: UIApplication,
                      configurationForConnecting connectingSceneSession: UISceneSession,
                      options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        if connectingSceneSession.role == UISceneSession.Role.carTemplateApplication {
+            let car = UISceneConfiguration(name: "CarPlay Configuration",
+                                           sessionRole: connectingSceneSession.role)
+            car.delegateClass = CarPlaySceneDelegate.self
+            return car
+        }
+
         let config = UISceneConfiguration(name: "Default Configuration",
                                           sessionRole: connectingSceneSession.role)
         config.delegateClass = SceneDelegate.self

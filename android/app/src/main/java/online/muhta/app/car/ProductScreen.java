@@ -5,7 +5,6 @@ import androidx.car.app.CarContext;
 import androidx.car.app.Screen;
 import androidx.car.app.model.Action;
 import androidx.car.app.model.ActionStrip;
-import androidx.car.app.model.CarText;
 import androidx.car.app.model.ItemList;
 import androidx.car.app.model.ListTemplate;
 import androidx.car.app.model.MessageTemplate;
@@ -124,16 +123,17 @@ public final class ProductScreen extends Screen {
                     .build();
         }
 
-        ListTemplate.Builder t = new ListTemplate.Builder()
-                .setTitle("أيّ وقودٍ تريد؟")
+        // خارجُ النطاق يُقال في العنوان، ولا يُترك المستعملُ يقيس مسافاتٍ من
+        // مكانٍ ليس فيه.
+        String title = (data != null && data.outOfRange)
+                ? "أيّ وقودٍ تريد؟ · تُقاس من مركز الرمادي"
+                : "أيّ وقودٍ تريد؟";
+
+        return new ListTemplate.Builder()
+                .setTitle(title)
                 .setHeaderAction(Action.APP_ICON)
                 .setActionStrip(strip)
-                .setSingleList(list.build());
-
-        if (data != null && data.outOfRange) {
-            // خارجُ النطاق يُقال، ولا يُترك المستعمل يقيس مسافاتٍ من مكانٍ ليس فيه.
-            t.setTitle(CarText.create("أيّ وقودٍ تريد؟ · تُقاس من مركز الرمادي"));
-        }
-        return t.build();
+                .setSingleList(list.build())
+                .build();
     }
 }
