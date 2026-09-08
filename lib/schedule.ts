@@ -174,18 +174,28 @@ export function parseSchedule(
     return one ? { product, rows: [{ name: one, product }] } : null;
   }
 
-  // **العنوانُ يُعرَف بما فيه لا بما يبقى منه.** كان يُحكم عليه بالبقيّة، فسطرُ
-  // «البنزين العادي في المحطات التالية» يترك «ال» فيُحسب محطةً تاسعة. والفحصُ
-  // الموجَب أدقّ: سطرٌ يذكر الوقودَ أو «المحطات التالية» عنوانٌ لا محطة.
-  const isHead = (line: string) => {
-    const n = normalizeName(line);
-    return n.includes(label) || n.includes(marker);
-  };
+  // **العنوانُ يُعرَف بما فيه لا بما يبقى منه** — وبأيِّ وقودٍ ذكره لا بوقودٍ
+  // بعينه. كان الفحصُ على وقودِ المنشور وحدَه، فمنشوران مُلصقان لكلٍّ عنوانُه
+  // يُقرأ ثانيهما محطةً، أو تُنسب محطاتُه إلى وقود الأوّل.
+  //
+  // وسطرٌ لا يبقى منه — بعد إسقاط الصدر واسمِ وقودِه — إلا حرفان: عنوانٌ لا
+  // محطة. وهو فحصٌ لا يخصّ وقوداً بعينه، فيصحّ لكلّ عنوان.
+  const isHead = (line: string, pr: FuelProduct) =>
+    normalizeName(line).includes(marker) || strip(line, pr).length < 2;
+
+  // **والوقودُ يجري مع العناوين.** كلُّ عنوانٍ يسمّي وقوداً يضبط ما تحته حتى
+  // العنوان التالي — كما تُقرأ الورقةُ بالعين. ولولا هذا لَورثت محطاتُ العنوان
+  // الثاني وقودَ الأوّل، وهو خبرٌ خطأ عن وقودٍ يقطع الناسُ إليه الطريق.
+  let current = product;
   const out: ParsedRow[] = [];
   for (const line of rows) {
-    if (isHead(line)) continue;
-    // وقودُ السطر إن سمّاه، وإلّا فوقودُ العنوان. والإسقاطُ بكلماتِ وقودِه هو.
-    const pr = lineProduct(line) ?? product;
+    const named = lineProduct(line);
+    if (isHead(line, named ?? current)) {
+      if (named) current = named;
+      continue;
+    }
+    // وقودُ السطر إن سمّاه، وإلّا فوقودُ عنوانه. والإسقاطُ بكلماتِ وقودِه هو.
+    const pr = named ?? current;
     const name = strip(line, pr);
     if (name.length >= 2) out.push({ name, product: pr });
   }

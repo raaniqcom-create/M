@@ -116,3 +116,27 @@ assert.equal(m.rows[0].product, 'gasoline_regular');
 assert.equal(m.rows[6].product, 'gasoline_regular');
 
 console.log('قراءةُ الجدول: كلُّ الفحوص سليمة.');
+
+
+// ــ ومنشوران لكلٍّ عنوانُه ــــــــــــــــــــــــــــــــــــــــــــــــــ
+//
+// القناةُ تنشر رسالتين لا رسالة، والرصدُ يدمج دفعةَ الليلة في عرضٍ واحد. فإن
+// كان لكلِّ رسالةٍ عنوانُها وجب أن يجري الوقودُ مع العناوين: ما تحت الثاني له،
+// لا لوقود الأوّل. ولولا ذلك لَنُسبت محطاتُ المحسّن إلى العادي.
+const TWO_HEADS = `غدا ان شاء الله البنزين العادي في المحطات التالية
+الامن
+السينما
+غدا ان شاء الله البنزين المحسن في المحطات التالية
+الواحة الخضراء
+نور الحياة`;
+const th = parseSchedule(TWO_HEADS);
+assert.ok(th, 'لم يُقرأ المنشوران');
+assert.equal(th.rows.length, 4, `أربعةُ أسماء، وقُرئ ${th.rows.length}`);
+assert.deepEqual(
+  th.rows.map((r) => r.product),
+  ['gasoline_regular', 'gasoline_regular', 'gasoline_premium', 'gasoline_premium'],
+  'الوقودُ يجري مع العناوين'
+);
+assert.ok(!th.rows.some((r) => r.name.includes('المحطات')), 'العنوانُ الثاني ليس محطة');
+
+console.log('عنوانان في منشورٍ واحد: سليم.');

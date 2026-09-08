@@ -53,6 +53,20 @@ interface ChannelPost {
  *  قبلها أرشيفٌ لا خبر. */
 const FRESH_HOURS = 20;
 
+/** ربعُ ساعةٍ يُنتظر قبل العرض.
+ *
+ *  **لأنّ القناةَ تنشر رسالتين لا رسالة.** قِيس على ليلة ٢٠٢٦-٠٩-٠٧: المحسّنُ
+ *  ٢٣:٢٩ والعاديُّ ٢٣:٣٢ — ثلاثُ دقائق. فعرضٌ فوريٌّ يجعلهما اقتراحين
+ *  منفصلين، ونشرتين، وإشعارين — والثاني لا يصل أحداً لأنّ حاجز الخمس
+ *  والأربعين دقيقة يحجبه.
+ *
+ *  فتُنتظر الدفعةُ حتى تستقرّ، ثمّ تُعرض جدولاً واحداً. وربعُ ساعةٍ لا يؤخّر
+ *  خبراً عن الغد. */
+const SETTLE_MINUTES = 15;
+
+/** ستّةٌ على الأكثر في العرض الواحد: دفعةُ ليلةٍ لا أرشيفُ أسبوع. */
+const MAX_MERGE = 6;
+
 function isRecent(iso: string | null): boolean {
   if (!iso) return false;
   const t = Date.parse(iso);
@@ -253,16 +267,25 @@ Deno.serve(async (req) => {
   //
   // واحدٌ في كلّ دورة، وأحدثُها: مسوّدةُ البوت صفٌّ واحدٌ لكلّ إداريّ، فعرضان
   // معاً يمحو أوّلُهما الثاني. والباقي ينتظر الدورةَ التالية — عشرُ دقائق.
+  // **دفعةُ الليلة كلُّها في عرضٍ واحد.** تُرتَّب بزمنها لا بعكسه: العنوانُ
+  // يسبق ما تحته، والمحلِّلُ يقرأ الوقودَ الجاري مع العناوين.
   const { data: pending } = await db
     .from('channel_posts')
-    .select('id, body')
+    .select('id, body, posted_at')
     .eq('state', 'seen')
     .gte('posted_at', new Date(Date.now() - FRESH_HOURS * 3_600_000).toISOString())
-    .order('posted_at', { ascending: false })
-    .limit(1);
+    .lte('posted_at', new Date(Date.now() - SETTLE_MINUTES * 60_000).toISOString())
+    .order('posted_at', { ascending: true })
+    .limit(MAX_MERGE);
 
-  const post = pending?.[0];
-  if (!post) return json({ ok: true, fetched, fresh, proposed: null });
+  if (!pending?.length) return json({ ok: true, fetched, fresh, proposed: null });
+  // ثابتٌ لا هروبٌ نصّيّ: تحريراتٌ آليّةٌ في هذا المستودع أكلت الشرطةَ المائلة
+  // مرّتين، فصار سطرُ الفصل حرفاً يُبنى من رقمه.
+  const NL = String.fromCharCode(10);
+  const post = {
+    id: pending.map((p) => p.id).join(' + '),
+    body: pending.map((p) => p.body).join(NL),
+  };
 
   const admins = (Deno.env.get('TELEGRAM_ADMIN_IDS') ?? '')
     .split(',')
@@ -273,10 +296,16 @@ Deno.serve(async (req) => {
 
   // ولا يُقاطَع عملٌ جارٍ: مسوّدةٌ مفتوحةٌ تعني أنّ الإدارةَ في وسط شيء —
   // تسجيلِ محطةٍ أو مراجعةِ جدولٍ سابق — وكتابةُ مسوّدةٍ فوقها تمحوه.
+  //
+  // **لكنّ المتروكةَ ليست جارية.** وقع: عُرض جدولٌ ولم يُضغط عليه، فبقيت
+  // مسوّدتُه ساعاتٍ تحجب كلَّ عرضٍ بعدها — والرصدُ يصمت بلا أن يقول لماذا.
+  // فثلاثُ ساعاتٍ حدٌّ: ما دونها عملٌ جارٍ يُحترم، وما فوقها متروكٌ يُتخطّى.
+  const STALE_HOURS = 3;
   const { data: busy } = await db
     .from('telegram_drafts')
-    .select('telegram_id')
+    .select('telegram_id, updated_at')
     .eq('telegram_id', admin)
+    .gte('updated_at', new Date(Date.now() - STALE_HOURS * 3_600_000).toISOString())
     .maybeSingle();
   if (busy) return json({ ok: true, fetched, fresh, proposed: null, why: 'مسوّدةٌ مفتوحة' });
 
@@ -287,7 +316,7 @@ Deno.serve(async (req) => {
   await db
     .from('channel_posts')
     .update({ state: 'proposed', acted_at: new Date().toISOString() })
-    .eq('id', post.id);
+    .in('id', pending.map((p) => p.id));
 
-  return json({ ok: true, fetched, fresh, proposed: post.id });
+  return json({ ok: true, fetched, fresh, proposed: post.id, merged: pending.length });
 });
