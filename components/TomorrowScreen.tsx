@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { PRODUCT_LABELS } from '@/lib/products';
-import { PERIOD_LABELS } from '@/lib/hours';
+import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
 import { readChoice } from '@/lib/alerts';
 import { withDeadline } from '@/lib/fn';
@@ -215,10 +215,10 @@ export function TomorrowScreen() {
                             المنصّة {MARK[r.state]}
                           </span>
                         )}
-                        {r.period && r.state === 'expected' && (
+                        {r.state === 'expected' && whenLabel(r.period, r.time) && (
                           <span className="mr-1.5 text-[10px] text-white/60">
                             {' '}
-                            · {PERIOD_LABELS[r.period]}
+                            · {whenLabel(r.period, r.time)}
                           </span>
                         )}
                       </td>

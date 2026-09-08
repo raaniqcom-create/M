@@ -1,4 +1,4 @@
-import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, expectedLabel, isExpectedLate, isListed, isOffered, isStaleOffer, trafficSource } from '@/lib/products';
+import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, expectedText, isExpectedLate, isListed, isOffered, isStaleOffer, trafficSource } from '@/lib/products';
 import { formatTime, isFresh, isOpenNow, openingLine, PERIOD_LABELS, runsOutLabel, statusNote } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
@@ -165,18 +165,10 @@ export function StationCard({
                 {stale && !row.expected_at && (
                   <span className="font-normal"> · {agoLabel(row.updated_at)}</span>
                 )}
-                {!inStock && row.expected_at && (
-                  <span>
-                    {' '}
-                    · {expectedLabel(row.expected_at)}
-                    {/* ولا فترةَ ليومٍ مضى: «تأخّر ١١ يوماً الصباح» ذيلٌ لا
-                        معنى له — صباحُ يومٍ فات لا يقول شيئاً. والفترةُ تخصّ
-                        الوعدَ القائم وحدَه. */}
-                    {row.expected_period && !isExpectedLate(row.expected_at)
-                      ? ` ${PERIOD_LABELS[row.expected_period]}`
-                      : ''}
-                  </span>
-                )}
+                {/* والجملةُ كلُّها من `expectedText` — بحارس التأخّر وترجيحِ
+                    الساعة على الفترة. وكانت تُركَّب هنا بيدها، وفي ثلاثة
+                    أسطحٍ أخرى، وكلٌّ يُعيد كتابةَ الحارس. */}
+                {!inStock && row.expected_at && <span> · {expectedText(row)}</span>}
               </span>
             );
           })

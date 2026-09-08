@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { PRODUCT_LABELS, PRODUCT_ORDER, expectedLabel, isExpectedLate, isOffered, isStaleOffer } from '@/lib/products';
+import { PRODUCT_LABELS, PRODUCT_ORDER, expectedText, isExpectedLate, isOffered, isStaleOffer } from '@/lib/products';
 import { hoursLabel, isFresh, isOpenNow, PERIOD_LABELS, runsOutLabel } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { Station, StationProduct } from '@/types/database';
@@ -132,7 +132,7 @@ export function StationLive({
                     ? `متوفر حتى ${runsOutLabel(row.runs_out_at)}`
                     : 'متوفر'
                   : expected
-                    ? `${expectedLabel(expected)}${row?.expected_period && !isExpectedLate(expected) ? ` ${PERIOD_LABELS[row.expected_period]}` : ''}`
+                    ? expectedText(row ?? { expected_at: expected })
                     : stale
                       ? `آخر إعلان ${staleAge}`
                       : 'غير متوفر'}

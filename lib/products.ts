@@ -1,6 +1,7 @@
 import type { FuelProduct, TrafficLevel } from '../types/database.ts';
 import { plural } from './freshness.ts';
-import { hasRunOut, isFresh, isOpenNow, isWithdrawn } from './hours.ts';
+import { hasRunOut, isFresh, isOpenNow, isWithdrawn, whenLabel } from './hours.ts';
+import type { ExpectedPeriod } from './hours.ts';
 
 // single source of truth for the 6 fixed products — mirrors the fuel_product
 // enum in supabase/schema.sql
@@ -102,6 +103,30 @@ export function isExpectedLate(isoDate: string | null | undefined): boolean {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return new Date(`${isoDate}T00:00:00`).getTime() < today.getTime();
+}
+
+/** «متوقع غداً ٦:٠٠ صباحاً» — جملةُ الوعد كاملةً، في موضعٍ واحد.
+ *
+ *  ── ولماذا جُمعت ────────────────────────────────────────────────────────
+ *
+ *  أربعةُ أسطحٍ كانت تركّبها بيدها — البطاقة، وصفحةُ المحطة، ولوحةُ المالك،
+ *  ولوحةُ الفرع — وكلٌّ منها يعيد كتابةَ حارس `isExpectedLate` بنفسه. وهو
+ *  الحارسُ الذي نُسي مرّةً فطُبع على الموقع الحيّ **«تأخّر ١١ يوماً الصباح»**:
+ *  فترةُ يومٍ مضى، معلَّقةٌ بلا معنى.
+ *
+ *  فمن أراد أن يزيد في الجملة — ساعةً، أو «تقريباً»، أو أيّاً كان — زادها
+ *  هنا مرّةً واحدة، ولم يُصب سطحاً ونسي ثلاثة. */
+export function expectedText(row: {
+  expected_at?: string | null;
+  expected_period?: ExpectedPeriod | null;
+  expected_time?: string | null;
+}): string {
+  if (!row.expected_at) return '';
+  const head = expectedLabel(row.expected_at);
+  // ولا ذيلَ لموعدٍ فات: «تأخّر ٣ أيام ٦:٠٠» تصف ساعةً لم تقع.
+  if (isExpectedLate(row.expected_at)) return head;
+  const tail = whenLabel(row.expected_period ?? null, row.expected_time ?? null);
+  return tail ? `${head} ${tail}` : head;
 }
 
 // Built from local date parts, not toISOString(): that converts to UTC first,

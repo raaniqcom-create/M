@@ -123,7 +123,7 @@ async function fetchBoardStations(
   // ٢ · وصفوفُ الوعد لهذا اليوم — وهي التي تُدخل محطةً لم يذكرها الجدولُ أصلاً.
   const { data: promised, error: e2 } = await supabase
     .from('station_products')
-    .select('station_id, product, is_available, expected_at, expected_period, runs_out_at, updated_at')
+    .select('station_id, product, is_available, expected_at, expected_period, expected_time, runs_out_at, updated_at')
     .eq('expected_at', day);
   if (e2) throw e2;
 
@@ -147,7 +147,7 @@ async function fetchBoardStations(
   const ids = inSchedule.map((s) => s.id as string);
   const { data: products, error: e3 } = await supabase
     .from('station_products')
-    .select('station_id, product, is_available, expected_at, expected_period, runs_out_at, updated_at')
+    .select('station_id, product, is_available, expected_at, expected_period, expected_time, runs_out_at, updated_at')
     .in('station_id', ids);
   if (e3) throw e3;
 

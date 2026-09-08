@@ -46,6 +46,10 @@ export interface StationProduct {
   is_available: boolean;
   expected_at: string | null; // ISO date: announced arrival for an unavailable product
   expected_period: 'morning' | 'afternoon' | 'evening' | null;
+  // "HH:MM:SS" بتوقيت بغداد: ساعةُ الوصول إن عرفها صاحبُ المحطة. اختياريّةٌ
+  // تماماً، وتُغني عن expected_period حين تُذكر — ولا تُذكر بلا expected_at،
+  // والقاعدةُ تحرس ذلك (station_products_time_needs_day).
+  expected_time: string | null;
   // ISO timestamptz: نفادٌ متوقَّع أعلنه صاحبُ المحطة لمنتجٍ متوفّر. بعد
   // مروره لا يُعرض ولا يُعلَن عنه، ويعود بأيّ تفعيلٍ أو تأكيدٍ يُصفّره.
   runs_out_at: string | null;

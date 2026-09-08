@@ -96,6 +96,8 @@ export interface BoardRow {
   state: 'expected' | 'arrived' | 'out';
   /** الصباح/العصر/المساء — من لوحة المحطة وحدها. */
   period: ExpectedPeriod | null;
+  /** وساعتُه إن ذكرها صاحبُها — من لوحة المحطة وحدَها، والفترةُ بديلٌ عنها. */
+  time: string | null;
   /** وردت في الجدول المنشور أيضاً — تأكيدٌ مضاعفٌ لا تكرار. */
   alsoInChannel?: boolean;
 }
@@ -183,6 +185,7 @@ export function buildBoard(
         source: 'station',
         state: arrived ? 'arrived' : out ? 'out' : 'expected',
         period: p.expected_period,
+        time: p.expected_time ?? null,
       });
     }
   }
@@ -241,6 +244,8 @@ export function buildBoard(
         // ولا فترةَ يومٍ آخر: `expected_period` تخصّ `expected_at`، وهذه محطةٌ
         // دخلت اللوحةَ بالجدول لا بوعدها — فقولُ «الصباح» عن يومٍ غيرِه كذب.
         period: live.expected_at === day ? live.expected_period : null,
+        // وبحارس اليوم نفسِه: ساعةُ وعدٍ ليومٍ آخر تصف لحظةً لا تخصّ هذا السطر.
+        time: live.expected_at === day ? (live.expected_time ?? null) : null,
         alsoInChannel: true,
       });
       continue;
@@ -255,6 +260,7 @@ export function buildBoard(
       source: 'channel',
       state: 'expected',
       period: null,
+      time: null,
     });
   }
 

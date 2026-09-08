@@ -22,7 +22,7 @@ import { ShareButton } from '@/components/ShareButton';
 import { StationLinkCard } from '@/components/StationLinkCard';
 import { StationPoster } from '@/components/StationPoster';
 import { AvailabilityPoster } from '@/components/AvailabilityPoster';
-import { ProductControl } from '@/components/ProductControl';
+import { ProductControl, type ProductState } from '@/components/ProductControl';
 import { WorkingHours } from '@/components/WorkingHours';
 import { OwnerReminders } from '@/components/OwnerReminders';
 import { StationChat } from '@/components/StationChat';
@@ -46,6 +46,8 @@ export default function OwnerPage() {
   const [turnedOn, setTurnedOn] = useState<Set<FuelProduct>>(new Set());
   const [loading, setLoading] = useState(true);
   const [savingProduct, setSavingProduct] = useState<FuelProduct | null>(null);
+  // كتابةٌ سقطت تُقال. وكانت تُبتلع في مسارين من ثلاثة.
+  const [saveErr, setSaveErr] = useState<string | null>(null);
   const [view, setView] = useState<'main' | 'info' | 'data' | 'chat'>('main');
   /** ما لم يقرأه صاحبُ المحطة من الإدارة أو من المنصّة */
   const [unread, setUnread] = useState(0);
@@ -127,110 +129,127 @@ export default function OwnerPage() {
       });
   }, [router, load]);
 
-  async function setAvailable(product: FuelProduct, next: boolean) {
-    if (!station) return;
+  /** كتابةٌ واحدةٌ لكلّ ما يُكتب على صفّ منتج — ومعها استرجاعٌ عند الفشل.
+   *
+   *  ── ولماذا وُحِّدت ───────────────────────────────────────────────────────
+   *
+   *  كانت ثلاثاً. و`setAvailable` وحدَها تنظر في `error` وترجع؛ أمّا
+   *  `setExpected` و`setRunsOut` **فلا تفحصانه إطلاقاً**. فكتابةٌ ترفضها
+   *  القاعدة — أو تسقط في الطريق — تُعرَض على صاحب المحطة «محفوظة»، فيمضي
+   *  وهو يظنّ موعدَ وصوله معلَناً وليس على صفحته حرف. وهو أسوأُ من عطلٍ ظاهر:
+   *  العطلُ الظاهرُ يُعاد، والصامتُ يُبنى عليه.
+   *
+   *  ويُستعاد الصفُّ كلُّه لا الحقلُ المكتوب: `setAvailable` كانت ترجع نصفَ
+   *  رجوعٍ — تُعيد `is_available` وتترك `runs_out_at` على قيمةٍ لم تُكتب. */
+  async function patchProduct(
+    product: FuelProduct,
+    patch: Partial<StationProduct>
+  ): Promise<boolean> {
+    if (!station) return false;
+    const before = products.find((p) => p.product === product);
     setSavingProduct(product);
-
-    // ── و«غير متوفر» تعني «نفد الآن» ──────────────────────────────────────
-    //
-    // كانت تُطفئ ولا تكتب موعدَ نفاد. فعلامةُ «نفد» في جدول الوقود — وشرطُها
-    // `is_available && hasRunOut(...)` — كانت **ميّتةً عمليّاً**: قِيس، فإذا
-    // صفٌّ واحدٌ من مئتين وثمانين يحقّقها في القاعدة كلِّها، وصفرٌ من ثلاثةَ
-    // عشرَ سطراً على لوحة ذلك اليوم. والحالةُ التي تُطلب منها العلامةُ هي
-    // نفسُها التي كانت تمنعها.
-    //
-    // وأزرارُ «متى تتوقع نفاده؟» لا تُعرض إلا والمنتجُ متوفّر
-    // (`ProductControl.tsx:87-121`)، فلا سبيلَ لصاحب المحطة أن يقولها بيده.
-    //
-    // **والشرطُ الانتقالُ لا الإطفاءُ المجرَّد**: وعدٌ لم يصل بعدُ مطفأٌ أيضاً،
-    // وكتابةُ موعدِ نفادٍ له تجعل ما لم يصل «نفد» — وهو الخلطُ الذي يحرس منه
-    // التعليقُ في `lib/board.ts`. فما كان `true` وصار `false` هو الذي نفد.
-    const was = products.find((p) => p.product === product)?.is_available === true;
-    const ranOut = !next && was ? new Date().toISOString() : null;
-
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.product === product
-          ? {
-              ...p,
-              is_available: next,
-              ...(next ? { runs_out_at: null } : ranOut ? { runs_out_at: ranOut } : {}),
-            }
-          : p
-      )
-    );
+    setSaveErr(null);
+    setProducts((prev) => prev.map((p) => (p.product === product ? { ...p, ...patch } : p)));
 
     const { error } = await supabase
       .from('station_products')
-      // والإشعالُ يُصفّر موعدَ النفاد: من يقول «متوفّر» الآن يُبطل بقولِه
-      // نفاداً أعلنه قبل ساعة — ولولا التصفير لوُلد التفعيلُ ميّتاً، فالبوت
-      // يقول «أصبح متوفراً» والمنصّةُ لا تعرضه.
-      .update({
-        is_available: next,
-        updated_at: new Date().toISOString(),
-        ...(next ? { runs_out_at: null } : ranOut ? { runs_out_at: ranOut } : {}),
-      })
+      .update(patch)
       .eq('station_id', station.id)
       .eq('product', product);
 
+    setSavingProduct(null);
     if (error) {
-      // revert the optimistic flip so the UI never lies about what's saved
-      setProducts((prev) =>
-        prev.map((p) => (p.product === product ? { ...p, is_available: !next } : p))
-      );
-      setSavingProduct(null);
-      return;
+      if (before) {
+        setProducts((prev) => prev.map((p) => (p.product === product ? before : p)));
+      }
+      setSaveErr('تعذّر الحفظ — تحقّق من اتصالك وأعد المحاولة.');
+      return false;
     }
+    return true;
+  }
+
+  /** الحالاتُ الثلاث، وما تكتبه كلٌّ منها.
+   *
+   *  ── و«غير متوفر» و«متوقّع» كلتاهما نفادٌ إن جاءتا من التوفّر ───────────
+   *
+   *  كانت «غير متوفر» وحدَها تكتب موعدَ النفاد. فعلامةُ «نفد» في جدول الوقود —
+   *  وشرطُها `is_available && hasRunOut(...)` — كانت **ميّتةً عمليّاً**: قِيس،
+   *  فإذا صفٌّ واحدٌ من مئتين وثمانين يحقّقها في القاعدة كلِّها، وصفرٌ من
+   *  ثلاثةَ عشرَ سطراً على لوحة ذلك اليوم.
+   *
+   *  **والشرطُ الانتقالُ لا الإطفاءُ المجرَّد**: وعدٌ لم يصل بعدُ مطفأٌ أيضاً،
+   *  وكتابةُ موعدِ نفادٍ له تجعل ما لم يصل «نفد» — وهو الخلطُ الذي يحرس منه
+   *  التعليقُ في `lib/board.ts`. فما كان `true` وصار غيرَه هو الذي نفد.
+   *
+   *  ── ولا يُمحى `expected_at` عند «متوفر» ────────────────────────────────
+   *
+   *  الوعدُ هو الذي يُدخل المحطةَ لوحةَ الجدول، وصيرورةُ التوفّر صادقةً هي
+   *  التي تجعل سطرَها «وصل ✓» (lib/board.ts:167-184). فمحوُه هنا يكسر
+   *  اللوحةَ صمتاً — وهو أسهلُ خطأٍ يقع في هذا الملفّ. */
+  async function setState(product: FuelProduct, next: ProductState) {
+    const was = products.find((p) => p.product === product)?.is_available === true;
+    const now = new Date().toISOString();
+    const ranOut = next !== 'in' && was ? now : null;
+
+    const ok = await patchProduct(product, {
+      is_available: next === 'in',
+      updated_at: now,
+      // والإشعالُ يُصفّر موعدَ النفاد: من يقول «متوفّر» الآن يُبطل بقولِه
+      // نفاداً أعلنه قبل ساعة — ولولا التصفير لوُلد التفعيلُ ميّتاً.
+      ...(next === 'in' ? { runs_out_at: null } : ranOut ? { runs_out_at: ranOut } : {}),
+      // و«غير متوفر» تمحو الوعدَ صراحةً. هذه هي الحالةُ التي لم يكن لها زرّ،
+      // فاضطُرّ أصحابُ المحطات إلى كتابة «متوقّع غداً» ليبقوا ظاهرين.
+      ...(next === 'out'
+        ? { expected_at: null, expected_period: null, expected_time: null }
+        : {}),
+    } as Partial<StationProduct>);
+    if (!ok) return;
 
     // No push here. An owner who switches on five products would fire five
     // notifications, and someone who receives five buzzes in ten seconds
     // deletes the app — which costs us every future alert, not just these.
     // The announcement belongs to the confirm button, once, for all of them.
-    //
-    // وما أُشعل في هذه الجلسة يُسجَّل هنا: زرّ «تأكيد» يُعلن ما **صار**
-    // متوفراً، لا كل ما هو متوفر. انظر confirmAvailability.
     setTurnedOn((s) => {
       const n = new Set(s);
-      if (next) n.add(product);
+      if (next === 'in') n.add(product);
       else n.delete(product);
       return n;
     });
-    setSavingProduct(null);
   }
 
-  /** «متى تتوقّع نفاده؟» — مرآةُ setExpected للمنتج المتوفّر.
-   *
-   *  ساعاتٌ من الآن لا ساعةُ حائط: صاحبُ المحطة يعرف كم بقي عنده، لا متى
-   *  ينتهي بالضبط — ولأن المدخل زرٌّ واحد لا حقلُ وقتٍ يُملأ بإصبعٍ على
-   *  هاتفٍ في ساحةٍ مزدحمة. */
+  /** «متى تتوقّع نفاده؟» — ساعاتٌ من الآن لا ساعةُ حائط: صاحبُ المحطة يعرف
+   *  كم بقي عنده، لا متى ينتهي بالضبط. */
   async function setRunsOut(product: FuelProduct, hours: number | null) {
-    if (!station) return;
-    const runs_out_at = hours === null ? null : new Date(Date.now() + hours * 3600_000).toISOString();
-    setProducts((prev) =>
-      prev.map((p) => (p.product === product ? { ...p, runs_out_at } : p))
-    );
-    await supabase
-      .from('station_products')
-      .update({ runs_out_at })
-      .eq('station_id', station.id)
-      .eq('product', product);
+    const runs_out_at =
+      hours === null ? null : new Date(Date.now() + hours * 3600_000).toISOString();
+    // والختمُ يُجدَّد: من ضبط موعدَ نفادٍ تكلّم الآن، فلا تُلاحقه رسالةُ
+    // «وقودك معروضٌ بخبرٍ قديم» عن لوحةٍ لمسها بيده.
+    await patchProduct(product, { runs_out_at, updated_at: new Date().toISOString() });
   }
 
+  /** موعدُ الوصول — يوماً، ومعه فترةٌ أو ساعةٌ لا كلتاهما.
+   *
+   *  والساعةُ والفترةُ تتعارضان بالتصميم: `whenLabel` تفضّل الساعة، فحالةٌ
+   *  تُخزَّن ولا تُعرض حالةٌ لا يُشخَّص عطبُها. والقاعدةُ تحرس ألّا تُكتب ساعةٌ
+   *  بلا يوم (station_products_time_needs_day). */
   async function setExpected(
     product: FuelProduct,
     expected_at: string | null,
-    period: ExpectedPeriod | null
+    period: ExpectedPeriod | null,
+    time: string | null
   ) {
-    if (!station) return;
-    const expected_period = expected_at === null ? null : period;
-    setProducts((prev) =>
-      prev.map((p) => (p.product === product ? { ...p, expected_at, expected_period } : p))
-    );
-    await supabase
-      .from('station_products')
-      .update({ expected_at, expected_period })
-      .eq('station_id', station.id)
-      .eq('product', product);
+    const was = products.find((p) => p.product === product)?.is_available === true;
+    const now = new Date().toISOString();
+    await patchProduct(product, {
+      expected_at,
+      expected_period: expected_at === null ? null : period,
+      expected_time: expected_at === null ? null : time,
+      updated_at: now,
+      // ووعدٌ يعني أنّه ليس متوفّراً الآن — وإن كان متوفّراً قبل لحظة فقد نفد.
+      ...(expected_at
+        ? { is_available: false, ...(was ? { runs_out_at: now } : {}) }
+        : {}),
+    } as Partial<StationProduct>);
   }
 
   /** Confirms the list as it stands and stamps the moment. An owner who
@@ -651,12 +670,17 @@ export default function OwnerPage() {
                     product={product}
                     row={products.find((p) => p.product === product)}
                     saving={savingProduct === product}
-                    onSetAvailable={(next) => setAvailable(product, next)}
-                    onSetExpected={(date, period) => setExpected(product, date, period)}
+                    onSetState={(next: ProductState) => setState(product, next)}
+                    onSetExpected={(date, period, time) =>
+                      setExpected(product, date, period, time)
+                    }
                     onSetRunsOut={(hours) => setRunsOut(product, hours)}
                   />
                 ))}
               </ul>
+              {saveErr && (
+                <p className="mt-2 text-[11.5px] font-bold text-traffic-red">{saveErr}</p>
+              )}
             </section>
             {/* One deliberate act at the end, not a poster that jumps on every
                 toggle while the owner is still working through six products. */}

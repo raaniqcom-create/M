@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { loadCachedStations, loadStations } from '@/lib/stations';
 import { randomId } from '@/lib/uid';
-import { FRESH_HOURS, PERIOD_LABELS, WITHDRAW_HOURS, formatTime, isFresh, isOpenNow } from '@/lib/hours';
+import { FRESH_HOURS, WITHDRAW_HOURS, formatTime, isFresh, isOpenNow, whenLabel } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import {
   PRODUCT_LABELS,
@@ -206,12 +206,16 @@ export function BranchBoard() {
         const dueRows = s.products.filter(
           (r) => r.expected_at === today || r.expected_at === tomorrow
         );
-        const dueLines = dueRows.map(
-          (r) =>
+        const dueLines = dueRows.map((row) => {
+          const r = { ...row, tail: whenLabel(row.expected_period, row.expected_time) };
+          return (
             `${r.expected_at === today ? 'توزيع اليوم' : 'توزيع غداً'}: ` +
             PRODUCT_LABELS[r.product] +
-            (r.expected_period ? ` — ${PERIOD_LABELS[r.expected_period]}` : '')
-        );
+            // والذيلُ من `whenLabel`: الساعةُ إن ذُكرت وإلّا الفترة. ولا
+            // حارسَ تأخّرٍ هنا — `dueRows` فوقُ لا تقبل إلا اليومَ والغد.
+            (r.tail ? ` — ${r.tail}` : '')
+          );
+        });
         const state: State =
           hours === null ? 'never'
           : isSilent(s) ? 'silent'

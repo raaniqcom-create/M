@@ -13,6 +13,24 @@ export const PERIOD_LABELS: Record<ExpectedPeriod, string> = {
 
 export const PERIODS: ExpectedPeriod[] = ['morning', 'afternoon', 'evening'];
 
+/** ذيلُ الوعد: الساعةُ إن ذُكرت، وإلّا الفترةُ إن ذُكرت، وإلّا صمت.
+ *
+ *  ── ولماذا تغلب الساعةُ الفترة ──────────────────────────────────────────
+ *
+ *  من قال «السادسة» قال أدقَّ ممّا يقوله «الصباح»، وجمعُهما «الصباح ٦:٠٠»
+ *  حشوٌ يقرؤه المسافرُ مرّتين. فتُكتب إحداهما وتُمحى الأخرى — وحالةٌ تُخزَّن
+ *  ولا تُعرض حالةٌ لا يُشخَّص عطبُها.
+ *
+ *  و`formatTime` تقرأ "HH:MM:SS" منذ اليوم الأوّل، وهي صيغةُ عمود `time` كما
+ *  تُرجعها PostgREST — فلا تحويلَ بينهما. */
+export function whenLabel(
+  period: ExpectedPeriod | null | undefined,
+  time: string | null | undefined
+): string {
+  if (time) return formatTime(time);
+  return period ? PERIOD_LABELS[period] : '';
+}
+
 /** Minutes since midnight, right now, in Baghdad. */
 export function baghdadMinutesNow(): number {
   const parts = new Intl.DateTimeFormat('en-GB', {

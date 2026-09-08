@@ -1,7 +1,7 @@
 'use client';
 
 import { PRODUCT_LABELS } from '@/lib/products';
-import { PERIOD_LABELS } from '@/lib/hours';
+import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
 import { baghdadDate, type BoardGroup, type BoardRow } from '@/lib/scheduleData';
 
@@ -62,10 +62,10 @@ function Row({ r }: { r: BoardRow }) {
     <tr className="border-t border-slate-100 align-top">
       <td className="py-2.5 pl-2 text-[12.5px] leading-snug">
         {name}
-        {r.period && r.state === 'expected' && (
+        {r.state === 'expected' && whenLabel(r.period, r.time) && (
           <span className="mr-1.5 text-[10.5px] text-amber-700">
             {' '}
-            · {PERIOD_LABELS[r.period]}
+            · {whenLabel(r.period, r.time)}
           </span>
         )}
         {r.source === 'station' ? (
