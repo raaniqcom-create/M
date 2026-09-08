@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { phoneToEmail } from '@/lib/phone';
+import { isAborted } from '@/lib/fn';
 import { EyeIcon, EyeOffIcon, FuelIcon, MessageIcon, PlusIcon, SpinnerIcon } from '@/components/icons';
 
 export default function LoginPage() {
@@ -39,13 +40,27 @@ export default function LoginPage() {
       setBusy(false);
       // a rate limit or a dropped connection is not a wrong password — saying
       // so sends the user hunting for a typo that isn't there
+      //
+      // ── والحالةُ تُقرأ قبل النصّ ────────────────────────────────────────
+      //
+      // كان الفرزُ بالبحث في نصّ الرسالة وحدَه، وكلُّ ما لا يطابق «rate» أو
+      // «fetch» يسقط إلى «البيانات غير صحيحة». فيومَ ٢٠٢٦-٠٩-٠٨ سقطت القاعدة
+      // — لا خدمةَ حسابات ولا شيء — وقرأ صاحبُ المنصّة أنّ كلمةَ مروره خاطئة،
+      // فذهب يبحث عن خطأٍ ليس فيه بينما العطلُ في مكانٍ آخر تماماً. وكادت
+      // تُبدَّل كلمةُ مرورٍ صحيحة.
+      //
+      // و`status` تحسم ما لا يحسمه النصّ: الأربعُمئة وحدَها تعني «بياناتٌ لا
+      // تُطابق»، وما فوق الخمسمئة عطلٌ في الخدمة، والانقطاعُ لا حالةَ له.
+      const status = signInError.status ?? 0;
       const raw = signInError.message.toLowerCase();
       setError(
-        raw.includes('rate') || raw.includes('many')
+        status === 429 || raw.includes('rate') || raw.includes('many')
           ? 'محاولات كثيرة خلال وقت قصير. انتظر دقيقة ثم حاول مجدداً.'
-          : raw.includes('fetch') || raw.includes('network')
-            ? 'تعذّر الاتصال بالخادم. تحقق من الإنترنت وحاول مجدداً.'
-            : 'البيانات غير صحيحة. تأكد من الرقم أو اسم المستخدم ومن كلمة المرور.'
+          : status >= 500
+            ? 'خدمة الحسابات لا تستجيب حالياً — العطل ليس في بياناتك. حاول بعد دقائق.'
+            : isAborted(signInError) || raw.includes('fetch') || raw.includes('network')
+              ? 'تعذّر الاتصال بالخادم. تحقق من الإنترنت وحاول مجدداً.'
+              : 'البيانات غير صحيحة. تأكد من الرقم أو اسم المستخدم ومن كلمة المرور.'
       );
       return;
     }
