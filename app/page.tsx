@@ -15,7 +15,6 @@ import { SoundToggle } from '@/components/SoundToggle';
 import { NotificationBell } from '@/components/NotificationBell';
 import { SideMenu } from '@/components/SideMenu';
 import { isFresh, isOpenNow } from '@/lib/hours';
-import { plural } from '@/lib/freshness';
 import { PRODUCT_LABELS, hasSomethingToShow, isOffered } from '@/lib/products';
 import { CITY_NAMES } from '@/lib/cities';
 import { StationCard } from '@/components/StationCard';
@@ -96,7 +95,6 @@ export default function HomePage() {
   const [picked, setPicked] = useState<string[] | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   /** «اعرض المحطات التي لا وقود لديها» — لحظيّ لا محفوظ. */
-  const [showEmpty, setShowEmpty] = useState(false);
   const [locating, setLocating] = useState(false);
 
   /** تبديل العرض يُعيد القارئ إلى أوّله.
@@ -578,14 +576,33 @@ export default function HomePage() {
    *  إنها ليست موجودة — يفقد الثقة بكل ما عداها. */
   const hasStock = hasSomethingToShow;
 
+  /** ــ تُفرز ولا تُخفى ــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+   *
+   *  اتّصل صاحبُ محطةٍ فقال: «نحن نجبر على وضع كلمة متوقع غدا وهذه عدم
+   *  مصداقية مع الزبون». وهذا السطرُ كان الإجبار: محطةٌ لا وقودَ عندها ولا
+   *  وعد تسقط من القائمة، فثمنُ ظهورها أن تخترع تاريخاً. وقِيس يومَ كُتب
+   *  هذا: **أربعَ عشرةَ محطةً من إحدى وأربعين تبقى ظاهرةً بالوعد وحدَه**.
+   *
+   *  والقرارُ المنقوضُ مكتوبٌ فوقُ وفي `lib/products.ts` — «بطاقةٌ لا وقود
+   *  فيها ولا وعدَ به ضجيجٌ بين الأجوبة» — وهو صحيحٌ لولا أنّه جعل الظهورَ
+   *  ثمناً يُدفع بكذبة. فتُعرض كلُّها، والفارغةُ في الذيل ببطاقةٍ تقول «لا
+   *  يوجد الآن» — نصٌّ مبنيٌّ في `StationCard` منذ زمنٍ ولم يُعرض قطّ.
+   *
+   *  ولا تُمسّ `isListed`: هي التي تختار شرائحَ المنتجات على البطاقة، فتغييرُها
+   *  يقلب كلَّ بطاقة. البوّابةُ هنا وحدَها.
+   *
+   *  والفرزُ مستقرّ، فترتيبُ المسافة يبقى داخل كلّ مجموعة. */
   const listRows = useMemo(() => {
     if (!visible) return null;
-    // البحث بالاسم لا يُصفّى: من كتب اسم محطة يريدها هي، لا وقودها.
-    if (query.trim() || showEmpty) return visible;
-    return visible.filter(hasStock);
-  }, [visible, query, showEmpty]);
+    return [...visible].sort((a, b) => Number(hasStock(b)) - Number(hasStock(a)));
+  }, [visible]);
 
-  const emptyCount = (visible?.length ?? 0) - (listRows?.length ?? 0);
+  /** والعدُّ يُفصل عن العرض.
+   *
+   *  القائمةُ تعرض الكلَّ، والعدّادُ يعدّ ما يُقصد. ولولا الفصلُ لقفز الرقمُ
+   *  إلى عدد المحطات كلِّه وفيه ما لا وقودَ فيه — فيصير وعداً يُخلَف، وهو
+   *  المبدأُ المكتوبُ في `inScope` نفسِها. */
+  const stocked = useMemo(() => (listRows ?? []).filter(hasStock).length, [listRows]);
 
   const cityCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -620,7 +637,7 @@ export default function HomePage() {
               setShowAll(all);
             }}
             cityCounts={cityCounts}
-            total={listRows?.length ?? 0}
+            total={stocked}
             productCounts={productCounts}
             activeProduct={filters.product}
             onPickProduct={(p) => setFilters({ ...filters, product: p })}
@@ -874,31 +891,6 @@ export default function HomePage() {
                 </div>
               ))}
 
-              {/* البابُ الذي لا يُغلق. */}
-              {emptyCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowEmpty(true)}
-                  className="w-full rounded-xl border border-dashed border-slate-200 bg-white p-3 text-xs font-bold text-slate-500"
-                >
-                  {plural(
-                    emptyCount,
-                    'محطة واحدة لا وقود لديها ولا متوقَّع — اعرضها',
-                    'محطتان لا وقود لديهما ولا متوقَّع — اعرضهما',
-                    'محطات لا وقود لديها ولا متوقَّع — اعرضها',
-                    'محطة لا وقود لديها ولا متوقَّع — اعرضها'
-                  )}
-                </button>
-              )}
-              {showEmpty && emptyCount === 0 && (visible?.some((s) => !hasStock(s)) ?? false) && (
-                <button
-                  type="button"
-                  onClick={() => setShowEmpty(false)}
-                  className="w-full rounded-xl border border-dashed border-slate-200 bg-white p-3 text-xs font-bold text-slate-500"
-                >
-                  أخفِ المحطات التي لا وقود لديها ولا متوقَّع
-                </button>
-              )}
             </div>
           )}
         </div>
@@ -945,7 +937,7 @@ export default function HomePage() {
       <BottomDock
         view={view}
         near={!!origin}
-        stationCount={listRows?.length ?? 0}
+        stationCount={stocked}
         onList={() => {
           setOrigin(null);
           setView('list');

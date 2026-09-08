@@ -1321,7 +1321,7 @@ async function showOwnerPanel(chat: number, stationId: string, messageId?: numbe
     `الحالة: ${open ? 'مفتوحة الآن' : 'مغلقة الآن'}\n` +
     (shows
       ? ''
-      : '\n⚠️ <b>محطتك لا تظهر في القائمة</b>\nلا منتج متوفراً ولا متوقَّعاً. أعلِن ما وصلك وتعود فوراً.\n') +
+      : '\n⚠️ <b>لا وقود معلَناً على صفحتك</b>\nبطاقتك تظهر مشطوبةً «لا يوجد الآن». أعلن ما وصلك — ولا تَعِد بموعد لا تعرفه.\n') +
     '\nاضغط على أي منتج لتبديل حالته بين متوفر وغير متوفر:';
 
   if (messageId) await edit(chat, messageId, text, { reply_markup: { inline_keyboard: keyboard } });
