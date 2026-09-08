@@ -1,0 +1,118 @@
+name: Deploy Supabase
+
+# ــ لماذا يوجد هذا الملفّ ــــــــــــــــــــــــــــــــــــــــــــــــــــ
+#
+# صاحبُ المنصّة يعمل من هاتفه في أكثر يومه، بعيداً عن حاسبته. وكان نشرُ
+# الدوالِّ وتطبيقُ الهجرات يتطلّبان `supabase login` ثمّ أمراً في طرفيّةٍ على
+# تلك الحاسبة — فيقف العملُ حتى يصلها.
+#
+# فصار الدفعُ هو الأمر: ما يُدفع إلى `main` يُطبَّق وينُشر وحدَه.
+#
+# ــ وسرٌّ واحدٌ يُضبط من الهاتف ــــــــــــــــــــــــــــــــــــــــــــ
+#
+#   SUPABASE_ACCESS_TOKEN   من supabase.com/dashboard/account/tokens
+#
+# ورقمُ المشروع مكتوبٌ هنا لا في سرّ: هو في عنوان الموقع العامّ أصلاً
+# (`<ref>.supabase.co`) فليس سرّاً، وكتابتُه صريحاً تمنع النشرَ على مشروعٍ
+# آخر بالسهو — وللمالك عشراتُ المشاريع.
+#
+# ــ والمستودع عامّ ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+#
+# فالمشغّلُ `push` على `main` و`workflow_dispatch` وحدَهما. ولا `pull_request`:
+# GitHub لا يُمرّر الأسرارَ إلى طلبات الدمج من النسخ المتفرّعة، ولو مرّرها
+# لكان أيُّ غريبٍ يكتب خطوةً تطبعه.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+      - 'supabase/migrations/**'
+      - 'scripts/apply-migrations.mjs'
+      - '.github/workflows/supabase.yml'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'اعرض ما سيقع ولا تفعله'
+        type: boolean
+        default: false
+
+concurrency:
+  # هجرتان تتسابقان على قاعدةٍ واحدةٍ حالٌ لا تُصلَح باستئنافٍ لاحق.
+  group: supabase-deploy
+  cancel-in-progress: false
+
+env:
+  SUPABASE_PROJECT_REF: snlafcvuoxpxcdbtinsy
+
+jobs:
+  migrate:
+    name: الهجرات
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: تطبيقُ ما لم يُطبَّق
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::error::السرُّ SUPABASE_ACCESS_TOKEN غيرُ مضبوط."
+            echo "اضبطه من: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            exit 1
+          fi
+          node scripts/apply-migrations.mjs ${{ inputs.dry_run && '--dry-run' || '' }}
+
+  functions:
+    name: الدوالّ
+    # الهجرةُ قبل الدالّة: دالّةٌ تقرأ عموداً لم يُنشأ بعدُ تسقط على المستخدم،
+    # وهجرةٌ سبقت دالّةً قديمةً لا تضرّ — العمودُ المضافُ لا يُقرأ حتى يُطلب.
+    needs: migrate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: النشر
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "تجربةٌ جافّة — لا نشر."
+            ls supabase/functions
+            exit 0
+          fi
+
+          # تُنشر كلُّها لا المتغيّرةُ وحدَها: الدوالُّ تشترك في `_shared`،
+          # فتغييرُ ملفٍّ هناك يمسّ من لم يتغيّر اسمُه. والنشرُ بلا تغييرٍ
+          # لا ضررَ فيه.
+          #
+          # و`--no-verify-jwt` **لا تُمرَّر هنا**: لكلّ دالّةٍ إعدادُها في
+          # `supabase/config.toml`، والأمرُ يقرؤه. وتمريرُها عموماً كان
+          # سيفتح دوالَّ تتحقّق من الرمز اليوم.
+          failed=""
+          for d in supabase/functions/*/; do
+            name=$(basename "$d")
+            case "$name" in _*) continue;; esac
+            echo "::group::$name"
+            if supabase functions deploy "$name" --project-ref "$SUPABASE_PROJECT_REF"; then
+              echo "✔ $name"
+            else
+              echo "✗ $name"
+              failed="$failed $name"
+            fi
+            echo "::endgroup::"
+          done
+
+          if [ -n "$failed" ]; then
+            echo "::error::سقطت:$failed"
+            exit 1
+          fi
+          echo "نُشرت كلُّها."
