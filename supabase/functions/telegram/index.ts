@@ -18,6 +18,7 @@ import {
 /** سطرُ الجدول في المسوّدة — ومعه مفتاحُه الثابت. */
 type ScheduleLine = RawLine & { key?: string };
 import { countWord, sendScheduleAlert } from '../_shared/alert.ts';
+import { newPassword } from '../_shared/password.ts';
 
 const TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
 const SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')!;
@@ -929,7 +930,9 @@ function phoneCore(raw: string): string {
  *  a second station for the same owner does not fail on a duplicate email. */
 async function ownerFor(core: string): Promise<{ id: string; password: string | null } | null> {
   const email = `p${core}@muhta.app`;
-  const password = `muhta${core.slice(-4)}`;
+  // كانت `muhta${core.slice(-4)}` — أي مشتقّةً من الرقم المعلَن نفسِه، واسمُ
+  // الدخول ذلك الرقم. فمن قرأه دخل. انظر `_shared/password.ts`.
+  const password = newPassword();
 
   const { data: created, error } = await db.auth.admin.createUser({
     email,

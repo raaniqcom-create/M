@@ -180,12 +180,70 @@ Deno.serve(async (req) => {
       }
     }
   } else {
-    const [{ data: d }, { data: alerts }] = await Promise.all([
-      // .range صريح: واجهة PostgREST تقصّ الردّ عند ألف صفّ افتراضياً، وجدول
-      // device_tokens فيه ١٣٧٤ صفّاً اليوم. فالبثّ العامّ كان يصل ٧٣٪ من
-      // الأجهزة، ولوحة المعاينة تؤكّد الرقم المقصوص على أنه الجمهور كلّه.
-      db.from('device_tokens').select('token, platform, keys').range(0, 99_999),
-      db.from('alerts').select('channel, address, keys').eq('channel', 'web').range(0, 99_999),
+    // ── والسقفُ لا يُرفع بل يُلتفّ حوله ──────────────────────────────────
+    //
+    // كان `.range(0, 99_999)`، وهو **لا يُلغي السقف**: يرفع الطلبَ إلى سقفِ
+    // الخادم `db-max-rows` — وقد قِيس اليوم فإذا هو **عشرون ألفاً** بالضبط.
+    // و`device_tokens` فيها ١٣٬٩٧٦ صفّاً وتنمو، أي أنّها تعبره خلال أيّام.
+    //
+    // وحين تعبره لا يقع خطأ: يُقَصّ الردُّ صامتاً، ويُعرض المقصوصُ على أنّه
+    // الجمهورُ كلُّه — وهو بعينه ما وقع حين كان السقفُ ألفاً والجدولُ ١٬٣٧٤،
+    // مكتوبٌ في التعليق الذي كان هنا. العطلُ نفسُه، مؤجَّلاً لا مُصلَحاً.
+    //
+    // فصفحاتٌ حتى تقصر الصفحة، ثمّ **مقارنةٌ بالعدّ الحقيقيّ**: إن نقص شيء
+    // يُرمى الخطأ ولا يُرسَل. بثٌّ ناقصٌ يُختم فيه الناسُ «أُشعروا» أسوأُ من
+    // بثٍّ لم يقع — لأنّ مهلةَ الخمسٍ والأربعين دقيقة تحجبهم عن التالي.
+    // و`orderBy` ليس زينة: الترقيمُ بالإزاحة على جدولٍ بلا ترتيبٍ صريح ترتيبُه
+    // غيرُ مضمون، فصفٌّ يُدرَج بين صفحتين قد يُزيح غيرَه فيتكرّر أو يسقط. وهذان
+    // الجدولان يُكتب فيهما **في أثناء القراءة**: أربعةَ عشرَ ألفَ جهازٍ تسجّل
+    // باستمرار. فعمودٌ ثابتٌ يُرتَّب به، ويصير الترقيمُ محدَّداً.
+    const readAll = async <T>(
+      table: string,
+      cols: string,
+      orderBy: string,
+      where?: (q: any) => any
+    ): Promise<T[]> => {
+      const PAGE = 1000;
+      const out: T[] = [];
+      let total: number | null = null;
+      for (let off = 0; ; off += PAGE) {
+        // العدُّ الدقيق في الصفحة الأولى وحدَها: `count: 'exact'` مسحٌ كامل،
+        // وطلبُه مع كلّ صفحةٍ خمسةَ عشرَ مسحاً حيث يكفي واحد — وهذه قاعدةٌ
+        // على t3.nano متجاوزةٌ حدَّها أصلاً.
+        let q = db
+          .from(table)
+          .select(cols, off === 0 ? { count: 'exact' } : undefined)
+          .order(orderBy)
+          .range(off, off + PAGE - 1);
+        if (where) q = where(q);
+        const { data, error, count } = await q;
+        if (error) throw new Error(`${table}: ${error.message}`);
+        if (off === 0 && typeof count === 'number') total = count;
+        out.push(...((data ?? []) as T[]));
+        if ((data?.length ?? 0) < PAGE) {
+          // **أقلّ** لا «مختلف»: الجدولُ ينمو أثناء القراءة — قِيس، فقُرئ
+          // ١٤٬٠١٦ والعدُّ ١٤٬٠١٥ لأنّ جهازين سجّلا بين الصفحتين. والزيادةُ
+          // لا تضرّ؛ والنقصُ هو القصُّ الصامت الذي كُتب هذا كلُّه لأجله.
+          if (total !== null && out.length < total) {
+            throw new Error(`${table}: قُرئ ${out.length} من ${total} — لا يُبثّ ناقصاً`);
+          }
+          return out;
+        }
+      }
+    };
+
+    const [d, alerts] = await Promise.all([
+      readAll<{ token: string; platform: string; keys: unknown }>(
+        'device_tokens',
+        'token, platform, keys',
+        'token'
+      ),
+      readAll<{ channel: string; address: string; keys: unknown }>(
+        'alerts',
+        'channel, address, keys',
+        'id',
+        (q) => q.eq('channel', 'web')
+      ),
     ]);
     // صفوف المتصفح تُفرَز عن الأصلية: ما دون ios يسقط إلى FCM أدناه، وعنوانُ
     // دفعٍ يُرسَل إلى FCM كرمز جهاز يردّ 400 لا 404 — فلا يُحذف، ويُعاد إليه

@@ -6,6 +6,7 @@
 // stations table alone would leave the station reachable on a number that
 // belongs to nobody, still signed in to by the admin. So this moves both.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { newPassword } from '../_shared/password.ts';
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -61,7 +62,9 @@ Deno.serve(async (req) => {
     if (clash) return json({ error: `الرقم مستخدم في «${clash.name}»` }, 409);
 
     const email = `p${c}@muhta.app`;
-    const password = `muhta${c.slice(-4)}`;
+    // كانت مشتقّةً من الرقم نفسِه، واسمُ الدخول ذلك الرقم — فالنصفان علنيّان.
+    // انظر `_shared/password.ts`.
+    const password = newPassword();
 
     let ownerId: string | null = null;
     let issued: string | null = null;

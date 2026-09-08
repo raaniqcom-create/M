@@ -22,6 +22,8 @@ const db = createClient(
 const TOKEN = Deno.env.get('WHATSAPP_TOKEN') ?? '';
 const PHONE_ID = Deno.env.get('WHATSAPP_PHONE_ID') ?? '';
 const VERIFY = Deno.env.get('WHATSAPP_VERIFY_TOKEN') ?? '';
+/** سرُّ تطبيق Meta — به وحدَه يُعرف أنّ الطلب من Meta لا من أيّ أحد. */
+const APP_SECRET = Deno.env.get('WHATSAPP_APP_SECRET') ?? '';
 const GROQ_KEY = Deno.env.get('GROQ_API_KEY') ?? '';
 const API = 'https://graph.facebook.com/v25.0';
 const SITE = 'https://muhta.online';
@@ -871,6 +873,36 @@ async function handle(from: string, message: Record<string, any>, name: string |
 
 // ── entry ──────────────────────────────────────────────────────────────────
 
+/** هل جاء هذا الطلبُ من Meta حقّاً؟
+ *
+ *  التوقيعُ `sha256=<hex>` على الجسم الخام بسرّ التطبيق. والمقارنةُ بزمنٍ ثابت
+ *  لا بـ`===`: مقارنةُ النصوص تخرج عند أوّل حرفٍ مختلف، وفارقُ الزمن يُقاس
+ *  ويُبنى عليه توقيعٌ صحيحٌ حرفاً بحرف. وهو هجومٌ نظريٌّ على دالّةِ حافّة، لكنّ
+ *  كتابتَه صحيحاً سطرٌ واحدٌ زائد.
+ *
+ *  ولا سرَّ ⇒ لا مرور. */
+async function fromMeta(header: string | null, raw: string): Promise<boolean> {
+  if (!APP_SECRET || !header?.startsWith('sha256=')) return false;
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(APP_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const mac = new Uint8Array(
+    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw))
+  );
+  const mine = [...mac].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const theirs = header.slice(7);
+
+  if (mine.length !== theirs.length) return false;
+  let diff = 0;
+  for (let i = 0; i < mine.length; i++) diff |= mine.charCodeAt(i) ^ theirs.charCodeAt(i);
+  return diff === 0;
+}
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
 
@@ -886,7 +918,31 @@ Deno.serve(async (req) => {
 
   if (req.method !== 'POST') return new Response('ok');
 
-  const body = await req.json().catch(() => null);
+  // ── ومن أرسل هذا الطلب؟ ──────────────────────────────────────────────────
+  //
+  // **لم يكن أحدٌ يسأل.** `WHATSAPP_VERIFY_TOKEN` يحرس المصافحةَ (GET) وحدَها،
+  // و`config.toml` يضع `verify_jwt = false` — فكان فرعُ POST يقبل أيَّ طلبٍ من
+  // أيّ أحدٍ في الإنترنت. ومن يعرف رقمَ محطةٍ (وثلاثٌ وعشرون محطةً تنشره) يصوغ
+  // حمولةً مزوَّرةً كأنّها من Meta فيتحدّث بلسان تلك المحطة إلى البوت.
+  //
+  // وMeta توقّع كلَّ طلبٍ بـHMAC-SHA256 على الجسم الخام بسرّ التطبيق. فيُقرأ
+  // الجسمُ نصّاً **مرّةً واحدة** — لأنّ التوقيعَ على البايتات لا على ما بعد
+  // التحليل — ثمّ يُقارَن بزمنٍ ثابت. وهو حارسُ تلغرام نفسُه في هذا المشروع.
+  //
+  // وإن غاب السرُّ من الأسرار رُفض كلُّ شيء: بابٌ مفتوحٌ لأنّ متغيّراً لم
+  // يُضبط أسوأُ من بابٍ مغلقٍ يُلاحَظ في أوّل رسالة.
+  const raw = await req.text();
+  if (!(await fromMeta(req.headers.get('x-hub-signature-256'), raw))) {
+    return new Response('forbidden', { status: 403 });
+  }
+
+  // موقَّعٌ وغيرُ صالحٍ للتحليل: يُبتلع كما كان يُبتلع، فـMeta تعيد الإرسال.
+  let body: any = null;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return new Response('ok');
+  }
   const value = body?.entry?.[0]?.changes?.[0]?.value;
   const message = value?.messages?.[0];
   if (!message) return new Response('ok');
