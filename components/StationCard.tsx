@@ -169,7 +169,12 @@ export function StationCard({
                   <span>
                     {' '}
                     · {expectedLabel(row.expected_at)}
-                    {row.expected_period ? ` ${PERIOD_LABELS[row.expected_period]}` : ''}
+                    {/* ولا فترةَ ليومٍ مضى: «تأخّر ١١ يوماً الصباح» ذيلٌ لا
+                        معنى له — صباحُ يومٍ فات لا يقول شيئاً. والفترةُ تخصّ
+                        الوعدَ القائم وحدَه. */}
+                    {row.expected_period && !isExpectedLate(row.expected_at)
+                      ? ` ${PERIOD_LABELS[row.expected_period]}`
+                      : ''}
                   </span>
                 )}
               </span>

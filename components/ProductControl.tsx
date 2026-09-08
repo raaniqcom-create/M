@@ -1,6 +1,6 @@
 'use client';
 
-import { PRODUCT_LABELS, expectedLabel, isoDateIn } from '@/lib/products';
+import { PRODUCT_LABELS, expectedLabel, isExpectedLate, isoDateIn } from '@/lib/products';
 import { PERIODS, PERIOD_LABELS, runsOutLabel, type ExpectedPeriod } from '@/lib/hours';
 import { CheckIcon, SpinnerIcon, XIcon } from './icons';
 import type { FuelProduct, StationProduct } from '@/types/database';
@@ -176,8 +176,12 @@ export function ProductControl({
               </div>
 
               <p className="mt-2 text-[11px] font-bold text-amber-900">
+                {/* والمعاينةُ تطابق المعروضَ حرفاً — وإلّا كذبت على من
+                    يقرؤها. فتُسقط الفترةَ حيث تُسقطها البطاقة. */}
                 يظهر للمستخدمين: {expectedLabel(expectedAt)}
-                {expectedPeriod ? ` — ${PERIOD_LABELS[expectedPeriod]}` : ''}
+                {expectedPeriod && !isExpectedLate(expectedAt)
+                  ? ` — ${PERIOD_LABELS[expectedPeriod]}`
+                  : ''}
               </p>
             </>
           )}

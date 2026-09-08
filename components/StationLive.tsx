@@ -132,7 +132,7 @@ export function StationLive({
                     ? `متوفر حتى ${runsOutLabel(row.runs_out_at)}`
                     : 'متوفر'
                   : expected
-                    ? `${expectedLabel(expected)}${row?.expected_period ? ` ${PERIOD_LABELS[row.expected_period]}` : ''}`
+                    ? `${expectedLabel(expected)}${row?.expected_period && !isExpectedLate(expected) ? ` ${PERIOD_LABELS[row.expected_period]}` : ''}`
                     : stale
                       ? `آخر إعلان ${staleAge}`
                       : 'غير متوفر'}
