@@ -401,7 +401,20 @@ export default function HomePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const visible = useMemo(() => {
+  /** ــ النطاق: كلُّ التصفيات إلا المنتج ــــــــــــــــــــــــــــــــــــ
+   *
+   *  **ولماذا المنتجُ وحدَه خارجٌ منها.** كانت تصفيةُ المنتج داخل هذه القائمة،
+   *  ولوحةُ المنتجات فوقها تعدّ من نتيجتها — فكان الرقمُ يعدّ داخلَ تصفيةِ
+   *  نفسِه. أي أنّ ضغطَ «كاز» يجعل رقمَ «بانزين عادي» يعني «المحطاتُ التي فيها
+   *  كازٌ **وفيها** عاديّ» لا «المحطاتُ التي فيها عاديّ».
+   *
+   *  فيتغيّر رقمُ المنتج بضغطةٍ على منتجٍ آخر، وهو ما وصلت به لقطتان: «١٠ كاز ·
+   *  ١ عادي» و«٢ كاز · ٢ عادي» في اللحظة نفسِها وللنطاق نفسِه — والقاعدةُ
+   *  قِيست في تلك الدقيقة: إحدى عشرةَ محطةَ كازٍ حديثة وثلاثُ محطاتِ عاديّ.
+   *
+   *  وأداةُ تصفيةٍ لا تُصفّي خياراتِها: الرقمُ يقول ماذا **سيجد** الضاغط، فإن
+   *  تغيّر بضغطةٍ صار وعداً يُخلَف. فالعدُّ من النطاق، والقائمةُ من التصفية. */
+  const inScope = useMemo(() => {
     if (!stations) return null;
     let rows = origin
       ? stations
@@ -432,18 +445,6 @@ export default function HomePage() {
         (s) => s.products.some((p) => isOffered(s, p))
       );
     }
-    if (filters.product) {
-      rows = rows.filter((s) =>
-        s.products.some(
-          (p) =>
-            p.product === filters.product &&
-            (filters.availableOnly
-              ? isOffered(s, p)
-              : isOffered(s, p) || !!p.expected_at)
-        )
-      );
-    }
-
     const q = query.trim();
     if (q) rows = rows.filter((s) => s.name.includes(q) || s.address.includes(q) || s.city.includes(q));
 
@@ -471,6 +472,21 @@ export default function HomePage() {
         Number(actionable(b)) - Number(actionable(a))
     );
   }, [stations, origin, filters, query, isFollowed, myCities, showAll]);
+
+  /** والقائمة: النطاقُ مصفّى بالمنتج المضغوط. الفرزُ مستقرّ، فالتصفيةُ بعده
+   *  لا تُغيّر ترتيبَ ما بقي. */
+  const visible = useMemo(() => {
+    if (!inScope) return null;
+    const want = filters.product;
+    if (!want) return inScope;
+    return inScope.filter((s) =>
+      s.products.some(
+        (p) =>
+          p.product === want &&
+          (filters.availableOnly ? isOffered(s, p) : isOffered(s, p) || !!p.expected_at)
+      )
+    );
+  }, [inScope, filters.product, filters.availableOnly]);
 
   // كم محطة تُخفيها التصفية — الرقم نفسه الذي يظهر على الزرّ.
   const hiddenElsewhere = useMemo(() => {
@@ -525,11 +541,12 @@ export default function HomePage() {
   // يبحث عن شيء وأقصر طريقٍ إليه أن يضغط نوعه مباشرةً.
   const productCounts = useMemo(() => {
     const m = new Map<FuelProduct, number>();
-    for (const s of visible ?? []) {
+    // من النطاق لا من القائمة — وإلا عدّ المنتجُ داخل تصفيةِ نفسِه. انظر `inScope`.
+    for (const s of inScope ?? []) {
       for (const pr of s.products) if (isOffered(s, pr)) m.set(pr.product, (m.get(pr.product) ?? 0) + 1);
     }
     return [...m.entries()].map(([product, n]) => ({ product, n }));
-  }, [visible]);
+  }, [inScope]);
 
   /** محطةٌ كل منتجاتها غير متوفرة.
    *
@@ -682,7 +699,9 @@ export default function HomePage() {
             <ProductsDashboard
               scopeLabel={scopeLabel ?? undefined}
               live={!staleAt}
-              stations={visible ?? stations}
+              // النطاقُ لا القائمة: اللوحةُ أداةُ تصفية، وأداةٌ تُصفّي خياراتِها
+              // تُغيّر رقمَ منتجٍ بضغطةٍ على منتجٍ آخر. انظر `inScope`.
+              stations={inScope ?? stations}
               filter={filters.product}
               onPick={(product) => setFilters({ ...filters, product })}
               announced={announcements}
