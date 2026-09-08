@@ -70,6 +70,29 @@ jobs:
           xcrun agvtool new-version -all "$n"
           echo "BUILD_NUMBER=$n" >> "$GITHUB_ENV"
 
+      # شاشةُ CarPlay تنادي القاعدةَ مباشرةً بلا WebView، فتقرأ العنوانَ
+      # والمفتاحَ العامّ من Info.plist. ويُحقنان هنا لا في المصدر: المستودعُ
+      # عامّ، وكتابةُ قيمةٍ كهذه في ملفٍّ يُتتبَّع هي الخطأُ الذي وقع في هذا
+      # المشروع يوم ٢٠٢٦-٠٩-٠٨. و`Add` ثمّ `Set` لأنّ المفتاحَ قد لا يكون
+      # موجوداً في أوّل بناء.
+      - name: Inject public Supabase config for CarPlay
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          P=ios/App/App/Info.plist
+          for pair in "MuhtaSupabaseURL:$SUPABASE_URL" "MuhtaSupabaseAnonKey:$SUPABASE_ANON_KEY"; do
+            k="${pair%%:*}"; v="${pair#*:}"
+            /usr/libexec/PlistBuddy -c "Add :$k string" "$P" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Set :$k $v" "$P"
+          done
+          # ويُتحقَّق أنّهما غيرُ فارغين — شاشةٌ تقول «الإعداد ناقص» في سيّارةٍ
+          # أسوأُ من بناءٍ يسقط هنا.
+          for k in MuhtaSupabaseURL MuhtaSupabaseAnonKey; do
+            got=$(/usr/libexec/PlistBuddy -c "Print :$k" "$P" 2>/dev/null || true)
+            if [ -z "$got" ]; then echo "::error::$k is empty — CarPlay would ship broken"; exit 1; fi
+          done
+
       - name: Install App Store Connect API key
         env:
           KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}

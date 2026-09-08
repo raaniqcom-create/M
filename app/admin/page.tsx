@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { metresToKnownFuel, SUSPICIOUS_M } from '@/lib/nearbyFuel';
 import { CheckIcon, LogOutIcon, MapPinIcon, SpinnerIcon, WhatsappIcon, XIcon } from '@/components/icons';
 import { whatsappLink, whatsappVerifyLocation, whatsappVerifyRole } from '@/lib/phone';
+import { ScheduleAdmin } from '@/components/ScheduleAdmin';
 import { AdminStationForm } from '@/components/AdminStationForm';
 import { BroadcastPanel } from '@/components/BroadcastPanel';
 import { AdminThreads } from '@/components/AdminThreads';
@@ -53,6 +54,7 @@ export default function AdminPage() {
     | 'ads'
     | 'offers'
     | 'reviews'
+    | 'schedule'
   >('stations');
   const [q, setQ] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
@@ -367,6 +369,7 @@ export default function AdminPage() {
           ['messages', `الرسائل${totalUnread ? ` (${totalUnread})` : ''}`],
           ['add', 'إضافة محطة'],
           ['announce', 'الإشعارات'],
+          ['schedule', 'جدول الوقود'],
           ['system', 'النظام'],
           ['stats', 'الإحصائيات'],
           ['ads', 'الإعلانات'],
@@ -386,6 +389,12 @@ export default function AdminPage() {
           </button>
         ))}
       </div>
+
+      {tab === 'schedule' && (
+        <div className="mt-4">
+          <ScheduleAdmin />
+        </div>
+      )}
 
       {tab === 'add' && adminId && (
         <div className="mt-4">
