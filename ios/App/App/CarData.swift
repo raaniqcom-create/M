@@ -79,7 +79,9 @@ enum CarData {
         var lat = anbar.latitude
         var lng = anbar.longitude
         var outOfRange = true
-        let status = CLLocationManager.authorizationStatus()
+        // `manager.authorizationStatus` لا `CLLocationManager.authorizationStatus()`:
+        // الثانيةُ مهجورةٌ منذ iOS 14 وقد تُرفض على SDK حديث، والهدفُ 15.
+        let status = manager.authorizationStatus
         if status == .authorizedWhenInUse || status == .authorizedAlways,
            let here = manager.location {
             let away = haversineKm(here.coordinate.latitude, here.coordinate.longitude,
