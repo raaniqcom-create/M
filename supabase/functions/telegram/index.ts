@@ -2549,10 +2549,30 @@ Deno.serve(async (req) => {
         //
         // **إلّا أن يكون حقلٌ ينتظر نصّاً**: فالمكتوبُ حينئذٍ جوابٌ لا منشور،
         // ولو كان اسمُ محطةٍ فيه «تجهيز» و«غاز» لَمحا المسوّدةَ كلَّها.
-        if (draft.step === 'schedadd') {
-          await proposeManual(chat, from, text);
-        } else if (draft.step === 'sched' && !draft.data.sched?.edit && looksLikeSchedule(text)) {
+        //
+        // **والحارسُ يعمّ البابين لا باباً واحداً.**
+        //
+        // كان `looksLikeSchedule` مشروطاً على `sched` وحدَها، و`schedadd` تبتلع
+        // كلَّ ما يُلصق. وزرُّ «إضافةٌ إلى جدول اليوم» يفتح `schedadd`،
+        // و`proposeManual` تكتب `for_date: baghdadDay()` — **اليوم دائماً**،
+        // وهو صحيحٌ لسطرٍ يكتبه صاحبُ المنصّة بيده عن خبرٍ سمعه الآن.
+        //
+        // فوقع ليلةَ ٢٠٢٦-٠٩-٠٨: فُتح البابُ ثمّ لُصق منشورُ قناةٍ من إحدى
+        // وثلاثين محطة الساعةَ ٢١:١٢. فقُرئ أسطراً يدويّةً لليومِ نفسِه، وانضمّ
+        // إلى اثنتَي عشرةَ محطةً نُشرت فجرَ ذلك اليوم — فاختلط جدولان في
+        // تاريخٍ واحد، وخرج الإشعارُ إلى ١١٬٨٧٦ مشتركاً. و`scheduleDay()` كانت
+        // ستعطي **الغد** لو مرّ من بابه، وهو الصواب: ما بعد الظهر يعني الغد.
+        //
+        // والشكلُ يُعرَف: منشورٌ كامل ليس سطراً يدويّاً، أيّاً كان البابُ
+        // المفتوح. وهو المبدأُ المكتوبُ فوقه بأربعة أسطر — «منشورٌ جديدٌ يَجُبُّ
+        // المسوّدة» — ولم يكن مطبَّقاً إلا على نصفه.
+        if (
+          looksLikeSchedule(text) &&
+          (draft.step === 'schedadd' || (draft.step === 'sched' && !draft.data.sched?.edit))
+        ) {
           await proposeSchedule(chat, from, text);
+        } else if (draft.step === 'schedadd') {
+          await proposeManual(chat, from, text);
         } else if (draft.step === 'sched') {
           await correctSchedule(chat, from, draft.data, text);
         } else {
