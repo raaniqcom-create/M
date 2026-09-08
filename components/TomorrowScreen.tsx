@@ -6,12 +6,12 @@ import { PERIOD_LABELS } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
 import { readChoice } from '@/lib/alerts';
 import { isDown, readStatus } from '@/lib/status';
-import { loadStations } from '@/lib/stations';
 import {
   baghdadDate,
   boardDate,
   buildBoard,
   groupBoard,
+  loadExpected,
   loadSchedule,
   type BoardGroup,
 } from '@/lib/scheduleData';
@@ -84,7 +84,7 @@ export function TomorrowScreen() {
         // جدولُ الغد ينتظر المساء؛ وجدولُ اليوم لا ينتظر شيئاً.
         if (target !== baghdadDate() && hour < HOUR_FLOOR) return;
 
-        const [schedule, stations] = await Promise.all([loadSchedule(), loadStations()]);
+        const [schedule, stations] = await Promise.all([loadSchedule(), loadExpected(target)]);
         if (!alive) return;
 
         const choice = readChoice();

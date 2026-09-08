@@ -7,11 +7,11 @@ import { BranchBoard } from '@/components/BranchBoard';
 import { BranchStats } from '@/components/BranchStats';
 import { ScheduleBoard } from '@/components/ScheduleBoard';
 import { SpinnerIcon } from '@/components/icons';
-import { loadStations } from '@/lib/stations';
 import {
   boardDate,
   buildBoard,
   groupBoard,
+  loadExpected,
   loadSchedule,
   type BoardGroup,
 } from '@/lib/scheduleData';
@@ -69,7 +69,7 @@ function BranchSchedule() {
   useEffect(() => {
     void (async () => {
       try {
-        const [schedule, stations] = await Promise.all([loadSchedule(), loadStations()]);
+        const [schedule, stations] = await Promise.all([loadSchedule(), loadExpected(day)]);
         // ولا ترتيبَ بمناطق أحد: الفرعُ يقرأ الأنبار كلَّها بلا تفضيل.
         setGroups(groupBoard(buildBoard(schedule, stations, day), []));
       } catch {

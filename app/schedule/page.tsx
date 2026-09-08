@@ -5,12 +5,12 @@ import { ScheduleBoard } from '@/components/ScheduleBoard';
 import { SpinnerIcon, FuelIcon } from '@/components/icons';
 import { readFailure } from '@/lib/fn';
 import { readChoice } from '@/lib/alerts';
-import { loadStations } from '@/lib/stations';
 import {
   baghdadDate,
   boardDate,
   buildBoard,
   groupBoard,
+  loadExpected,
   loadSchedule,
   type BoardGroup,
 } from '@/lib/scheduleData';
@@ -32,10 +32,9 @@ export default function SchedulePage() {
   useEffect(() => {
     void (async () => {
       try {
-        // نداءان متوازيان: الجدولُ المنشور، ولوحاتُ المحطات. والثاني هو
-        // `loadStations` نفسُها التي تناديها الصفحةُ الرئيسة — بلا استعلامٍ
-        // جديدٍ ولا دالّةِ قاعدة.
-        const [schedule, stations] = await Promise.all([loadSchedule(), loadStations()]);
+        // نداءان متوازيان خفيفان: الجدولُ المنشور، ثمّ صفوفُ الوعد لهذا
+        // اليوم وحدَها — لا المحطاتُ كلُّها.
+        const [schedule, stations] = await Promise.all([loadSchedule(), loadExpected(day)]);
         setGroups(groupBoard(buildBoard(schedule, stations, day), readChoice()?.cities ?? []));
       } catch (e) {
         // والفشلُ ليس فراغاً: «لا جدولَ بعد» و«تعذّر الجلب» خبران مختلفان،
