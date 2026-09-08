@@ -13,7 +13,7 @@
 //   ٣ ـ **الوعدُ الفائت.** في القاعدة وعودٌ من آب لم تُنظَّف، و`isListed`
 //       تُبقيها إلى الأبد. فاللوحةُ تأخذ يومَها وحدَه.
 import assert from 'node:assert/strict';
-import { buildBoard, groupBoard, baghdadDate } from '../lib/board.ts';
+import { applyOverrides, buildBoard, groupBoard, baghdadDate } from '../lib/board.ts';
 
 let n = 0;
 const ok = (label, fn) => {
@@ -244,6 +244,143 @@ ok('والمنطقةُ المجهولةُ آخرَ المجموعات', () => {
   const gs = groupBoard(rows);
   assert.equal(gs[0].city, 'الرمادي');
   assert.equal(gs[gs.length - 1].city, null);
+});
+
+// ــ ٤ ـ المحطةُ تُقرأ لأنّها في الجدول، لا لأنّها وعدت ــــــــــــــــــــــ
+//
+// العطلُ الذي قِيس على «محطة ساسكو»: مربوطةٌ بدرجة مئة، والمنصّةُ تعرف أنّ
+// منتوجَها نفد قبل ثماني ساعات — واللوحةُ تقول «متوقّع»، لأنّ صاحبَها لم يُعلن
+// وعداً لذلك اليوم بعينه فلم تدخل `rows` أصلاً.
+console.log('\nالربطُ بلا وعد:');
+
+ok('سطرٌ مربوطٌ يقرأ حالةَ محطتِه ولو لم تَعِد ذلك اليوم', () => {
+  const st = station('S9', 'محطة ساسكو', 'الفلوجة', [
+    prod('gasoline_regular', {
+      is_available: true,
+      expected_at: null,
+      runs_out_at: new Date(Date.now() - 8 * 3600_000).toISOString(),
+    }),
+  ]);
+  const rows = buildBoard(
+    [chan('c9', 'محطة ساسكو', 'الفلوجة', 'gasoline_regular', { linked_station_id: 'S9' })],
+    [st],
+    DAY
+  );
+  assert.equal(rows.length, 1, 'سطرٌ واحدٌ لا اثنان');
+  assert.equal(rows[0].source, 'station', 'حالةُ المحطة أصدقُ من الوعد المنشور');
+  assert.equal(rows[0].state, 'out', 'المنصّةُ تعرف أنّه نفد — فلتقُله');
+  assert.equal(rows[0].stationId, 'S9');
+  assert.equal(rows[0].alsoInChannel, true);
+});
+
+ok('وبالاسم أيضاً حين لا رابطَ صريح', () => {
+  const st = station('S8', 'محطة تعبئة وقود غصن الزيتون', 'حصيبة الشرقية', [
+    prod('gasoline_regular', { is_available: true }),
+  ]);
+  const rows = buildBoard(
+    [chan('c8', 'غصن الزيتون جويبة', 'حصيبة الشرقية', 'gasoline_regular')],
+    [st],
+    DAY
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].state, 'arrived', 'متوفّرٌ حديثاً ومفتوحة ⇒ وصل');
+});
+
+ok('ولا فترةَ يومٍ آخر تُنسب إلى اليوم', () => {
+  const st = station('S7', 'محطة النور', 'الرمادي', [
+    prod('gasoline_regular', { expected_at: OLD, expected_period: 'morning' }),
+  ]);
+  const rows = buildBoard(
+    [chan('c7', 'محطة النور', 'الرمادي', 'gasoline_regular')],
+    [st],
+    DAY
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].period, null, 'الصباحُ كان لوعدِ آب، لا لليوم');
+});
+
+ok('ومحطةٌ لا تعرف المنتجَ تبقى سطرَ قناة', () => {
+  const st = station('S6', 'محطة الفردوس', 'الفلوجة', [prod('kerosene')]);
+  const rows = buildBoard(
+    [chan('c6', 'محطة الفردوس', 'الفلوجة', 'gasoline_regular')],
+    [st],
+    DAY
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].source, 'channel');
+  assert.equal(rows[0].state, 'expected');
+});
+
+// ــ ٥ ـ علاماتُ المشغّل ــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+console.log('\nالتحكّم:');
+
+const boardOf = () =>
+  buildBoard(
+    [
+      chan('c1', 'محطة الفردوس', 'الفلوجة', 'gasoline_regular'),
+      chan('c2', 'محطة رحاب', 'الفلوجة', 'kerosene'),
+      chan('c3', 'محطة الحق', 'الرمادي', 'gasoline_regular'),
+    ],
+    [
+      station('S1', 'محطة تعبئة وقود غصن الزيتون', 'حصيبة الشرقية', [
+        prod('gasoline_regular', { expected_at: DAY }),
+      ]),
+    ],
+    DAY
+  );
+
+const mark = (extra) => ({
+  for_date: DAY,
+  city: null,
+  station_id: null,
+  station_name: null,
+  product: null,
+  action: 'hide',
+  ...extra,
+});
+
+ok('إخفاءُ محطةٍ بمعرّفها يُسقط سطرَها وحدَه', () => {
+  const rows = boardOf();
+  const out = applyOverrides(rows, [mark({ station_id: 'S1' })], DAY);
+  assert.equal(out.length, rows.length - 1);
+  assert.ok(!out.some((r) => r.stationId === 'S1'));
+});
+
+ok('وبالاسم — وهو ما يملكه سطرُ القناة', () => {
+  const out = applyOverrides(
+    boardOf(),
+    [mark({ station_name: 'محطة الفردوس', city: 'الفلوجة' })],
+    DAY
+  );
+  assert.ok(!out.some((r) => r.name.includes('الفردوس')));
+  assert.ok(out.some((r) => r.name.includes('رحاب')), 'ولا يُصيب جارَها');
+});
+
+ok('إخفاءُ مدينةٍ يُسقطها كلَّها ولا يمسّ غيرَها', () => {
+  const out = applyOverrides(boardOf(), [mark({ city: 'الفلوجة' })], DAY);
+  assert.ok(!out.some((r) => r.city === 'الفلوجة'));
+  assert.ok(out.some((r) => r.city === 'الرمادي'));
+});
+
+ok('و«نفد» اليدويّةُ تشطب ولا تحذف', () => {
+  const out = applyOverrides(
+    boardOf(),
+    [mark({ station_id: 'S1', action: 'out' })],
+    DAY
+  );
+  assert.equal(out.length, boardOf().length, 'لا يُمحى — قرارُ صاحب المنصّة');
+  assert.equal(out.find((r) => r.stationId === 'S1').state, 'out');
+});
+
+ok('وعلامةُ يومٍ آخر لا تمسّ اليوم', () => {
+  const rows = boardOf();
+  const out = applyOverrides(rows, [mark({ for_date: OLD, city: 'الفلوجة' })], DAY);
+  assert.equal(out.length, rows.length, 'الإخفاءُ يومُه وحدَه — لا يُنسى فيخفي أسابيع');
+});
+
+ok('وعلامةٌ فارغةٌ لا تُفرغ اللوحة', () => {
+  const rows = boardOf();
+  assert.equal(applyOverrides(rows, [mark({})], DAY).length, rows.length);
 });
 
 console.log(`${n} فحصاً — كلُّها سليمة.`);

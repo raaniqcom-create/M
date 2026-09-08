@@ -130,10 +130,32 @@ export default function OwnerPage() {
   async function setAvailable(product: FuelProduct, next: boolean) {
     if (!station) return;
     setSavingProduct(product);
+
+    // ── و«غير متوفر» تعني «نفد الآن» ──────────────────────────────────────
+    //
+    // كانت تُطفئ ولا تكتب موعدَ نفاد. فعلامةُ «نفد» في جدول الوقود — وشرطُها
+    // `is_available && hasRunOut(...)` — كانت **ميّتةً عمليّاً**: قِيس، فإذا
+    // صفٌّ واحدٌ من مئتين وثمانين يحقّقها في القاعدة كلِّها، وصفرٌ من ثلاثةَ
+    // عشرَ سطراً على لوحة ذلك اليوم. والحالةُ التي تُطلب منها العلامةُ هي
+    // نفسُها التي كانت تمنعها.
+    //
+    // وأزرارُ «متى تتوقع نفاده؟» لا تُعرض إلا والمنتجُ متوفّر
+    // (`ProductControl.tsx:87-121`)، فلا سبيلَ لصاحب المحطة أن يقولها بيده.
+    //
+    // **والشرطُ الانتقالُ لا الإطفاءُ المجرَّد**: وعدٌ لم يصل بعدُ مطفأٌ أيضاً،
+    // وكتابةُ موعدِ نفادٍ له تجعل ما لم يصل «نفد» — وهو الخلطُ الذي يحرس منه
+    // التعليقُ في `lib/board.ts`. فما كان `true` وصار `false` هو الذي نفد.
+    const was = products.find((p) => p.product === product)?.is_available === true;
+    const ranOut = !next && was ? new Date().toISOString() : null;
+
     setProducts((prev) =>
       prev.map((p) =>
         p.product === product
-          ? { ...p, is_available: next, ...(next ? { runs_out_at: null } : {}) }
+          ? {
+              ...p,
+              is_available: next,
+              ...(next ? { runs_out_at: null } : ranOut ? { runs_out_at: ranOut } : {}),
+            }
           : p
       )
     );
@@ -146,7 +168,7 @@ export default function OwnerPage() {
       .update({
         is_available: next,
         updated_at: new Date().toISOString(),
-        ...(next ? { runs_out_at: null } : {}),
+        ...(next ? { runs_out_at: null } : ranOut ? { runs_out_at: ranOut } : {}),
       })
       .eq('station_id', station.id)
       .eq('product', product);

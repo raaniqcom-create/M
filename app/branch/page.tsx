@@ -9,9 +9,11 @@ import { ScheduleBoard } from '@/components/ScheduleBoard';
 import { SpinnerIcon } from '@/components/icons';
 import {
   boardDate,
+  applyOverrides,
   buildBoard,
   groupBoard,
-  loadExpected,
+  loadBoardStations,
+  loadOverrides,
   loadSchedule,
   type BoardGroup,
 } from '@/lib/scheduleData';
@@ -69,9 +71,11 @@ function BranchSchedule() {
   useEffect(() => {
     void (async () => {
       try {
-        const [schedule, stations] = await Promise.all([loadSchedule(), loadExpected(day)]);
+        const schedule = await loadSchedule();
+        const stations = await loadBoardStations(day, schedule);
+        const marks = await loadOverrides();
         // ولا ترتيبَ بمناطق أحد: الفرعُ يقرأ الأنبار كلَّها بلا تفضيل.
-        setGroups(groupBoard(buildBoard(schedule, stations, day), []));
+        setGroups(groupBoard(applyOverrides(buildBoard(schedule, stations, day), marks, day), []));
       } catch {
         setFailed(true);
       }

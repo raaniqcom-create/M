@@ -180,6 +180,47 @@ export function buildBoard(
       continue;
     }
 
+    // ── والمحطةُ تُقرأ لأنّها في الجدول، لا لأنّها وعدت ──────────────────
+    //
+    // **هنا كان العطل.** البحثُ أعلاه يجري في `rows`، وهي مبنيّةٌ خلف بوّابة
+    // `expected_at !== day`. فمحطةٌ مسجَّلةٌ ورد اسمُها في الجدول ولم تُعلن
+    // وعداً لذلك التاريخ **لا توجد في `rows` أصلاً** — فلا `linked_station_id`
+    // يُستشار ولا اسمٌ يُطابَق، ويُدفع سطرُها «متوقّع» أبداً.
+    //
+    // ووقع مقيساً: «محطة ساسكو» مربوطةٌ بدرجة مئة، والمنصّةُ تعرف أنّ منتوجَها
+    // نفد قبل ثماني ساعات (`runs_out_at` مضى) — واللوحةُ تقول «متوقّع». رابطٌ
+    // تامٌّ يُرمى لأنّ صاحبَها لم يَعِد بذلك اليوم بعينه.
+    //
+    // فيُبحث في المحطات نفسِها لا في الصفوف المبنيّة. وحالتُها الحيّةُ أصدقُ
+    // من الوعد المنشور على كلّ حال — وهو المبدأ المكتوب أعلاه.
+    const st = stations.find(
+      (s) =>
+        (r.linked_station_id && s.id === r.linked_station_id) ||
+        sameStation({ name: s.name, city: s.city }, me)
+    );
+    const live = st?.products.find((p) => p.product === r.product);
+
+    if (st && live) {
+      rows.push({
+        key: `s:${st.id}:${live.product}`,
+        name: st.name,
+        city: st.city,
+        product: live.product,
+        stationId: st.id,
+        source: 'station',
+        state: isOffered(st, live)
+          ? 'arrived'
+          : live.is_available === true && hasRunOut(live.runs_out_at)
+            ? 'out'
+            : 'expected',
+        // ولا فترةَ يومٍ آخر: `expected_period` تخصّ `expected_at`، وهذه محطةٌ
+        // دخلت اللوحةَ بالجدول لا بوعدها — فقولُ «الصباح» عن يومٍ غيرِه كذب.
+        period: live.expected_at === day ? live.expected_period : null,
+        alsoInChannel: true,
+      });
+      continue;
+    }
+
     rows.push({
       key: `c:${r.id}`,
       name: r.station_name,
@@ -193,6 +234,58 @@ export function buildBoard(
   }
 
   return rows;
+}
+
+/** علامةُ مشغّلٍ على لوحة يومٍ بعينه.
+ *
+ *  ── ولماذا جدولٌ مستقلٌّ لا عمودٌ في `fuel_schedule` ─────────────────────
+ *
+ *  لأنّ السطرَ الظاهرَ للناس ليس دائماً سطرَ الجدول. `linkBack` في بوت تلغرام
+ *  يكتب `expected_at` في `station_products` عند كلّ نشر، فتدخل المحطةُ اللوحةَ
+ *  من المصدر الأوّل ويُبتلع سطرُ القناة فيها. فإخفاءُ صفّ `fuel_schedule` كان
+ *  سيترك السطرَ معروضاً — وهو بعينه حالُ «غصن الزيتون».
+ *
+ *  فالعلامةُ تصف **ما يُعرض** لا ما نُشر، وتُطبَّق بعد الدمج.
+ *
+ *  والفارغُ يعني «أيّ»: مدينةٌ بلا محطةٍ تعني المدينةَ كلَّها، ومحطةٌ بلا منتجٍ
+ *  تعني منتجاتِها كلَّها. فسطرٌ واحدٌ يعبّر عن الثلاثة بلا ثلاثِ آليّات. */
+export interface BoardOverride {
+  for_date: string;
+  city: string | null;
+  station_id: string | null;
+  station_name: string | null;
+  product: FuelProduct | null;
+  /** `hide` يُسقط السطر · `out` يشطبه بعلامة «نفد». */
+  action: 'hide' | 'out';
+}
+
+function marks(o: BoardOverride, r: BoardRow): boolean {
+  if (o.product && o.product !== r.product) return false;
+  if (o.station_id && o.station_id !== r.stationId) return false;
+  if (o.station_name && !sameStation({ name: o.station_name, city: o.city }, r)) return false;
+  // والمدينةُ تُفحص وحدَها فقط حين لا محطةَ في العلامة: `sameStation` تفحصها
+  // أصلاً، وفحصُها مرّتين يُسقط علامةً صحيحةً كُتبت بمدينةٍ فارغة.
+  if (!o.station_id && !o.station_name && o.city && o.city !== r.city) return false;
+  // وعلامةٌ بلا شيءٍ إطلاقاً لا تُطبَّق: «أخفِ كلَّ شيء» يُكتب صراحةً لا سهواً.
+  if (!o.product && !o.station_id && !o.station_name && !o.city) return false;
+  return true;
+}
+
+/** يطبّق علاماتِ المشغّل على لوحةٍ مبنيّة — دالّةٌ خالصةٌ تُفحص بـnode.
+ *
+ *  و«نفد» اليدويّةُ تغلب المحسوبة: ما يقوله المشغّلُ عن سطرٍ نشره أدقُّ ما
+ *  عنده. ولا تُرقّى «وصل» إلى «نفد» صدفةً — الغلبةُ صريحةٌ في الاتّجاهين. */
+export function applyOverrides(rows: BoardRow[], overrides: BoardOverride[], day: string): BoardRow[] {
+  const mine = overrides.filter((o) => o.for_date === day);
+  if (!mine.length) return rows;
+
+  const out: BoardRow[] = [];
+  for (const r of rows) {
+    const hit = mine.filter((o) => marks(o, r));
+    if (hit.some((o) => o.action === 'hide')) continue;
+    out.push(hit.some((o) => o.action === 'out') ? { ...r, state: 'out' } : r);
+  }
+  return out;
 }
 
 /** مجموعةٌ واحدة: **منطقةٌ في يوم**. */

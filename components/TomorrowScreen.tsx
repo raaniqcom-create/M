@@ -10,9 +10,11 @@ import { isDown, readStatus } from '@/lib/status';
 import {
   baghdadDate,
   boardDate,
+  applyOverrides,
   buildBoard,
   groupBoard,
-  loadExpected,
+  loadBoardStations,
+  loadOverrides,
   loadSchedule,
   type BoardGroup,
 } from '@/lib/scheduleData';
@@ -104,17 +106,15 @@ export function TomorrowScreen() {
 
         // بمهلةٍ كمهلة الصفحة: هذه الشاشةُ تبتلع فشلَها بصمت، فنداءٌ عالقٌ
         // يترك `waitUntil` قائماً إلى أن تُغلق الصفحة — وهو تسريبٌ صامت.
-        const [schedule, stations] = await withDeadline(
-          Promise.all([loadSchedule(), loadExpected(target)]),
-          15000
-        );
+        const schedule = await withDeadline(loadSchedule(), 15000);
+        const stations = await withDeadline(loadBoardStations(target, schedule), 15000);
         if (!alive) return;
 
         const choice = readChoice();
         const myCities = new Set(choice?.cities ?? []);
         const myProducts = new Set<string>(choice?.products ?? []);
 
-        let rows = buildBoard(schedule, stations, target);
+        let rows = applyOverrides(buildBoard(schedule, stations, target), await loadOverrides(), target);
         // ── والشاشةُ تتبع الإشعارَ حرفيّاً ──────────────────────────────
         //
         // إشعارُ النشر يمرّ بـ`alerts_for` فلا يصل إلا من اختار تلك المنطقة

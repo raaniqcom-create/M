@@ -8,9 +8,11 @@ import { readChoice } from '@/lib/alerts';
 import {
   baghdadDate,
   boardDate,
+  applyOverrides,
   buildBoard,
   groupBoard,
-  loadExpected,
+  loadBoardStations,
+  loadOverrides,
   loadSchedule,
   type BoardGroup,
 } from '@/lib/scheduleData';
@@ -32,18 +34,19 @@ export default function SchedulePage() {
   useEffect(() => {
     void (async () => {
       try {
-        // نداءان متوازيان خفيفان: الجدولُ المنشور، ثمّ صفوفُ الوعد لهذا
-        // اليوم وحدَها — لا المحطاتُ كلُّها.
+        // نداءان خفيفان متتاليان — والترتيبُ لازم: محطاتُ اللوحة تُنتقى بمدن
+        // الجدول ومربوطاتِه، فلا تُعرف قبله. ولا المحطاتُ كلُّها بحال.
         //
-        // وبمهلةٍ حولهما: بلا هذه المهلة بقيت الصفحةُ على مغزلٍ لا ينتهي في
+        // وبمهلةٍ على كلٍّ: بلا هذه المهلة بقيت الصفحةُ على مغزلٍ لا ينتهي في
         // جهازٍ بعينه — صورةُ شاشةٍ من صاحب المنصّة الساعةَ ١٣:١٥ — بينما
         // الخادمُ يجيب في نصف ثانيةٍ من جهازٍ آخر في اللحظة نفسِها. ومهلةُ
         // العميل في `lib/supabase.ts` لا تبلغ ما يعلَق قبل الشبكة.
-        const [schedule, stations] = await withDeadline(
-          Promise.all([loadSchedule(), loadExpected(day)]),
-          15000
-        );
-        setGroups(groupBoard(buildBoard(schedule, stations, day), readChoice()?.cities ?? []));
+        // الجدولُ أوّلاً، ثمّ محطاتُه: الثانيةُ تحتاج مدنَ الأوّل ومربوطاتِه.
+        const schedule = await withDeadline(loadSchedule(), 15000);
+        const stations = await withDeadline(loadBoardStations(day, schedule), 15000);
+        const marks = await loadOverrides();
+        const rows = applyOverrides(buildBoard(schedule, stations, day), marks, day);
+        setGroups(groupBoard(rows, readChoice()?.cities ?? []));
       } catch (e) {
         // والفشلُ ليس فراغاً: «لا جدولَ بعد» و«تعذّر الجلب» خبران مختلفان،
         // وخلطُهما يجعل انقطاعَ الشبكة يبدو خبراً عن الوقود.
