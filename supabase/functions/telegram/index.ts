@@ -6,6 +6,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 // المسح أو من تطبيع الأسماء تعني أن البوت والموقع يفهمان الاسمَ نفسَه فهمين.
 // وهي ملفّاتٌ خالصةٌ بلا شبكةٍ ولا React، تُرفع مع هذه الدالّة عند كلّ نشر.
 import {
+  lineProduct,
   looksLikeSchedule,
   readSchedule,
   type PlatformStation,
@@ -1556,27 +1557,64 @@ async function showSchedule(chat: number, d: { product: string; lines: ScheduleL
 
   const foot = cities.length
     ? reach === null
-      ? `المدن: ${esc(cities.join(' · '))}`
+      ? `المناطق: ${esc(cities.join(' · '))}`
       : `يصل الإشعارُ إلى ${reach} مشتركاً في ${esc(cities.join(' · '))}.`
     : '⚠️ لا منطقةَ معروفةً في الجدول — يُنشر بلا إشعار.';
+
+  // **أهذه أوّلُ دفعةِ اليوم أم إضافةٌ إلى منشور؟**
+  //
+  // القناةُ تنشر رسالتين وأكثر، وقد تُنشر الأولى ثمّ تصل الثانية. فالثانيةُ
+  // «تحديثٌ مباشرٌ للجدول» — قرارُ صاحب المنصّة — والإشعارُ فيها اختيارٌ لا
+  // أصل: من أُشعر بجدول الليلة لا يُزعج ثانيةً لأنّ سطراً أُضيف.
+  const { count: already } = await db
+    .from('fuel_schedule')
+    .select('id', { count: 'exact', head: true })
+    .eq('for_date', day);
+  const adding = (already ?? 0) > 0;
+
+  const verb = adding ? 'أضِف' : 'انشر';
+  const note = adding
+    ? `${NL}➕ يُضاف إلى جدولٍ منشورٍ فيه ${already} محطة.`
+    : '';
 
   await send(
     chat,
     `<b>جدولُ ${dayWord}</b> — ${esc(label)} · ${day}${NL}${NL}` +
       rows.join(NL) +
-      `${NL}${NL}${foot}${NL}${NL}` +
-      `<i>للتصحيح: «٣ الرمادي» تضبط المنطقة، و«٣ حذف» تُسقط السطر،${NL}` +
-      `و«اليوم» أو «غدا» تضبط اليومَ الذي يخصّه الجدول.</i>`,
+      `${NL}${NL}${foot}${note}${NL}${NL}` +
+      `<i>«✏️ تعديل» يشرح كيف تُصحَّح الأسطر.</i>`,
     {
       reply_markup: {
         inline_keyboard: [
           [
-            { text: '📣 انشر', callback_data: 'sch:go' },
+            { text: `📣 ${verb} وأشعِر`, callback_data: 'sch:go' },
+            { text: `🔕 ${verb} بلا إشعار`, callback_data: 'sch:mute' },
+          ],
+          [
+            { text: '✏️ تعديل', callback_data: 'sch:edit' },
             { text: '✖️ ألغِ', callback_data: 'wx' },
           ],
         ],
       },
     }
+  );
+}
+
+/** شرحُ التصحيح — بأسطرِ الجدول الحاضر لا بمثالٍ مجرَّد.
+ *
+ *  طلبه صاحبُ المنصّة: «سأبحث عن اسم المحطة المقصودة وكذلك المنطقة والتفصيل
+ *  وبعدها أعدّل». فالشرحُ يُستدعى بزرٍّ ولا يُحشر في كلّ معاينة. */
+async function showEditHelp(chat: number, d: { lines: ScheduleLine[] }) {
+  const sample = d.lines.length;
+  await send(
+    chat,
+    `<b>تصحيحُ الجدول</b> — اكتب سطراً واحداً:${NL}${NL}` +
+      `<code>٢ الرمادي</code> — يضبط منطقةَ السطر الثاني${NL}` +
+      `<code>٢ اسم محطة الشهداء</code> — يضبط اسمَ المحطة${NL}` +
+      `<code>٢ محسن</code> — يضبط الوقود (عادي · محسن · سوبر · كاز · غاز)${NL}` +
+      `<code>٢ حذف</code> — يُسقط السطر${NL}` +
+      `<code>اليوم</code> أو <code>غدا</code> — يضبط اليومَ${NL}${NL}` +
+      `<i>الأرقامُ من ١ إلى ${sample}. وبعد كلّ تصحيحٍ تُعاد المعاينةُ بأزرارها.</i>`
   );
 }
 
@@ -1617,8 +1655,20 @@ async function correctSchedule(chat: number, userId: number, d: Draft, raw: stri
   const rest = parts.slice(1).join(' ').trim();
   if (!rest) return void (await send(chat, '⚠️ بعد الرقم: اسمُ المنطقة، أو «حذف».'));
 
-  if (rest === 'حذف') sched.lines.splice(n - 1, 1);
-  else sched.lines[n - 1].city = rest;
+  // الترتيبُ مقصود: «حذف» أوّلاً فهي كلمةٌ واحدةٌ لا لبسَ فيها، ثمّ «اسم»
+  // لأنّ ما بعدها نصٌّ حرٌّ قد يحوي اسمَ منطقةٍ أو وقود، ثمّ الوقودُ لأنّه
+  // مجموعةٌ مغلقة، وما بقي منطقة.
+  if (rest === 'حذف') {
+    sched.lines.splice(n - 1, 1);
+  } else if (rest.startsWith('اسم ')) {
+    const name = rest.slice(4).trim();
+    if (name.length < 2) return void (await send(chat, '⚠️ بعد «اسم»: اسمُ المحطة.'));
+    sched.lines[n - 1].name = name;
+  } else {
+    const pr = lineProduct(rest);
+    if (pr) sched.lines[n - 1].product = pr;
+    else sched.lines[n - 1].city = rest;
+  }
 
   if (!sched.lines.length) {
     await clearDraft(userId);
@@ -1629,7 +1679,12 @@ async function correctSchedule(chat: number, userId: number, d: Draft, raw: stri
 }
 
 /** الضغطة: صفوفُ الجدول تُكتب، ثمّ إشعارٌ واحدٌ لا واحدٌ لكلّ محطة. */
-async function publishSchedule(chat: number, userId: number, queryId: string) {
+async function publishSchedule(
+  chat: number,
+  userId: number,
+  queryId: string,
+  notify: boolean
+) {
   const draft = await getDraft(userId);
   const d = draft?.data?.sched;
   if (!d?.lines?.length) {
@@ -1670,13 +1725,28 @@ async function publishSchedule(chat: number, userId: number, queryId: string) {
   await answer(queryId, 'نُشر ✅');
 
   const when = for_date === baghdadDay() ? 'اليوم' : 'غداً';
+
+  // **بلا إشعار: يُختم كأنّه أُشعر.** `alerted_at` يقول «انقضى أمرُ الإشعار عن
+  // هذا الصفّ» — أُرسل أو قُرّر ألّا يُرسل. ولولا الختمُ لَأرسلت شبكةُ الصباح
+  // ما اخترتَ إسكاته.
+  if (!notify) {
+    await db
+      .from('fuel_schedule')
+      .update({ alerted_at: new Date().toISOString() })
+      .eq('batch_id', batch_id);
+    await send(
+      chat,
+      `✅ أُضيف إلى جدول ${for_date} — ${countWord(d.lines.length)}، بلا إشعار.`
+    );
+    return;
+  }
+
   const { sent, why } = await sendScheduleAlert(
     schedCities(d.lines),
     schedProducts(d.lines),
     d.lines.length,
     when
   );
-  // ويُختم الجدولُ بلحظة خروج خبره — عليه تقوم شبكةُ الأمان الصباحيّة.
   if (sent) {
     await db
       .from('fuel_schedule')
@@ -1805,7 +1875,14 @@ Deno.serve(async (req) => {
         await answer(cb.id, 'تم التحديث');
         await showOwnerPanel(chat, data.slice(2), messageId);
       } else if (data === 'sch:go') {
-        await publishSchedule(chat, from, cb.id);
+        await publishSchedule(chat, from, cb.id, true);
+      } else if (data === 'sch:mute') {
+        await publishSchedule(chat, from, cb.id, false);
+      } else if (data === 'sch:edit') {
+        await answer(cb.id);
+        const draft = await getDraft(from);
+        if (draft?.data?.sched) await showEditHelp(chat, draft.data.sched);
+        else await send(chat, 'انتهت الجلسة. أعِد تحويلَ المنشور.');
       } else if (data.startsWith('t:')) {
         const [, stationId, product] = data.split(':');
         await toggleProduct(chat, messageId, from, stationId, product, cb.id);
