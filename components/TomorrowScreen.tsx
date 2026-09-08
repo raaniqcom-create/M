@@ -5,6 +5,7 @@ import { PRODUCT_LABELS } from '@/lib/products';
 import { PERIOD_LABELS } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
 import { readChoice } from '@/lib/alerts';
+import { withDeadline } from '@/lib/fn';
 import { isDown, readStatus } from '@/lib/status';
 import {
   baghdadDate,
@@ -84,7 +85,12 @@ export function TomorrowScreen() {
         // جدولُ الغد ينتظر المساء؛ وجدولُ اليوم لا ينتظر شيئاً.
         if (target !== baghdadDate() && hour < HOUR_FLOOR) return;
 
-        const [schedule, stations] = await Promise.all([loadSchedule(), loadExpected(target)]);
+        // بمهلةٍ كمهلة الصفحة: هذه الشاشةُ تبتلع فشلَها بصمت، فنداءٌ عالقٌ
+        // يترك `waitUntil` قائماً إلى أن تُغلق الصفحة — وهو تسريبٌ صامت.
+        const [schedule, stations] = await withDeadline(
+          Promise.all([loadSchedule(), loadExpected(target)]),
+          15000
+        );
         if (!alive) return;
 
         const choice = readChoice();

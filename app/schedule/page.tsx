@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { ScheduleBoard } from '@/components/ScheduleBoard';
 import { SpinnerIcon, FuelIcon } from '@/components/icons';
-import { readFailure } from '@/lib/fn';
+import { readFailure, withDeadline } from '@/lib/fn';
 import { readChoice } from '@/lib/alerts';
 import {
   baghdadDate,
@@ -34,7 +34,15 @@ export default function SchedulePage() {
       try {
         // نداءان متوازيان خفيفان: الجدولُ المنشور، ثمّ صفوفُ الوعد لهذا
         // اليوم وحدَها — لا المحطاتُ كلُّها.
-        const [schedule, stations] = await Promise.all([loadSchedule(), loadExpected(day)]);
+        //
+        // وبمهلةٍ حولهما: بلا هذه المهلة بقيت الصفحةُ على مغزلٍ لا ينتهي في
+        // جهازٍ بعينه — صورةُ شاشةٍ من صاحب المنصّة الساعةَ ١٣:١٥ — بينما
+        // الخادمُ يجيب في نصف ثانيةٍ من جهازٍ آخر في اللحظة نفسِها. ومهلةُ
+        // العميل في `lib/supabase.ts` لا تبلغ ما يعلَق قبل الشبكة.
+        const [schedule, stations] = await withDeadline(
+          Promise.all([loadSchedule(), loadExpected(day)]),
+          15000
+        );
         setGroups(groupBoard(buildBoard(schedule, stations, day), readChoice()?.cities ?? []));
       } catch (e) {
         // والفشلُ ليس فراغاً: «لا جدولَ بعد» و«تعذّر الجلب» خبران مختلفان،

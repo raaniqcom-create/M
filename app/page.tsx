@@ -2,6 +2,7 @@
 
 import { StaleBanner } from '@/components/StaleBanner';
 import { STATUS_RECHECK } from '@/lib/status';
+import { readFailure, withDeadline } from '@/lib/fn';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
@@ -74,6 +75,7 @@ export default function HomePage() {
   /** ساعةُ وصول ما هو معروضٌ الآن — تُملأ حين يسقط الاتصال ويبقى المعروض قديماً.
    *  و`null` تعني «حيّ»، فلا يظهر الشريط في الحال الطبيعيّة. */
   const [staleAt, setStaleAt] = useState<string | null>(null);
+  const [staleWhy, setStaleWhy] = useState<string | null>(null);
   /** يُقرآن داخل ردٍّ أُنشئ مرّةً مع الأثر، فقراءةُ الحالة هناك تُرجع قيمةَ
    *  أوّل رسمٍ إلى الأبد. */
   const failedRef = useRef(false);
@@ -183,18 +185,6 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    // A dropped connection must surface as a retry prompt, not an endless
-    // spinner — and that was the intent here, but nothing enforced it. If a
-    // request neither resolves nor rejects (a WebView that suspends mid-flight
-    // is the common way), .catch never runs and the first screen of the app is
-    // a spinner that never stops. So the wait is bounded here rather than
-    // trusted to the transport.
-    const withDeadline = (p: Promise<StationWithStatus[]>, ms: number) =>
-      new Promise<StationWithStatus[]>((resolve, reject) => {
-        const t = setTimeout(() => reject(new Error('timeout')), ms);
-        p.then(resolve, reject).finally(() => clearTimeout(t));
-      });
-
     // آخرُ لحظةٍ وصلت فيها بياناتٌ حيّة. في ref لا في state: تُقرأ داخل مُعالِج
     // الفشل الذي أُنشئ مرّةً واحدةً مع التأثير، فقراءةُ state هناك تُرجع قيمةَ
     // أوّل رسمٍ إلى الأبد.
@@ -206,10 +196,16 @@ export default function HomePage() {
           setStations(rows);
           setFailed(false);
           setStaleAt(null);
+          setStaleWhy(null);
           okAt.current = new Date().toISOString();
         })
-        .catch(() => {
+        .catch((e) => {
           setFailed(true);
+          // **والسببُ يُحفظ لا يُبتلع.** كان `catch` فارغاً، فيقرأ صاحبُ الجهاز
+          // «الاتصال منقطع» سواءٌ انتهت المهلةُ أم رُفض المفتاحُ أم سقطت
+          // الشبكة — ثلاثةُ أسبابٍ بجملةٍ واحدة، ولا سبيلَ إلى تمييزها من صورةِ
+          // شاشة. و`readFailure` تفصل البطءَ عن الانقطاع بلفظين.
+          setStaleWhy(readFailure(e));
           // ربّما ليست شبكةً بل صيانةٌ بدأت والتبويبُ مفتوح — تُسأل مرّةً.
           window.dispatchEvent(new Event(STATUS_RECHECK));
           // **وهنا كان الصمت.** الشرطُ في الأسفل كان يعرض بطاقةَ الخطأ حين
@@ -606,7 +602,7 @@ export default function HomePage() {
             من الصفوف القديمة نفسِها. فتحذيرٌ يأتي بعدها يصل بعد أن تكوّن
             الاعتقادُ الخاطئ. قِيس في المتصفّح: كان يقع تحتها فعلاً. */}
         {staleAt && stations && (
-          <StaleBanner at={staleAt} onRetry={() => refreshRef.current()} />
+          <StaleBanner at={staleAt} why={staleWhy} onRetry={() => refreshRef.current()} />
         )}
 
         <TripAsk stations={stations} />
@@ -633,6 +629,7 @@ export default function HomePage() {
              *  رقم آخر، ولو كان كلٌّ منهما صادقاً في سياقه. */}
             <ProductsDashboard
               scopeLabel={scopeLabel ?? undefined}
+              live={!staleAt}
               stations={visible ?? stations}
               filter={filters.product}
               onPick={(product) => setFilters({ ...filters, product })}

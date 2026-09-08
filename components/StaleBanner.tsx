@@ -26,7 +26,17 @@ import { FRESH_HOURS } from '@/lib/hours';
  *  والحدّان قائمان في المنصّة، ولا يُخترع ثالث: دون FRESH_HOURS تُقال «قديمة»،
  *  وفوقها «أقدمُ من أن يُبنى عليها قرار»، وفوق WITHDRAW_HOURS لا تُعرض
  *  اللقطةُ أصلاً — ترفضها `loadCachedStations`. */
-export function StaleBanner({ at, onRetry }: { at: string; onRetry: () => void }) {
+export function StaleBanner({
+  at,
+  why,
+  onRetry,
+}: {
+  at: string;
+  /** سببُ آخر محاولةٍ فاشلة — بطءُ الشبكة أم تعذّرُ الوصول. تُترك فارغةً حين
+   *  تُعرض لقطةُ الجهاز قبل أن تقع محاولةٌ في هذه الجلسة. */
+  why?: string | null;
+  onRetry: () => void;
+}) {
   const when = new Date(at);
   const hours = (Date.now() - when.getTime()) / 3600_000;
   const dead = hours >= FRESH_HOURS;
@@ -71,6 +81,17 @@ export function StaleBanner({ at, onRetry }: { at: string; onRetry: () => void }
       >
         أعد المحاولة
       </button>
+
+      {/* **والسببُ مكتوبٌ تحت السطر.** «الاتصال منقطع» وصفُ الأثر لا السبب،
+          ومن يقرؤه يظنّ الخللَ في المنصّة. وبطءُ الشبكة يُعالَج بالانتظار،
+          وتعذّرُ الوصول يُعالَج بشيءٍ آخر — فيُقالان بلفظين لا بلفظ. */}
+      {why && (
+        // و«أعد المحاولة» تُحذف من ذيله: الزرُّ فوقه يقولها، وتكرارُها في سطرين
+        // متجاورين يجعل السطرَ الثاني يُقرأ زرّاً ثانياً.
+        <div className="mt-1 text-[10.5px] font-normal opacity-80">
+          {why.replace(/\s*أعد المحاولة\.?\s*$/, '')}
+        </div>
+      )}
     </div>
   );
 }

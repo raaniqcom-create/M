@@ -46,6 +46,26 @@ export function readFailure(e: unknown): string {
     : 'تعذّر الاتصال بالخادم. تحقّق من الإنترنت.';
 }
 
+/** مهلةٌ حول الوعد كلِّه — لأنّ الطلبَ ليس أوّلَ ما قد يعلَق.
+ *
+ *  في `lib/supabase.ts` مهلةٌ لكلّ طلب، وهي تحرس الشبكةَ وحدَها. لكنّ العميل
+ *  ينتظر جلسةَ الحساب **قبل** أن يبني الطلب، فما يعلَق قبل الشبكة لا تمسّه
+ *  مهلتُها: لا يُرفض النداءُ ولا يُقبل، ولا يعمل `catch` أبداً.
+ *
+ *  وقد وقع وصُوِّر: `/schedule` على مغزلٍ لا ينتهي — لا خبرَ ولا زرَّ إعادة —
+ *  بينما القاعدةُ والواجهةُ تُقاسان سليمتين من جهازٍ آخر في اللحظة نفسِها.
+ *
+ *  فكانت هذه القاعدةُ في الصفحة الرئيسة وحدَها مكتوبةً داخل تأثيرها؛ وصارت
+ *  هنا لتُقاسمها السطوحُ الثلاثة: أيّاً كان موضعُ العُلقة، ينتهي الانتظارُ
+ *  بخبرٍ يُقرأ. والخطأُ يُسمّى `timeout` كي تعرفه `isAborted` فيقول
+ *  `readFailure` «الشبكة بطيئة» لا «تعذّر الاتصال» — وهما سببان مختلفان. */
+export function withDeadline<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('timeout')), ms);
+    p.then(resolve, reject).finally(() => clearTimeout(t));
+  });
+}
+
 export interface FnResult<T> {
   ok: boolean;
   status: number;

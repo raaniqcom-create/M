@@ -65,9 +65,20 @@ export function useSession(): Session {
       }
     }
 
-    read();
+    // **و`ready` تُحسم في كلّ طريق.** لم يكن في `read` مِقبضٌ للخطأ: أيُّ رفضٍ
+    // من `profiles` أو `is_branch_viewer` يُسقط الدالّةَ فتبقى `ready` كاذبةً
+    // إلى الأبد — وعندها يُرسم عنوانُ «حسابي» في القائمة **بلا بندٍ تحته**،
+    // لأنّ بنودَه كلَّها خلف `ready`. وهو ما صُوِّر ووصل.
+    //
+    // وحين يُجهل الدور: `signedIn: true, role: null` — وهو الطريقُ المكتوب
+    // أصلاً لفشل قراءة الدور أعلاه، فلا يُخترع ثالث.
+    read().catch(() => {
+      if (alive) setSession((s) => ({ ...s, ready: true }));
+    });
     // a sign-out in another tab, or a token refresh, must reach this too
-    const { data: sub } = supabase.auth.onAuthStateChange(() => read());
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      read().catch(() => {});
+    });
     return () => {
       alive = false;
       sub.subscription.unsubscribe();

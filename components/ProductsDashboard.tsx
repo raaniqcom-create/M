@@ -12,6 +12,7 @@ export function ProductsDashboard({
   announced = [],
   onPickAnnounced,
   scopeLabel,
+  live = true,
 }: {
   stations: StationWithStatus[];
   filter: FuelProduct | null;
@@ -23,6 +24,8 @@ export function ProductsDashboard({
    *  محطة يقرأ من في القائم «47 بانزين محسن» ثم يرى بطاقتين — وليس على الشاشة
    *  كلمةٌ واحدة تشرح لماذا. فصار الرقم والقائمة من نطاقٍ واحد، ومكتوبٍ. */
   scopeLabel?: string;
+  /** هل الأرقامُ حيّة؟ حين تُعرض لقطةٌ قديمة لأنّ الجلب فشل تصير `false`. */
+  live?: boolean;
   /** أخبار اليوم عن محطات لم تنضمّ — تُعدّ منفصلةً ولا تُخلط. */
   announced?: OpenAnnouncement[];
   onPickAnnounced?: () => void;
@@ -52,12 +55,31 @@ export function ProductsDashboard({
         <h2 className="text-sm font-bold text-brand-900">
           {scopeLabel ? `المتوفر الآن في ${scopeLabel}` : 'المنتجات المتوفرة الآن'}
         </h2>
-        <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
+        {/* ── ونقطةٌ خضراء لا تنبض على بياناتٍ ميّتة ─────────────────────
+          *
+          *  كانت «مباشر» زينةً ثابتة: نقطةٌ خضراء تنبض في كلّ حال. فوصلت صورةُ
+          *  شاشةٍ من صاحب المنصّة تحمل الشريطَ الأصفر «الاتصال منقطع — هذه
+          *  حالةُ الساعة ٥:٠٦ ص» وتحته بسنتيمترٍ واحد نقطةٌ خضراء تقول
+          *  «مباشر» عن الأرقام نفسِها. جملتان متناقضتان في لقطةٍ واحدة، والتي
+          *  تُصدَّق هي الخضراء — فالخضرةُ تُقرأ قبل الحرف.
+          *
+          *  فصارت تتبع الحال: حيّةٌ تنبض، أو رماديّةٌ ساكنةٌ تقول «غير متصل». */}
+        <span
+          className={`flex items-center gap-1.5 text-[11px] font-medium ${
+            live ? 'text-slate-400' : 'text-amber-700'
+          }`}
+        >
           <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-pulse-ring rounded-full bg-brand-400" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-brand" />
+            {live && (
+              <span className="absolute inline-flex h-full w-full animate-pulse-ring rounded-full bg-brand-400" />
+            )}
+            <span
+              className={`relative inline-flex h-2 w-2 rounded-full ${
+                live ? 'bg-brand' : 'bg-amber-500'
+              }`}
+            />
           </span>
-          مباشر
+          {live ? 'مباشر' : 'غير متصل'}
         </span>
       </div>
 
