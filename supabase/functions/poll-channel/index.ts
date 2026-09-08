@@ -22,6 +22,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { looksLikeSchedule } from '../../../lib/schedule.ts';
+import { sendScheduleAlert } from '../_shared/alert.ts';
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -88,10 +89,111 @@ function readChannel(html: string, slug: string): ChannelPost[] {
   return out;
 }
 
+/** ساعةُ شبكة الأمان بتوقيت بغداد — طلبُ صاحب المنصّة. */
+const ALERT_HOUR = 7;
+
+const baghdadHour = () =>
+  Number(
+    new Date().toLocaleString('en-US', {
+      timeZone: 'Asia/Baghdad',
+      hour: '2-digit',
+      hour12: false,
+    })
+  );
+
+const baghdadDay = () =>
+  new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Baghdad' });
+
+/** يُرسل نصّاً إلى بوت المنصّة كأنّ الإدارةَ كتبته.
+ *
+ *  السرُّ من بيئة الدالّة نفسِها، فلا يخرج منها. وهو المسلكُ الذي يجعل
+ *  المعاينةَ والتصحيحَ والنشرَ كلَّها في مكانٍ واحد. */
+async function tellBot(text: string): Promise<boolean> {
+  const admins = (Deno.env.get('TELEGRAM_ADMIN_IDS') ?? '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const secret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET');
+  if (!admins.length || !secret) return false;
+  const admin = Number(admins[0]);
+  const now = Math.floor(Date.now() / 1000);
+  const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/telegram`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-telegram-bot-api-secret-token': secret,
+    },
+    body: JSON.stringify({
+      update_id: now,
+      message: {
+        message_id: now,
+        date: now,
+        from: { id: admin, is_bot: false, first_name: 'رصد' },
+        chat: { id: admin, type: 'private' },
+        text,
+      },
+    }),
+  });
+  if (!r.ok) console.error('telegram', r.status, await r.text());
+  return r.ok;
+}
+
 Deno.serve(async (req) => {
   const cron = Deno.env.get('CRON_SECRET');
   if (!cron || req.headers.get('x-cron-secret') !== cron) {
     return new Response('forbidden', { status: 403 });
+  }
+
+  // ── شبكةُ الأمان الصباحيّة ───────────────────────────────────────────
+  //
+  // الجدولُ يُنشر ليلاً — بعد الحاديةَ عشرةَ غالباً، وأحياناً بعد منتصف الليل.
+  // وإشعارٌ يخرج الثالثةَ فجراً إزعاجٌ لا خبر، وجدولٌ بلا إشعارٍ خبرٌ لا يصل.
+  // فالسابعةُ صباحاً (طلبُ صاحب المنصّة): إن بقي جدولُ اليوم بلا إشعار، خرج.
+  //
+  // و`alerted_at` يمنع التكرار: إن خرج الإشعارُ مساءً صمتت هذه تماماً. ولا
+  // تُرسل بنفسها بل تكتب `/اشعار` إلى البوت — فالنداءُ واحدٌ في مكانٍ واحد،
+  // ويبقى في محادثة الإدارة أثرٌ يقول ما جرى.
+  // `?morning=1` يُشغّلها الآن، و`&dry=1` يجعلها بروفةً تعدّ ولا تُرسل —
+  // فيُفحص المسارُ كاملاً قبل السابعة، لا بعد فواتها.
+  const params = new URL(req.url).searchParams;
+  const forced = params.get('morning') === '1';
+  const dry = params.get('dry') === '1';
+
+  if (forced || baghdadHour() === ALERT_HOUR) {
+    const day = baghdadDay();
+    const { data: due } = await db
+      .from('fuel_schedule')
+      .select('product, city')
+      .eq('for_date', day)
+      .is('alerted_at', null);
+
+    if (due?.length) {
+      const cities = [...new Set(due.map((r) => r.city).filter(Boolean))] as string[];
+      const products = [...new Set(due.map((r) => r.product))] as string[];
+      const { sent, why } = await sendScheduleAlert(cities, products, due.length, 'اليوم', dry);
+
+      // **الختمُ عند النجاح وحدَه.** ولو خُتم عند الفشل لَسكتت الشبكةُ عن جدولٍ
+      // لم يصل أحداً، وهو نقيضُ ما بُنيت له.
+      if (sent && !dry) {
+        await db
+          .from('fuel_schedule')
+          .update({ alerted_at: new Date().toISOString() })
+          .eq('for_date', day)
+          .is('alerted_at', null);
+      }
+
+      // وتُخبر الإدارةَ بما جرى — إخبارٌ لا اعتماد: فشلُ الرسالة لا يمسّ
+      // الإشعارَ الذي خرج سلفاً.
+      if (dry) return json({ ok: true, dryRun: { day, due: due.length, cities, products, sent, why } });
+
+      await tellBot(
+        sent
+          ? `📣 شبكةُ الصباح: وصل إشعارُ جدول ${day} إلى ${sent} مشتركاً في ${cities.join(' · ')}.`
+          : `⚠️ شبكةُ الصباح: لم يخرج إشعارُ جدول ${day} — ${why}`
+      ).catch(() => {});
+
+      return json({ ok: true, morningAlert: { day, due: due.length, sent, why } });
+    }
   }
 
   const { data: channels } = await db
@@ -166,10 +268,7 @@ Deno.serve(async (req) => {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  const secret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET');
-  if (!admins.length || !secret) {
-    return json({ ok: false, why: 'TELEGRAM_ADMIN_IDS أو TELEGRAM_WEBHOOK_SECRET غائب' }, 500);
-  }
+  if (!admins.length) return json({ ok: false, why: 'TELEGRAM_ADMIN_IDS غائب' }, 500);
   const admin = Number(admins[0]);
 
   // ولا يُقاطَع عملٌ جارٍ: مسوّدةٌ مفتوحةٌ تعني أنّ الإدارةَ في وسط شيء —
@@ -181,28 +280,8 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (busy) return json({ ok: true, fetched, fresh, proposed: null, why: 'مسوّدةٌ مفتوحة' });
 
-  const now = Math.floor(Date.now() / 1000);
-  const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/telegram`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-telegram-bot-api-secret-token': secret,
-    },
-    body: JSON.stringify({
-      update_id: now,
-      message: {
-        message_id: now,
-        date: now,
-        from: { id: admin, is_bot: false, first_name: 'رصد' },
-        chat: { id: admin, type: 'private' },
-        text: post.body,
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    console.error('telegram', res.status, await res.text());
-    return json({ ok: false, fetched, fresh, why: `telegram ${res.status}` }, 500);
+  if (!(await tellBot(post.body))) {
+    return json({ ok: false, fetched, fresh, why: 'تعذّر بلوغُ البوت' }, 500);
   }
 
   await db

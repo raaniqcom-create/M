@@ -1,0 +1,75 @@
+// إشعارُ الجدول — نداءٌ واحدٌ يشترك فيه البوتُ والرصد.
+//
+// ── ولماذا مُشترَك ───────────────────────────────────────────────────────
+//
+// لأنّ هذا النداءَ فشل مرّةً بلا أثر: نُشر جدولُ ٢٠٢٦-٠٩-٠٨ فلم يخرج خبرُه،
+// ولا صفَّ في `notification_log` ولا عنوانَ خُتم. و`announce` نفسُها سليمة —
+// أُثبت ذلك بنداءٍ مباشر وصل ثلاثةً وعشرين جهازاً. فالعطلُ في الوسيط.
+//
+// فصارت شبكةُ الأمان الصباحيّة تنادي `announce` **مباشرةً** لا عبر البوت،
+// وصار النصُّ واحداً في ملفٍّ واحدٍ يستورده الاثنان — فلا نسختان تفترقان.
+
+import { PRODUCT_LABELS } from '../../../lib/products.ts';
+
+export interface AlertOutcome {
+  sent: number;
+  why: string;
+}
+
+/** العربيةُ تعدّ على أربعة وجوه، و«7 محطة» تُقرأ خطأً. */
+export const countWord = (n: number) =>
+  n === 1 ? 'محطة واحدة' : n === 2 ? 'محطتين' : n <= 10 ? `${n} محطات` : `${n} محطة`;
+
+/** يُخرج إشعارَ الجدول، ويردّ بعددِ من وصلهم — أو بسببِ الفشل نصّاً.
+ *
+ *  **والسببُ يُردّ ولا يُكتب في سجلّ.** سجلُّ الدوالّ في هذا المشروع لا
+ *  يُبتلَع، ففُحص فوُجد فارغاً ساعةَ الحاجة إليه. فالسببُ يعود إلى المُنادي
+ *  ليقوله في محادثة الإدارة — وهي المكانُ الوحيد المضمون.
+ *
+ *  **ونداءٌ واحدٌ بكلّ المناطق، لا نداءٌ لكلّ منطقة.** ليس اختصاراً: announce
+ *  يوحّد العناوين عبر المناطق في النداء الواحد، ومهلةُ الخمس والأربعين دقيقة
+ *  في alerts_for تعني أن نداءً ثانياً بعد الأوّل لا يصل أحداً. */
+export async function sendScheduleAlert(
+  cities: string[],
+  products: string[],
+  count: number,
+  when: string,
+  // بروفةٌ تعدّ ولا تُرسل — بها يُفحص المسار كلُّه بلا أن يصل أحداً شيء.
+  // ولزمت لأنّ فحصاً بمنطقةٍ مخترعةٍ ليس بلا جمهور: من اختار «كلّ المدن»
+  // يُطابق أيَّ منطقة، فوصلته رسالةُ «فحص» — ثلاثةٌ وعشرون شخصاً.
+  dryRun = false
+): Promise<AlertOutcome> {
+  if (!cities.length) return { sent: 0, why: 'لا منطقةَ معروفةً في الجدول' };
+  const cron = Deno.env.get('CRON_SECRET');
+  if (!cron) return { sent: 0, why: 'CRON_SECRET غائبٌ عن بيئة الدالّة' };
+
+  const label = products.map((p) => PRODUCT_LABELS[p as never] ?? p).join(' و');
+  try {
+    const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/announce`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-cron-secret': cron },
+      body: JSON.stringify({
+        title: `${label} ${when}`,
+        body:
+          `يصل ${label} ${when} إلى ${countWord(count)} في ` +
+          `${cities.join(' و')} — افتح التطبيق لترى القائمة.`,
+        cities,
+        products,
+        url: '/schedule',
+        dryRun,
+      }),
+    });
+    const raw = await r.text();
+    if (!r.ok) return { sent: 0, why: `announce ${r.status}: ${raw.slice(0, 160)}` };
+    let audience: Record<string, number> = {};
+    try {
+      audience = (JSON.parse(raw)?.audience ?? {}) as Record<string, number>;
+    } catch {
+      return { sent: 0, why: `ردٌّ غيرُ مفهوم: ${raw.slice(0, 160)}` };
+    }
+    const sent = (audience.ios ?? 0) + (audience.android ?? 0) + (audience.web ?? 0);
+    return { sent, why: sent ? '' : `الردُّ بلا جمهور: ${raw.slice(0, 160)}` };
+  } catch (e) {
+    return { sent: 0, why: `تعذّر النداء: ${String(e).slice(0, 160)}` };
+  }
+}

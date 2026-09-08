@@ -11,6 +11,7 @@ import {
   type PlatformStation,
   type ScheduleLine,
 } from '../../../lib/schedule.ts';
+import { countWord, sendScheduleAlert } from '../_shared/alert.ts';
 
 const TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
 const SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')!;
@@ -1627,59 +1628,6 @@ async function correctSchedule(chat: number, userId: number, d: Draft, raw: stri
   await showSchedule(chat, sched);
 }
 
-interface AlertOutcome {
-  sent: number;
-  why: string;
-}
-
-const countWord = (n: number) =>
-  n === 1 ? 'محطة واحدة' : n === 2 ? 'محطتين' : n <= 10 ? `${n} محطات` : `${n} محطة`;
-
-/** يُخرج إشعارَ الجدول، ويردّ بعددِ من وصلهم أو بسببِ الفشل نصّاً.
- *
- *  **نداءٌ واحدٌ بكلّ المناطق، لا نداءٌ لكلّ منطقة.** ليس اختصاراً: announce
- *  يوحّد العناوين عبر المناطق في النداء الواحد، ومهلةُ الخمس والأربعين دقيقة
- *  في alerts_for تعني أن نداءً ثانياً بعد الأوّل لا يصل أحداً — وهو منصوصٌ في
- *  تعليق announce نفسِه. */
-async function sendScheduleAlert(
-  cities: string[],
-  products: string[],
-  count: number,
-  when: string
-): Promise<AlertOutcome> {
-  if (!cities.length) return { sent: 0, why: 'لا منطقةَ معروفةً في الجدول' };
-  const cron = Deno.env.get('CRON_SECRET');
-  if (!cron) return { sent: 0, why: 'CRON_SECRET غائبٌ عن بيئة الدالّة' };
-
-  const label = products.map((p) => PRODUCT_LABELS[p] ?? p).join(' و');
-  const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/announce`;
-  try {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-cron-secret': cron },
-      body: JSON.stringify({
-        title: `${label} ${when}`,
-        body: `يصل ${label} ${when} إلى ${countWord(count)} في ${cities.join(' و')} — افتح التطبيق لترى القائمة.`,
-        cities,
-        products,
-        url: '/schedule',
-      }),
-    });
-    const raw = await r.text();
-    if (!r.ok) return { sent: 0, why: `announce ${r.status}: ${raw.slice(0, 160)}` };
-    let audience: Record<string, number> = {};
-    try {
-      audience = (JSON.parse(raw)?.audience ?? {}) as Record<string, number>;
-    } catch {
-      return { sent: 0, why: `ردٌّ غيرُ مفهوم: ${raw.slice(0, 160)}` };
-    }
-    const sent = (audience.ios ?? 0) + (audience.android ?? 0) + (audience.web ?? 0);
-    return { sent, why: sent ? '' : `الردُّ بلا جمهور: ${raw.slice(0, 160)}` };
-  } catch (e) {
-    return { sent: 0, why: `تعذّر النداء: ${String(e).slice(0, 160)}` };
-  }
-}
-
 /** الضغطة: صفوفُ الجدول تُكتب، ثمّ إشعارٌ واحدٌ لا واحدٌ لكلّ محطة. */
 async function publishSchedule(chat: number, userId: number, queryId: string) {
   const draft = await getDraft(userId);
@@ -1728,6 +1676,13 @@ async function publishSchedule(chat: number, userId: number, queryId: string) {
     d.lines.length,
     when
   );
+  // ويُختم الجدولُ بلحظة خروج خبره — عليه تقوم شبكةُ الأمان الصباحيّة.
+  if (sent) {
+    await db
+      .from('fuel_schedule')
+      .update({ alerted_at: new Date().toISOString() })
+      .eq('batch_id', batch_id);
+  }
 
   await send(
     chat,
@@ -1977,6 +1932,13 @@ Deno.serve(async (req) => {
         const cities = [...new Set(rows.map((r) => r.city).filter(Boolean))] as string[];
         const products = [...new Set(rows.map((r) => r.product))] as string[];
         const { sent, why } = await sendScheduleAlert(cities, products, rows.length, 'اليوم');
+        if (sent) {
+          await db
+            .from('fuel_schedule')
+            .update({ alerted_at: new Date().toISOString() })
+            .eq('for_date', day)
+            .is('alerted_at', null);
+        }
         await send(
           chat,
           sent
