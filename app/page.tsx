@@ -226,8 +226,26 @@ export default function HomePage() {
 
     refresh();
 
-    // any availability toggle or new vote just refetches — station counts are
-    // small (single city), so this beats hand-merging every event type
+    // ── والحدثُ لا يجرّ جلباً فوريّاً ──────────────────────────────────────
+    //
+    // **صوتٌ واحدٌ كان يكلّف مئتَي طلب.** الأحداثُ الثلاثة تحت كانت تنادي
+    // `refresh` مباشرةً، و`refresh` أربعةُ استعلاماتٍ ثقيلة. فتصويتُ مستخدمٍ
+    // واحدٍ على الازدحام = حدثٌ واحد × ٤٩ جهازاً مفتوحاً × ٤ = ١٩٦ طلباً
+    // وأربعةُ ميغابايت، من لمسةٍ واحدة.
+    //
+    // وأسوأُ منه: `confirmAvailability` في لوحة المحطة تكتب صفوفَ المنتجات
+    // السبعةَ بجملةٍ واحدة، ويُخرجها السجلُّ سبعةَ أحداثٍ منفصلة — ١٬٣٧٢ طلباً
+    // من ضغطةِ «تأكيد» واحدة.
+    //
+    // فمهلةٌ لاحقةٌ بثانيتين تجمع الرشقةَ كلَّها في جلبةٍ واحدة: السبعةُ تصير
+    // واحداً. والثانيتان لا تُقرآن تأخيراً — الحدثُ نفسُه يقطع الشبكةَ في
+    // مئاتِ الأجزاء أصلاً، والجلبُ بعده نصفَ ثانية.
+    let bumpTimer: ReturnType<typeof setTimeout> | undefined;
+    const bump = () => {
+      clearTimeout(bumpTimer);
+      bumpTimer = setTimeout(refresh, 2000);
+    };
+
     const channel = supabase
       .channel('home-updates')
       .on(
@@ -246,11 +264,12 @@ export default function HomePage() {
           ) {
             playAlert();
           }
-          refresh();
+          // والصوتُ فوريّ والجلبُ مؤجَّل: الأذنُ تسمع لحظتَها، والرقمُ يلحق.
+          bump();
         }
       )
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'traffic_votes' }, refresh)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'stations' }, refresh)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'traffic_votes' }, bump)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'stations' }, bump)
       // ── الزناد ─────────────────────────────────────────────────────────
       //
       // **بدونه لا يُعلن الانقطاعُ أبداً.** `refresh` تُنادى مرّةً عند الفتح،
@@ -260,25 +279,43 @@ export default function HomePage() {
       //
       // والقناةُ تعرف قبل الصفحة: نبضُها يكشف الموتَ خلال ثلاثين ثانيةً إلى
       // ستّين، ويكشف العودةَ كذلك — فيزول الشريطُ وحدَه بلا لمسة.
+      //
+      // ── والفشلُ لا يُجلَب عليه ────────────────────────────────────────
+      //
+      // كان فرعُ `CHANNEL_ERROR` ينادي `refresh` — وحارسُه `failedRef` لا
+      // يمنع شيئاً: الجلبُ ينجح (الشبكةُ حيّة، القناةُ وحدَها ميّتة) فتعود
+      // `failed` كاذبةً، فيُجلب في الدورة التالية، وهكذا بلا نهاية.
+      //
+      // وإعادةُ الاشتراك تتراجع إلى عشر ثوانٍ سقفاً، أي ستُّ محاولاتٍ في
+      // الدقيقة: ٦ × ٤ = ٢٤ طلباً في الدقيقة من هاتفٍ واحدٍ ساكنٍ على الشاشة.
+      // وقياسُ اليوم أنّ ٩٢٪ من نداءات Realtime تفشل — أي أنّ أكثرَ الأجهزة
+      // كانت في هذه الحلقة: ٤٩ جهازاً × ٢٤ = ١٬١٧٦ طلباً في الدقيقة، سبعون
+      // ألفاً في الساعة. وقياسُ البوّابة ٤٤٬٤٢٥ طلباً في الساعة.
+      //
+      // **فقناةٌ ساقطةٌ لا تقول شيئاً عن تغيّر البيانات.** يبقى فرعُ العودة
+      // وحدَه: من فشل جلبُه ثمّ عاد اشتراكُه يلحق ما فاته — مرّةً، عند العودة.
       .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          // مرّةً واحدة: لإعادة الاشتراك تراجعٌ يبلغ عشرَ ثوانٍ، ونداءٌ بلا
-          // حارسٍ يرمي أربعةَ طلباتٍ في كلّ دورةٍ على شبكةٍ ميّتة.
-          if (!failedRef.current) refresh();
-        } else if (status === 'SUBSCRIBED' && failedRef.current) {
-          refresh();
-        }
+        if (status === 'SUBSCRIBED' && failedRef.current) refresh();
       });
 
     refreshRef.current = refresh;
 
     // والهاتفُ الذي كان في الجيب طوالَ القطع: العودةُ إلى الصفحة تسأل من جديد.
+    //
+    // **إلا أن تكون سألت قبل دقيقة.** من يقف في طابور الوقود يخرج إلى واتساب
+    // ويعود، خمسَ مرّاتٍ في دقائق — وكانت كلُّ عودةٍ أربعةَ استعلاماتٍ و٨٨
+    // كيلوبايت عن بياناتٍ لم تتغيّر. والقناةُ الحيّةُ تُبلغ التغيّرَ أصلاً،
+    // فهذه لاستدراكِ ما فات لا لتكرارِ ما وصل.
+    const REVISIT_FLOOR_MS = 60_000;
     const onVisible = () => {
-      if (document.visibilityState === 'visible') refresh();
+      if (document.visibilityState !== 'visible') return;
+      if (okAt.current && Date.now() - Date.parse(okAt.current) < REVISIT_FLOOR_MS) return;
+      refresh();
     };
     document.addEventListener('visibilitychange', onVisible);
 
     return () => {
+      clearTimeout(bumpTimer);
       document.removeEventListener('visibilitychange', onVisible);
       supabase.removeChannel(channel);
     };

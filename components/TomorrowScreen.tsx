@@ -85,6 +85,23 @@ export function TomorrowScreen() {
         // جدولُ الغد ينتظر المساء؛ وجدولُ اليوم لا ينتظر شيئاً.
         if (target !== baghdadDate() && hour < HOUR_FLOOR) return;
 
+        // ── والحارسُ قبل الجلب لا بعده ────────────────────────────────────
+        //
+        // كان مفتاحُ «رُئيت» يحمل اليومَ **ومناطقَه**، ومناطقُها لا تُعرف إلا
+        // بعد الجلب — فكان الحارسُ تحت النداء لا فوقه. وهذه الشاشةُ مركَّبةٌ
+        // في `app/layout.tsx`، أي في كلّ فتحةِ صفحةٍ من كلّ مسار: فمن تصفّح
+        // أربعَ صفحاتٍ جلب الجدولَ أربعَ مرّات، ورُمي ثلاثاً.
+        //
+        // فصار المفتاحُ اليومَ وحدَه، ويُقرأ قبل أن يُفتح اتصال. والثمنُ
+        // مذكورٌ صراحةً: جدولٌ **جديد** يُنشر في أثناء الجلسة لا يفتح الشاشةَ
+        // ثانيةً لمن رآها. وهو ثمنٌ مقبول — الإشعارُ يبلغه، والجدولُ في
+        // `/schedule` كاملاً، مقابل استعلامين في كلّ صفحةٍ يفتحها كلُّ إنسان.
+        try {
+          if (sessionStorage.getItem(SEEN) === target) return;
+        } catch {
+          /* تصفّحٌ خاصّ — تُعرض في كلّ فتحة، وهو أهونُ من ألّا تُعرض */
+        }
+
         // بمهلةٍ كمهلة الصفحة: هذه الشاشةُ تبتلع فشلَها بصمت، فنداءٌ عالقٌ
         // يترك `waitUntil` قائماً إلى أن تُغلق الصفحة — وهو تسريبٌ صامت.
         const [schedule, stations] = await withDeadline(
@@ -110,12 +127,10 @@ export function TomorrowScreen() {
         if (!rows.length) return;
 
         const mine = groupBoard(rows, choice?.cities ?? []);
-        const key = `${target}|${mine.map((g) => g.city ?? '؟').join(',')}`;
         try {
-          if (sessionStorage.getItem(SEEN) === key) return;
-          sessionStorage.setItem(SEEN, key);
+          sessionStorage.setItem(SEEN, target);
         } catch {
-          /* تصفّحٌ خاصّ — تُعرض في كلّ فتحة، وهو أهونُ من ألّا تُعرض */
+          /* تصفّحٌ خاصّ — لا يُكتب شيء، فتُعرض في الفتحة التالية أيضاً */
         }
 
         setGroups(mine.slice(0, MAX_GROUPS));

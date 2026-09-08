@@ -41,6 +41,20 @@ export function NativePush() {
       }
 
       await PushNotifications.addListener('registration', async (token) => {
+        // ── ولا كتابةَ لِما كُتب ──────────────────────────────────────────
+        //
+        // هذا يعمل عند **كلّ** إقلاعٍ بارد، والرمزُ نفسُه لا يتغيّر. فكلُّ
+        // إقلاعٍ بعد الأوّل كان كتابةً مرفوضةً حتماً بـ23505 — بلا استثناء.
+        // وبثمانيةِ آلافِ جهازٍ مسجَّل، ذلك آلافُ الطلبات الفاشلة يوميّاً،
+        // كلُّها تُحتسب في «الأخطاء» على لوحة القياس فتُخفي الأخطاء الحقيقيّة.
+        //
+        // والحارسُ من المخزون نفسِه الذي يُكتب أدناه — لا مفتاحَ جديد.
+        try {
+          if (localStorage.getItem('device-token') === token.value) return;
+        } catch {
+          /* تخزينٌ محجوب — تُكتب كما كانت تُكتب، ويُبتلع 23505 كما كان */
+        }
+
         const { supabase } = await import('@/lib/supabase');
         // Plain insert, duplicate swallowed. Every upsert resolution PostgREST
         // offers needs an UPDATE policy, and the only UPDATE policy here is

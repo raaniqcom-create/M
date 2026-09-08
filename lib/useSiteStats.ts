@@ -38,26 +38,19 @@ export function useSiteStats() {
       read();
     }
 
-    // The count climbing while the page is open is the point — a visitor
-    // watching it move sees a live platform, not a static badge.
-    // اسمٌ فريد لكل تركيب، كما تفعل قناة الحضور تحتها.
+    // ── ولا قناةَ ثالثةً لعدّاد الزيارات ───────────────────────────────────
     //
-    // supabase.channel('visit-counter') يُعيد **النسخة نفسها** لكل من يناديه
-    // بالاسم نفسه. فإن رُكّب الخطّاف مرّتين — وضع React الصارم يفعلها في كل
-    // تطوير، وتركيبان في شجرة واحدة يفعلانها في الإنتاج — نُودي on() على قناة
-    // مشتركة سلفاً: «cannot add postgres_changes callbacks after subscribe()».
-    // ويُرمى الخطأ فلا يُسجَّل المستمع، ويبقى الرقم ساكناً بلا عطلٍ ظاهر.
-    const counter = supabase
-      .channel(`visit-counter:${randomId()}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'site_stats' },
-        (payload) => {
-          const next = (payload.new as { visits?: number })?.visits;
-          if (typeof next === 'number') setVisits(next);
-        }
-      )
-      .subscribe();
+    // كانت هنا قناةٌ تشترك في كلّ تعديلٍ على `site_stats` كي يتحرّك الرقمُ حيّاً
+    // أمام الناظر. وهي أغلى ما في المنصّة بلا منازع، لأنّ الصفَّ الذي تراقبه
+    // هو الصفُّ الذي **تكتبه كلُّ فتحةِ صفحة**: كلُّ زيارةٍ تُبثّ إلى كلّ جهازٍ
+    // مفتوح. أي أنّ الرسائل = الزياراتُ × المتصلين، وهو حاصلُ ضربٍ يتضاعف
+    // بمربّع النموّ. بالقياس: ٤٬٤٠٠ فتحةٍ في الساعة × ٤٩ متصلاً ≈ ٢١٥ ألف
+    // رسالةٍ في الساعة، والحصّةُ المجّانيّة مليونان في الشهر.
+    //
+    // ولا يُخسر شيء: `increment_visits` تردّ العددَ الجديد (السطر أعلاه)،
+    // و`read()` تقرؤه لمن لم يُحتسب. فالرقمُ صحيحٌ عند كلّ فتحة — وإنّما لا
+    // يتسلّق أمام العين. وقناةُ الحضور تحته باقية: «المتصلون الآن» عددٌ حيٌّ
+    // يراه صاحبُ المحطة فيعرف أنّ للمنصّة ناساً، وهو نصفُ الكلفة لا ضِعفُها.
 
     // Realtime Presence gives a genuine concurrent-viewer count — no polling,
     // and members drop off automatically when their socket closes.
@@ -74,7 +67,6 @@ export function useSiteStats() {
       });
 
     return () => {
-      supabase.removeChannel(counter);
       supabase.removeChannel(presence);
     };
   }, []);

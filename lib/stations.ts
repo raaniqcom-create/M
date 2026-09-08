@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { WITHDRAW_HOURS } from './hours';
+import { isAborted } from './fn';
 import type {
-  ProductTraffic,
   Station,
   StationProduct,
   StationTrafficAvg,
@@ -30,7 +30,7 @@ export function distanceKm(
  *  fallback to the table: anon no longer holds SELECT on it, so a fallback
  *  would only turn one error into two.
  *
- *  ── وثلاثُ محاولاتٍ لا واحدة ───────────────────────────────────────────
+ *  ── ومحاولةٌ ثانيةٌ للانقطاع وحدَه ──────────────────────────────────────
  *
  *  طلبٌ ساقطٌ واحد كان يكفي ليرى المستعمل «تعذّر تحميل المحطات» — وهو أوّلُ
  *  شاشةٍ يراها. وقع فعلاً يوم ٢٠٢٦-٠٩-٠٧ الساعة ٠٠:٤٤: قُيست سجلّاتُ
@@ -42,22 +42,31 @@ export function distanceKm(
  *  البيانات منه على الحزم: بلا الحزمة لا يُرسم شيء، وبلا البيانات يُرسم
  *  خطأٌ يقرؤه المستعمل عطلاً في المنصّة.
  *
- *  ولا مهلةَ لكلّ محاولةٍ هنا: النداءُ في app/page.tsx محدودٌ بخمسَ عشرةَ
- *  ثانية أصلاً، فالتعليقُ الوقتيُّ يقع هناك مرّةً واحدة. وهذه تعالج الطلبَ
- *  الذي يسقط سريعاً — وهو الشكلُ الغالب. */
+ *  وكانت ثلاثاً لأيّ فشلٍ كان، فصارت ثانيةً واحدةً للانقطاع وحدَه — والسببُ
+ *  مكتوبٌ عند `catch` أدناه. ولا مهلةَ لكلّ محاولةٍ هنا: النداءُ في
+ *  app/page.tsx محدودٌ بخمسَ عشرةَ ثانية أصلاً. */
 export async function loadStations(): Promise<StationWithStatus[]> {
-  let last: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const rows = await fetchStations();
-      cacheStations(rows);
-      return rows;
-    } catch (e) {
-      last = e;
-      if (attempt < 2) await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
-    }
+  try {
+    const rows = await fetchStations();
+    cacheStations(rows);
+    return rows;
+  } catch (e) {
+    // ── ومحاولةٌ ثانيةٌ للانقطاع وحدَه ────────────────────────────────────
+    //
+    // كانت ثلاثَ محاولاتٍ لأيّ فشلٍ كان — أي اثني عشرَ استعلاماً لكلّ جلبةٍ
+    // ساقطة. وهي مكتوبةٌ لعلاج «الطلب الذي يسقط سريعاً»، وذلك حقٌّ؛ لكنّها
+    // كانت تعيد المحاولةَ على خطأِ خادمٍ أيضاً — فتضيف حِملاً إلى الشيء الذي
+    // سقط من الحِمل. ويومَ ٢٠٢٦-٠٩-٠٨ سقطت القاعدةُ سقوطاً تامّاً، فصار كلُّ
+    // جهازٍ يرمي عليها ثلاثةَ أضعافِ ما كان يرمي.
+    //
+    // فمحاولةٌ واحدةٌ ثانية، وللانقطاع وحدَه: `isAborted` تعرف مهلةَ الطلب
+    // والشبكةَ الساقطة، وما عداهما جوابٌ من الخادم — لا يُصلحه التكرار.
+    if (!isAborted(e)) throw e;
+    await new Promise((r) => setTimeout(r, 500));
+    const rows = await fetchStations();
+    cacheStations(rows);
+    return rows;
   }
-  throw last;
 }
 
 /** ــ آخرُ حالةٍ وصلت الجهاز ــــــــــــــــــــــــــــــــــــــــــــــــــ
@@ -121,8 +130,15 @@ export function loadCachedStations(): { rows: StationWithStatus[]; at: string } 
   }
 }
 
+/** ــ ثلاثةُ استعلاماتٍ لا أربعة ــــــــــــــــــــــــــــــــــــــــــــ
+ *
+ *  كان الرابعُ `station_product_traffic` يُجلب في كلّ مرّة ثمّ يُوضع في حقل
+ *  `productTraffic` — **ولا يقرؤه سطرٌ واحدٌ في المشروع.** فُحص بالبحث: ثلاثةُ
+ *  مواضعَ تكتبه ولا موضعَ يقرؤه. أي أنّ ربعَ كلّ جلبةٍ كان ضائعاً، على كلّ
+ *  فتحةِ صفحةٍ وكلّ حدثٍ حيّ. وهو **مَنظرٌ** لا جدول: مجموعٌ فوق `traffic_votes`
+ *  يُعاد حسابُه في كلّ نداء. */
 async function fetchStations(): Promise<StationWithStatus[]> {
-  const [stationsRes, productsRes, trafficRes, laneRes] = await Promise.all([
+  const [stationsRes, productsRes, trafficRes] = await Promise.all([
     // Belt and braces on the status filter. Dropping it here because "the view
     // filters it" put every rejected and suspended station on the public list
     // the moment the view shipped without that WHERE — a live, visible fault.
@@ -138,12 +154,11 @@ async function fetchStations(): Promise<StationWithStatus[]> {
     // لأن الترتيب غير مضمون. هذه أخطر نسخة من العطل: تصيب الصفحة الرئيسة.
     supabase.from('station_products').select('*').range(0, 99_999),
     supabase.from('station_traffic_avg').select('*').range(0, 99_999),
-    supabase.from('station_product_traffic').select('*').range(0, 99_999),
   ]);
 
   // supabase-js resolves with an error object instead of rejecting — without
   // this, a dropped connection is indistinguishable from an empty database
-  const failure = stationsRes.error ?? productsRes.error ?? trafficRes.error ?? laneRes.error;
+  const failure = stationsRes.error ?? productsRes.error ?? trafficRes.error;
   if (failure) throw failure;
 
   const { data: stations } = stationsRes;
@@ -162,6 +177,6 @@ async function fetchStations(): Promise<StationWithStatus[]> {
     ...s,
     products: productsByStation.get(s.id) ?? [],
     traffic: trafficByStation.get(s.id) ?? null,
-    productTraffic: ((laneRes.data ?? []) as ProductTraffic[]).filter((t) => t.station_id === s.id),
+    productTraffic: [],
   }));
 }
