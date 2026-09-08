@@ -32,3 +32,15 @@ docs/promo/*.mp4
 /ANBAR *.png
 /foteranbar.png
 supabase/.temp/
+
+# graphify: مخرجاتُ الخريطة تُتتبَّع، وملفّاتُها الوسيطة لا — تُبنى وتُحذف في
+# كلّ تشغيل، وواحدٌ منها تسرّب إلى تزكيةٍ اليوم.
+graphify-out/.graphify_chunk_*.json
+graphify-out/.graphify_detect.json
+graphify-out/.graphify_extract.json
+graphify-out/.graphify_ast.json
+graphify-out/.graphify_semantic*.json
+graphify-out/.graphify_analysis.json
+graphify-out/.graphify_cached.json
+graphify-out/.graphify_uncached.txt
+graphify-out/.graphify_labels_draft.json
