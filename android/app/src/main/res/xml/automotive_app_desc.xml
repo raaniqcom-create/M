@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- يُعلن أنّ هذا التطبيق يخاطب السيارةَ بالقوالب — لا برسمٍ حرّ. -->
+<automotiveApp>
+    <uses name="template" />
+</automotiveApp>

@@ -60,6 +60,10 @@ jobs:
         working-directory: android
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          # شاشةُ السيارة تنادي القاعدةَ مباشرةً بلا WebView، فتحتاج العنوانَ
+          # والمفتاحَ العامّ. ويُحقنان هنا لا في المصدر: المستودعُ عامّ.
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease bundleRelease --no-daemon \

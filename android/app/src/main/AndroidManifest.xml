@@ -20,6 +20,29 @@
             </intent-filter>
         </activity>
 
+
+        <!-- ── شاشةُ السيارة ────────────────────────────────────────────
+             فئةُ POI: تطبيقٌ يعرض نقاطَ اهتمامٍ من نوعٍ واحد. وليس في بيانات
+             هذه المنصّة نوعُ مكانٍ غيرُ محطة الوقود، فالشرطُ مستوفًى بالبناء
+             لا بالانضباط. ولا تُستعمل فئةُ NAVIGATION: مراجعتُها أضيق،
+             وتطلب إذنَ ACCESS_SURFACE، وهذا التطبيق لا يرسم خريطةً ولا يحسب
+             طريقاً — يسلّم الوجهةَ لخرائط السيارة. -->
+        <service
+            android:name=".car.MuhtaCarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.POI" />
+            </intent-filter>
+        </service>
+
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -35,4 +58,12 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- قوالبُ الخرائط في السيارة — يلزم لـPlaceListMapTemplate. -->
+    <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
+
+    <!-- الشاشاتُ المدمَجة في السيارات (Google built-in): غيرُ مشروطة، فالتطبيق
+         تطبيقُ هاتفٍ أوّلاً ولا يُحجب عن أجهزةٍ بلا عتاد سيّارة. -->
+    <uses-feature
+        android:name="android.hardware.type.automotive"
+        android:required="false" />
 </manifest>
