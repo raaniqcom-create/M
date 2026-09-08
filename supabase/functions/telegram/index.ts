@@ -263,6 +263,7 @@ async function mainMenu(userId: number) {
     const before = rows.findIndex((r) => r[0] === mine);
     rows.splice(before < 0 ? rows.length : before, 0,
       [{ text: '➕ أضِف إلى جدول اليوم', callback_data: 'addsched' }],
+      [{ text: '🛠 تحكّم بجدول اليوم', callback_data: 'bd' }],
       [{ text: `📋 طلبات المحطات (${n})`, callback_data: 'req' }],
       [{ text: '🏬 المحطات المسجلة', callback_data: 'people' }],
       [{ text: '🛡 لوحة الإدارة', callback_data: 'admin' }],
@@ -1661,6 +1662,191 @@ const chunk = <T,>(xs: T[], n: number): T[][] => {
   return out;
 };
 
+/** ــ التحكّم بالجدول بعد نشره ــــــــــــــــــــــــــــــــــــــــــــــ
+ *
+ *  محرّرُ المسوّدة أدناه يُصحّح **قبل** النشر. وهذا يُصحّح بعده — وهو الذي
+ *  يُحتاج فعلاً: «نفدت» تقع بعد النشر بساعات لا لحظتَه. ولذلك زرٌّ في القائمة
+ *  الرئيسة لا زرٌّ في رسالة النشر وحدَها؛ رسالةٌ من الصباح يُبحث عنها فلا تُوجد.
+ *
+ *  ── ولا يُحذف صفٌّ نُشر ──────────────────────────────────────────────────
+ *
+ *  ما نُشر وقع، والسجلُّ يبقى. فالعلامةُ تُكتب في `board_overrides` وتُطبَّق على
+ *  ما يُعرض، وتُرفع فيعود السطر. وحذفُ الصفّ كان سيمحو أنّ الخبرَ أُعلن أصلاً
+ *  وأنّ الناسَ بنوا عليه.
+ *
+ *  ── والعلامةُ بالاسم لا بمعرّف الصفّ ────────────────────────────────────
+ *
+ *  لأنّ السطرَ الظاهرَ للناس قد لا يكون سطرَ الجدول: `linkBack` يكتب وعداً في
+ *  لوحة المحطة، فيدخل السطرُ من مصدرها ويُبتلع سطرُ القناة فيه. والعلامةُ
+ *  بالاسم والمنطقة تصيبهما معاً — `sameStation` في `lib/board.ts` تطابق
+ *  «غصن الزيتون جويبة» بـ«محطة تعبئة وقود غصن الزيتون». */
+async function boardRows(day: string) {
+  const { data } = await db
+    .from('fuel_schedule')
+    .select('id, product, station_name, city, linked_station_id')
+    .eq('for_date', day)
+    .order('created_at');
+  return data ?? [];
+}
+
+async function boardMarks(day: string) {
+  const { data } = await db
+    .from('board_overrides')
+    .select('id, city, station_id, station_name, product, action')
+    .eq('for_date', day);
+  return data ?? [];
+}
+
+/** حالُ سطرٍ كما يراها المشغّل: مخفيٌّ، أو موسومٌ نفداً، أو كما نُشر. */
+function markOf(marks: Record<string, any>[], r: Record<string, any>): string | null {
+  const hit = marks.find(
+    (m) =>
+      (!m.product || m.product === r.product) &&
+      ((m.station_id && m.station_id === r.linked_station_id) ||
+        (m.station_name && m.station_name === r.station_name) ||
+        (!m.station_id && !m.station_name && m.city === r.city))
+  );
+  return (hit?.action as string | undefined) ?? null;
+}
+
+async function boardHome(chat: number, day: string, msgId?: number) {
+  const rows = await boardRows(day);
+  const marks = await boardMarks(day);
+  const when = day === baghdadDay() ? 'اليوم' : 'غداً';
+
+  if (!rows.length) {
+    const home = { reply_markup: { inline_keyboard: [[{ text: '🏠 القائمة', callback_data: 'menu' }]] } };
+    const t = `لا جدولَ منشورٌ ${when}.`;
+    if (msgId) await edit(chat, msgId, t, home);
+    else await send(chat, t, home);
+    return;
+  }
+
+  const badge: Record<string, string> = { hide: '🚫', out: '⛔️' };
+  const keyboard = [
+    ...rows.map((r) => [
+      {
+        text: `${badge[markOf(marks, r) ?? ''] ?? '•'} ${r.station_name}`.slice(0, 45),
+        callback_data: `bd:r:${r.id}`,
+      },
+    ]),
+    [{ text: '📍 إخفاء منطقةٍ كاملة', callback_data: 'bd:c' }],
+    [{ text: '🏠 القائمة', callback_data: 'menu' }],
+  ];
+
+  const hidden = rows.filter((r) => markOf(marks, r) === 'hide').length;
+  const gone = rows.filter((r) => markOf(marks, r) === 'out').length;
+  const text =
+    `<b>جدول ${when} — ${rows.length} سطراً</b>${NL}` +
+    (hidden || gone
+      ? `${hidden ? `🚫 ${hidden} مخفيّ   ` : ''}${gone ? `⛔️ ${gone} موسومٌ «نفد»` : ''}${NL}${NL}`
+      : NL) +
+    `اضغط سطراً لتُخفيه أو تَسِمه «نفد».`;
+
+  const extra = { reply_markup: { inline_keyboard: keyboard } };
+  if (msgId) await edit(chat, msgId, text, extra);
+  else await send(chat, text, extra);
+}
+
+async function boardRoute(chat: number, data: string, msgId?: number) {
+  const day = scheduleDay();
+  if (data === 'bd') return boardHome(chat, day, msgId);
+
+  // ــ منطقةٌ كاملة ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+  if (data === 'bd:c') {
+    const rows = await boardRows(day);
+    const marks = await boardMarks(day);
+    const cities = [...new Set(rows.map((r) => r.city).filter(Boolean))] as string[];
+    const isHidden = (c: string) =>
+      marks.some((m) => m.action === 'hide' && !m.station_id && !m.station_name && m.city === c);
+    return edit(chat, msgId!, '<b>أيَّ منطقةٍ تُخفي من جدول اليوم؟</b>', {
+      reply_markup: {
+        inline_keyboard: [
+          ...cities.map((c, i) => [
+            {
+              text: `${isHidden(c) ? '🚫' : '•'} ${c}`,
+              callback_data: `bd:ct:${i}:${isHidden(c) ? 's' : 'h'}`,
+            },
+          ]),
+          [{ text: '↩︎ رجوع', callback_data: 'bd' }],
+        ],
+      },
+    });
+  }
+
+  if (data.startsWith('bd:ct:')) {
+    const [, , idx, act] = data.split(':');
+    const rows = await boardRows(day);
+    const cities = [...new Set(rows.map((r) => r.city).filter(Boolean))] as string[];
+    const city = cities[Number(idx)];
+    if (!city) return boardHome(chat, day, msgId);
+    if (act === 's') {
+      await db
+        .from('board_overrides')
+        .delete()
+        .eq('for_date', day)
+        .eq('city', city)
+        .is('station_id', null)
+        .is('station_name', null);
+    } else {
+      await db.from('board_overrides').insert({ for_date: day, city, action: 'hide' });
+    }
+    return boardRoute(chat, 'bd:c', msgId);
+  }
+
+  // ــ سطرٌ بعينه ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+  const [, kind, id, act] = data.split(':');
+  const rows = await boardRows(day);
+  const row = rows.find((r) => r.id === id);
+  if (!row) return boardHome(chat, day, msgId);
+
+  if (kind === 'a') {
+    // ما يخصّ هذا السطرَ وحدَه يُمسح أوّلاً — فلا تتراكم علامتان متناقضتان
+    // عليه، ولا تُمسّ علامةُ المنطقة التي تشمله.
+    await db
+      .from('board_overrides')
+      .delete()
+      .eq('for_date', day)
+      .eq('station_name', row.station_name)
+      .eq('product', row.product);
+
+    if (act !== 's') {
+      await db.from('board_overrides').insert({
+        for_date: day,
+        city: row.city,
+        station_id: row.linked_station_id,
+        station_name: row.station_name,
+        product: row.product,
+        action: act === 'o' ? 'out' : 'hide',
+      });
+    }
+    return boardHome(chat, day, msgId);
+  }
+
+  const marks = await boardMarks(day);
+  const now = markOf(marks, row);
+  const state = now === 'hide' ? '🚫 مخفيّ' : now === 'out' ? '⛔️ موسومٌ «نفد»' : '• كما نُشر';
+  return edit(
+    chat,
+    msgId!,
+    `<b>${esc(row.station_name)}</b>${NL}` +
+      `${esc(row.city ?? 'منطقةٌ لم تُذكر')} · ${esc(PRODUCT_LABELS[row.product] ?? row.product)}${NL}` +
+      `الحال: ${state}`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '🚫 أخفِ', callback_data: `bd:a:${row.id}:h` },
+            { text: '⛔️ نفد', callback_data: `bd:a:${row.id}:o` },
+          ],
+          [{ text: '↩︎ أعِده كما نُشر', callback_data: `bd:a:${row.id}:s` }],
+          [{ text: '↩︎ رجوع', callback_data: 'bd' }],
+        ],
+      },
+    }
+  );
+}
+
 /** الشاشةُ الأولى: أيَّ سطرٍ تُصحّح؟ */
 function linePicker(d: { lines: ScheduleLine[] }) {
   return {
@@ -2228,6 +2414,9 @@ Deno.serve(async (req) => {
             { reply_markup: { inline_keyboard: [[{ text: '✖️ ألغِ', callback_data: 'wx' }]] } }
           );
         }
+      } else if (data === 'bd' || data.startsWith('bd:')) {
+        await answer(cb.id);
+        await boardRoute(chat, data, messageId);
       } else if (data === 'sch:go') {
         await publishSchedule(chat, from, cb.id, true);
       } else if (data === 'sch:mute') {
