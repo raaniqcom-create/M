@@ -8,6 +8,7 @@ import { readChoice } from '@/lib/alerts';
 import {
   baghdadDate,
   boardDate,
+  resolveBoardDay,
   applyOverrides,
   buildBoard,
   groupBoard,
@@ -29,7 +30,11 @@ import {
 export default function SchedulePage() {
   const [groups, setGroups] = useState<BoardGroup[] | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  const day = boardDate();
+  // يومُ الانقلاب هو المبدأ، واليومُ المعروض يُحسم بعد قراءة المنشور — انظر
+  // `resolveBoardDay`. والتابعُ للانقلاب هو تبعيّةُ الأثر، لا المعروض: وإلا
+  // أعاد `setDay` تشغيلَ الأثر بنفسه.
+  const flip = boardDate();
+  const [day, setDay] = useState(flip);
 
   useEffect(() => {
     void (async () => {
@@ -43,9 +48,11 @@ export default function SchedulePage() {
         // العميل في `lib/supabase.ts` لا تبلغ ما يعلَق قبل الشبكة.
         // الجدولُ أوّلاً، ثمّ محطاتُه: الثانيةُ تحتاج مدنَ الأوّل ومربوطاتِه.
         const schedule = await withDeadline(loadSchedule(), 15000);
-        const stations = await withDeadline(loadBoardStations(day, schedule), 15000);
+        const shown = resolveBoardDay(schedule);
+        setDay(shown);
+        const stations = await withDeadline(loadBoardStations(shown, schedule), 15000);
         const marks = await loadOverrides();
-        const rows = applyOverrides(buildBoard(schedule, stations, day), marks, day);
+        const rows = applyOverrides(buildBoard(schedule, stations, shown), marks, shown);
         setGroups(groupBoard(rows, readChoice()?.cities ?? []));
       } catch (e) {
         // والفشلُ ليس فراغاً: «لا جدولَ بعد» و«تعذّر الجلب» خبران مختلفان،
@@ -53,7 +60,7 @@ export default function SchedulePage() {
         setFailed(readFailure(e));
       }
     })();
-  }, [day]);
+  }, [flip]);
 
   const title = day === baghdadDate() ? 'محطات اليوم' : 'محطات غداً';
 

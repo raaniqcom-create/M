@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ComponentType } from 'react';
-import { baghdadDate, boardDate } from '@/lib/scheduleData';
+import { baghdadDate, boardDate, loadSchedule, resolveBoardDay } from '@/lib/scheduleData';
 import {
   getTone,
   isMuted,
@@ -54,6 +54,10 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
   // make a noise, and the tone is chosen once and then forgotten about.
   const [picking, setPicking] = useState(false);
   const [shareNote, setShareNote] = useState<string | null>(null);
+  // عنوانُ بند الجدول يتبع ما تعرضه الصفحةُ فعلاً لا ما يرجّحه الانقلاب —
+  // وإلا قرأ الفاتحُ «محطات غداً» في القائمة و«محطات اليوم» في الصفحة.
+  // والمبدأُ هو المرجَّح، فلا يومَض العنوانُ في الفتحة الأولى.
+  const [boardDay, setBoardDay] = useState(boardDate());
   // `ready` matters: reading the session is two network round trips, and
   // without it a returning owner watched "register your station" sit there
   // for a second before it was replaced by their own panel.
@@ -63,6 +67,20 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
   useEffect(() => {
     setToneState(getTone());
     setMutedState(isMuted());
+  }, []);
+
+  // و`loadSchedule` مذخورةٌ بمفتاح اليوم، فهذه لا تزيد نداءً: الصفحةُ نفسُها
+  // تسألها. والفشلُ يُبتلع — عنوانُ بندٍ لا يستحقّ شاشةَ خطأ.
+  useEffect(() => {
+    let alive = true;
+    void loadSchedule()
+      .then((schedule) => {
+        if (alive) setBoardDay(resolveBoardDay(schedule));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, []);
 
   // a drawer that leaves the page scrollable behind it feels broken on a phone
@@ -257,7 +275,7 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
               <Item
                 href="/schedule"
                 icon={CalendarIcon}
-                title={boardDate() === baghdadDate() ? 'محطات اليوم' : 'محطات غداً'}
+                title={boardDay === baghdadDate() ? 'محطات اليوم' : 'محطات غداً'}
                 note="أين يصل الوقود — قبل أن يصل"
                 accent
               />

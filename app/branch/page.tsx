@@ -9,6 +9,7 @@ import { ScheduleBoard } from '@/components/ScheduleBoard';
 import { SpinnerIcon } from '@/components/icons';
 import {
   boardDate,
+  resolveBoardDay,
   applyOverrides,
   buildBoard,
   groupBoard,
@@ -66,21 +67,26 @@ const TABS: { id: Tab; label: string }[] = [
 function BranchSchedule() {
   const [groups, setGroups] = useState<BoardGroup[] | null>(null);
   const [failed, setFailed] = useState(false);
-  const day = boardDate();
+  const flip = boardDate();
+  const [day, setDay] = useState(flip);
 
   useEffect(() => {
     void (async () => {
       try {
         const schedule = await loadSchedule();
-        const stations = await loadBoardStations(day, schedule);
+        const shown = resolveBoardDay(schedule);
+        setDay(shown);
+        const stations = await loadBoardStations(shown, schedule);
         const marks = await loadOverrides();
         // ولا ترتيبَ بمناطق أحد: الفرعُ يقرأ الأنبار كلَّها بلا تفضيل.
-        setGroups(groupBoard(applyOverrides(buildBoard(schedule, stations, day), marks, day), []));
+        setGroups(
+          groupBoard(applyOverrides(buildBoard(schedule, stations, shown), marks, shown), [])
+        );
       } catch {
         setFailed(true);
       }
     })();
-  }, [day]);
+  }, [flip]);
 
   if (failed) {
     return (

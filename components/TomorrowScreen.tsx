@@ -10,6 +10,7 @@ import { isDown, readStatus } from '@/lib/status';
 import {
   baghdadDate,
   boardDate,
+  resolveBoardDay,
   applyOverrides,
   buildBoard,
   groupBoard,
@@ -107,14 +108,25 @@ export function TomorrowScreen() {
         // بمهلةٍ كمهلة الصفحة: هذه الشاشةُ تبتلع فشلَها بصمت، فنداءٌ عالقٌ
         // يترك `waitUntil` قائماً إلى أن تُغلق الصفحة — وهو تسريبٌ صامت.
         const schedule = await withDeadline(loadSchedule(), 15000);
-        const stations = await withDeadline(loadBoardStations(target, schedule), 15000);
+        // واليومُ يُحسم بعد قراءة المنشور: الحارسان فوق يمنعان نداءً لا لزومَ
+        // له، وهذا يمنع شاشةً فارغةً ليلةَ يُنشر جدولُ اليوم بعد التاسعة.
+        const shown = resolveBoardDay(schedule);
+        // ويُعاد فحصُ «رُئيت» على اليوم المحسوم — الأوّلُ كان على المرجَّح.
+        if (shown !== target) {
+          try {
+            if (sessionStorage.getItem(SEEN) === shown) return;
+          } catch {
+            /* تصفّحٌ خاصّ */
+          }
+        }
+        const stations = await withDeadline(loadBoardStations(shown, schedule), 15000);
         if (!alive) return;
 
         const choice = readChoice();
         const myCities = new Set(choice?.cities ?? []);
         const myProducts = new Set<string>(choice?.products ?? []);
 
-        let rows = applyOverrides(buildBoard(schedule, stations, target), await loadOverrides(), target);
+        let rows = applyOverrides(buildBoard(schedule, stations, shown), await loadOverrides(), shown);
         // ── والشاشةُ تتبع الإشعارَ حرفيّاً ──────────────────────────────
         //
         // إشعارُ النشر يمرّ بـ`alerts_for` فلا يصل إلا من اختار تلك المنطقة
@@ -128,14 +140,14 @@ export function TomorrowScreen() {
 
         const mine = groupBoard(rows, choice?.cities ?? []);
         try {
-          sessionStorage.setItem(SEEN, target);
+          sessionStorage.setItem(SEEN, shown);
         } catch {
           /* تصفّحٌ خاصّ — لا يُكتب شيء، فتُعرض في الفتحة التالية أيضاً */
         }
 
         setGroups(mine.slice(0, MAX_GROUPS));
         setMore(mine.slice(MAX_GROUPS).reduce((n, g) => n + g.rows.length, 0));
-        setDay(target);
+        setDay(shown);
         setOpen(true);
       } catch {
         /* الشاشةُ ترفٌ: فشلُ جلبها لا يُظهر خطأً لأحد */

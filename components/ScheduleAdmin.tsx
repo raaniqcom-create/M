@@ -12,6 +12,7 @@ import {
   loadBoardStations,
   loadOverrides,
   loadSchedule,
+  resolveBoardDay,
   type BoardRow,
 } from '@/lib/scheduleData';
 
@@ -46,21 +47,24 @@ export function ScheduleAdmin() {
   const [raw, setRaw] = useState<BoardRow[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const day = boardDate();
+  const flip = boardDate();
+  const [day, setDay] = useState(flip);
 
   const load = useCallback(async () => {
     try {
       const schedule = await loadSchedule();
-      const stations = await loadBoardStations(day, schedule);
-      const built = buildBoard(schedule, stations, day);
+      const shown = resolveBoardDay(schedule);
+      setDay(shown);
+      const stations = await loadBoardStations(shown, schedule);
+      const built = buildBoard(schedule, stations, shown);
       setRaw(built);
-      setRows(applyOverrides(built, await loadOverrides(), day));
+      setRows(applyOverrides(built, await loadOverrides(), shown));
       setNote(null);
     } catch {
       setNote('تعذّر جلب الجدول. أعد المحاولة.');
       setRows([]);
     }
-  }, [day]);
+  }, [flip]);
 
   useEffect(() => {
     void load();
