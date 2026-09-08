@@ -1627,6 +1627,59 @@ async function correctSchedule(chat: number, userId: number, d: Draft, raw: stri
   await showSchedule(chat, sched);
 }
 
+interface AlertOutcome {
+  sent: number;
+  why: string;
+}
+
+const countWord = (n: number) =>
+  n === 1 ? 'محطة واحدة' : n === 2 ? 'محطتين' : n <= 10 ? `${n} محطات` : `${n} محطة`;
+
+/** يُخرج إشعارَ الجدول، ويردّ بعددِ من وصلهم أو بسببِ الفشل نصّاً.
+ *
+ *  **نداءٌ واحدٌ بكلّ المناطق، لا نداءٌ لكلّ منطقة.** ليس اختصاراً: announce
+ *  يوحّد العناوين عبر المناطق في النداء الواحد، ومهلةُ الخمس والأربعين دقيقة
+ *  في alerts_for تعني أن نداءً ثانياً بعد الأوّل لا يصل أحداً — وهو منصوصٌ في
+ *  تعليق announce نفسِه. */
+async function sendScheduleAlert(
+  cities: string[],
+  products: string[],
+  count: number,
+  when: string
+): Promise<AlertOutcome> {
+  if (!cities.length) return { sent: 0, why: 'لا منطقةَ معروفةً في الجدول' };
+  const cron = Deno.env.get('CRON_SECRET');
+  if (!cron) return { sent: 0, why: 'CRON_SECRET غائبٌ عن بيئة الدالّة' };
+
+  const label = products.map((p) => PRODUCT_LABELS[p] ?? p).join(' و');
+  const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/announce`;
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-cron-secret': cron },
+      body: JSON.stringify({
+        title: `${label} ${when}`,
+        body: `يصل ${label} ${when} إلى ${countWord(count)} في ${cities.join(' و')} — افتح التطبيق لترى القائمة.`,
+        cities,
+        products,
+        url: '/schedule',
+      }),
+    });
+    const raw = await r.text();
+    if (!r.ok) return { sent: 0, why: `announce ${r.status}: ${raw.slice(0, 160)}` };
+    let audience: Record<string, number> = {};
+    try {
+      audience = (JSON.parse(raw)?.audience ?? {}) as Record<string, number>;
+    } catch {
+      return { sent: 0, why: `ردٌّ غيرُ مفهوم: ${raw.slice(0, 160)}` };
+    }
+    const sent = (audience.ios ?? 0) + (audience.android ?? 0) + (audience.web ?? 0);
+    return { sent, why: sent ? '' : `الردُّ بلا جمهور: ${raw.slice(0, 160)}` };
+  } catch (e) {
+    return { sent: 0, why: `تعذّر النداء: ${String(e).slice(0, 160)}` };
+  }
+}
+
 /** الضغطة: صفوفُ الجدول تُكتب، ثمّ إشعارٌ واحدٌ لا واحدٌ لكلّ محطة. */
 async function publishSchedule(chat: number, userId: number, queryId: string) {
   const draft = await getDraft(userId);
@@ -1668,58 +1721,20 @@ async function publishSchedule(chat: number, userId: number, queryId: string) {
   }
   await answer(queryId, 'نُشر ✅');
 
-  const label = productsLabel(d.lines);
-  // «غداً» في نصِّ الإشعار كانت ثابتةً، فجدولٌ يخصّ اليومَ كان يُعلَن للغد.
   const when = for_date === baghdadDay() ? 'اليوم' : 'غداً';
-  // العربيةُ تعدّ على أربعة وجوه، و«7 محطة» تُقرأ خطأً.
-  const n = d.lines.length;
-  const countLabel =
-    n === 1 ? 'محطة واحدة' : n === 2 ? 'محطتين' : n <= 10 ? `${n} محطات` : `${n} محطة`;
-  const cities = schedCities(d.lines);
-  if (!cities.length) {
-    await send(chat, `✅ نُشر الجدول (${d.lines.length} محطة). ولا إشعار: لا منطقةَ معروفة.`);
-    return;
-  }
-
-  // **نداءٌ واحدٌ بكلّ المدن، لا نداءٌ لكلّ مدينة.**
-  //
-  // ليس اختصاراً: announce يوحّد العناوين عبر المدن في النداء الواحد، ومهلةُ
-  // الخمس والأربعين دقيقة في alerts_for تعني أن نداءً ثانياً بعد الأوّل لا يصل
-  // أحداً — وهو منصوصٌ في تعليق announce نفسِه. فمدينتان في جدولٍ واحدٍ لا
-  // تُرسلان رسالتين، وثماني محطاتٍ لا تُرسل ثمانيةَ إشعارات.
-  const cron = Deno.env.get('CRON_SECRET');
-  if (!cron) {
-    await send(chat, `✅ نُشر الجدول (${d.lines.length} محطة). والإشعارُ لم يخرج: CRON_SECRET غائب.`);
-    return;
-  }
-  let sent = 0;
-  try {
-    const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/announce`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-cron-secret': cron },
-      body: JSON.stringify({
-        title: `${label} ${when}`,
-        body: `يصل ${label} ${when} إلى ${countLabel} في ${cities.join(' و')} — افتح التطبيق لترى القائمة.`,
-        cities,
-        // كلُّ وقودٍ في الجدول: من اختار المحسّن وحدَه يجب أن يصله خبرُه.
-        products: schedProducts(d.lines),
-        url: '/schedule',
-      }),
-    });
-    if (r.ok) {
-      const a = (await r.json())?.audience ?? {};
-      sent = (a.ios ?? 0) + (a.android ?? 0) + (a.web ?? 0);
-    } else {
-      console.error('announce', r.status, await r.text());
-    }
-  } catch (e) {
-    console.error('announce fetch', e);
-  }
+  const { sent, why } = await sendScheduleAlert(
+    schedCities(d.lines),
+    schedProducts(d.lines),
+    d.lines.length,
+    when
+  );
 
   await send(
     chat,
-    `✅ نُشر جدولُ ${esc(label)} — ${d.lines.length} محطة.${NL}` +
-      (sent ? `ووصل الإشعارُ إلى ${sent} مشتركاً.` : 'ولم يخرج الإشعار — راجع السجلّ.')
+    `✅ نُشر جدولُ ${esc(productsLabel(d.lines))} — ${countWord(d.lines.length)}.${NL}` +
+      (sent
+        ? `ووصل الإشعارُ إلى ${sent} مشتركاً.`
+        : `⚠️ ولم يخرج الإشعار: ${esc(why)}${NL}أعِده بأمر /اشعار.`)
   );
 }
 
@@ -1944,6 +1959,30 @@ Deno.serve(async (req) => {
       // المنشورُ كلُّه اسمَ محطةٍ يُبحث عنه.
       if (!text.startsWith('/') && looksLikeSchedule(text)) {
         await proposeSchedule(chat, from, text);
+        return new Response('ok');
+      }
+
+      // إعادةُ الإشعار لجدولٍ نُشر ولم يخرج خبرُه — أو تأجيلُه إلى ساعةٍ
+      // لائقة: النشرُ يقع ليلاً، والإشعارُ الثالثةَ فجراً إزعاجٌ لا خبر.
+      if (text === '/اشعار' || text === '/alert') {
+        const day = baghdadDay();
+        const { data: rows } = await db
+          .from('fuel_schedule')
+          .select('product, city')
+          .eq('for_date', day);
+        if (!rows?.length) {
+          await send(chat, `لا جدولَ منشوراً لليوم (${day}).`);
+          return new Response('ok');
+        }
+        const cities = [...new Set(rows.map((r) => r.city).filter(Boolean))] as string[];
+        const products = [...new Set(rows.map((r) => r.product))] as string[];
+        const { sent, why } = await sendScheduleAlert(cities, products, rows.length, 'اليوم');
+        await send(
+          chat,
+          sent
+            ? `📣 وصل الإشعارُ إلى ${sent} مشتركاً في ${esc(cities.join(' · '))}.`
+            : `⚠️ لم يخرج الإشعار: ${esc(why)}`
+        );
         return new Response('ok');
       }
 
