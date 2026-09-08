@@ -84,6 +84,34 @@ function stillLive(
   return !!p?.is_available && !(p.runs_out_at && p.runs_out_at <= new Date().toISOString());
 }
 
+/** وهل يُقال عنه «الآن»؟
+ *
+ *  `stillLive` تقرأ ما ضبطه صاحبُ المحطة، ولذلك تصلح للوحته: زرُّه يقلب ما
+ *  يراه، وشارتُه ✅ تعني «هكذا تركتَها». **ولا تصلح للناس.** فهي لا تسأل متى
+ *  قيل ذلك، وقد لا يكون قيل اليوم.
+ *
+ *  مقيسٌ يومَ كُتب هذا: شاشةُ «المتوفر الآن» سبعَ عشرةَ محطة، خمسٌ منها على
+ *  خبرٍ أقدمَ من يوم — وأقدمُها **تسعةُ أيامٍ وثلث**. والسائقُ الذي يقصدها
+ *  يقطع الطريقَ على جملةٍ عنوانُها «الآن».
+ *
+ *  والحدُّ أربعٌ وعشرون ساعةً لا اجتهاداً: هو `FRESH_HOURS` في lib/hours.ts،
+ *  وهو الذي يُسقط الأخضرَ في التطبيق. فما ليس أخضرَ في الموقع لا يُقال عنه
+ *  «متوفّرٌ الآن» في البوت — والسطحان يقولان الشيءَ نفسَه أو أحدُهما يكذب.
+ *
+ *  والعيبُ كان مذكوراً في تعليق `stillLive` نفسِه: «والحداثةَ لا يفحصها
+ *  البوتُ أصلاً — عيبٌ قائمٌ قبل هذا العمود». فسُدّ. */
+const FRESH_MS = 24 * 3600_000;
+
+function offeredNow(
+  p: { is_available?: boolean | null; runs_out_at?: string | null; updated_at?: string | null }
+    | null | undefined
+): boolean {
+  if (!stillLive(p)) return false;
+  if (!p?.updated_at) return false;
+  const age = Date.now() - new Date(p.updated_at).getTime();
+  return age >= 0 && age < FRESH_MS;
+}
+
 // Anbar districts with a rough centre each. Duplicated from lib/cities.ts
 // because an Edge Function cannot import from the Next app; the list is
 // administrative geography and does not change.
@@ -1171,16 +1199,16 @@ async function showNearby(chat: number) {
 async function showProducts(chat: number, messageId?: number) {
   const { data: stations } = await db
     .from('stations')
-    .select('id, is_24h, opens_at, closes_at, temp_closed, station_products(product, is_available, runs_out_at)')
+    .select('id, is_24h, opens_at, closes_at, temp_closed, station_products(product, is_available, runs_out_at, updated_at)')
     .eq('status', 'approved');
 
   const counts = new Map<string, number>();
   for (const s of stations ?? []) {
     if (!isOpenNow(s as never)) continue;
     for (const p of (s as never as {
-      station_products: { product: string; is_available: boolean; runs_out_at: string | null }[];
+      station_products: { product: string; is_available: boolean; runs_out_at: string | null; updated_at: string | null }[];
     }).station_products) {
-      if (stillLive(p)) counts.set(p.product, (counts.get(p.product) ?? 0) + 1);
+      if (offeredNow(p)) counts.set(p.product, (counts.get(p.product) ?? 0) + 1);
     }
   }
 
@@ -1200,7 +1228,7 @@ async function showProducts(chat: number, messageId?: number) {
 async function showStationsWithProduct(chat: number, messageId: number, product: string) {
   const { data } = await db
     .from('stations_public')
-    .select('name, city, address, phone, slug, is_24h, opens_at, closes_at, temp_closed, station_products!inner(product, is_available, runs_out_at)')
+    .select('name, city, address, phone, slug, is_24h, opens_at, closes_at, temp_closed, station_products!inner(product, is_available, runs_out_at, updated_at)')
     .eq('status', 'approved')
     .eq('station_products.product', product)
     .eq('station_products.is_available', true);
@@ -1208,7 +1236,7 @@ async function showStationsWithProduct(chat: number, messageId: number, product:
   const open = (data ?? []).filter(
     (s) =>
       isOpenNow(s as never) &&
-      (s as never as { station_products: { runs_out_at: string | null }[] }).station_products.some(stillLive)
+      (s as never as { station_products: { runs_out_at: string | null; updated_at: string | null }[] }).station_products.some(offeredNow)
   );
   const label = PRODUCT_LABELS[product] ?? product;
 
@@ -2648,7 +2676,7 @@ Deno.serve(async (req) => {
     if (q.length >= 2) {
       const { data } = await db
         .from('stations_public')
-        .select('id, name, city, address, phone, slug, is_24h, opens_at, closes_at, temp_closed, station_products(product, is_available, runs_out_at)')
+        .select('id, name, city, address, phone, slug, is_24h, opens_at, closes_at, temp_closed, station_products(product, is_available, runs_out_at, updated_at)')
         .eq('status', 'approved')
         .or(`name.ilike.%${q}%,city.ilike.%${q}%,address.ilike.%${q}%`)
         .limit(5);
@@ -2656,8 +2684,8 @@ Deno.serve(async (req) => {
       const results = (data ?? []).map((s) => ({
         ...s,
         products: (s as never as {
-          station_products: { product: string; is_available: boolean; runs_out_at: string | null }[];
-        }).station_products.filter(stillLive).map((p) => p.product),
+          station_products: { product: string; is_available: boolean; runs_out_at: string | null; updated_at: string | null }[];
+        }).station_products.filter(offeredNow).map((p) => p.product),
       }));
 
       if (!results.length) {

@@ -1,4 +1,5 @@
 import type { FuelProduct, TrafficLevel } from '../types/database.ts';
+import { plural } from './freshness.ts';
 import { hasRunOut, isFresh, isOpenNow, isWithdrawn } from './hours.ts';
 
 // single source of truth for the 6 fixed products — mirrors the fuel_product
@@ -74,11 +75,33 @@ export function expectedLabel(isoDate: string): string {
   const target = new Date(`${isoDate}T00:00:00`);
   const days = Math.round((target.getTime() - today.getTime()) / 86400000);
 
-  if (days < 0) return 'متوقع';
+  // وعدٌ فات موعدُه ليس وعداً — انظر `isExpectedLate` تحته.
+  if (days < 0) return `تأخّر ${plural(-days, 'يوماً', 'يومين', 'أيام', 'يوماً')}`;
   if (days === 0) return 'متوقع اليوم';
   if (days === 1) return 'متوقع غداً';
   if (days === 2) return 'متوقع بعد غد';
   return `متوقع خلال ${days} أيام`;
+}
+
+/** وعدٌ مضى موعدُه ولم يُصحَّح.
+ *
+ *  كانت `expectedLabel` تطبع «متوقع» عاريةً لكلّ ما فات — فوعدُ الثامن
+ *  والعشرين من آب يُقرأ في الثامن من أيلول «متوقع»، أي **قادم**. مقيسٌ يومَ
+ *  كُتب هذا: ستّةُ أسطر، أقدمُها متأخّرٌ أحدَ عشرَ يوماً، وكلُّها بشريحةٍ
+ *  كهرمانيّةٍ لونُها لونُ الترقّب.
+ *
+ *  **ولا تُحذف المحطة.** قيس البديل: إسقاطُ الوعد الفائت من `isListed` يُخفي
+ *  ثلاثَ محطاتٍ من القائمة — ومبدأ المشروع أنّ المحطة تبقى: يجدها الباحثُ
+ *  بالاسم وتحملها الخريطة (انظر تعليقَ `isListed`). فالعطبُ ليس في بقائها بل
+ *  في الكلمة، والكلمةُ وحدَها تُصحَّح.
+ *
+ *  ولونُها معها: الكهرمانُ يعني «يوشك»، والفائتُ يعني «قيل ولم يقع» — وهو
+ *  معنى الرمادي في هذا التطبيق، وبه يُعرض الخبرُ المسحوب. */
+export function isExpectedLate(isoDate: string | null | undefined): boolean {
+  if (!isoDate) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(`${isoDate}T00:00:00`).getTime() < today.getTime();
 }
 
 // Built from local date parts, not toISOString(): that converts to UTC first,

@@ -1,4 +1,4 @@
-import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, expectedLabel, isListed, isOffered, isStaleOffer, trafficSource } from '@/lib/products';
+import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, expectedLabel, isExpectedLate, isListed, isOffered, isStaleOffer, trafficSource } from '@/lib/products';
 import { formatTime, isFresh, isOpenNow, openingLine, PERIOD_LABELS, runsOutLabel, statusNote } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
@@ -151,7 +151,7 @@ export function StationCard({
                 className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                   inStock
                     ? 'bg-brand-100 text-brand-900'
-                    : stale
+                    : stale || isExpectedLate(row.expected_at)
                       ? 'bg-slate-100 text-slate-500'
                       : 'bg-amber-50 text-amber-700'
                 }`}

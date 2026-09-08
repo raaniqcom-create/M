@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { PRODUCT_LABELS, PRODUCT_ORDER, expectedLabel, isOffered, isStaleOffer } from '@/lib/products';
+import { PRODUCT_LABELS, PRODUCT_ORDER, expectedLabel, isExpectedLate, isOffered, isStaleOffer } from '@/lib/products';
 import { hoursLabel, isFresh, isOpenNow, PERIOD_LABELS, runsOutLabel } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { Station, StationProduct } from '@/types/database';
@@ -119,7 +119,9 @@ export function StationLive({
                   inStock
                     ? 'bg-brand-100 text-brand'
                     : expected
-                      ? 'bg-amber-50 text-amber-700'
+                      ? isExpectedLate(expected)
+                        ? 'bg-slate-100 text-slate-500'
+                        : 'bg-amber-50 text-amber-700'
                       : stale
                         ? 'bg-slate-100 text-slate-500'
                         : 'bg-slate-100 text-slate-400'
