@@ -266,7 +266,7 @@ const AREA_CITY: [string, string][] = [
 // لَنُسبت محطةُ العامريّة إلى الفلوجة.
 const AREAS_BY_LENGTH = [...AREA_CITY].sort((a, b) => b[0].length - a[0].length);
 
-function cityInText(raw: string): string | null {
+export function cityInText(raw: string): string | null {
   const t = normalizeName(raw);
   // الناحيةُ الرسميّةُ أوّلاً — «الخالدية قرب مركز الخالدية» تقول ناحيتَها
   // بنفسها. ثمّ المعالمُ لمن لا يقولها.
@@ -331,6 +331,92 @@ export function matchLine(
     score: hit.score,
     product,
   };
+}
+
+/** سطرٌ يكتبه صاحبُ المنصّة بيده: «محطة وادي حجلان - حديثة - محسن».
+ *
+ *  ── ولماذا لا يكفي مُحلِّلُ القناة ───────────────────────────────────────
+ *
+ *  لأنّ القناةَ تكتب اسماً مجرَّداً في سطر، وعنوانُ الوقود فوقه. وصاحبُ المنصّة
+ *  يأتيه الخبرُ بالهاتف فيكتبه كما يُملى عليه: الاسمُ والمنطقةُ والوقود في
+ *  سطرٍ واحد. فلو مرّ بمُحلِّل القناة لَصار كلُّه اسمَ محطة.
+ *
+ *  ── والفواصلُ لا تُشترط ─────────────────────────────────────────────────
+ *
+ *  «-» و«،» و«|» تُقسّم إن وُجدت. وإن لم توجد فُحص السطرُ كلُّه: الوقودُ
+ *  بكلمةٍ مطابِقة (`lineProduct`)، والمنطقةُ باسمٍ معروف (`cityInText`) — وهما
+ *  الأداتان اللتان تقرآن منشورَ القناة نفسَه، فلا قائمتان تفترقان.
+ *
+ *  وما لم يُعرَف يبقى فارغاً ولا يُخمَّن: الأزرارُ في البوت تسأل عنه. */
+export interface ManualLine {
+  name: string;
+  city: string | null;
+  product: FuelProduct | null;
+}
+
+export function readManualLine(raw: string): ManualLine | null {
+  const parts = raw
+    .split(/[-،|]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (!parts.length) return null;
+
+  // **الجزءُ الأوّلُ اسمٌ دائماً.** هكذا يُملى الخبرُ على الهاتف: الاسمُ ثمّ
+  // المنطقةُ ثمّ الوقود. ولولا هذه القاعدة لَابتُلع «محطة الخالدية» منطقةً —
+  // فاسمُها بعد التطبيع هو اسمُ ناحيتها.
+  if (parts.length > 1) {
+    const extra: string[] = [];
+    let product: FuelProduct | null = null;
+    let city: string | null = null;
+
+    for (const part of parts.slice(1)) {
+      if (!product) {
+        const p = lineProduct(part);
+        if (p) {
+          product = p;
+          continue;
+        }
+      }
+      if (!city) {
+        const c = cityInText(part);
+        if (c) {
+          city = c;
+          continue;
+        }
+      }
+      extra.push(part);
+    }
+
+    const name = [parts[0], ...extra].join(' ').trim();
+    return name ? { name, city, product } : null;
+  }
+
+  // ── وسطرٌ بلا فواصل ─────────────────────────────────────────────────────
+  //
+  // «محطة وادي حجلان حديثة محسن» — يُقرأ الوقودُ والمنطقةُ من السطر كلِّه، ثمّ
+  // تُنزع كلماتُهما من الاسم. ولو تُركت لَصار اسمُ المحطة يحمل ناحيتَها ووقودَها.
+  const product = lineProduct(raw);
+  const city = cityInText(raw);
+  const drop = new Set<string>();
+  if (product) for (const w of normalizeName(PRODUCT_LABELS[product]).split(' ')) if (w) drop.add(w);
+  if (city) for (const w of normalizeName(city).split(' ')) if (w) drop.add(w);
+
+  const bare = (w: string) => {
+    const n = normalizeName(w);
+    return n.startsWith('ال') ? n.slice(2) : n;
+  };
+  const name = raw
+    .split(/\s+/)
+    .filter((w) => {
+      const n = normalizeName(w);
+      // «محطة» و«تعبئة» يُطبَّعان إلى فراغ — وهما من الاسم لا من الضجيج هنا،
+      // فيبقيان. والمحذوفُ ما طابق وقوداً أو منطقةً وحدَه.
+      return n !== 'ال' && !drop.has(n) && !drop.has(bare(w));
+    })
+    .join(' ')
+    .trim();
+
+  return name ? { name, city, product } : { name: raw.trim(), city, product };
 }
 
 /** المنشورُ كاملاً: قراءةٌ ثمّ مطابقةُ كلّ سطر. */

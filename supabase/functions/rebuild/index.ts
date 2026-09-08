@@ -27,6 +27,15 @@ const CORS = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
+// سطرٌ جديدٌ يُبنى من رقمه لا من هروبٍ نصّيّ.
+//
+// كان يُكتب هروباً نصّيّاً، فأكلت تحريراتٌ آليّةٌ الشرطةَ المائلة وبقي سطرٌ
+// حقيقيٌّ داخل نصٍّ مفرد — والملفُّ لا يُبنى أصلاً. ومرّ ذلك بلا أن يُكشف
+// لأنّ أحداً لم يُعِد نشرَ الدالّة منذها، وكان أوّلُ نشرٍ تالٍ سيُطفئ مفتاحَ
+// الصيانة. وهو العطلُ نفسُه الذي جعل `functions/telegram` يُعرِّف NL
+// بـString.fromCharCode، والذي أضيف لأجله scripts/check-functions.mjs.
+const NEWLINE = String.fromCharCode(10);
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   try {
@@ -164,8 +173,7 @@ Deno.serve(async (req) => {
             : body.maintenance
               ? 'صيانة: إيقاف مؤقّت'
               : 'صيانة: عودة',
-          content: encodeBase64(new TextEncoder().encode(JSON.stringify(status, null, 2) + '
-')),
+          content: encodeBase64(new TextEncoder().encode(JSON.stringify(status, null, 2) + NEWLINE)),
           sha,
         }),
       });

@@ -5,13 +5,18 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 // المحلِّلُ والمطابقُ يُستوردان من `lib/` ولا يُنسخان: نسخةٌ ثانيةٌ من قائمة
 // المسح أو من تطبيع الأسماء تعني أن البوت والموقع يفهمان الاسمَ نفسَه فهمين.
 // وهي ملفّاتٌ خالصةٌ بلا شبكةٍ ولا React، تُرفع مع هذه الدالّة عند كلّ نشر.
+import { CITY_NAMES } from '../../../lib/cities.ts';
 import {
-  lineProduct,
   looksLikeSchedule,
+  matchLine,
+  readManualLine,
   readSchedule,
   type PlatformStation,
-  type ScheduleLine,
+  type ScheduleLine as RawLine,
 } from '../../../lib/schedule.ts';
+
+/** سطرُ الجدول في المسوّدة — ومعه مفتاحُه الثابت. */
+type ScheduleLine = RawLine & { key?: string };
 import { countWord, sendScheduleAlert } from '../_shared/alert.ts';
 
 const TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
@@ -115,13 +120,31 @@ const CITIES: Record<string, [number, number]> = {
 
 type Json = Record<string, unknown>;
 
-async function call(method: string, body: Json) {
-  const res = await fetch(`${API}/${method}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) console.error(method, await res.text());
+async function call(method: string, body: Json): Promise<Response> {
+  const post = (b: Json) =>
+    fetch(`${API}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(b),
+    });
+
+  const res = await post(body);
+  if (res.ok) return res;
+
+  const why = await res.text();
+  console.error(method, res.status, why);
+
+  // **وسمٌ لم يُهرَّب لا يُسقط الردَّ كلَّه.**
+  //
+  // كلُّ رسائل البوت تُرسَل بـ parse_mode: 'HTML'، فاسمُ محطةٍ فيه «<» يجعل
+  // تلغرام يردّ 400 «can't parse entities» — وكان الخطأُ يُبتلع في السجلّ
+  // فلا يصل السائقَ شيءٌ إطلاقاً، ولا يعرف أحدٌ لماذا. فيُعاد الإرسالُ نصّاً
+  // خاماً: وسومٌ ضائعةٌ أهونُ من رسالةٍ ضائعة.
+  const b = body as Record<string, unknown>;
+  if (res.status === 400 && b.parse_mode && /parse|entit/i.test(why)) {
+    const { parse_mode: _drop, ...plain } = b;
+    return post(plain as Json);
+  }
   return res;
 }
 
@@ -238,6 +261,7 @@ async function mainMenu(userId: number) {
     // top silently moved all three admin buttons somewhere else.
     const before = rows.findIndex((r) => r[0] === mine);
     rows.splice(before < 0 ? rows.length : before, 0,
+      [{ text: '➕ أضِف إلى جدول اليوم', callback_data: 'addsched' }],
       [{ text: `📋 طلبات المحطات (${n})`, callback_data: 'req' }],
       [{ text: '🏬 المحطات المسجلة', callback_data: 'people' }],
       [{ text: '🛡 لوحة الإدارة', callback_data: 'admin' }],
@@ -621,7 +645,14 @@ type Draft = {
   contact?: string;
   contact_phone?: string;
   // جدولُ الغد يركب آلةَ المسوّدات نفسَها: منشورٌ مقروءٌ ينتظر «انشر».
-  sched?: { product: string; lines: ScheduleLine[]; for_date?: string };
+  sched?: {
+    product: string;
+    lines: ScheduleLine[];
+    for_date?: string;
+    /** حقلٌ ينتظر نصّاً بعد ضغطة زرّ — الاسمُ أو المنطقةُ إن لم تكن في القائمة.
+     *  ويُعنوَن بمفتاح السطر لا بموضعه: المواضعُ تزحف بالحذف. */
+    edit?: { key: string; field: 'name' | 'city' };
+  };
 };
 
 const PROVINCES = ['الأنبار'];
@@ -1461,10 +1492,6 @@ async function toggleProduct(
 // وهذا ليس تحفّظاً زائداً: 20260823c يسجّل أن المطابقةَ بالاسم جُرّبت في هذه
 // المنصّة ورُفضت لأنها تُخطئ في الجهتين. فالمطابقةُ تقترح، والإنسانُ يقرّر.
 
-const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
-const latinDigits = (v: string) =>
-  [...v].map((c) => (AR_DIGITS.indexOf(c) < 0 ? c : String(AR_DIGITS.indexOf(c)))).join('');
-
 const baghdadDay = (plus = 0) =>
   new Date(Date.now() + plus * 86_400_000).toLocaleDateString('en-CA', {
     timeZone: 'Asia/Baghdad',
@@ -1489,16 +1516,6 @@ const baghdadHour = () =>
  *  فالفجرُ والصباحُ يعنيان اليوم، وما بعد الظهر يعني الغد. وهو ترجيحٌ لا يقين،
  *  ولذلك يُطبع التاريخُ في المعاينة ويُصحَّح بكلمةٍ واحدة قبل النشر. */
 const scheduleDay = () => baghdadDay(baghdadHour() < 12 ? 0 : 1);
-
-/** المحطاتُ المعتمدة بإحداثيّاتها — منها يأتي الربطُ ومنها «مسجّلة». */
-async function platformStations(): Promise<PlatformStation[]> {
-  const { data } = await db
-    .from('stations_public')
-    .select('id, name, lat, lng')
-    .eq('status', 'approved')
-    .range(0, 99_999);
-  return (data ?? []) as PlatformStation[];
-}
 
 /** كم شخصاً سيصله الإشعار — قبل الضغط لا بعده.
  *
@@ -1537,13 +1554,35 @@ const productsLabel = (lines: ScheduleLine[]) =>
     .map((p) => PRODUCT_LABELS[p] ?? p)
     .join(' و');
 
-async function showSchedule(chat: number, d: { product: string; lines: ScheduleLine[]; for_date?: string }) {
+/** مفتاحٌ ثابتٌ لكلّ سطر — لا موضعُه.
+ *
+ *  **لأنّ الموضعَ يزحف.** كانت أزرارُ المحرِّر تحمل فهرسَ السطر، فحذفُ سطرٍ
+ *  يُزيح ما بعده — وزرٌّ في رسالةٍ سابقةٍ يبقى حيّاً يشير إلى محطةٍ أخرى.
+ *  فيُحذف غيرُ المقصود أو يُبدَّل وقودُ غيرِه، ثمّ يُنشر ويُشعَر به الناس.
+ *
+ *  وثمانيةُ أحرفٍ تكفي: `callback_data` سقفُه أربعةٌ وستّون بايتاً. */
+const keyed = (lines: ScheduleLine[]): ScheduleLine[] =>
+  lines.map((l) => (l.key ? l : { ...l, key: crypto.randomUUID().slice(0, 8) }));
+
+/** يُحرِّر الرسالةَ إن جاءت الضغطةُ من زرّ، ويُرسل جديدةً إن لم تأتِ.
+ *
+ *  **رسالةُ محرِّرٍ حيّةٌ واحدة لا كومة.** كانت كلُّ شاشةٍ رسالةً جديدة، فتبقى
+ *  الشاشاتُ السابقةُ بأزرارها تشير إلى حالةٍ ماتت — وهو أصلُ خمسةٍ من أعطال
+ *  المحرِّر. */
+const show = (chat: number, msgId: number | undefined, text: string, extra: Json = {}) =>
+  msgId ? edit(chat, msgId, text, extra) : send(chat, text, extra);
+
+async function showSchedule(
+  chat: number,
+  d: { product: string; lines: ScheduleLine[]; for_date?: string },
+  msgId?: number
+) {
   const label = productsLabel(d.lines);
+  const day = d.for_date ?? scheduleDay();
+  const dayWord = day === baghdadDay() ? 'اليوم' : day === baghdadDay(1) ? 'غداً' : day;
   // وقودُ السطر يُكتب مع اسمه حين يحمل المنشورُ أكثرَ من وقود — وهو يقع:
   // منشورا الليلة يُلصقان أحياناً في رسالةٍ واحدة.
   const mixed = schedProducts(d.lines).length > 1;
-  const day = d.for_date ?? scheduleDay();
-  const dayWord = day === baghdadDay() ? 'اليوم' : day === baghdadDay(1) ? 'غداً' : day;
   const cities = schedCities(d.lines);
   const reach = await scheduleReach(cities, schedProducts(d.lines));
 
@@ -1573,16 +1612,15 @@ async function showSchedule(chat: number, d: { product: string; lines: ScheduleL
   const adding = (already ?? 0) > 0;
 
   const verb = adding ? 'أضِف' : 'انشر';
-  const note = adding
-    ? `${NL}➕ يُضاف إلى جدولٍ منشورٍ فيه ${already} محطة.`
-    : '';
+  const note = adding ? `${NL}➕ يُضاف إلى جدولٍ منشورٍ فيه ${already} محطة.` : '';
+  const flip = day === baghdadDay() ? '📅 اجعله غداً' : '📅 اجعله اليوم';
 
-  await send(
+  await show(
     chat,
+    msgId,
     `<b>جدولُ ${dayWord}</b> — ${esc(label)} · ${day}${NL}${NL}` +
       rows.join(NL) +
-      `${NL}${NL}${foot}${note}${NL}${NL}` +
-      `<i>«✏️ تعديل» يشرح كيف تُصحَّح الأسطر.</i>`,
+      `${NL}${NL}${foot}${note}`,
     {
       reply_markup: {
         inline_keyboard: [
@@ -1592,30 +1630,123 @@ async function showSchedule(chat: number, d: { product: string; lines: ScheduleL
           ],
           [
             { text: '✏️ تعديل', callback_data: 'sch:edit' },
-            { text: '✖️ ألغِ', callback_data: 'wx' },
+            { text: flip, callback_data: 'sd' },
           ],
+          [{ text: '✖️ ألغِ', callback_data: 'wx' }],
         ],
       },
     }
   );
 }
 
-/** شرحُ التصحيح — بأسطرِ الجدول الحاضر لا بمثالٍ مجرَّد.
- *
- *  طلبه صاحبُ المنصّة: «سأبحث عن اسم المحطة المقصودة وكذلك المنطقة والتفصيل
- *  وبعدها أعدّل». فالشرحُ يُستدعى بزرٍّ ولا يُحشر في كلّ معاينة. */
-async function showEditHelp(chat: number, d: { lines: ScheduleLine[] }) {
-  const sample = d.lines.length;
-  await send(
-    chat,
-    `<b>تصحيحُ الجدول</b> — اكتب سطراً واحداً:${NL}${NL}` +
-      `<code>٢ الرمادي</code> — يضبط منطقةَ السطر الثاني${NL}` +
-      `<code>٢ اسم محطة الشهداء</code> — يضبط اسمَ المحطة${NL}` +
-      `<code>٢ محسن</code> — يضبط الوقود (عادي · محسن · سوبر · كاز · غاز)${NL}` +
-      `<code>٢ حذف</code> — يُسقط السطر${NL}` +
-      `<code>اليوم</code> أو <code>غدا</code> — يضبط اليومَ${NL}${NL}` +
-      `<i>الأرقامُ من ١ إلى ${sample}. وبعد كلّ تصحيحٍ تُعاد المعاينةُ بأزرارها.</i>`
-  );
+// ── محرِّرُ الجدول ───────────────────────────────────────────────────────
+//
+// **أزرارٌ لا قواعدُ كتابة.** كان التصحيحُ نحواً يُحفظ — «٢ اسم محطة كذا» —
+// فكُتب الرقمُ وحدَه فردّ البوتُ بتحذير. والقاعدةُ التي تحتاج شرحاً في كلّ
+// مرّةٍ ليست واجهة.
+//
+// فثلاثُ شاشات في **رسالةٍ واحدةٍ تُحرَّر**: اختر السطر ← اختر ما تُصحّح ←
+// اختر القيمة. ولا يُطلب نصٌّ إلا حيث لا تُحصر القيم: اسمُ المحطة، ومنطقةٌ
+// خارج قائمة الأنبار.
+
+/** الوقودُ المعروض في المحرِّر — الشائعُ لا كلُّ ما في المُعدَّد. */
+const EDIT_PRODUCTS = ['gasoline_regular', 'gasoline_premium', 'gasoline_super', 'kerosene', 'gas'];
+
+const chunk = <T,>(xs: T[], n: number): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
+  return out;
+};
+
+/** الشاشةُ الأولى: أيَّ سطرٍ تُصحّح؟ */
+function linePicker(d: { lines: ScheduleLine[] }) {
+  return {
+    text: '<b>أيَّ سطرٍ تُصحّح؟</b>',
+    extra: {
+      reply_markup: {
+        inline_keyboard: [
+          ...d.lines.map((l, i) => [
+            { text: `${i + 1} ${l.name}`.slice(0, 40), callback_data: `se:${l.key}` },
+          ]),
+          [{ text: '↩︎ رجوع', callback_data: 'sb' }],
+        ],
+      },
+    },
+  };
+}
+
+/** الشاشةُ الثانية: ماذا في هذا السطر تُصحّح؟ */
+function lineMenu(l: ScheduleLine, i: number) {
+  return {
+    text:
+      `<b>السطر ${i + 1}</b>${NL}` +
+      `الاسم: ${esc(l.name)}${NL}` +
+      `المنطقة: ${esc(l.city ?? 'غير معروفة')}${NL}` +
+      `الوقود: ${esc(PRODUCT_LABELS[l.product] ?? l.product)}`,
+    extra: {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '✏️ الاسم', callback_data: `sf:${l.key}:n` },
+            { text: '📍 المنطقة', callback_data: `sf:${l.key}:c` },
+          ],
+          [
+            { text: '⛽ الوقود', callback_data: `sf:${l.key}:p` },
+            { text: '🗑 حذف السطر', callback_data: `sf:${l.key}:x` },
+          ],
+          [{ text: '↩︎ رجوع', callback_data: 'sch:edit' }],
+        ],
+      },
+    },
+  };
+}
+
+/** الشاشةُ الثالثة: القيمة — حيث تُحصر. */
+function valuePicker(l: ScheduleLine, i: number, field: string) {
+  if (field === 'p') {
+    return {
+      text: `<b>وقودُ السطر ${i + 1}</b>${NL}${esc(l.name)}`,
+      extra: {
+        reply_markup: {
+          inline_keyboard: [
+            ...chunk(
+              EDIT_PRODUCTS.map((p) => ({
+                text: PRODUCT_LABELS[p] ?? p,
+                callback_data: `sp:${l.key}:${p}`,
+              })),
+              2
+            ),
+            [{ text: '↩︎ رجوع', callback_data: `se:${l.key}` }],
+          ],
+        },
+      },
+    };
+  }
+  return {
+    text: `<b>منطقةُ السطر ${i + 1}</b>${NL}${esc(l.name)}`,
+    extra: {
+      reply_markup: {
+        inline_keyboard: [
+          ...chunk(
+            CITY_NAMES.map((c, k) => ({ text: c, callback_data: `sc:${l.key}:${k}` })),
+            3
+          ),
+          [{ text: '⌨️ اكتبها بنفسي', callback_data: `sw:${l.key}:c` }],
+          [{ text: '↩︎ رجوع', callback_data: `se:${l.key}` }],
+        ],
+      },
+    },
+  };
+}
+
+/** المحطاتُ المعتمدة بإحداثيّاتها — منها يأتي الربطُ ومنها «مسجّلة». */
+async function platformStations(): Promise<PlatformStation[]> {
+  const { data } = await db
+    .from('stations_public')
+    .select('id, name, lat, lng')
+    .eq('status', 'approved')
+    .range(0, 99_999);
+  return (data ?? []) as PlatformStation[];
 }
 
 /** منشورٌ وصل: يُقرأ ويُطابق ويُحفظ مسوّدةً — بلا صفٍّ واحدٍ في القاعدة. */
@@ -1627,58 +1758,183 @@ async function proposeSchedule(chat: number, userId: number, text: string) {
   }
   const d = {
     product: parsed.product as string,
-    lines: parsed.lines,
+    lines: keyed(parsed.lines),
     for_date: scheduleDay(),
   };
   await saveDraft(userId, chat, 'sched', { sched: d });
   await showSchedule(chat, d);
 }
 
-/** «٣ الرمادي» أو «٣ حذف» — تصحيحُ سطرٍ واحدٍ قبل النشر. */
+/** أسطرٌ يكتبها صاحبُ المنصّة بيده: «محطة وادي حجلان - حديثة - محسن».
+ *
+ *  نصفُ عمله اليوميّ خارجُ القناة — يتّصل به أصحابُ محطات ويتابع صفحاتِهم.
+ *  فالخبرُ يدخل من هنا إلى **جدول اليوم نفسِه**، ويمرّ بالمعاينة والأزرار
+ *  نفسِها: مسارٌ واحدٌ لا ثانٍ له. */
+async function proposeManual(chat: number, userId: number, text: string) {
+  const platform = await platformStations();
+  const lines: ScheduleLine[] = [];
+
+  for (const row of text.split(/\r?\n/)) {
+    const one = readManualLine(row);
+    if (!one) continue;
+    const m = matchLine(one.name, platform, one.product ?? 'gasoline_regular');
+    // ما كتبه صاحبُ المنصّة أولى ممّا استنتجه المطابق: هو سمع الخبرَ بأذنه.
+    lines.push({ ...m, city: one.city ?? m.city, name: m.stationId ? m.name : one.name });
+  }
+
+  if (!lines.length) {
+    await send(chat, '⚠️ لم أفهم شيئاً. اكتب: <code>اسم المحطة - المنطقة - نوع الوقود</code>');
+    return;
+  }
+
+  const d = {
+    product: lines[0].product as string,
+    lines: keyed(lines),
+    for_date: baghdadDay(),
+  };
+  await saveDraft(userId, chat, 'sched', { sched: d });
+  await showSchedule(chat, d);
+}
+
+/** النصُّ المنتظَر بعد ضغطة زرّ — الاسمُ أو منطقةٌ خارج القائمة. */
 async function correctSchedule(chat: number, userId: number, d: Draft, raw: string) {
   const sched = d.sched;
   if (!sched) return void (await send(chat, 'انتهت الجلسة. أعِد تحويلَ المنشور.'));
 
-  // اليومُ يُصحَّح بكلمةٍ لا برقم: هو خاصّيّةُ الجدول كلِّه لا خاصّيّةُ سطر.
-  const word = raw.trim();
-  if (word === 'اليوم' || word === 'غدا' || word === 'غداً') {
-    sched.for_date = baghdadDay(word === 'اليوم' ? 0 : 1);
+  const v = raw.trim();
+  const waiting = sched.edit;
+  if (!waiting) {
+    return void (await send(chat, 'اضغط <b>✏️ تعديل</b> في المعاينة لاختيار السطر.'));
+  }
+
+  const i = sched.lines.findIndex((l) => l.key === waiting.key);
+  if (i < 0) {
+    sched.edit = undefined;
     await saveDraft(userId, chat, 'sched', { sched });
-    return void (await showSchedule(chat, sched));
+    return void (await send(chat, 'تغيّرت القائمة — افتح ✏️ تعديل من جديد.'));
   }
+  if (v.length < 2) return void (await send(chat, '⚠️ قصيرٌ جداً. اكتبه كاملاً.'));
 
-  const parts = latinDigits(word).split(' ').filter(Boolean);
-  const n = Number(parts[0]);
-  if (!Number.isInteger(n) || n < 1 || n > sched.lines.length) {
-    return void (await send(chat, '⚠️ ابدأ برقم السطر، مثل: «٣ الرمادي».'));
-  }
-  const rest = parts.slice(1).join(' ').trim();
-  if (!rest) return void (await send(chat, '⚠️ بعد الرقم: اسمُ المنطقة، أو «حذف».'));
-
-  // الترتيبُ مقصود: «حذف» أوّلاً فهي كلمةٌ واحدةٌ لا لبسَ فيها، ثمّ «اسم»
-  // لأنّ ما بعدها نصٌّ حرٌّ قد يحوي اسمَ منطقةٍ أو وقود، ثمّ الوقودُ لأنّه
-  // مجموعةٌ مغلقة، وما بقي منطقة.
-  if (rest === 'حذف') {
-    sched.lines.splice(n - 1, 1);
-  } else if (rest.startsWith('اسم ')) {
-    const name = rest.slice(4).trim();
-    if (name.length < 2) return void (await send(chat, '⚠️ بعد «اسم»: اسمُ المحطة.'));
-    sched.lines[n - 1].name = name;
+  if (waiting.field === 'name') {
+    // **الاسمُ الجديد يُعاد مطابقتُه.** ولولا ذلك لبقي `linked_station_id`
+    // لمحطةٍ قديمةٍ تحت اسمٍ جديد — فيُنشر صفٌّ يربط المواطنَ بصفحةِ محطةٍ
+    // لا يصلها وقود، والمعاينةُ تقول «مسجّلة» فيُصدَّق.
+    const old = sched.lines[i];
+    const m = matchLine(v, await platformStations(), old.product);
+    sched.lines[i] = { ...m, name: m.stationId ? m.name : v, city: m.city ?? old.city, key: old.key };
   } else {
-    const pr = lineProduct(rest);
-    if (pr) sched.lines[n - 1].product = pr;
-    else sched.lines[n - 1].city = rest;
+    sched.lines[i].city = v;
   }
 
-  if (!sched.lines.length) {
-    await clearDraft(userId);
-    return void (await send(chat, 'حُذفت كلُّ الأسطر. أُلغي الجدول.'));
-  }
+  sched.edit = undefined;
   await saveDraft(userId, chat, 'sched', { sched });
   await showSchedule(chat, sched);
 }
 
-/** الضغطة: صفوفُ الجدول تُكتب، ثمّ إشعارٌ واحدٌ لا واحدٌ لكلّ محطة. */
+/** توجيهُ ضغطات المحرِّر كلِّها — والمسوّدةُ تُقرأ مرّةً واحدة. */
+async function editRoute(chat: number, userId: number, data: string, msgId?: number) {
+  const draft = await getDraft(userId);
+  const sched = draft?.data?.sched;
+  if (!sched?.lines?.length) {
+    await send(chat, 'انتهت الجلسة. أعِد تحويلَ المنشور.');
+    return;
+  }
+
+  // **أيُّ ضغطةٍ تُلغي انتظاراً سابقاً.** ضغط «✏️ الاسم» ثمّ انتقل ولم يكتب:
+  // كان الطلبُ يبقى حيّاً، فأوّلُ نصٍّ يكتبه بعدها — ولو كان بحثاً — يقع في
+  // حقلٍ وسطرٍ غيرِ اللذين أمامه. والفرعان اللذان يضبطانه يأتيان بعدُ.
+  sched.edit = undefined;
+
+  const save = () => saveDraft(userId, chat, 'sched', { sched });
+
+  if (data === 'sch:edit') {
+    await save();
+    const v = linePicker(sched);
+    return void (await show(chat, msgId, v.text, v.extra));
+  }
+  if (data === 'sb') {
+    await save();
+    return void (await showSchedule(chat, sched, msgId));
+  }
+  if (data === 'sd') {
+    // اليومُ يُقلب بزرّ: منشورُ الليلة يُراجَع بعد منتصف الليل أحياناً، والترجيحُ
+    // ترجيحٌ لا يقين.
+    sched.for_date = sched.for_date === baghdadDay() ? baghdadDay(1) : baghdadDay();
+    await save();
+    return void (await showSchedule(chat, sched, msgId));
+  }
+
+  const [tag, key, arg] = data.split(':');
+  const i = sched.lines.findIndex((l) => l.key === key);
+  if (i < 0) {
+    await save();
+    return void (await show(chat, msgId, 'تغيّرت القائمة — افتح ✏️ تعديل من جديد.', {
+      reply_markup: { inline_keyboard: [[{ text: '↩︎ رجوع', callback_data: 'sb' }]] },
+    }));
+  }
+  const l = sched.lines[i];
+
+  if (tag === 'se') {
+    await save();
+    const v = lineMenu(l, i);
+    return void (await show(chat, msgId, v.text, v.extra));
+  }
+
+  if (tag === 'sf') {
+    if (arg === 'x') {
+      // الحذفُ بالمفتاح لا بالموضع، فضغطةٌ ثانيةٌ على الزرّ نفسِه بلا أثر.
+      sched.lines = sched.lines.filter((x) => x.key !== key);
+      if (!sched.lines.length) {
+        await clearDraft(userId);
+        return void (await show(chat, msgId, 'حُذفت كلُّ الأسطر. أُلغي الجدول.'));
+      }
+      await save();
+      return void (await showSchedule(chat, sched, msgId));
+    }
+    if (arg === 'n' || arg === 'c') {
+      sched.edit = { key, field: arg === 'n' ? 'name' : 'city' };
+      await save();
+      if (arg === 'c') {
+        const v = valuePicker(l, i, 'c');
+        return void (await show(chat, msgId, v.text, v.extra));
+      }
+      return void (await show(
+        chat,
+        msgId,
+        `اكتب الآن اسمَ المحطة للسطر ${i + 1}:${NL}<i>${esc(l.name)}</i>`,
+        { reply_markup: { inline_keyboard: [[{ text: '✖️ ألغِ التعديل', callback_data: 'sb' }]] } }
+      ));
+    }
+    await save();
+    const v = valuePicker(l, i, 'p');
+    return void (await show(chat, msgId, v.text, v.extra));
+  }
+
+  if (tag === 'sp') {
+    sched.lines[i].product = arg;
+    await save();
+    return void (await showSchedule(chat, sched, msgId));
+  }
+
+  if (tag === 'sc') {
+    const city = CITY_NAMES[Number(arg)];
+    if (city) sched.lines[i].city = city;
+    await save();
+    return void (await showSchedule(chat, sched, msgId));
+  }
+
+  if (tag === 'sw') {
+    sched.edit = { key, field: 'city' };
+    await save();
+    return void (await show(
+      chat,
+      msgId,
+      `اكتب الآن اسمَ المنطقة للسطر ${i + 1}:${NL}<i>${esc(l.name)}</i>`,
+      { reply_markup: { inline_keyboard: [[{ text: '✖️ ألغِ التعديل', callback_data: 'sb' }]] } }
+    ));
+  }
+}
+
 async function publishSchedule(
   chat: number,
   userId: number,
@@ -1827,7 +2083,7 @@ Deno.serve(async (req) => {
             await saveDraft(from, chat, 'rename', { rename_id: id } as Draft);
             await send(
               chat,
-              `الاسم الحالي: <b>${st.name}</b>
+              `الاسم الحالي: <b>${esc(st.name)}</b>
 
 اكتب الاسم الصحيح الآن.
 ` +
@@ -1874,15 +2130,32 @@ Deno.serve(async (req) => {
       } else if (data.startsWith('r:')) {
         await answer(cb.id, 'تم التحديث');
         await showOwnerPanel(chat, data.slice(2), messageId);
+      } else if (data === 'addsched') {
+        await answer(cb.id);
+        if (!isAdmin(from)) {
+          await send(chat, 'هذا الزرّ للإدارة.');
+        } else {
+          await saveDraft(from, chat, 'schedadd', {});
+          await send(
+            chat,
+            `<b>إضافةٌ إلى جدول اليوم</b>${NL}${NL}` +
+              `الصق سطراً أو أكثر، كلُّ سطرٍ هكذا:${NL}` +
+              `<code>اسم المحطة - المنطقة - نوع الوقود</code>${NL}${NL}` +
+              `<i>مثال: محطة وادي حجلان - حديثة - محسن</i>${NL}` +
+              `والمنطقةُ أو الوقودُ إن نقصا سألتُك عنهما بأزرار.`,
+            { reply_markup: { inline_keyboard: [[{ text: '✖️ ألغِ', callback_data: 'wx' }]] } }
+          );
+        }
       } else if (data === 'sch:go') {
         await publishSchedule(chat, from, cb.id, true);
       } else if (data === 'sch:mute') {
         await publishSchedule(chat, from, cb.id, false);
-      } else if (data === 'sch:edit') {
+      } else if (data === 'sch:edit' || data === 'sb' || data === 'sd' ||
+                 data.startsWith('se:') || data.startsWith('sf:') ||
+                 data.startsWith('sp:') || data.startsWith('sc:') ||
+                 data.startsWith('sw:')) {
         await answer(cb.id);
-        const draft = await getDraft(from);
-        if (draft?.data?.sched) await showEditHelp(chat, draft.data.sched);
-        else await send(chat, 'انتهت الجلسة. أعِد تحويلَ المنشور.');
+        await editRoute(chat, from, data, messageId);
       } else if (data.startsWith('t:')) {
         const [, stationId, product] = data.split(':');
         await toggleProduct(chat, messageId, from, stationId, product, cb.id);
@@ -1974,7 +2247,12 @@ Deno.serve(async (req) => {
         // وقع: عرض الرصدُ جدولاً، ثمّ لصق صاحبُ المنصّة منشوراً كاملاً — فذهب
         // إلى مُصحِّح الأسطر، فردّ «ابدأ برقم السطر». والتصحيحُ سطرٌ قصير،
         // والمنشورُ يُعرَف بشكله؛ فالتمييزُ بينهما ممكنٌ بلا سؤال.
-        if (draft.step === 'sched' && looksLikeSchedule(text)) {
+        //
+        // **إلّا أن يكون حقلٌ ينتظر نصّاً**: فالمكتوبُ حينئذٍ جوابٌ لا منشور،
+        // ولو كان اسمُ محطةٍ فيه «تجهيز» و«غاز» لَمحا المسوّدةَ كلَّها.
+        if (draft.step === 'schedadd') {
+          await proposeManual(chat, from, text);
+        } else if (draft.step === 'sched' && !draft.data.sched?.edit && looksLikeSchedule(text)) {
           await proposeSchedule(chat, from, text);
         } else if (draft.step === 'sched') {
           await correctSchedule(chat, from, draft.data, text);
@@ -2112,11 +2390,18 @@ Deno.serve(async (req) => {
       }));
 
       if (!results.length) {
-        await send(chat, `لا توجد نتائج لـ «${q}».`, { reply_markup: await mainMenu(from) });
+        // **وقد لا يكون سؤالاً أصلاً.** لصق صاحبُ المنصّة «محطة وادي حجلان -
+        // حديثة - محسن» فردّ البوتُ «لا توجد نتائج» — وهو خبرٌ عن محطةٍ لا
+        // بحثٌ عنها. والفارقُ يُقرأ: اسمُ وقودٍ في النصّ لا يكون في سؤالِ بحث.
+        if (isAdmin(from) && readManualLine(q)?.product) {
+          await proposeManual(chat, from, q);
+          return new Response('ok');
+        }
+        await send(chat, `لا توجد نتائج لـ «${esc(q)}».`, { reply_markup: await mainMenu(from) });
         return new Response('ok');
       }
 
-      await send(chat, `🔍 نتائج البحث عن «${q}»`);
+      await send(chat, `🔍 نتائج البحث عن «${esc(q)}»`);
       for (const s of results) await sendStationCard(chat, s as never);
       await send(chat, 'اختر ما تريد:', { reply_markup: await mainMenu(from) });
       return new Response('ok');

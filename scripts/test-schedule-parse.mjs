@@ -10,7 +10,12 @@
 // وأخطرُ عقدةٍ هنا ليست القراءة بل **التمييز**: نصُّ الرسالة في البوت اليوم
 // بحثٌ عن محطة، فلو قُرئ كلُّ نصٍّ جدولاً لصار كلُّ من كتب اسمَ محطةٍ ناشراً.
 import assert from 'node:assert/strict';
-import { looksLikeSchedule, parseSchedule, readProduct } from '../lib/schedule.ts';
+import {
+  looksLikeSchedule,
+  parseSchedule,
+  readManualLine,
+  readProduct,
+} from '../lib/schedule.ts';
 
 // ــ منشورٌ ذو عنوان، سبعةُ أسماء (٢٠:٣٢) ــــــــــــــــــــــــــــــــــــ
 const POST_A = `غدا ان شاء الله البنزين العادي في المحطات التالية
@@ -140,3 +145,36 @@ assert.deepEqual(
 assert.ok(!th.rows.some((r) => r.name.includes('المحطات')), 'العنوانُ الثاني ليس محطة');
 
 console.log('عنوانان في منشورٍ واحد: سليم.');
+
+
+// ــ سطرٌ يكتبه صاحبُ المنصّة بيده ــــــــــــــــــــــــــــــــــــــــــ
+//
+// نصفُ عمله اليوميّ خارجُ القناة: يتّصل به أصحابُ محطات فيكتب الخبرَ كما
+// يُملى عليه — الاسمُ والمنطقةُ والوقود في سطر. ولصقُه في البوت كان يردّ
+// «لا توجد نتائج»، لأنّ النصَّ الحرَّ بحثٌ عن محطة لا خبرٌ عنها.
+for (const [line, name, city, product] of [
+  ['محطة وادي حجلان - حديثة - محسن', 'محطة وادي حجلان', 'حديثة', 'gasoline_premium'],
+  ['محطة الشهداء ، الفلوجة ، عادي', 'محطة الشهداء', 'الفلوجة', 'gasoline_regular'],
+  ['محطة النصر | الرمادي | كاز', 'محطة النصر', 'الرمادي', 'kerosene'],
+  // وبلا فواصل: يُقرأ الوقودُ والمنطقةُ من السطر كلِّه وتُنزع كلماتُهما
+  ['محطة وادي حجلان حديثة محسن', 'محطة وادي حجلان', 'حديثة', 'gasoline_premium'],
+  // واسمُ محطةٍ هو اسمُ ناحيتها لا يُبتلع: الجزءُ الأوّلُ اسمٌ دائماً
+  ['محطة الخالدية - الخالدية - عادي', 'محطة الخالدية', 'الخالدية', 'gasoline_regular'],
+]) {
+  const m = readManualLine(line);
+  assert.ok(m, `لم يُقرأ: «${line}»`);
+  assert.equal(m.name, name, `اسمُ «${line}»`);
+  assert.equal(m.city, city, `منطقةُ «${line}»`);
+  assert.equal(m.product, product, `وقودُ «${line}»`);
+}
+
+// وما نقص يبقى فارغاً ولا يُخمَّن — الأزرارُ تسأل عنه.
+const half = readManualLine('محطة بلا منطقة - سوبر');
+assert.equal(half.city, null, 'منطقةٌ لم تُذكر لا تُخمَّن');
+assert.equal(half.product, 'gasoline_super');
+
+const bare = readManualLine('الامن');
+assert.equal(bare.name, 'الامن');
+assert.equal(bare.product, null, 'اسمٌ مجرَّدٌ بلا وقود');
+
+console.log('السطرُ اليدويّ: سليم.');
