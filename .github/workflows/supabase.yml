@@ -27,6 +27,14 @@ on:
     branches: [main]
     paths:
       - 'supabase/functions/**'
+      # ــ و`lib/**` معها ــــــــــــــــــــــــــــــــــــــــــــــــــــ
+      #
+      # الدوالُّ الطرفيّةُ تستورد من `lib/` بمسارٍ نسبيّ (`../../../lib/…`)،
+      # وDeno يحزمها معها عند النشر. فتغييرٌ في `lib/schedule.ts` أو
+      # `lib/officialTable.ts` يمسّ البوتَ ولا يُطلق نشراً — وقد وقع مرّتين:
+      # أُصلح قارئُ الكتاب ولم يصل، فقرأ البوتُ الجدولَ بالمحلّل القديم ومزّقه.
+      - 'lib/**'
+      - 'types/**'
       - 'supabase/migrations/**'
       - 'scripts/apply-migrations.mjs'
       - '.github/workflows/supabase.yml'
