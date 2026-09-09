@@ -21,13 +21,36 @@ const CORS = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
+/** يقبل مفتاح .p8 بأيّ شكلٍ وصل: نصَّ PEM كما تُصدره أبل، أو **ذلك النصَّ
+ *  ملفوفاً بطبقة base64 ثانية** — وهي الصيغةُ التي حُفظ بها سرُّ هذا المشروع
+ *  فعلاً (`notify/index.ts` يقولها صراحةً).
+ *
+ *  **وهذا الملفُّ كان يفكّ طبقةً واحدة.** ففكُّ المزدوج مرّةً يُخرج نصَّ PEM
+ *  بايتاتٍ، فترفضه `importKey` بـ«expected valid PKCS#8 data» — خطأٌ يُقرأ
+ *  كمفتاحٍ تالفٍ لا كلفٍّ مزدوج. فكانت `apnsJwt` تردّ `null`، وكلُّ رمز آيفون
+ *  يسقط في `catch` صامت: **اثنان وعشرون جهازاً لأصحاب المحطات بلا إشعارٍ**،
+ *  ولوحةُ الحالة خضراءُ لأنّها تفحص بمفكِّكها الصحيح.
+ *
+ *  والمفكُّ المزدوجُ صحيحٌ على المفتاح البسيط أيضاً: الطبقةُ الثانيةُ لا تُفكّ
+ *  إلّا إن لم يبدأ الناتجُ بوسم DER (0x30). */
 function pemToPkcs8(pem: string): Uint8Array {
-  const raw = atob(
-    pem.replace('-----BEGIN PRIVATE KEY-----', '').replace('-----END PRIVATE KEY-----', '').split(/\s/).join('')
-  );
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
+  const decode = (text: string): Uint8Array => {
+    const stripped = text
+      .replace('-----BEGIN PRIVATE KEY-----', '')
+      .replace('-----END PRIVATE KEY-----', '')
+      .split(/\s/)
+      .join('');
+    const raw = atob(stripped);
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  };
+  let bytes = decode(pem);
+  if (bytes[0] !== 0x30) {
+    const inner = new TextDecoder().decode(bytes);
+    if (inner.includes('PRIVATE KEY')) bytes = decode(inner);
+  }
+  return bytes;
 }
 
 const b64url = (v: Uint8Array | string) =>

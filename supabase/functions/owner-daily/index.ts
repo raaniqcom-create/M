@@ -81,13 +81,36 @@ const db = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 );
 
+/** يقبل مفتاح .p8 بأيّ شكلٍ وصل: نصَّ PEM كما تُصدره أبل، أو **ذلك النصَّ
+ *  ملفوفاً بطبقة base64 ثانية** — وهي الصيغةُ التي حُفظ بها سرُّ هذا المشروع
+ *  فعلاً (`notify/index.ts` يقولها صراحةً).
+ *
+ *  **وهذا الملفُّ كان يفكّ طبقةً واحدة.** ففكُّ المزدوج مرّةً يُخرج نصَّ PEM
+ *  بايتاتٍ، فترفضه `importKey` بـ«expected valid PKCS#8 data» — خطأٌ يُقرأ
+ *  كمفتاحٍ تالفٍ لا كلفٍّ مزدوج. فكانت `apnsJwt` تردّ `null`، وكلُّ رمز آيفون
+ *  يسقط في `catch` صامت: **اثنان وعشرون جهازاً لأصحاب المحطات بلا إشعارٍ**،
+ *  ولوحةُ الحالة خضراءُ لأنّها تفحص بمفكِّكها الصحيح.
+ *
+ *  والمفكُّ المزدوجُ صحيحٌ على المفتاح البسيط أيضاً: الطبقةُ الثانيةُ لا تُفكّ
+ *  إلّا إن لم يبدأ الناتجُ بوسم DER (0x30). */
 function pemToPkcs8(pem: string): Uint8Array {
-  const raw = atob(
-    pem.replace('-----BEGIN PRIVATE KEY-----', '').replace('-----END PRIVATE KEY-----', '').split(/\s/).join('')
-  );
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
+  const decode = (text: string): Uint8Array => {
+    const stripped = text
+      .replace('-----BEGIN PRIVATE KEY-----', '')
+      .replace('-----END PRIVATE KEY-----', '')
+      .split(/\s/)
+      .join('');
+    const raw = atob(stripped);
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  };
+  let bytes = decode(pem);
+  if (bytes[0] !== 0x30) {
+    const inner = new TextDecoder().decode(bytes);
+    if (inner.includes('PRIVATE KEY')) bytes = decode(inner);
+  }
+  return bytes;
 }
 const b64url = (v: Uint8Array | string) =>
   btoa(typeof v === 'string' ? v : String.fromCharCode(...v))
@@ -110,7 +133,10 @@ async function apnsJwt(): Promise<string | null> {
       await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(unsigned))
     );
     return `${unsigned}.${b64url(sig)}`;
-  } catch {
+  } catch (e) {
+    // **ولا يسقط صامتاً.** `null` هنا تعني أنّ كلَّ آيفونٍ في هذا التشغيل لن
+    // يصله شيء، وسجلُّ الدالّة هو المكان الوحيد الذي يظهر فيه ذلك.
+    console.error('apnsJwt', e instanceof Error ? e.message : String(e));
     return null;
   }
 }
@@ -157,6 +183,15 @@ function baghdadNow(): { minutes: number; day: string } {
 }
 
 const toMinutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+
+/** يومُ طابعِ وقتٍ بتقويم بغداد.
+ *
+ *  `updated_at` يصل من PostgREST بتوقيت عالميّ، و`day` من `baghdadNow` ببغداد.
+ *  ومقارنةُ `slice(0,10)` بينهما تُخطئ ثلاثَ ساعاتٍ كلَّ ليلة: من حدّث لوحته
+ *  الواحدةَ فجراً يُحسب أنّه لم يحدّث، فيُحيّا صباحاً بتذكيرٍ عن عملٍ أدّاه،
+ *  ولا يُشكَر مساءً. */
+const baghdadDayOf = (iso: string): string =>
+  new Date(iso).toLocaleDateString('en-CA', { timeZone: BAGHDAD });
 
 /** Did `moment` fall inside the window that just closed? */
 function justPassed(moment: number, now: number): boolean {
@@ -338,14 +373,18 @@ async function preview(req: Request, stationId: string): Promise<Response> {
     .at(-1) as string | undefined;
   const staleStock = !!lastAvail && Date.now() - new Date(lastAvail).getTime() >= 24 * 3600_000;
   const withdrawn = !!lastAvail && Date.now() - new Date(lastAvail).getTime() >= WITHDRAW_MS;
-  const publishedToday = !!last && last.slice(0, 10) === day;
+  const publishedToday = !!last && baghdadDayOf(last) === day;
   const everPublished = !!last;
 
   const n = ((watchRows ?? []) as { city: string; watchers: number }[])[0]?.watchers ?? 0;
 
   const openingKind = everPublished ? 'opening_again' : 'opening_first';
-  const sentKinds = new Set((pinged ?? []).map((p) => p.kind));
-  const at = (k: string) => (pinged ?? []).find((p) => p.kind === k)?.sent_at ?? null;
+  // بالنوع الأساس: ما يُكتب هو `stock_check#3`، وما يُسأل عنه `stock_check`.
+  // فكانت المعاينةُ تقول «لن تُرسل» عن تذكيرٍ خرج قبل ثلاث ساعات — وارتفاع
+  // الحدّ من ثلاثٍ إلى خمسٍ وسّع العمى من اثنتين من ثلاثٍ إلى أربعٍ من خمس.
+  const sentKinds = new Set((pinged ?? []).map((p) => baseKind(p.kind)));
+  const at = (k: string) =>
+    (pinged ?? []).find((p) => baseKind(p.kind) === k)?.sent_at ?? null;
 
   return json({
     station: st.name,
@@ -582,13 +621,15 @@ Deno.serve(async (req) => {
     const close = s.is_24h ? 1260 : toMinutes(s.closes_at);
 
     const last = lastUpdate.get(s.id) ?? null;
-    const publishedToday = !!last && last.slice(0, 10) === day;
+    const publishedToday = !!last && baghdadDayOf(last) === day;
     const everPublished = !!last;
 
     let kind: string | null = null;
-    if (justPassed(open, minutes) && !publishedToday) {
+    // و`temp_closed` تُفحص هنا كما تُفحص في كلّ فرعٍ أدناه. محطةٌ مغلقةٌ
+    // لحادثٍ كانت تُحيّا كلَّ صباح بـ«ينتظرون خبر الوقود اليوم» — وهي مغلقة.
+    if (justPassed(open, minutes) && !publishedToday && !s.temp_closed) {
       kind = everPublished ? 'opening_again' : 'opening_first';
-    } else if (justPassed(close, minutes) && publishedToday) {
+    } else if (justPassed(close, minutes) && publishedToday && !s.temp_closed) {
       kind = 'closing_thanks';
     } else if (
       // The crowd said something, and that something has just gone stale: the
@@ -647,16 +688,27 @@ Deno.serve(async (req) => {
     byStation.set(d.station_id, [...(byStation.get(d.station_id) ?? []), d]);
   }
 
-  webpush.setVapidDetails(
-    'mailto:admin@muhta.online',
-    Deno.env.get('VAPID_PUBLIC_KEY')!,
-    Deno.env.get('VAPID_PRIVATE_KEY')!
-  );
+  // بحارسٍ كما في `announce`: نداءٌ بمفتاحٍ مفقودٍ يرمي **قبل** أن تُلمس محطةٌ
+  // واحدة، فيسقط التشغيلُ كلُّه — آيفونَ وأندرويدَ ومتصفّحاً — كلَّ ربع ساعة.
+  const vapidPub = Deno.env.get('VAPID_PUBLIC_KEY');
+  const vapidPriv = Deno.env.get('VAPID_PRIVATE_KEY');
+  const webReady = !!vapidPub && !!vapidPriv;
+  if (webReady) {
+    webpush.setVapidDetails('mailto:admin@muhta.online', vapidPub, vapidPriv);
+  } else {
+    console.error('VAPID غير مضبوط — إشعارُ المتصفّح معطّل');
+  }
 
   const jwt = await apnsJwt();
   const topic = Deno.env.get('APNS_TOPIC') ?? 'online.muhta.app';
   const saRaw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
-  const sa = saRaw ? JSON.parse(saRaw) : null;
+  const sa = (() => {
+    if (!saRaw) return null;
+    try { return JSON.parse(saRaw); } catch (e) {
+      console.error('FIREBASE_SERVICE_ACCOUNT', e instanceof Error ? e.message : String(e));
+      return null;
+    }
+  })();
   let access: string | null = null;
   if (sa) {
     try { access = await fcmToken(sa); } catch { access = null; }
@@ -859,7 +911,7 @@ ${body}`,
           if (r.status === 410) await db.from('device_tokens').delete().eq('token', t.token);
           else if (r.ok) sent++;
           else failed++;
-        } else if (t.platform === 'web') {
+        } else if (t.platform === 'web' && webReady) {
           // A browser subscription, not a device token. This is the branch that
           // did not exist — which is why an owner who runs their station from
           // the browser was counted as «لا جهاز مربوط» and heard nothing.
@@ -924,8 +976,17 @@ ${body}`,
     }
   }
 
-  if (marks.length) await db.from('owner_pings').upsert(marks);
-  if (thread.length) await db.from('station_messages').insert(thread);
+  // **وهذه الكتابةُ هي كلُّ ما يمنع التكرار.** لو سقطت، أعاد كلُّ ما أُرسل
+  // استحقاقَه في الدورة التالية — و`no_stock` بلا خانةٍ فتتكرّر طولَ اليوم.
+  // فلا تُبتلع: supabase-js لا يرمي، يردّ `error`.
+  const { error: markErr } = marks.length
+    ? await db.from('owner_pings').upsert(marks)
+    : { error: null };
+  if (markErr) console.error('owner_pings', markErr.message);
+  const { error: threadErr } = thread.length
+    ? await db.from('station_messages').insert(thread)
+    : { error: null };
+  if (threadErr) console.error('station_messages', threadErr.message);
 
   return new Response(
     JSON.stringify(chatMsg ? { ok: true, sent, failed } : { at: minutes, day, due: due.length, sent, failed, sms }),
