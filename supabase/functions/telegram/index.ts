@@ -6,6 +6,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 // المسح أو من تطبيع الأسماء تعني أن البوت والموقع يفهمان الاسمَ نفسَه فهمين.
 // وهي ملفّاتٌ خالصةٌ بلا شبكةٍ ولا React، تُرفع مع هذه الدالّة عند كلّ نشر.
 import { CITY_NAMES } from '../../../lib/cities.ts';
+import { looksLikeOfficialTable, readOfficialTable } from '../../../lib/officialTable.ts';
 import {
   looksLikeSchedule,
   matchLine,
@@ -682,6 +683,12 @@ type Draft = {
     /** حقلٌ ينتظر نصّاً بعد ضغطة زرّ — الاسمُ أو المنطقةُ إن لم تكن في القائمة.
      *  ويُعنوَن بمفتاح السطر لا بموضعه: المواضعُ تزحف بالحذف. */
     edit?: { key: string; field: 'name' | 'city' };
+    /** «official:2026-09-09:مصفى الصمود (اهلي)» — للكتاب الرسميّ وحدَه.
+     *  به يصير الإدراجُ لا يتكرّر: الفهرسُ الفريدُ (source_ref, raw_name)
+     *  موجودٌ في القاعدة منذ 20260908 ولم يُستعمل قطّ. */
+    source_ref?: string;
+    /** المصفى المجهِّز — يُحفظ في `note` ولا يُعرض للناس. */
+    note?: string;
   };
 };
 
@@ -1811,7 +1818,7 @@ const show = (chat: number, msgId: number | undefined, text: string, extra: Json
 
 async function showSchedule(
   chat: number,
-  d: { product: string; lines: ScheduleLine[]; for_date?: string },
+  d: { product: string; lines: ScheduleLine[]; for_date?: string; source_ref?: string; note?: string },
   msgId?: number
 ) {
   const label = productsLabel(d.lines);
@@ -1849,7 +1856,12 @@ async function showSchedule(
   const adding = (already ?? 0) > 0;
 
   const verb = adding ? 'أضِف' : 'انشر';
-  const note = adding ? `${NL}➕ يُضاف إلى جدولٍ منشورٍ فيه ${already} محطة.` : '';
+  // والكتابُ الرسميُّ يُسمّى: مصدرُ الخبر جزءٌ منه، ومن يضغط «انشر» يعرف
+  // أيَّ ورقةٍ ينشر.
+  const official = d.source_ref
+    ? `${NL}📄 كتابٌ رسميّ — ${esc(d.note ?? '')}`
+    : '';
+  const note = official + (adding ? `${NL}➕ يُضاف إلى جدولٍ منشورٍ فيه ${already} محطة.` : '');
   const flip = day === baghdadDay() ? '📅 اجعله غداً' : '📅 اجعله اليوم';
 
   await show(
@@ -2171,6 +2183,47 @@ async function platformStations(): Promise<PlatformStation[]> {
   return (data ?? []) as PlatformStation[];
 }
 
+/** الكتابُ الرسميُّ وصل: يُقرأ ويُطابق ويُحفظ مسوّدةً — كسابقه، بلا صفّ.
+ *
+ *  ── ولماذا بابٌ ثانٍ ────────────────────────────────────────────────────
+ *
+ *  الكتابُ جدولٌ لا كلام: محطةٌ واحدةٌ قد يصلها أربعةُ منتجات، وتاريخُه منصوصٌ
+ *  في عنوانه. و`readOfficialTable` تترجمه إلى `ScheduleLine[]` — الصيغةِ
+ *  القائمة — فتعمل المعاينةُ والمحرّرُ والنشرُ بعده بلا حرفٍ يتغيّر.
+ *
+ *  ── والتاريخُ لا يُخمَّن ─────────────────────────────────────────────────
+ *
+ *  ليلةَ ٢٠٢٦-٠٩-٠٨ اختلط جدولان في يومٍ واحد لأنّ التاريخَ كان يُرجَّح بساعة
+ *  اللصق. والكتابُ يقوله بنصّه؛ فإن لم يُقرأ تُترك المسوّدةُ بلا تاريخٍ وزرُّ 📅
+ *  يضبطه — ولا يُخترع يومٌ لم يُكتب. */
+async function proposeOfficial(chat: number, userId: number, text: string) {
+  const t = readOfficialTable(text, await platformStations());
+  if (!t.lines.length) {
+    await send(chat, '⚠️ عرفتُ أنّه كتابٌ رسميّ ولم أقرأ منه صفّاً. أرسله نصّاً بأعمدةٍ مفصولة.');
+    return;
+  }
+
+  const d = {
+    product: t.lines[0].product as string,
+    lines: keyed(t.lines),
+    ...(t.forDate ? { for_date: t.forDate } : {}),
+    ...(t.source ? { note: t.source } : {}),
+    // والمصفى في المفتاح: كتابا الصمود وكركوك في يومٍ واحدٍ لا يتصادمان.
+    ...(t.forDate ? { source_ref: `official:${t.forDate}:${t.source ?? '-'}` } : {}),
+  };
+  await saveDraft(userId, chat, 'sched', { sched: d });
+
+  // وما لم يُفهم يُقال، ولا يُبتلع: صفٌّ سقط من كتابٍ رسميٍّ خبرٌ ناقصٌ يُعلن.
+  if (t.skipped.length) {
+    await send(
+      chat,
+      `⚠️ ${t.skipped.length} صفّاً لم أفهمه:${NL}` +
+        t.skipped.slice(0, 5).map((x) => `• ${esc(x.slice(0, 90))}`).join(NL)
+    );
+  }
+  await showSchedule(chat, d);
+}
+
 /** منشورٌ وصل: يُقرأ ويُطابق ويُحفظ مسوّدةً — بلا صفٍّ واحدٍ في القاعدة. */
 async function proposeSchedule(chat: number, userId: number, text: string) {
   const parsed = readSchedule(text, await platformStations());
@@ -2443,8 +2496,15 @@ async function publishSchedule(
 
   const for_date = d.for_date ?? scheduleDay();
   const batch_id = crypto.randomUUID();
-  const { error } = await db.from('fuel_schedule').insert(
-    d.lines.map((l) => ({
+  // ــ ولا يتكرّر الكتابُ إن لُصق مرّتين ــــــــــــــــــــــــــــــــــــ
+  //
+  // `source_ref` وفهرسُه الفريد `(source_ref, raw_name)` موجودان في القاعدة
+  // منذ 20260908_fuel_schedule.sql ولم يكتبهما أحدٌ قطّ — بُنيا لاستيرادٍ لا
+  // يتكرّر، وهذا استعمالُهما الأوّل.
+  //
+  // ومنشورُ القناة لا مرجعَ له، فيبقى إدراجاً: القناةُ تنشر رسالتين وأكثر،
+  // والثانيةُ إضافةٌ مقصودة لا تكرار.
+  const rows = d.lines.map((l) => ({
       for_date,
       // **وقودُ الصفّ لا وقودُ المنشور.** كان `d.product` يُكتب للجميع، فسطرٌ
       // آخرُه «تجهيز بنزين محسن» يُنشر عاديّاً — خبرٌ خطأ عن وقودٍ يقطع الناسُ
@@ -2459,8 +2519,15 @@ async function publishSchedule(
       // خمسٍ وخمسين تُخرج ٢٧٫٥ و٣٦٫٦٦٦. فردّت القاعدةُ «invalid input syntax
       // for type integer» وضاع النشرُ كلُّه على منزلةٍ عشريّة لا تُقرأ أصلاً.
       match_score: Math.round(l.score),
-    }))
-  );
+      ...(d.source_ref ? { source_ref: d.source_ref } : {}),
+      ...(d.note ? { note: d.note } : {}),
+  }));
+
+  const { error } = d.source_ref
+    ? await db
+        .from('fuel_schedule')
+        .upsert(rows, { onConflict: 'source_ref,raw_name', ignoreDuplicates: true })
+    : await db.from('fuel_schedule').insert(rows);
   if (error) {
     // المسوّدةُ تُعاد: مُسحت قبل الكتابة منعاً للنشر مرّتين، فلو تُركت ممحوّةً
     // بعد فشلٍ لَضاع الجدولُ كلُّه ولزم لصقُه من جديد.
@@ -2780,7 +2847,13 @@ Deno.serve(async (req) => {
         // والشكلُ يُعرَف: منشورٌ كامل ليس سطراً يدويّاً، أيّاً كان البابُ
         // المفتوح. وهو المبدأُ المكتوبُ فوقه بأربعة أسطر — «منشورٌ جديدٌ يَجُبُّ
         // المسوّدة» — ولم يكن مطبَّقاً إلا على نصفه.
-        if (
+        // **والكتابُ الرسميُّ يُسأل أوّلاً.** حاشيتُه تقول «حسب توجيهات شعبة
+        // التجهيز»، و«تجهيز» إحدى قرائن `looksLikeSchedule` — ففيه أسماءُ
+        // وقودٍ وقرينةُ صياغة، ولو سُئل القديمُ أوّلاً لَالتقطه ومزّقه: يقرأ
+        // الصفَّ كلَّه اسمَ محطةٍ واحداً طويلاً. مقيسٌ في test-official-table.
+        if (looksLikeOfficialTable(text) && !draft.data.sched?.edit) {
+          await proposeOfficial(chat, from, text);
+        } else if (
           looksLikeSchedule(text) &&
           (draft.step === 'schedadd' || (draft.step === 'sched' && !draft.data.sched?.edit))
         ) {
@@ -2800,6 +2873,10 @@ Deno.serve(async (req) => {
       // منشورُ الجدول يُعرَف بشكله لا بأمرٍ يُكتب — وهو كسبُ الوقت كلُّه:
       // تحويلٌ بلمسة ثمّ ضغطة. والفحصُ يسبق البحثَ الحرَّ أدناه، وإلّا صار
       // المنشورُ كلُّه اسمَ محطةٍ يُبحث عنه.
+      if (!text.startsWith('/') && looksLikeOfficialTable(text)) {
+        await proposeOfficial(chat, from, text);
+        return new Response('ok');
+      }
       if (!text.startsWith('/') && looksLikeSchedule(text)) {
         await proposeSchedule(chat, from, text);
         return new Response('ok');
