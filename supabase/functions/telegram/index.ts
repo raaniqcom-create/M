@@ -1877,6 +1877,22 @@ async function showSchedule(
             { text: `📣 ${verb} وأشعِر`, callback_data: 'sch:go' },
             { text: `🔕 ${verb} بلا إشعار`, callback_data: 'sch:mute' },
           ],
+          // ــ والاستبدالُ حيث تكون الإضافةُ خطأً ــــــــــــــــــــــــــــ
+          //
+          // القناةُ تنشر رسالتين وأكثر، فالثانيةُ **إضافةٌ** مقصودة. والكتابُ
+          // الرسميُّ غيرُ ذلك: هو موقفُ اليوم كلِّه، فإذا وصل بعد جدولِ قناةٍ
+          // كان الصوابُ أن يحلَّ محلَّه لا أن يُضاف إليه — وإلّا قرأ الناسُ
+          // محطتين لواحدة، إحداهما بخبرٍ نُسخ.
+          //
+          // ولا يُعرض الزرُّ إلا حين يكون على التاريخ شيءٌ يُستبدَل.
+          ...(adding
+            ? [
+                [
+                  { text: '🔁 استبدل وأشعِر', callback_data: 'sch:rep' },
+                  { text: '🔁 استبدل بلا إشعار', callback_data: 'sch:repmute' },
+                ],
+              ]
+            : []),
           [
             { text: '✏️ تعديل', callback_data: 'sch:edit' },
             { text: flip, callback_data: 'sd' },
@@ -2483,7 +2499,8 @@ async function publishSchedule(
   chat: number,
   userId: number,
   queryId: string,
-  notify: boolean
+  notify: boolean,
+  replace = false
 ) {
   const draft = await getDraft(userId);
   const d = draft?.data?.sched;
@@ -2523,7 +2540,30 @@ async function publishSchedule(
       ...(d.note ? { note: d.note } : {}),
   }));
 
-  const { error } = d.source_ref
+  // ــ والاستبدالُ يمسح يومَه أوّلاً ــــــــــــــــــــــــــــــــــــــــ
+  //
+  // **ولا يُمسح إلا بعد أن يُقرأ الجديدُ ويُعرف عددُه.** فلو مُسح ثمّ سقط
+  // الإدراجُ لَضاع الجدولان معاً — القديمُ محذوفٌ والجديدُ لم يُكتب. والأسطرُ
+  // بين يدينا هنا، مبنيّةً في `rows`، فالمسحُ آمنٌ.
+  //
+  // ولا تُمسّ لوحاتُ المحطات: ما كتبه `linkBack` فيها صار حالةَ المحطة عند
+  // صاحبها، وقد يكون أكّده بيده. والمسحُ يخصّ الجدولَ المنشور وحدَه.
+  let removed = 0;
+  if (replace) {
+    const { data: gone, error: delErr } = await db
+      .from('fuel_schedule')
+      .delete()
+      .eq('for_date', for_date)
+      .select('id');
+    if (delErr) {
+      await saveDraft(userId, chat, 'sched', { sched: d });
+      await answer(queryId, 'تعذّر المسح');
+      return;
+    }
+    removed = gone?.length ?? 0;
+  }
+
+  const { error } = d.source_ref && !replace
     ? await db
         .from('fuel_schedule')
         .upsert(rows, { onConflict: 'source_ref,raw_name', ignoreDuplicates: true })
@@ -2549,6 +2589,9 @@ async function publishSchedule(
   await linkBack(chat, d.lines, for_date);
 
   const when = for_date === baghdadDay() ? 'اليوم' : 'غداً';
+  // وما مُحي يُقال بعدده: «تمّ» عن مسحٍ لا يُعرف مقدارُه خبرٌ ناقصٌ يبني عليه
+  // المشغّلُ ثقةً في غير محلِّها — وهو مبدأُ `cancel_announcement` نفسُه.
+  const swap = removed ? `${NL}🔁 حُذف ${countWord(removed)} من جدول ${for_date} قبله.` : '';
 
   // **بلا إشعار: يُختم كأنّه أُشعر.** `alerted_at` يقول «انقضى أمرُ الإشعار عن
   // هذا الصفّ» — أُرسل أو قُرّر ألّا يُرسل. ولولا الختمُ لَأرسلت شبكةُ الصباح
@@ -2560,7 +2603,7 @@ async function publishSchedule(
       .eq('batch_id', batch_id);
     await send(
       chat,
-      `✅ أُضيف إلى جدول ${for_date} — ${countWord(d.lines.length)}، بلا إشعار.`
+      `✅ ${replace ? 'استُبدل' : 'أُضيف إلى'} جدول ${for_date} — ${countWord(d.lines.length)}، بلا إشعار.${swap}`
     );
     return;
   }
@@ -2580,7 +2623,7 @@ async function publishSchedule(
 
   await send(
     chat,
-    `✅ نُشر جدولُ ${esc(productsLabel(d.lines))} — ${countWord(d.lines.length)}.${NL}` +
+    `✅ ${replace ? 'استُبدل' : 'نُشر'} جدولُ ${esc(productsLabel(d.lines))} — ${countWord(d.lines.length)}.${swap}${NL}` +
       (sent
         ? `📣 يخرج الإشعارُ إلى ${sent} مشتركاً.`
         : `⚠️ ولم يخرج الإشعار: ${esc(why)}${NL}أعِده بأمر /اشعار.`)
@@ -2721,6 +2764,10 @@ Deno.serve(async (req) => {
         await publishSchedule(chat, from, cb.id, true);
       } else if (data === 'sch:mute') {
         await publishSchedule(chat, from, cb.id, false);
+      } else if (data === 'sch:rep') {
+        await publishSchedule(chat, from, cb.id, true, true);
+      } else if (data === 'sch:repmute') {
+        await publishSchedule(chat, from, cb.id, false, true);
       } else if (data === 'sch:edit' || data === 'sb' || data === 'sd' ||
                  data.startsWith('se:') || data.startsWith('sf:') ||
                  data.startsWith('sp:') || data.startsWith('sc:') ||
