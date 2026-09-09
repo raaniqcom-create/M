@@ -174,8 +174,24 @@ async function checkTelegram(): Promise<Check> {
  *
  *  ولوحة الحالة تفحص جوجل وأبل وتيليجرام والموقع — ولا تفحص هذا. فأُضيف. */
 async function checkGithub(): Promise<Check> {
-  const t = Deno.env.get('GH_DISPATCH_TOKEN');
-  if (!t) return { key: 'github', label: 'تحديث الموقع', ok: false, detail: 'المفتاح غير مضبوط' };
+  const raw = Deno.env.get('GH_DISPATCH_TOKEN');
+  if (!raw) return { key: 'github', label: 'تحديث الموقع', ok: false, detail: 'المفتاح غير مضبوط' };
+
+  // ── ووصفُ المفتاح يُقال، لأنّ «مرفوض» وحدَها طريقٌ مسدود ────────────────
+  //
+  // ردَّ الفحصُ «المفتاح مرفوض — أنشئ غيره» بعد لصقِ مفتاحٍ جديدٍ صحيح، فلم
+  // يُعرف: أاللصقُ ناقص؟ أم مسافةٌ في طرفه؟ أم سرٌّ لم يُلتقط بعد؟ فصار يُقال.
+  //
+  // ولا يُكشف السرّ: طولُه وبادئتُه ليسا سرّاً — والبادئةُ نوعٌ معلَن
+  // (`github_pat_` دقيق، `ghp_` كلاسيكيّ) — أمّا المتنُ فلا يُطبع أبداً.
+  const t = raw.trim();
+  const kind = t.startsWith('github_pat_')
+    ? 'دقيق'
+    : t.startsWith('ghp_') || t.startsWith('gho_')
+      ? 'كلاسيكيّ'
+      : 'بادئةٌ غيرُ معروفة';
+  const shape = `${kind} · ${t.length} حرفاً${raw !== t ? ' · وفيه فراغٌ طرفيٌّ أُهمل' : ''}`;
+
   try {
     const res = await fetch('https://api.github.com/user', {
       headers: {
@@ -185,10 +201,21 @@ async function checkGithub(): Promise<Check> {
       },
     });
     if (res.status === 401) {
-      return { key: 'github', label: 'تحديث الموقع', ok: false, detail: 'المفتاح مرفوض — أنشئ غيره' };
+      // ورسالةُ جيت‌هَب نفسُها: «Bad credentials» تعني قيمةً خاطئة، و«Token
+      // expired» تعني مفتاحاً منتهياً، وهما بابان مختلفان.
+      const why = await res.text().catch(() => '');
+      const msg = (() => {
+        try { return String(JSON.parse(why).message ?? ''); } catch { return ''; }
+      })();
+      return {
+        key: 'github',
+        label: 'تحديث الموقع',
+        ok: false,
+        detail: `مرفوض · ${shape}${msg ? ` · ${msg}` : ''}`,
+      };
     }
     if (!res.ok) {
-      return { key: 'github', label: 'تحديث الموقع', ok: false, detail: `جيت‌هَب ردّ ${res.status}` };
+      return { key: 'github', label: 'تحديث الموقع', ok: false, detail: `جيت‌هَب ردّ ${res.status} · ${shape}` };
     }
     const who = (await res.json()) as { login?: string };
 
