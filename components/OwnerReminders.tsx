@@ -9,6 +9,11 @@ type State = 'idle' | 'loading' | 'on' | 'denied';
 
 // Owners forget to flip products back; a reminder that reaches a locked phone
 // is the only one that lands while they're on the forecourt.
+//
+// **والوتيرةُ مكتوبةٌ هنا مرّةً واحدةً وهي وتيرةُ `owner-daily` نفسِها.** كان
+// النصُّ يقول «كل 30 دقيقة» والدالّةُ تُرسل كلَّ ثلاث — ووعدٌ بإزعاجٍ نصفَ
+// ساعيٍّ يجعل صاحبَ المحطة يرفض التفعيلَ أصلاً، ثمّ لا يصله شيء. فمن بدّل
+// `SLOT_MIN` أو `MAX_SLOTS` هناك بدّل السطرين هنا.
 export function OwnerReminders({ stationId }: { stationId: string }) {
   const [state, setState] = useState<State>('idle');
   const native = useNativeApp();
@@ -39,8 +44,8 @@ export function OwnerReminders({ stationId }: { stationId: string }) {
       <section className="card p-5">
         <h3 className="text-sm font-bold">تذكير تحديث الحالة</h3>
         <p className="mt-1 text-xs leading-relaxed text-slate-500">
-          مُفعّل عبر إشعارات التطبيق. يصلك تنبيه كل 30 دقيقة أثناء ساعات عملك لتحديث التوفر.
-          لإيقافه، أوقف إشعارات التطبيق من إعدادات هاتفك.
+          مُفعّل عبر إشعارات التطبيق. يصلك تنبيه عند فتح محطتك، ثمّ كل 3 ساعات أثناء
+          ساعات عملك، وشكرٌ عند الإغلاق. لإيقافه، أوقف إشعارات التطبيق من إعدادات هاتفك.
         </p>
       </section>
     );
@@ -52,8 +57,8 @@ export function OwnerReminders({ stationId }: { stationId: string }) {
         <div className="min-w-0">
           <h3 className="text-sm font-bold">تذكير تحديث الحالة</h3>
           <p className="mt-1 text-xs text-slate-500">
-            يصلك تنبيه على هاتفك كل 30 دقيقة أثناء ساعات عملك — حتى والتطبيق مغلق — لتحديث
-            توفر المنتجات وحالة الازدحام.
+            يصلك تنبيه على هاتفك عند فتح محطتك، ثمّ كل 3 ساعات أثناء ساعات عملك — حتى
+            والتطبيق مغلق — لتحديث توفر المنتجات وحالة الازدحام.
           </p>
         </div>
         <button
