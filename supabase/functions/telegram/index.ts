@@ -19,6 +19,18 @@ import {
 type ScheduleLine = RawLine & { key?: string };
 import { countWord, sendScheduleAlert } from '../_shared/alert.ts';
 import { newPassword } from '../_shared/password.ts';
+import {
+  MARK,
+  baghdadDay,
+  stillLive,
+  nextState,
+  PERIOD_WORD,
+  dayWord,
+  hourWord,
+  promiseWord,
+  stateOf,
+  type OwnerState,
+} from '../_shared/state.ts';
 
 const TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')!;
 const SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')!;
@@ -70,19 +82,7 @@ const PRODUCT_LABELS: Record<string, string> = {
 };
 const PRODUCTS = Object.keys(PRODUCT_LABELS);
 
-/** هل ما زال هذا المنتج معروضاً؟
- *
- *  نظيرةُ `isOffered` في lib/products.ts، بقدر ما يخصّ الصفَّ وحدَه: متوفّرٌ،
- *  ولم يمرّ موعدُ النفاد الذي أعلنه صاحبُه. (الدوامَ يفحصه `isOpenNow` حيث
- *  يلزم، والحداثةَ لا يفحصها البوتُ أصلاً — عيبٌ قائمٌ قبل هذا العمود.)
- *
- *  وستّةُ مواضعَ في هذا الملفّ كانت تكتب `p.is_available` بيدها؛ فدالّةٌ
- *  واحدة، لأن المنسيَّ منها يقول للسائق «متوفر» عن وقودٍ نفد. */
-function stillLive(
-  p: { is_available?: boolean | null; runs_out_at?: string | null } | null | undefined
-): boolean {
-  return !!p?.is_available && !(p.runs_out_at && p.runs_out_at <= new Date().toISOString());
-}
+// `stillLive` و`baghdadDay` في `_shared/state.ts` — انظر صدرَه.
 
 /** وهل يُقال عنه «الآن»؟
  *
@@ -1286,6 +1286,20 @@ async function showManage(chat: number, telegramId: number) {
   await showOwnerPanel(chat, link.station_id);
 }
 
+/** ملكيّةُ المحطة، في موضعٍ واحد.
+ *
+ *  كانت مكتوبةً بيدها في موضعين — `confirmStock` و`toggleProduct` — وشاشاتُ
+ *  المواعيد تجعلها أربعة. ومنسيَّةٌ منها تعني أنّ غريباً يكتب في لوحة غيره. */
+async function ownsStation(telegramId: number, stationId: string): Promise<boolean> {
+  if (isAdmin(telegramId)) return true;
+  const { data } = await db
+    .from('telegram_links')
+    .select('station_id')
+    .eq('telegram_id', telegramId)
+    .maybeSingle();
+  return data?.station_id === stationId;
+}
+
 async function showOwnerPanel(chat: number, stationId: string, messageId?: number) {
   const { data: station } = await db
     .from('stations')
@@ -1295,24 +1309,38 @@ async function showOwnerPanel(chat: number, stationId: string, messageId?: numbe
 
   const { data: rows } = await db
     .from('station_products')
-    .select('product, is_available, expected_at, runs_out_at')
+    .select('product, is_available, expected_at, expected_period, expected_time, runs_out_at')
     .eq('station_id', stationId);
 
   // والمقياسُ هو المقياسُ العامّ: لولاه لرأى المالكُ ✅ بلا تحذير، ومحطتُه
   // قد اختفت من القائمة لأن موعدَ النفاد الذي ضبطه بنفسه قد مرّ.
-  const byProduct = new Map((rows ?? []).map((r) => [r.product, stillLive(r)]));
+  const byRow = new Map((rows ?? []).map((r) => [r.product, r]));
   // القاعدة نفسها التي تُخفي البطاقة في التطبيق (hasSomethingToShow في
   // lib/products.ts): متوفرٌ الآن، أو متوقّعٌ لاحقاً. ومن لا هذا ولا ذاك
   // لا يظهر — ويجب أن يعلم، لا أن يكتشف.
   const shows = (rows ?? []).some((r) => stillLive(r) || r.expected_at);
   const open = station ? isOpenNow(station as never) : false;
 
-  const keyboard = PRODUCTS.map((p) => [
-    {
-      text: `${byProduct.get(p) ? '✅' : '❌'} ${PRODUCT_LABELS[p]}`,
-      callback_data: `t:${stationId}:${p}`,
-    },
-  ]);
+  // ── والزرُّ يدور على ثلاثٍ لا يبدّل اثنتين ────────────────────────────
+  //
+  // اتّصلت محطةٌ فقالت إنّها تُجبَر على «متوقّع غداً» لتبقى ظاهرة. فصارت
+  // الحالاتُ ثلاثاً في لوحة الويب، وهذه مرآتُها حيث يقف المشغّلُ فعلاً:
+  // هاتفٌ في جيبه وهو في الساحة.
+  //
+  // وشاشةٌ ضيّقةٌ لا تسع ثلاثةَ أزرارٍ لكلّ منتجٍ من سبعة، فالزرُّ واحدٌ يدور:
+  // متوفّر ← متوقّع ← غير متوفّر ← متوفّر. والوعدُ يُطبع عليه فيُقرأ بلا فتح.
+  const keyboard = PRODUCTS.map((p) => {
+    const r = byRow.get(p);
+    const st = stateOf(r);
+    const tail = st === 'soon' && r ? promiseWord(r) : '';
+    return [
+      {
+        text: `${MARK[st]} ${PRODUCT_LABELS[p]}${tail ? ` — ${tail}` : ''}`,
+        callback_data: `t:${stationId}:${p}`,
+      },
+    ];
+  });
+  keyboard.push([{ text: '🕒 مواعيد الوصول', callback_data: `e:${stationId}` }]);
   keyboard.push([{ text: '🔄 تحديث', callback_data: `r:${stationId}` }]);
   keyboard.push([{ text: '🏠 القائمة', callback_data: 'menu' }]);
 
@@ -1322,10 +1350,184 @@ async function showOwnerPanel(chat: number, stationId: string, messageId?: numbe
     (shows
       ? ''
       : '\n⚠️ <b>لا وقود معلَناً على صفحتك</b>\nبطاقتك تظهر مشطوبةً «لا يوجد الآن». أعلن ما وصلك — ولا تَعِد بموعد لا تعرفه.\n') +
-    '\nاضغط على أي منتج لتبديل حالته بين متوفر وغير متوفر:';
+    '\nاضغط على المنتج ليدور: ✅ متوفر ← 🕒 متوقّع ← ❌ غير متوفر.';
 
   if (messageId) await edit(chat, messageId, text, { reply_markup: { inline_keyboard: keyboard } });
   else await send(chat, text, { reply_markup: { inline_keyboard: keyboard } });
+}
+
+/** ــ شاشاتُ مواعيد الوصول ــــــــــــــــــــــــــــــــــــــــــــــــــ
+ *
+ *  ── ولماذا شاشةٌ لا زرٌّ في اللوحة ──────────────────────────────────────
+ *
+ *  الزرُّ الدائرُ يقول الحالةَ، ولا يسع الوقت: سبعةُ منتجاتٍ × (يومٌ + فترةٌ +
+ *  ساعة) لا تُقرأ في هاتفٍ داخل سيّارة. فالحالةُ في اللوحة، والتفصيلُ خلف بابٍ
+ *  يُفتح لمن أراده.
+ *
+ *  ── وميزانيّةُ أربعةٍ وستّين بايتاً ─────────────────────────────────────
+ *
+ *  `callback_data` سقفُه ٦٤ بايتاً، والمعرّفُ ستّةٌ وثلاثون محرفاً. فقِيس:
+ *  `x:{uuid}:gasoline_regular:2026-09-09` = **٦٦ بايتاً، يسقط**. فتُحمَل
+ *  **فهرسُ المنتج** في `PRODUCTS` و**إزاحةُ اليوم** لا الأسماءُ والتواريخ —
+ *  وهو سببُ `keyed` نفسُه في محرّر الجدول.
+ *
+ *  ── ومصدرُ الوعد يُقال بلا عمودٍ جديد ───────────────────────────────────
+ *
+ *  `linkBack` تكتب «متوقَّع» في لوحات المحطات عند كلّ نشرِ جدول، فيرى صاحبُها
+ *  وعداً لم يقله ولا يعرف من أين جاء. و`fuel_schedule` تحفظ
+ *  (linked_station_id, product, for_date) — فالسؤالُ استعلامٌ واحد. */
+const HOURS = [6, 9, 12, 15, 18, 21];
+
+async function showExpected(chat: number, stationId: string, messageId?: number) {
+  const { data: rows } = await db
+    .from('station_products')
+    .select('product, expected_at, expected_period, expected_time')
+    .eq('station_id', stationId);
+  const byProduct = new Map((rows ?? []).map((r) => [r.product, r]));
+
+  const keyboard = PRODUCTS.map((p, i) => {
+    const r = byProduct.get(p);
+    const w = r ? promiseWord(r) : '';
+    return [
+      {
+        text: `${w ? '🕒' : '—'} ${PRODUCT_LABELS[p]}${w ? ` · ${w}` : ' · لا موعد'}`,
+        callback_data: `e:${stationId}:${i}`,
+      },
+    ];
+  });
+  keyboard.push([{ text: '⬅️ رجوع', callback_data: `r:${stationId}` }]);
+
+  const text =
+    `🕒 <b>مواعيد الوصول</b>${NL}` +
+    `اضغط على منتجٍ لتحديد يومِه وساعتِه — أو لمحو موعده.`;
+  await show(chat, messageId, text, { reply_markup: { inline_keyboard: keyboard } });
+}
+
+async function showExpectOne(chat: number, stationId: string, i: number, messageId?: number) {
+  const product = PRODUCTS[i];
+  if (!product) return void (await showExpected(chat, stationId, messageId));
+
+  const { data: r } = await db
+    .from('station_products')
+    .select('expected_at, expected_period, expected_time')
+    .eq('station_id', stationId)
+    .eq('product', product)
+    .maybeSingle();
+
+  // أمِن الجدول المنشور هو؟ — يُسأل هنا لأنّ صاحبَها لا يعرف، ولم يكن يستطيع
+  // محوَه من أيّ بوت.
+  let fromSchedule = false;
+  if (r?.expected_at) {
+    const { count } = await db
+      .from('fuel_schedule')
+      .select('id', { count: 'exact', head: true })
+      .eq('linked_station_id', stationId)
+      .eq('product', product)
+      .eq('for_date', r.expected_at);
+    fromSchedule = (count ?? 0) > 0;
+  }
+
+  const keyboard = [
+    [0, 1, 2].map((d) => ({
+      text: dayWord(baghdadDay(d)),
+      callback_data: `xd:${stationId}:${i}:${d}`,
+    })),
+    ['morning', 'afternoon', 'evening'].map((k) => ({
+      text: PERIOD_WORD[k],
+      callback_data: `xp:${stationId}:${i}:${k[0]}`,
+    })),
+    HOURS.slice(0, 3).map((h) => ({
+      text: hourWord(`${String(h).padStart(2, '0')}:00`),
+      callback_data: `xh:${stationId}:${i}:${h}`,
+    })),
+    HOURS.slice(3).map((h) => ({
+      text: hourWord(`${String(h).padStart(2, '0')}:00`),
+      callback_data: `xh:${stationId}:${i}:${h}`,
+    })),
+    [{ text: '🗑 امسح الموعد', callback_data: `xc:${stationId}:${i}` }],
+    [{ text: '⬅️ رجوع', callback_data: `e:${stationId}` }],
+  ];
+
+  const now = r?.expected_at ? promiseWord(r) : 'لا موعد';
+  const text =
+    `🕒 <b>${PRODUCT_LABELS[product]}</b>${NL}` +
+    `الآن: ${esc(now)}${NL}` +
+    (fromSchedule
+      ? `${NL}📋 هذا الموعدُ من جدول القناة، لا منك. امسحه إن لم يصلك شيء.${NL}`
+      : '') +
+    `${NL}اختر اليومَ أوّلاً، ثمّ فترةً أو ساعةً — والساعةُ اختياريّة.`;
+  await show(chat, messageId, text, { reply_markup: { inline_keyboard: keyboard } });
+}
+
+/** يكتب اليومَ أو الفترةَ أو الساعةَ أو يمحو — ولا يخترع يوماً. */
+async function setExpectation(
+  chat: number,
+  messageId: number,
+  telegramId: number,
+  data: string,
+  queryId: string
+) {
+  const [tag, stationId, idx, arg] = data.split(':');
+  const i = Number(idx);
+  const product = PRODUCTS[i];
+  if (!product) return void (await answer(queryId, 'منتجٌ غيرُ معروف'));
+
+  if (!(await ownsStation(telegramId, stationId))) {
+    return void (await answer(queryId, 'غير مصرّح لك بإدارة هذه المحطة'));
+  }
+
+  const { data: cur } = await db
+    .from('station_products')
+    .select('is_available, expected_at')
+    .eq('station_id', stationId)
+    .eq('product', product)
+    .maybeSingle();
+
+  const now = new Date().toISOString();
+
+  if (tag === 'xd') {
+    const day = baghdadDay(Number(arg));
+    // upsert لا update: صفٌّ لم يُنشأ بعدُ كان يُبدَّل فلا يتغيّر شيء — وهو
+    // العطبُ نفسُه الذي أُصلح في toggleProduct.
+    await db.from('station_products').upsert(
+      {
+        station_id: stationId,
+        product,
+        expected_at: day,
+        is_available: false,
+        updated_at: now,
+        ...(cur?.is_available ? { runs_out_at: now } : {}),
+      },
+      { onConflict: 'station_id,product' }
+    );
+    await answer(queryId, `متوقّع ${dayWord(day)}`);
+  } else if (tag === 'xc') {
+    await db
+      .from('station_products')
+      .update({ expected_at: null, expected_period: null, expected_time: null, updated_at: now })
+      .eq('station_id', stationId)
+      .eq('product', product);
+    await answer(queryId, 'مُحي الموعد');
+  } else {
+    // فترةٌ أو ساعة — ولا يُخترع يومٌ لمن لم يختره.
+    if (!cur?.expected_at) return void (await answer(queryId, 'اختر اليوم أوّلاً'));
+    const patch =
+      tag === 'xp'
+        ? {
+            expected_period:
+              arg === 'm' ? 'morning' : arg === 'a' ? 'afternoon' : 'evening',
+            expected_time: null,
+          }
+        : { expected_time: `${String(Number(arg)).padStart(2, '0')}:00`, expected_period: null };
+    await db
+      .from('station_products')
+      .update({ ...patch, updated_at: now })
+      .eq('station_id', stationId)
+      .eq('product', product);
+    await answer(queryId, 'حُفظ');
+  }
+
+  await showExpectOne(chat, stationId, i, messageId);
 }
 
 async function linkByContact(chat: number, telegramId: number, rawPhone: string) {
@@ -1438,22 +1640,14 @@ async function toggleProduct(
   queryId: string
 ) {
   // never trust the station id in the callback: it comes back from the client
-  if (!isAdmin(telegramId)) {
-    const { data: link } = await db
-      .from('telegram_links')
-      .select('station_id')
-      .eq('telegram_id', telegramId)
-      .maybeSingle();
-
-    if (!link || link.station_id !== stationId) {
-      await answer(queryId, 'غير مصرّح لك بإدارة هذه المحطة');
-      return;
-    }
+  if (!(await ownsStation(telegramId, stationId))) {
+    await answer(queryId, 'غير مصرّح لك بإدارة هذه المحطة');
+    return;
   }
 
   const { data: row } = await db
     .from('station_products')
-    .select('is_available, runs_out_at')
+    .select('is_available, runs_out_at, expected_at')
     .eq('station_id', stationId)
     .eq('product', product)
     .single();
@@ -1461,7 +1655,13 @@ async function toggleProduct(
   // الحالةُ الظاهرة لا الخام: بعد مرور موعد النفاد يكون المنتج مُطفأً عند
   // الناس و is_available ما زالت true — فلو قُرئت الخام لأطفأت الضغطةُ
   // الأولى ما هو مُطفأٌ أصلاً، واحتاج المالكُ ضغطتين ليُشعله.
-  const next = !stillLive(row);
+  const cur = stateOf(row);
+  const to: OwnerState = nextState(cur);
+  const next = to === 'in';
+  const now = new Date().toISOString();
+  // والانتقالُ من التوفّر نفادٌ — إلى «متوقّع» كما إلى «غير متوفر». والشرطُ
+  // الانتقالُ لا الإطفاء: وعدٌ لم يصل بعدُ مطفأٌ أيضاً، ولم ينفد.
+  const ranOut = cur === 'in' && !next ? now : null;
   // upsert لا update: منتجٌ لم يُنشأ صفُّه بعد كان يُبدَّل فلا يتغيّر شيء،
   // والبوت يجيب «متوفر ✅» عن كتابةٍ لم تقع. (واتساب يفعلها صحيحاً منذ البداية.)
   const { error: saveErr } = await db
@@ -1473,8 +1673,16 @@ async function toggleProduct(
         is_available: next,
         // والإشعالُ يُصفّر: بلا هذا يُولد كلُّ تفعيلٍ بعد نفادٍ سابق ميّتاً —
         // البوتُ يقول «أصبح متوفراً» والمنصّةُ لا تعرضه.
-        runs_out_at: null,
-        updated_at: new Date().toISOString(),
+        runs_out_at: next ? null : ranOut,
+        updated_at: now,
+        // «متوقّع» يدخلها بأقرب ما يُقال — **اليوم لا غداً**. فلا يُخترع
+        // بعيدٌ عن صاحبها، والساعةُ تُضبط من شاشة المواعيد إن أرادها.
+        ...(to === 'soon' ? { expected_at: baghdadDay() } : {}),
+        // و«غير متوفر» تعني ما تقوله: لا وقودَ ولا وعد.
+        ...(to === 'out'
+          ? { expected_at: null, expected_period: null, expected_time: null }
+          : {}),
+        // ولا يُمحى الوعدُ عند «متوفر»: هو الذي يجعل سطرَ الجدول «وصل ✓».
       },
       { onConflict: 'station_id,product' }
     );
@@ -1511,7 +1719,9 @@ async function toggleProduct(
     }
   }
 
-  await answer(queryId, `${PRODUCT_LABELS[product]}: ${next ? 'متوفر ✅' : 'غير متوفر ❌'}`);
+  const said =
+    to === 'in' ? 'متوفر ✅' : to === 'soon' ? `متوقّع ${dayWord(baghdadDay())} 🕒` : 'غير متوفر ❌';
+  await answer(queryId, `${PRODUCT_LABELS[product]}: ${said}`);
   await showOwnerPanel(chat, stationId, messageId);
 }
 
@@ -1523,11 +1733,6 @@ async function toggleProduct(
 //
 // وهذا ليس تحفّظاً زائداً: 20260823c يسجّل أن المطابقةَ بالاسم جُرّبت في هذه
 // المنصّة ورُفضت لأنها تُخطئ في الجهتين. فالمطابقةُ تقترح، والإنسانُ يقرّر.
-
-const baghdadDay = (plus = 0) =>
-  new Date(Date.now() + plus * 86_400_000).toLocaleDateString('en-CA', {
-    timeZone: 'Asia/Baghdad',
-  });
 
 const baghdadHour = () =>
   Number(
@@ -2455,6 +2660,15 @@ Deno.serve(async (req) => {
                  data.startsWith('sw:')) {
         await answer(cb.id);
         await editRoute(chat, from, data, messageId);
+      } else if (data.startsWith('e:')) {
+        // شاشاتُ مواعيد الوصول. و`e:` لا تصطدم ببادئةٍ قائمة — فُحصت السلسلةُ
+        // كلُّها قبل إضافتها.
+        await answer(cb.id);
+        const [, sid, idx] = data.split(':');
+        if (idx === undefined) await showExpected(chat, sid, messageId);
+        else await showExpectOne(chat, sid, Number(idx), messageId);
+      } else if (/^x[dphc]:/.test(data)) {
+        await setExpectation(chat, messageId, from, data, cb.id);
       } else if (data.startsWith('t:')) {
         const [, stationId, product] = data.split(':');
         await toggleProduct(chat, messageId, from, stationId, product, cb.id);

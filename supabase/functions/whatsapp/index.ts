@@ -13,6 +13,14 @@
 // model in the reply path. Every answer is built from the stations table, so
 // the bot cannot discuss weather or news because no code path can produce it.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import {
+  MARK,
+  nextState,
+  baghdadDay,
+  promiseWord,
+  stateOf,
+  type OwnerState,
+} from '../_shared/state.ts';
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -472,17 +480,41 @@ async function screenOwner(to: string) {
     return mainMenu(to, 'شيء آخر؟');
   }
 
-  const avail = await availability();
-  const on = new Set(avail.get(station.id) ?? []);
-  const rows = Object.keys(PRODUCT_LABELS).map((p) => ({
-    id: `t:${station.id}:${p}`,
-    title: `${on.has(p) ? '✅' : '⛔'} ${PRODUCT_LABELS[p]}`,
-    description: on.has(p) ? 'متوفر — اضغط لإيقافه' : 'غير متوفر — اضغط لتفعيله',
-  }));
+  // قراءةٌ واحدةٌ لهذه المحطة — لا `availability()` التي تجلب المنصّةَ كلَّها
+  // لتبني مجموعةً لمحطةٍ واحدة. والوعدُ يلزم، فالحالاتُ ثلاث.
+  const { data: rowsDb } = await db
+    .from('station_products')
+    .select('product, is_available, runs_out_at, expected_at, expected_period, expected_time')
+    .eq('station_id', station.id);
+  const byProduct = new Map((rowsDb ?? []).map((r) => [r.product, r]));
+
+  // ــ الحالاتُ الثلاث، ودورةٌ بضغطة ــــــــــــــــــــــــــــــــــــــــ
+  //
+  // اتّصلت محطةٌ فقالت إنّها تُجبَر على «متوقّع غداً» لتبقى ظاهرة. فصارت
+  // الحالاتُ ثلاثاً في الويب وتيليجرام، وهذه مرآتُها.
+  //
+  // والعنوانُ أربعةٌ وعشرون محرفاً (`sendList` تقصّه)، و«نفط أبيض» مع يومٍ
+  // وساعةٍ يتجاوزها — فالوعدُ في الوصف، وهو اثنان وسبعون.
+  const rows = Object.keys(PRODUCT_LABELS).map((p) => {
+    const r = byProduct.get(p);
+    const st = stateOf(r);
+    const w = r ? promiseWord(r) : '';
+    return {
+      id: `t:${station.id}:${p}`,
+      title: `${MARK[st]} ${PRODUCT_LABELS[p]}`,
+      description:
+        st === 'in'
+          ? 'متوفر — اضغط ليصير متوقّعاً'
+          : st === 'soon'
+            ? `متوقّع ${w} — اضغط ليصير غير متوفر`
+            : 'غير متوفر — اضغط ليصير متوفراً',
+    };
+  });
 
   return sendList(
     to,
-    `🏪 *${station.name}*\nاضغط على المنتج لتبديل حالته. يظهر التغيير للمستخدمين فوراً.`,
+    `🏪 *${station.name}*\nاضغط على المنتج ليدور: ✅ متوفر ← 🕒 متوقّع ← ⛔ غير متوفر.` +
+      `\n\n🕒 «متوقّع» يعني اليوم. ولتحديد يومٍ وساعةٍ افتح لوحتك: ${SITE}/owner`,
     'المنتجات',
     rows
   );
@@ -496,7 +528,7 @@ async function toggleProduct(to: string, stationId: string, product: string) {
 
   const { data: row } = await db
     .from('station_products')
-    .select('is_available, runs_out_at')
+    .select('is_available, runs_out_at, expected_at')
     .eq('station_id', stationId)
     .eq('product', product)
     .maybeSingle();
@@ -505,7 +537,12 @@ async function toggleProduct(to: string, stationId: string, product: string) {
   // الناس و is_available ما زالت true — فقراءةُ الخام تجعل الضغطةَ الأولى
   // تُطفئ ما هو مُطفأ، فيحتاج المالكُ ضغطتين.
   const now = new Date().toISOString();
-  const next = !(row?.is_available && !(row.runs_out_at && row.runs_out_at <= now));
+  const cur = stateOf(row);
+  const to3: OwnerState = nextState(cur);
+  const next = to3 === 'in';
+  // والانتقالُ من التوفّر نفادٌ — إلى «متوقّع» كما إلى «غير متوفر».
+  const ranOut = cur === 'in' && !next ? now : null;
+
   await db
     .from('station_products')
     .upsert(
@@ -514,16 +551,46 @@ async function toggleProduct(to: string, stationId: string, product: string) {
         product,
         is_available: next,
         // والإشعالُ يُصفّر، وإلا وُلد التفعيلُ ميّتاً
-        runs_out_at: null,
+        runs_out_at: next ? null : ranOut,
         updated_at: now,
+        // «متوقّع» بأقرب ما يُقال — اليوم لا غداً، ولا يُخترع بعيدٌ عن صاحبها.
+        ...(to3 === 'soon' ? { expected_at: baghdadDay() } : {}),
+        ...(to3 === 'out'
+          ? { expected_at: null, expected_period: null, expected_time: null }
+          : {}),
+        // ولا يُمحى الوعدُ عند «متوفر»: هو الذي يجعل سطرَ الجدول «وصل ✓».
       },
       { onConflict: 'station_id,product' }
     );
 
-  await sendText(
-    to,
-    `${next ? '✅' : '⛔'} ${PRODUCT_LABELS[product]} — ${next ? 'أصبح متوفراً' : 'أصبح غير متوفر'}`
-  );
+  // ــ وخبرُ الوصول يخرج إلى الناس ــــــــــــــــــــــــــــــــــــــــــ
+  //
+  // كان واتساب **لا ينادي `notify` إطلاقاً** — بخلاف تيليجرام. فمالكٌ يُعلن
+  // وصولَ الوقود من هنا لا يصل خبرُه أحداً، وهو يظنّ أنّه أعلن.
+  if (next) {
+    const cron = Deno.env.get('CRON_SECRET');
+    if (cron) {
+      try {
+        const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/notify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-cron-secret': cron },
+          body: JSON.stringify({ stationId, products: [product] }),
+        });
+        // 409 جوابٌ صحيح لا عطل: المحطة مغلقة، أو المنتج لم يعد متوفراً.
+        if (!r.ok && r.status !== 409) console.error('notify', r.status, await r.text());
+      } catch (e) {
+        console.error('notify fetch', e);
+      }
+    }
+  }
+
+  const said =
+    to3 === 'in'
+      ? '✅ أصبح متوفراً'
+      : to3 === 'soon'
+        ? `🕒 صار متوقّعاً اليوم`
+        : '⛔ أصبح غير متوفر';
+  await sendText(to, `${PRODUCT_LABELS[product]} — ${said}`);
   return screenOwner(to);
 }
 
