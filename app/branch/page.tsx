@@ -13,6 +13,7 @@ import {
   applyOverrides,
   buildBoard,
   groupBoard,
+  isBoardOff,
   loadBoardStations,
   loadOverrides,
   loadSchedule,
@@ -66,6 +67,7 @@ const TABS: { id: Tab; label: string }[] = [
  *  سيسمح بأن يفترقا. */
 function BranchSchedule() {
   const [groups, setGroups] = useState<BoardGroup[] | null>(null);
+  const [off, setOff] = useState(false);
   const [failed, setFailed] = useState(false);
   const flip = boardDate();
   const [day, setDay] = useState(flip);
@@ -78,6 +80,7 @@ function BranchSchedule() {
         setDay(shown);
         const stations = await loadBoardStations(shown, schedule);
         const marks = await loadOverrides();
+        setOff(isBoardOff(marks, shown));
         // ولا ترتيبَ بمناطق أحد: الفرعُ يقرأ الأنبار كلَّها بلا تفضيل.
         setGroups(
           groupBoard(applyOverrides(buildBoard(schedule, stations, shown), marks, shown), [])
@@ -102,7 +105,7 @@ function BranchSchedule() {
       </div>
     );
   }
-  return <ScheduleBoard groups={groups} day={day} />;
+  return <ScheduleBoard groups={groups} day={day} off={off} />;
 }
 export default function BranchPage() {
   const router = useRouter();

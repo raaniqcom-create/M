@@ -12,6 +12,7 @@ import {
   applyOverrides,
   buildBoard,
   groupBoard,
+  isBoardOff,
   loadBoardStations,
   loadOverrides,
   loadSchedule,
@@ -29,6 +30,7 @@ import {
  *  مكتوباً في القاعدة منذ زمنٍ ولا يقرؤه هذا الجدول. */
 export default function SchedulePage() {
   const [groups, setGroups] = useState<BoardGroup[] | null>(null);
+  const [off, setOff] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   // يومُ الانقلاب هو المبدأ، واليومُ المعروض يُحسم بعد قراءة المنشور — انظر
   // `resolveBoardDay`. والتابعُ للانقلاب هو تبعيّةُ الأثر، لا المعروض: وإلا
@@ -52,6 +54,7 @@ export default function SchedulePage() {
         setDay(shown);
         const stations = await withDeadline(loadBoardStations(shown, schedule), 15000);
         const marks = await loadOverrides();
+        setOff(isBoardOff(marks, shown));
         const rows = applyOverrides(buildBoard(schedule, stations, shown), marks, shown);
         setGroups(groupBoard(rows, readChoice()?.cities ?? []));
       } catch (e) {
@@ -98,7 +101,7 @@ export default function SchedulePage() {
           </div>
         )}
 
-        {groups && <ScheduleBoard groups={groups} day={day} />}
+        {groups && <ScheduleBoard groups={groups} day={day} off={off} />}
       </div>
 
       <a href="/" className="btn-ghost mt-6 w-full text-center">

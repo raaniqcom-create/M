@@ -51,6 +51,9 @@ export interface PlatformStation {
   name: string;
   lat: number | null;
   lng: number | null;
+  /** تُشترط عند المطابقة بالاسم حين تُعرف مدينةُ السطر — ومن لم يمرّرها فقد
+   *  اكتفى بالتساوي التامّ والجغرافيا، وهو ما كان قبل هذا. */
+  city?: string | null;
 }
 
 /** الكلماتُ التي تُميّز منشورَ جدولٍ عن سؤالِ بحث.
@@ -335,7 +338,43 @@ export function matchLine(
   const hit = top && top.score >= MATCH_FLOOR ? top : null;
   const key = normalizeName(raw);
 
-  const byName = () => platform.find((s) => normalizeName(s.name) === key) ?? null;
+  /** محطةُ المنصّة التي يسمّيها هذا السطر — بالتساوي أوّلاً، ثمّ بالاحتواء.
+   *
+   *  ── وما كان ينقص ────────────────────────────────────────────────────
+   *
+   *  كانت المطابقةُ بالاسم تجري على `ROAD_STATIONS` وحدَها — وهي مولَّدةٌ من
+   *  خرائطَ مفتوحة — ولا تلمس أسماءَ المنصّة إلّا **بتساوٍ حرفيٍّ تامّ**.
+   *  فمحطةٌ مسجّلةٌ باسمٍ يعرفه صاحبُها لا تُربط ما لم يكتب المنشورُ اسمَها
+   *  حرفاً بحرف، وهو ما لا تفعله القناةُ أبداً: تكتب «المسرة قرب كراج بغداد»
+   *  و«التل الاخضر (البوذياب)- الرمادي».
+   *
+   *  قِيس على جدول ٢٠٢٦-٠٩-١٠: ثلاثةٌ من أحدَ عشرَ سطراً كانت «خارج المنصّة»
+   *  وهي مسجّلةٌ فيها.
+   *
+   *  ── والقاعدةُ: كلماتُ الاسم كلُّها في السطر ──────────────────────────
+   *
+   *  ككلماتٍ لا كنصّ: «الراشديه» لا تُطابق «الراشد» وإن احتوت حروفَها.
+   *  واسمٌ من كلمةٍ واحدةٍ قصيرة يُرفض — «الحق» ترد في كلّ كلام.
+   *  والمدينةُ تُشترط حين تُعرف: «الفتح المبين الطلاسة - الكرمة» لا تُربط
+   *  بمحطةٍ اسمُها كذلك في الفلوجة، وهو فخُّ «رماح الأنبار» بعينه.
+   *  والالتباسُ لا يُحسم بالتخمين: مرشَّحان فأكثر يعني لا ربط.
+   *
+   *  قِيس على اثنين وثلاثين صفّاً منشوراً: ستّةٌ تُربط، وصفرُ التباس، وصفرُ
+   *  مخالفةٍ لربطٍ قائم. */
+  const lineWords = new Set(key.split(' ').filter(Boolean));
+  const lineCity = cityInText(raw);
+  const byName = () => {
+    const exact = platform.find((s) => normalizeName(s.name) === key);
+    if (exact) return exact;
+    const held = platform.filter((s) => {
+      const nw = normalizeName(s.name).split(' ').filter(Boolean);
+      if (!nw.length) return false;
+      if (nw.length === 1 && nw[0].length < 5) return false;
+      if (!nw.every((w) => lineWords.has(w))) return false;
+      return !(lineCity && s.city && lineCity !== s.city);
+    });
+    return held.length === 1 ? held[0] : null;
+  };
 
   if (!hit) {
     const direct = byName();

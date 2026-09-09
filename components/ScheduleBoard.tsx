@@ -88,8 +88,38 @@ function Row({ r }: { r: BoardRow }) {
   );
 }
 
-export function ScheduleBoard({ groups, day }: { groups: BoardGroup[]; day: string }) {
+export function ScheduleBoard({
+  groups,
+  day,
+  off,
+}: {
+  groups: BoardGroup[];
+  day: string;
+  /** أُوقف جدولُ هذا اليوم بعد نشره — لا «لم يُنشر بعد».
+   *
+   *  **مطلوبةٌ لا اختياريّة.** ثلاثةُ مواضعَ تركّب هذه اللوحة، ونسيانُها في
+   *  أحدها يجعل شاشتين تقولان عن الصفّ نفسِه شيئين متناقضين في الدقيقة
+   *  نفسِها — وهو ما وقع في `app/branch/page.tsx`. والمترجمُ أرخصُ حارس. */
+  off: boolean;
+}) {
   if (!groups.length) {
+    // **والخبران لا يُخلطان.** «لم يصل بعد» و«وصل ثمّ سُحب» جوابان مختلفان
+    // لمن فتح الصفحةَ يبحث عن جدولٍ قرأه صباحاً — وخلطُهما يجعل السحبَ يبدو
+    // عطلاً في التطبيق. وهو مبدأُ «نفد» نفسُه في `lib/board.ts`.
+    if (off) {
+      return (
+        <div className="card p-8 text-center">
+          <p className="text-sm font-bold text-slate-700">أُوقف جدولُ {dayLabel(day)} مؤقّتاً.</p>
+          <p className="mt-2 text-[11.5px] leading-relaxed text-slate-500">
+            سُحب بعد نشره — قد يكون التوزيع تغيّر أو وردت الأسماء خطأً. وصفحةُ كلِّ محطةٍ
+            تعرض ما تقوله هي عن نفسها.
+          </p>
+          <a href="/" className="btn-ghost mt-4 inline-flex px-6">
+            المحطات الآن
+          </a>
+        </div>
+      );
+    }
     return (
       <div className="card p-8 text-center">
         <p className="text-sm text-slate-600">لا جدولَ {dayLabel(day)} بعد.</p>

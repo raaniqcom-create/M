@@ -7,6 +7,9 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 // وهي ملفّاتٌ خالصةٌ بلا شبكةٍ ولا React، تُرفع مع هذه الدالّة عند كلّ نشر.
 import { CITY_NAMES } from '../../../lib/cities.ts';
 import { looksLikeOfficialTable, readOfficialTable } from '../../../lib/officialTable.ts';
+// وقاعدةُ يوم اللوحة تُستورد ولا تُعاد كتابتُها: شاشةُ التحكّم يجب أن تُدير
+// اليومَ الذي تعرضه الصفحةُ نفسُه — انظر `boardDay` أدناه.
+import { resolveBoardDay } from '../../../lib/board.ts';
 import {
   looksLikeSchedule,
   matchLine,
@@ -1962,6 +1965,9 @@ async function boardMarks(day: string) {
 function markOf(marks: Record<string, any>[], r: Record<string, any>): string | null {
   const hit = marks.find(
     (m) =>
+      // و`off` علامةُ يومٍ لا سطر: لولا استثناؤها لَوسمت السطرَ الذي لا مدينةَ
+      // له (null === null) وحدَه من بين إخوته.
+      m.action !== 'off' &&
       (!m.product || m.product === r.product) &&
       ((m.station_id && m.station_id === r.linked_station_id) ||
         (m.station_name && m.station_name === r.station_name) ||
@@ -1974,12 +1980,28 @@ async function boardHome(chat: number, day: string, msgId?: number) {
   const rows = await boardRows(day);
   const marks = await boardMarks(day);
   const when = day === baghdadDay() ? 'اليوم' : 'غداً';
+  const off = marks.some((m) => m.action === 'off');
+
+  // زرُّ الإيقاف ورفعِه — ويُعرض ولو خلا الجدولُ من الأسطر، وإلّا بقي يومٌ
+  // موقوفٌ لا بابَ لرفعه بعد استبدالٍ محا أسطرَه.
+  const offRow = off
+    ? [{ text: '♻️ أعِد نشر الجدول', callback_data: 'bd:on' }]
+    : [{ text: '⛔️ أوقف الجدول كلَّه', callback_data: 'bd:off' }];
 
   if (!rows.length) {
-    const home = { reply_markup: { inline_keyboard: [[{ text: '🏠 القائمة', callback_data: 'menu' }]] } };
-    const t = `لا جدولَ منشورٌ ${when}.`;
-    if (msgId) await edit(chat, msgId, t, home);
-    else await send(chat, t, home);
+    const t = off
+      ? `⛔️ جدول ${when} <b>موقوف</b> — ولا أسطرَ فيه الآن.`
+      : `لا جدولَ منشورٌ ${when}.`;
+    const extra = {
+      reply_markup: {
+        inline_keyboard: [
+          ...(off ? [offRow] : []),
+          [{ text: '🏠 القائمة', callback_data: 'menu' }],
+        ],
+      },
+    };
+    if (msgId) await edit(chat, msgId, t, extra);
+    else await send(chat, t, extra);
     return;
   }
 
@@ -1992,12 +2014,14 @@ async function boardHome(chat: number, day: string, msgId?: number) {
       },
     ]),
     [{ text: '📍 إخفاء منطقةٍ كاملة', callback_data: 'bd:c' }],
+    offRow,
     [{ text: '🏠 القائمة', callback_data: 'menu' }],
   ];
 
   const hidden = rows.filter((r) => markOf(marks, r) === 'hide').length;
   const gone = rows.filter((r) => markOf(marks, r) === 'out').length;
   const text =
+    (off ? `⛔️ <b>الجدولُ موقوف</b> — لا يراه أحد.${NL}${NL}` : '') +
     `<b>جدول ${when} — ${rows.length} سطراً</b>${NL}` +
     (hidden || gone
       ? `${hidden ? `🚫 ${hidden} مخفيّ   ` : ''}${gone ? `⛔️ ${gone} موسومٌ «نفد»` : ''}${NL}${NL}`
@@ -2009,9 +2033,69 @@ async function boardHome(chat: number, day: string, msgId?: number) {
   else await send(chat, text, extra);
 }
 
+/** اليومُ الذي تُدير الشاشةُ لوحتَه — **هو الذي يراه الناسُ الآن**.
+ *
+ *  كانت تستعمل `scheduleDay()` (قبل الظهر اليوم، وبعده غداً)، والصفحةُ تنقلب
+ *  الساعةَ ٢١ (`BOARD_FLIP_HOUR`). فبين الظهر والتاسعة مساءً — تسعُ ساعات —
+ *  كان زرُّ الإيقاف يُوقف **جدولَ الغد** بينما الناسُ يقرؤون جدولَ اليوم، فيرى
+ *  المشغّلُ «موقوف» ويبقى المنشورُ معروضاً على أربعةَ عشرَ ألفاً.
+ *
+ *  و`resolveBoardDay` هي قاعدةُ الصفحة نفسُها، تُستورد ولا تُنسخ. */
+async function boardDay(): Promise<string> {
+  const { data } = await db
+    .from('fuel_schedule')
+    .select('for_date')
+    .gte('for_date', baghdadDay());
+  return resolveBoardDay(data ?? []);
+}
+
 async function boardRoute(chat: number, data: string, msgId?: number) {
-  const day = scheduleDay();
+  const day = await boardDay();
   if (data === 'bd') return boardHome(chat, day, msgId);
+
+  // ــ إيقافُ اليوم كلِّه ورفعُه ــــــــــــــــــــــــــــــــــــــــــــ
+  //
+  // **ويُسأل قبل الإيقاف.** ضغطةٌ واحدةٌ تُفرغ لوحةَ يومٍ أمام كلّ من يفتح
+  // الصفحة، وهي في صفٍّ واحدٍ مع أزرارٍ تُخفي سطراً — فالسؤالُ يفصل بينهما.
+  // والرفعُ بلا سؤال: لا ضررَ في أن يعود ما نُشر.
+  if (data === 'bd:off') {
+    return edit(
+      chat,
+      msgId!,
+      `⛔️ <b>إيقافُ جدول ${day === baghdadDay() ? 'اليوم' : 'غد'} (${day})</b>${NL}${NL}` +
+        `يختفي الجدولُ كلُّه عن الموقع والتطبيق، ويُقال للناس إنّه أُوقف — لا إنّه لم يُنشر.${NL}` +
+        `ولا يُحذف شيء: تُعيده بضغطةٍ متى شئت.`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '⛔️ نعم، أوقفه', callback_data: 'bd:off:y' }],
+            [{ text: '↩︎ رجوع', callback_data: 'bd' }],
+          ],
+        },
+      }
+    );
+  }
+
+  if (data === 'bd:off:y') {
+    // حذفٌ ثمّ إدراج، لا `upsert`: الفهرسُ الفريدُ جزئيٌّ (`where action = 'off'`)
+    // وPostgREST لا تُصدِّر شرطَه، فلا تجد بوستجرس مُحكَماً للتعارض وتردّ خطأً.
+    // والحذفُ أوّلاً يجعل الضغطةَ الثانيةَ بلا أثرٍ بدل أن تسقط بـ23505.
+    await db.from('board_overrides').delete().eq('for_date', day).eq('action', 'off');
+    const { error: offErr } = await db
+      .from('board_overrides')
+      .insert({ for_date: day, action: 'off' });
+    if (offErr) {
+      return edit(chat, msgId!, `⚠️ تعذّر الإيقاف: ${esc(offErr.message)}`, {
+        reply_markup: { inline_keyboard: [[{ text: '↩︎ رجوع', callback_data: 'bd' }]] },
+      });
+    }
+    return boardHome(chat, day, msgId);
+  }
+
+  if (data === 'bd:on') {
+    await db.from('board_overrides').delete().eq('for_date', day).eq('action', 'off');
+    return boardHome(chat, day, msgId);
+  }
 
   // ــ منطقةٌ كاملة ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
   if (data === 'bd:c') {
@@ -2193,7 +2277,9 @@ function valuePicker(l: ScheduleLine, i: number, field: string) {
 async function platformStations(): Promise<PlatformStation[]> {
   const { data } = await db
     .from('stations_public')
-    .select('id, name, lat, lng')
+    // و`city` معها: بها تُشترط المدينةُ في المطابقة بالاسم، فلا تُربط محطةُ
+    // الفلوجة بسطرٍ يقول الكرمة.
+    .select('id, name, lat, lng, city')
     .eq('status', 'approved')
     .range(0, 99_999);
   return (data ?? []) as PlatformStation[];
@@ -2588,6 +2674,41 @@ async function publishSchedule(
   // فادّعاؤه عن محطته أولى من خبرٍ عنها.
   await linkBack(chat, d.lines, for_date);
 
+  // ── والنشرُ يرفع الإيقاف ────────────────────────────────────────────────
+  //
+  // «أوقف الجدولَ الحاليّ ثمّ انشر من جديد» هو الطريقُ الذي طُلب من أجله الزرّ.
+  // فلو بقي الإيقافُ قائماً بعد النشر لَنشر المشغّلُ جدولاً صحيحاً ولم يرَه أحد،
+  // وهو لا يعرف لماذا — عطلٌ صامتٌ صنعناه بأيدينا.
+  //
+  // ويُقال إنّه رُفع: تبديلُ حالٍ لم يطلبه في هذه الضغطة بعينها لا يمرّ صامتاً.
+  const { data: lifted, error: liftErr } = await db
+    .from('board_overrides')
+    .delete()
+    .eq('for_date', for_date)
+    .eq('action', 'off')
+    .select('id');
+
+  // **ولا يُرفع إلا إيقافُ اليوم المنشور.** كان الإغراءُ أن يُرفع إيقافُ اليوم
+  // المعروض أيضاً — وذاك يفتح لوحةً سحبها صاحبُها عمداً ولم يصحّحها بعد.
+  //
+  // فيبقى الحذفُ على `for_date` وحدَه، ويُقال الباقي: إن نشر لغدٍ ولوحةُ اليوم
+  // موقوفة، فالجدولُ الجديدُ صحيحٌ ولا يراه أحد — وهو ما يجب أن يُقرأ لا أن
+  // يُستنتج بعد ساعة.
+  const stillOff = await boardDay();
+  const { count: offNow } =
+    stillOff === for_date
+      ? { count: 0 }
+      : await db
+          .from('board_overrides')
+          .select('id', { count: 'exact', head: true })
+          .eq('for_date', stillOff)
+          .eq('action', 'off');
+
+  const resumed = liftErr
+    ? `${NL}⚠️ تعذّر رفعُ الإيقاف: ${esc(liftErr.message)} — ارفعه من 🛠.`
+    : (lifted?.length ? `${NL}♻️ ورُفع إيقافُ الجدول — صار ظاهراً.` : '') +
+      (offNow ? `${NL}⛔️ لكنّ لوحةَ ${stillOff} موقوفةٌ — لا يُعرض شيءٌ حتى تُرفع من 🛠.` : '');
+
   const when = for_date === baghdadDay() ? 'اليوم' : 'غداً';
   // وما مُحي يُقال بعدده: «تمّ» عن مسحٍ لا يُعرف مقدارُه خبرٌ ناقصٌ يبني عليه
   // المشغّلُ ثقةً في غير محلِّها — وهو مبدأُ `cancel_announcement` نفسُه.
@@ -2603,7 +2724,7 @@ async function publishSchedule(
       .eq('batch_id', batch_id);
     await send(
       chat,
-      `✅ ${replace ? 'استُبدل' : 'أُضيف إلى'} جدول ${for_date} — ${countWord(d.lines.length)}، بلا إشعار.${swap}`
+      `✅ ${replace ? 'استُبدل' : 'أُضيف إلى'} جدول ${for_date} — ${countWord(d.lines.length)}، بلا إشعار.${swap}${resumed}`
     );
     return;
   }
@@ -2623,7 +2744,7 @@ async function publishSchedule(
 
   await send(
     chat,
-    `✅ ${replace ? 'استُبدل' : 'نُشر'} جدولُ ${esc(productsLabel(d.lines))} — ${countWord(d.lines.length)}.${swap}${NL}` +
+    `✅ ${replace ? 'استُبدل' : 'نُشر'} جدولُ ${esc(productsLabel(d.lines))} — ${countWord(d.lines.length)}.${swap}${resumed}${NL}` +
       (sent
         ? `📣 يخرج الإشعارُ إلى ${sent} مشتركاً.`
         : `⚠️ ولم يخرج الإشعار: ${esc(why)}${NL}أعِده بأمر /اشعار.`)
@@ -2758,8 +2879,16 @@ Deno.serve(async (req) => {
           );
         }
       } else if (data === 'bd' || data.startsWith('bd:')) {
-        await answer(cb.id);
-        await boardRoute(chat, data, messageId);
+        // **والحارسُ هنا لا في القائمة.** `menuKeyboard` لا تعرض هذا الزرَّ لغير
+        // الإدارة، لكنّ `callback_data` نصٌّ يرسله من شاء — ومن أرسل `bd:ct:0:h`
+        // كان يُخفي منطقةً من لوحةٍ يقرؤها أربعةَ عشرَ ألفاً. جارُه `addsched`
+        // يفحص الدورَ (`:2826`)، وهذا لم يكن يفحصه.
+        if (!isAdmin(from)) {
+          await answer(cb.id, 'هذا الزرّ للإدارة.');
+        } else {
+          await answer(cb.id);
+          await boardRoute(chat, data, messageId);
+        }
       } else if (data === 'sch:go') {
         await publishSchedule(chat, from, cb.id, true);
       } else if (data === 'sch:mute') {

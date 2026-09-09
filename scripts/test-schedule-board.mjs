@@ -13,7 +13,7 @@
 //   ٣ ـ **الوعدُ الفائت.** في القاعدة وعودٌ من آب لم تُنظَّف، و`isListed`
 //       تُبقيها إلى الأبد. فاللوحةُ تأخذ يومَها وحدَه.
 import assert from 'node:assert/strict';
-import { applyOverrides, buildBoard, groupBoard, baghdadDate } from '../lib/board.ts';
+import { applyOverrides, buildBoard, groupBoard, isBoardOff, baghdadDate } from '../lib/board.ts';
 
 let n = 0;
 const ok = (label, fn) => {
@@ -381,6 +381,41 @@ ok('وعلامةُ يومٍ آخر لا تمسّ اليوم', () => {
 ok('وعلامةٌ فارغةٌ لا تُفرغ اللوحة', () => {
   const rows = boardOf();
   assert.equal(applyOverrides(rows, [mark({})], DAY).length, rows.length);
+});
+
+// ── الإيقافُ: يومٌ كلُّه يُسحب ثمّ يعود ───────────────────────────────────
+//
+// الفرقُ بينه وبين العلامة الفارغة هو كلُّ شيء: تلك **لا تُطبَّق** لأنّها قد
+// تكون خطأً برمجيّاً فقَد هدفَه، وهذا **يُطبَّق على كلّ سطر** لأنّ اسمَه يقول
+// إنّه قُصد. والفحصان متجاوران عمداً.
+
+ok('والإيقافُ يسحب اليومَ كلَّه', () => {
+  const rows = boardOf();
+  assert.ok(rows.length > 1, 'الحالةُ تحتاج أكثرَ من سطر');
+  assert.equal(applyOverrides(rows, [mark({ action: 'off' })], DAY).length, 0);
+});
+
+ok('ويُصيب السطرَ الذي لا مدينةَ له', () => {
+  const rows = boardOf().concat([{ ...boardOf()[0], key: 'x:1', city: null, stationId: null, source: 'schedule' }]);
+  const out = applyOverrides(rows, [mark({ action: 'off' })], DAY);
+  assert.equal(out.length, 0, 'إخفاءُ المدن واحدةً واحدةً كان يتركه — وهذا لا');
+});
+
+ok('وإيقافُ يومٍ آخر لا يمسّ اليوم', () => {
+  const rows = boardOf();
+  assert.equal(applyOverrides(rows, [mark({ for_date: OLD, action: 'off' })], DAY).length, rows.length);
+});
+
+ok('ورفعُه يُعيد كلَّ شيء كما كان', () => {
+  const rows = boardOf();
+  assert.deepEqual(applyOverrides(rows, [], DAY), rows, 'لا يُحذف منشورٌ — يُخفى فقط');
+});
+
+ok('و«موقوف» تُقرأ خبراً مستقلّاً عن «لم يُنشر»', () => {
+  assert.equal(isBoardOff([mark({ action: 'off' })], DAY), true);
+  assert.equal(isBoardOff([], DAY), false, 'لوحةٌ فارغةٌ بلا إيقافٍ ليست موقوفة');
+  assert.equal(isBoardOff([mark({ city: 'الرمادي' })], DAY), false, 'ولا الإخفاءُ إيقاف');
+  assert.equal(isBoardOff([mark({ for_date: OLD, action: 'off' })], DAY), false, 'ولا إيقافُ أمس');
 });
 
 console.log(`${n} فحصاً — كلُّها سليمة.`);

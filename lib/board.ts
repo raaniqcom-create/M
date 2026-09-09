@@ -286,11 +286,15 @@ export interface BoardOverride {
   station_id: string | null;
   station_name: string | null;
   product: FuelProduct | null;
-  /** `hide` يُسقط السطر · `out` يشطبه بعلامة «نفد». */
-  action: 'hide' | 'out';
+  /** `hide` يُسقط السطر · `out` يشطبه بعلامة «نفد» · `off` يوقف اليومَ كلَّه. */
+  action: 'hide' | 'out' | 'off';
 }
 
 function marks(o: BoardOverride, r: BoardRow): boolean {
+  // والإيقافُ يُصيب اليومَ كلَّه: هدفُه اليومُ لا سطرٌ فيه، فلا حقلَ يُفحص.
+  // وهو الاستثناءُ الوحيدُ من قاعدة «لا علامةَ بلا هدف» أدناه — واستثناءٌ
+  // باسمٍ صريحٍ ليس هو العطلَ الذي مُنع، بل نقيضُه.
+  if (o.action === 'off') return true;
   if (o.product && o.product !== r.product) return false;
   if (o.station_id && o.station_id !== r.stationId) return false;
   if (o.station_name && !sameStation({ name: o.station_name, city: o.city }, r)) return false;
@@ -313,7 +317,7 @@ export function applyOverrides(rows: BoardRow[], overrides: BoardOverride[], day
   const out: BoardRow[] = [];
   for (const r of rows) {
     const hit = mine.filter((o) => marks(o, r));
-    if (hit.some((o) => o.action === 'hide')) continue;
+    if (hit.some((o) => o.action === 'hide' || o.action === 'off')) continue;
     out.push(hit.some((o) => o.action === 'out') ? { ...r, state: 'out' } : r);
   }
   return out;
@@ -365,4 +369,13 @@ export function groupBoard(rows: BoardRow[], prefer: string[] = []): BoardGroup[
       b.rows.length - a.rows.length ||
       (a.city ?? '').localeCompare(b.city ?? '', 'ar')
   );
+}
+
+/** أموقوفٌ جدولُ هذا اليوم؟
+ *
+ *  اللوحةُ الفارغةُ خبران لا خبرٌ واحد: «لم يُنشر بعد» و«نُشر ثمّ أُوقف». ومن
+ *  قرأ الجدولَ صباحاً ثمّ وجده فارغاً ظُهراً يستحقّ أن يعرف أيَّهما — وهو مبدأُ
+ *  «نفد» نفسُه في هذا الملفّ: «فلا يظنّ المنصّةَ كذبت». */
+export function isBoardOff(overrides: BoardOverride[], day: string): boolean {
+  return overrides.some((o) => o.for_date === day && o.action === 'off');
 }

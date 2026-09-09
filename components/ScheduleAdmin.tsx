@@ -10,6 +10,7 @@ import {
   boardDate,
   buildBoard,
   loadBoardStations,
+  isBoardOff,
   loadOverrides,
   loadSchedule,
   resolveBoardDay,
@@ -49,6 +50,7 @@ export function ScheduleAdmin() {
   const [note, setNote] = useState<string | null>(null);
   const flip = boardDate();
   const [day, setDay] = useState(flip);
+  const [off, setOff] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -58,7 +60,9 @@ export function ScheduleAdmin() {
       const stations = await loadBoardStations(shown, schedule);
       const built = buildBoard(schedule, stations, shown);
       setRaw(built);
-      setRows(applyOverrides(built, await loadOverrides(), shown));
+      const marks = await loadOverrides();
+      setOff(isBoardOff(marks, shown));
+      setRows(applyOverrides(built, marks, shown));
       setNote(null);
     } catch {
       setNote('تعذّر جلب الجدول. أعد المحاولة.');
@@ -132,7 +136,7 @@ export function ScheduleAdmin() {
         {note && <p className="mt-2 text-[11.5px] font-bold text-traffic-red">{note}</p>}
       </div>
 
-      {!rows.length && !hidden.length && (
+      {!off && !rows.length && !hidden.length && (
         <div className="card p-8 text-center text-sm text-slate-500">لا جدولَ {when} بعد.</div>
       )}
 
@@ -169,7 +173,25 @@ export function ScheduleAdmin() {
         </div>
       ))}
 
-      {hidden.length > 0 && (
+      {/* ── وتحت الإيقاف لا قائمةَ مخفيّين ───────────────────────────────
+          `applyOverrides` تُسقط كلَّ صفٍّ، فيصير الفرقُ **كلَّ الصفوف** وتُرسم
+          تحت «مخفيٌّ عن الناس» بأزرارِ «أعِده». والزرُّ ينادي
+          `clear_board_override_for` باسم المحطة، وصفُّ الإيقاف اسمُه NULL —
+          فلا يُحذف شيءٌ ولا يُقال شيء.
+
+          وأسوأُ من العبث: صفٌّ يحمل إخفاءً حقيقيّاً **يُمحى** إخفاؤه ولا يعود
+          ظاهراً (الإيقافُ يُسقطه على كلّ حال) — فيظنّ المشغّلُ أنّ الزرَّ لم
+          يفعل شيئاً وقد محا قراراً اتّخذه. فتُخفى الأزرارُ ويُقال الحال. */}
+      {off && (
+        <div className="card p-3 text-center">
+          <p className="text-[12px] font-extrabold text-slate-600">الجدولُ موقوفٌ اليوم.</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+            لا يراه أحد. ويُرفع الإيقافُ من بوت تلغرام — «🛠 تحكّم بجدول اليوم».
+          </p>
+        </div>
+      )}
+
+      {!off && hidden.length > 0 && (
         <div className="card p-3">
           <h3 className="text-[12px] font-extrabold text-slate-500">
             مخفيٌّ عن الناس ({hidden.length})
