@@ -42,12 +42,27 @@ interface Target {
 
 export type SaveResult = 'ok' | 'denied' | 'unsupported' | 'pending' | 'failed';
 
+/** أسماءٌ تبدّلت — تُصحَّح عند القراءة.
+ *
+ *  الاختيارُ محفوظٌ في متصفّح كلِّ زائرٍ ولا هجرةَ تبلغه ولا انتهاءَ له. فيومَ
+ *  صارت «عانة» «عنة» بقي في أجهزةٍ اسمٌ لم يعد في القائمة — ومن حمله سقط من
+ *  التصفية والعدّادات ورقاقة المدينة بلا خطأٍ يظهر.
+ *
+ *  ويُكتب مرّةً لا في كلّ قراءة. ويُحذف الجدولُ — لا النداء — حين ينفد الذيل. */
+const LEGACY_CITY: Record<string, string> = { 'عانة': 'عنة' };
+
 export function readChoice(): AlertChoice | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const c = JSON.parse(raw) as AlertChoice;
-    return Array.isArray(c.cities) && Array.isArray(c.products) ? c : null;
+    if (!Array.isArray(c.cities) || !Array.isArray(c.products)) return null;
+    const cities = c.cities.map((x) => LEGACY_CITY[x] ?? x);
+    if (cities.some((x, i) => x !== c.cities[i])) {
+      c.cities = cities;
+      localStorage.setItem(KEY, JSON.stringify(c));
+    }
+    return c;
   } catch {
     return null;
   }

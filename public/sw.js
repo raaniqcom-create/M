@@ -1,8 +1,9 @@
 // Hand-written service worker. Replaced next-pwa/workbox: that pulled ~500
 // packages and 7 high-severity advisories to generate what these ~70 lines do.
+// v7: تُبطَّل نسخةُ road-routes.json المخزَّنة — أسماءُ نقاطها تبدّلت.
 // v6: يُمسح ما خزّنه v5 من /offline المُحوَّلة — جوابٌ مُحوَّلٌ لا يصلح
 // جواباً لتنقّل، فكان الاحتياطُ يسقط إلى صفحة المتصفّح بدل صفحتنا.
-const CACHE = 'mahatta-v6';
+const CACHE = 'mahatta-v7';
 // بشرطةٍ مائلة: trailingSlash يُخرج out/offline/index.html، و«/offline»
 // تحويلٌ ٣٠١ — والجوابُ المُحوَّل يُرفض جواباً لتنقّل في المواصفة.
 const OFFLINE_URL = '/offline/';
