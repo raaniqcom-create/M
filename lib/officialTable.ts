@@ -21,7 +21,14 @@
 // اللصق. والكتابُ يقول يومَه بنصّه — فيُقرأ ولا يُخمَّن. وإن لم يُقرأ **لم
 // يُخترع**: تُعرض المعاينةُ بلا تاريخٍ وزرُّ 📅 يضبطه.
 import { CITY_NAMES } from './cities.ts';
-import { cityInText, matchLine, type PlatformStation, type ScheduleLine } from './schedule.ts';
+import {
+  cityInText,
+  lineProduct,
+  matchLine,
+  readProduct,
+  type PlatformStation,
+  type ScheduleLine,
+} from './schedule.ts';
 import { normalizeName } from './nearbyFuel.ts';
 import type { FuelProduct } from '../types/database.ts';
 
@@ -81,20 +88,6 @@ export const TABLE_COLUMNS: { header: string[]; product: FuelProduct }[] = [
  *  «فيها طلبيّة». قرارُ صاحب المنصّة ألّا تُحفظ الكمّيّات. */
 const EMPTY_CELL = /^[\s\-–—_ـ.·،]*$/;
 export const hasOrder = (cell: string): boolean => !!cell && !EMPTY_CELL.test(cell);
-
-const TABLE_HINTS = ['موقف طلبيات', 'الطلبية', 'القضاء'];
-const COL_WORDS = ['عادي', 'محسن', 'نفط ابيض', 'زيت الغاز', 'المحافظة', 'اسم المحطة'];
-
-/** أهذا كتابٌ رسميٌّ أم كلامٌ آخر؟
- *
- *  قرينتان معاً، كما تشترط `looksLikeSchedule` صياغةً واسمَ وقود. وواحدةٌ
- *  وحدَها تُخطئ: «المحافظة» تَرِد في كلامٍ كثير، و«عادي» كلمةٌ دارجة. */
-export function looksLikeOfficialTable(text: string): boolean {
-  const t = normalizeName(text);
-  const hinted = TABLE_HINTS.some((h) => t.includes(normalizeName(h)));
-  const cols = COL_WORDS.filter((c) => t.includes(normalizeName(c))).length;
-  return hinted && cols >= 2;
-}
 
 /** يُقسَم الصفُّ إلى خانات — والفاصلُ يُكتشف ولا يُفترض.
  *
@@ -159,6 +152,103 @@ export function cityFromDistrict(cell: string): string | null {
   return cityInText(cell);
 }
 
+/** دورُ العمود، كما تقوله ترويسةُ الجدول نفسُها.
+ *
+ *  ── ولماذا تُقرأ الترويسةُ ولا تُفترض المواضع ────────────────────────────
+ *
+ *  وصل الكتابُ أوّلاً بثمانية أعمدة: ت · المحافظة · القضاء · الاسم · ثمّ عمودٌ
+ *  لكلّ منتجٍ فيه عددُ الحمولات. ثمّ وصل بثلاثة: الاسم · المدينة والعنوان ·
+ *  نوعُ الوقود — وفيه المنتجُ **اسمٌ في خانة** لا عمودٌ قائم.
+ *
+ *  وشكلان في يومين يعنيان ثالثاً في الشهر القادم. فلا تُعدّ المواضعُ: تُقرأ
+ *  أسماءُ الأعمدة، وهي مكتوبةٌ في الوثيقة لهذا الغرض بعينه. */
+type Role =
+  | { kind: 'name' }
+  | { kind: 'city' }
+  | { kind: 'productName' }
+  | { kind: 'productCol'; product: FuelProduct }
+  | { kind: 'skip' };
+
+/** تطبيعُ الترويسة — خفيفٌ لا يحذف كلمة.
+ *
+ *  **ولا تصلح `normalizeName` هنا.** تلك مصنوعةٌ لأسماء المحطات، فتُسقط
+ *  «محطة» و«تعبئة» و«وقود» ضجيجاً — وهي بعينها كلماتُ الترويسة. فتصير
+ *  «اسم المحطة» ← «اسم ال»، و«الوقود» ← «ال»، و«ال» تُطابق كلَّ عمودٍ فيه
+ *  ألفٌ ولام. مقيسٌ: كلُّ عمودٍ صار عمودَ منتج، ولم تُعرف ترويسةٌ قطّ.
+ *
+ *  فهذه توحّد الحروفَ وتُسقط الحركاتِ والتطويلَ، ولا تحذف كلمة. */
+function headKey(t: string): string {
+  return t
+    .replace(/[ً-ْـ]/g, '')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[^؀-ۿ\w ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const NAME_WORDS = ['اسم المحطه', 'المحطه'].map(headKey);
+const CITY_WORDS = ['المدينه', 'العنوان', 'القضاء', 'الناحيه', 'القاطع', 'المنطقه'].map(headKey);
+const PRODUCT_NAME_WORDS = ['نوع الوقود', 'الوقود', 'المنتج'].map(headKey);
+
+function roleOf(header: string): Role {
+  const h = headKey(header);
+  if (!h) return { kind: 'skip' };
+  // المنتجُ المسمّى قبل المدينة: «نوع الوقود» فيه «الوقود» ولا يخصّ العنوان.
+  if (PRODUCT_NAME_WORDS.some((w) => h.includes(w))) return { kind: 'productName' };
+  for (const col of TABLE_COLUMNS) {
+    if (col.header.some((w) => h === headKey(w))) {
+      return { kind: 'productCol', product: col.product };
+    }
+  }
+  if (NAME_WORDS.some((w) => h.includes(w))) return { kind: 'name' };
+  if (CITY_WORDS.some((w) => h.includes(w))) return { kind: 'city' };
+  return { kind: 'skip' };
+}
+
+/** صفُّ الفصل في جداول ماركداون: `|---|---|---|`. */
+const isRule = (cells: string[]) => cells.length > 0 && cells.every((c) => /^:?-{2,}:?$/.test(c.trim()));
+
+interface Header {
+  roles: Role[];
+  /** موضعُ الصفّ في النصّ، فما بعده بياناتٌ وما قبله عنوان. */
+  at: number;
+}
+
+/** يبحث عن صفّ الترويسة: فيه عمودُ اسمٍ، ومعه مدينةٌ أو منتجٌ على الأقلّ. */
+function findHeader(lines: string[]): Header | null {
+  for (let i = 0; i < lines.length; i++) {
+    const cells = splitCells(lines[i]);
+    if (cells.length < 2 || isRule(cells)) continue;
+    const roles = cells.map(roleOf);
+    const hasName = roles.some((r) => r.kind === 'name');
+    const hasRest = roles.some(
+      (r) => r.kind === 'city' || r.kind === 'productName' || r.kind === 'productCol'
+    );
+    if (hasName && hasRest) return { roles, at: i };
+  }
+  return null;
+}
+
+/** أهذا جدولٌ يُقرأ؟
+ *
+ *  والمحكُّ هو القراءةُ نفسُها لا كلماتٌ في العنوان: ترويسةٌ تُفهم، وصفّا
+ *  بياناتٍ بعدها على الأقلّ. فلا يُدّعى ما لا يُقرأ، ولا يُردّ ما يُقرأ لأنّ
+ *  عنوانَه صيغ بغير ما نتوقّع. */
+export function looksLikeOfficialTable(text: string): boolean {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const h = findHeader(lines);
+  if (!h) return false;
+  let data = 0;
+  for (let i = h.at + 1; i < lines.length; i++) {
+    const cells = splitCells(lines[i]);
+    if (isRule(cells) || cells.length < 2) continue;
+    data++;
+  }
+  return data >= 2;
+}
+
 export interface OfficialTable {
   /** "2026-09-09" — من العنوان. و`null` تعني «لم يُقرأ»، ولا يُخمَّن. */
   forDate: string | null;
@@ -169,60 +259,60 @@ export interface OfficialTable {
   skipped: string[];
 }
 
-/** يقرأ الكتابَ ويُخرج سطراً لكلّ خانةٍ فيها طلبيّة.
+/** يقرأ الجدولَ ويُخرج سطراً لكلّ منتجٍ مطلوبٍ في كلّ محطة.
  *
- *  صفٌّ واحدٌ في الوثيقة قد يُخرج أربعةَ أسطر — والمصبُّ يعرف سطراً لمنتجٍ
- *  واحد، فهذه هي الترجمة. */
+ *  عمودُ «نوع الوقود» يُخرج سطراً واحداً؛ وأعمدةُ المنتجات تُخرج سطراً لكلّ
+ *  خانةٍ ليست شرطة. والمصبُّ يعرف سطراً لمنتجٍ واحد، فهذه هي الترجمة. */
 export function readOfficialTable(text: string, platform: PlatformStation[]): OfficialTable {
   const forDate = tableDate(text);
   const source = tableSource(text);
   const lines: ScheduleLine[] = [];
   const skipped: string[] = [];
 
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line) continue;
-    const n = normalizeName(line);
+  const rows = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const header = findHeader(rows);
+  if (!header) return { forDate, source, lines, skipped };
 
-    // الترويسةُ والعنوانُ والمجموعُ والملاحظة — كلُّها ليست صفوفَ بيانات.
-    if (
-      n.includes(normalizeName('اسم المحطة')) ||
-      n.includes(normalizeName('المجموع')) ||
-      n.includes(normalizeName('ملاحظة')) ||
-      n.includes(normalizeName('موقف طلبيات')) ||
-      n.includes(normalizeName('يجهز من'))
-    ) {
-      continue;
-    }
-
+  for (let i = header.at + 1; i < rows.length; i++) {
+    const line = rows[i];
     const cells = splitCells(line);
-    // أربعةُ أعمدةِ طلبيّةٍ في الذيل، وقبلها المحطةُ والقضاء على الأقلّ.
-    if (cells.length < 4 + 2) {
-      skipped.push(line);
-      continue;
-    }
+    if (isRule(cells)) continue;
+    // ذيلُ الوثيقة: مجموعٌ وملاحظةٌ وتوقيع — ليست صفوفَ بيانات.
+    if (cells.length < 2) continue;
 
-    const orders = cells.slice(-TABLE_COLUMNS.length);
-    const head = cells.slice(0, -TABLE_COLUMNS.length);
-    // اسمُ المحطة آخرُ ما قبل الأعمدة، والقضاءُ قبله.
-    const name = head[head.length - 1] ?? '';
-    const district = head[head.length - 2] ?? '';
+    let name = '';
+    let city: string | null = null;
+    const wanted: FuelProduct[] = [];
+
+    header.roles.forEach((role, c) => {
+      const cell = (cells[c] ?? '').trim();
+      if (!cell) return;
+      if (role.kind === 'name') name = cell;
+      else if (role.kind === 'city') city = cityFromDistrict(cell);
+      else if (role.kind === 'productName') {
+        const p = lineProduct(cell) ?? readProduct(cell);
+        if (p) wanted.push(p);
+      } else if (role.kind === 'productCol' && hasOrder(cell)) {
+        wanted.push(role.product);
+      }
+    });
+
     if (!name || normalizeName(name).length < 2) {
-      skipped.push(line);
+      // صفُّ مجموعٍ أو ملاحظةٍ يُترك بلا ضجيج؛ وما عداه يُقال.
+      const n = normalizeName(line);
+      const noise = ['المجموع', 'ملاحظة', 'يجهز من', 'موقف طلبيات'].some((w) =>
+        n.includes(normalizeName(w))
+      );
+      if (!noise) skipped.push(line);
       continue;
     }
+    // محطةٌ بلا منتجٍ مطلوبٍ ليست خطأً: الوثيقةُ تذكر محطاتٍ لم يُقرَّر لها شيء.
+    if (!wanted.length) continue;
 
-    const city = cityFromDistrict(district);
-    let any = false;
-    orders.forEach((cell, i) => {
-      if (!hasOrder(cell)) return;
-      any = true;
-      const product = TABLE_COLUMNS[i].product;
+    for (const product of wanted) {
       const m = matchLine(name, platform, product);
       lines.push({ ...m, city: city ?? m.city });
-    });
-    // صفٌّ بلا طلبيّةٍ واحدة ليس خطأً — الكتابُ يذكر محطاتٍ لم يُقرَّر لها شيء.
-    if (!any) continue;
+    }
   }
 
   return { forDate, source, lines, skipped };
