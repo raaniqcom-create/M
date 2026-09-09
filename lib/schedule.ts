@@ -333,12 +333,36 @@ export function matchLine(
   }
 
   const { la, lo, n, c } = hit.station;
+
+  // ── والجغرافيا تقترح، والاسمُ يؤكّد ────────────────────────────────────
+  //
+  // كان الالتقاطُ بالمسافة وحدَها: أقربُ محطةِ منصّةٍ ضمن خمسمئة متر. وهو
+  // صحيحٌ حيث تتباعد المحطات، وخاطئٌ حيث تتجاور.
+  //
+  // ووقع: الكتابُ الرسميُّ ذكر «محطة رماح الأنبار المشيدة»، فطابقها المطابقُ
+  // بـ«محطة تعبئة وقود رماح الأنبار» بدرجة **٨٢** — وهو الصواب. ثمّ استبدلها
+  // الالتقاطُ بـ«محطة الحق»، وهما جارتان على شارع ٦٠ بجانب جسر الطاش.
+  // و«رماح الأنبار» ليست مسجّلةً في المنصّة أصلاً، فالربطُ كان سيكتب
+  // «متوقَّع» في لوحة صاحب محطةٍ أخرى ويُعلن عنها وقوداً لم يُقرَّر لها.
+  //
+  // فالمسافةُ ترشّح، والاسمُ يحكم: يُشترط أن يشترك المرشَّحُ والمطابَقُ في
+  // كلمةٍ مميّزةٍ واحدةٍ على الأقلّ — بعد إسقاط الضجيج (محطة · تعبئة · وقود).
+  // «ساسكو» تُطابق «محطة ساسكو»، و«رماح الأنبار» لا تُطابق «الحق».
+  const distinct = (t: string) =>
+    new Set(normalizeName(t).split(' ').map(bareWord).filter((w) => w.length > 1));
+  const hitWords = distinct(n);
+  const sharesWord = (name: string) => {
+    for (const w of distinct(name)) if (hitWords.has(w)) return true;
+    return false;
+  };
+
   const near =
     platform.find(
       (s) =>
         s.lat != null &&
         s.lng != null &&
-        metresBetween({ lat: la, lng: lo }, { lat: s.lat, lng: s.lng }) <= 500
+        metresBetween({ lat: la, lng: lo }, { lat: s.lat, lng: s.lng }) <= 500 &&
+        sharesWord(s.name)
     ) ?? byName();
 
   return {
