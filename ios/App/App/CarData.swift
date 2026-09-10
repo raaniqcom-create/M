@@ -116,13 +116,17 @@ enum CarData {
             }
 
             let stations: [Station] = raw.compactMap { o in
-                guard let id = o["id"] as? String, let name = o["name"] as? String else { return nil }
+                // **والإحداثيّةُ لا تُستبدل بصفر.** (0,0) نقطةٌ صالحةٌ في المحيط
+                // الأطلسيّ قبالة غانا — فصفٌّ ناقصٌ كان يصير محطةً على بُعد
+                // خمسة آلاف كيلومتر، ويُسلَّم دليلاً إلى خرائط آبل. فيُسقَط.
+                guard let id = o["id"] as? String, let name = o["name"] as? String,
+                      let lat = o["lat"] as? Double, let lng = o["lng"] as? Double else { return nil }
                 return Station(
                     id: id,
                     name: name,
                     city: o["city"] as? String ?? "",
-                    lat: o["lat"] as? Double ?? 0,
-                    lng: o["lng"] as? Double ?? 0,
+                    lat: lat,
+                    lng: lng,
                     distanceKm: o["distance_km"] as? Double ?? 0,
                     products: o["products"] as? [String] ?? [],
                     confirmedMin: o["confirmed_min"] as? Int ?? 0,

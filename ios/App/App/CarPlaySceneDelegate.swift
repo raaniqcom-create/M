@@ -118,18 +118,42 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     : CarData.since(station.confirmedMin),
                 pinImage: nil)
 
-            poi.primaryButton = CPTextButton(title: "الطريق", textStyle: .confirm) { _ in
-                item.openInMaps(launchOptions: [
-                    MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving,
-                ])
+            // ── والفتحُ يسمّي مشهدَه ──────────────────────────────────────
+            //
+            // **هنا كان العطل.** `openInMaps(launchOptions:)` صيغةٌ بلا مشهد،
+            // وُضعت يومَ كان للتطبيق مشهدٌ واحد. وقد صار له اثنان معلَنان في
+            // `Info.plist` — نافذةُ الهاتف وقالبُ السيّارة — فلا يعرف النظامُ
+            // على أيّ شاشةٍ يفتح الخريطة. وشاشةُ السيارة تعمل والتطبيقُ مغلقٌ
+            // على الهاتف (`CarData.swift:6`)، فقد لا يكون هناك مشهدُ نافذةٍ
+            // أصلاً — فيُرفض الفتحُ بلا أثرٍ يراه السائق.
+            poi.primaryButton = CPTextButton(title: "الطريق", textStyle: .confirm) { [weak self] _ in
+                let carScene = UIApplication.shared.connectedScenes
+                    .first { $0 is CPTemplateApplicationScene }
+                item.openInMaps(
+                    launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving],
+                    from: carScene,
+                    completionHandler: { ok in
+                        if !ok {
+                            DispatchQueue.main.async { self?.carAlert("تعذّر فتح الخرائط") }
+                        }
+                    })
             }
 
             // ومحطةٌ تُخفي رقمها لا زرَّ اتّصالٍ لها — لا زرٌّ معطَّل. زرٌّ يبدو
             // قابلاً للضغط يُضغط ثلاثاً قبل أن يرفع السائقُ عينَه عن الطريق.
+            //
+            // **وشاشةُ تأكيد الاتّصال تبقى على الهاتف، وذلك صحيح.** يعرضها
+            // النظامُ لا التطبيق، وتطبيقُ فئة الوقود لا يملك وضعَها على شاشة
+            // السيارة. وبعد اتّصال المكالمة تنتقل إلى واجهة السيّارة وصوتها.
+            //
+            // و`+` يبقى: رقمٌ بصيغة +964 يُدخله المشرفُ خاماً بلا تطبيع
+            // (`components/AdminStationForm.tsx`)، وحذفُ علامته يجعله محلّيّاً.
             if let phone = station.phone,
-               let tel = URL(string: "tel://" + phone.filter({ $0.isNumber })) {
-                poi.secondaryButton = CPTextButton(title: "اتصل", textStyle: .normal) { _ in
-                    UIApplication.shared.open(tel)
+               let tel = URL(string: "tel:" + phone.filter({ $0.isNumber || $0 == "+" })) {
+                poi.secondaryButton = CPTextButton(title: "اتصل", textStyle: .normal) { [weak self] _ in
+                    UIApplication.shared.open(tel, options: [:]) { ok in
+                        if !ok { DispatchQueue.main.async { self?.carAlert("تعذّر الاتصال") } }
+                    }
                 }
             }
             return poi
@@ -143,6 +167,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     // MARK: - أدوات
+
+    /// خطأٌ يُقال على شاشة السيارة.
+    ///
+    /// ولا Mac في هذا المشروع يقرأ سجلّاً، ولا Xcode يُوصَل بهاتف — فالبناءُ
+    /// كلُّه على خادمٍ سحابيّ والتجربةُ في سيّارة. فبلا هذا التنبيه لا يُفرَّق
+    /// بين «الزرُّ لم يُنادَ» و«نُودي فرُفض الفتح»، وهما بابان مختلفان.
+    private func carAlert(_ text: String) {
+        interface?.presentTemplate(
+            CPAlertTemplate(titleVariants: [text], actions: [
+                CPAlertAction(title: "حسناً", style: .cancel) { [weak self] _ in
+                    self?.interface?.dismissTemplate(animated: true, completion: nil)
+                },
+            ]), animated: true, completion: nil)
+    }
 
     private func reloadAction() -> CPTextButton {
         CPTextButton(title: "تحديث", textStyle: .normal) { [weak self] _ in
