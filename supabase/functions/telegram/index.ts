@@ -1867,12 +1867,39 @@ async function showSchedule(
   const note = official + (adding ? `${NL}➕ يُضاف إلى جدولٍ منشورٍ فيه ${already} محطة.` : '');
   const flip = day === baghdadDay() ? '📅 اجعله غداً' : '📅 اجعله اليوم';
 
+  // ── والمعاينةُ تُقصّ لتدخل، والمنشورُ كاملٌ لا يُقصّ ────────────────────
+  //
+  // **هنا كان العطل.** سقفُ رسالة تيليجرام ٤٠٩٦ حرفاً، وهذه الرسالةُ كانت
+  // تُبنى بلا حدّ. فجدولٌ من تسعةٍ وستّين سطراً — وصل ٢٠٢٦-٠٩-١٠ — بلغ نحوَ
+  // ٤٨٠٠ حرفاً، فردّت تيليجرام ٤٠٠ ولم تظهر معاينةٌ أصلاً. والمسوّدةُ محفوظةٌ
+  // في القاعدة والبابُ مغلق: بوتٌ يبدو ميّتاً وصاحبُ المنصّة لا يعرف لماذا.
+  //
+  // والحارسُ مكتوبٌ في هذا الملفّ لشاشةٍ أخرى منذ زمن (`people`)، ولم يُوضع
+  // هنا. وسببُه هناك يصلح هنا حرفاً: «whole entries only: never leave a tag
+  // half-written» — فقصٌّ أعمى في وسط وسمٍ يجعل تيليجرام ترفض الرسالةَ كلَّها.
+  //
+  // **والمقصوصُ عرضٌ لا حذف.** النشرُ يمضي على `d.lines` كاملةً، ويُقال العددُ
+  // صراحةً — فلا يظنّ المشغّلُ أنّ أسطراً سقطت.
+  const head = `<b>جدولُ ${dayWord}</b> — ${esc(label)} · ${day}${NL}${NL}`;
+  const tailText = `${NL}${NL}${foot}${note}`;
+  const budget = 3800 - head.length - tailText.length;
+
+  const shown: string[] = [];
+  let used = 0;
+  for (const r of rows) {
+    if (used + r.length + 1 > budget) break;
+    used += r.length + 1;
+    shown.push(r);
+  }
+  const hidden = rows.length - shown.length;
+  const more = hidden
+    ? `${NL}… و${countWord(hidden)} لا تتّسع لها هذه الرسالة — <b>وتُنشر معها كلُّها</b>. راجعها بـ✏️ تعديل.`
+    : '';
+
   await show(
     chat,
     msgId,
-    `<b>جدولُ ${dayWord}</b> — ${esc(label)} · ${day}${NL}${NL}` +
-      rows.join(NL) +
-      `${NL}${NL}${foot}${note}`,
+    head + shown.join(NL) + more + tailText,
     {
       reply_markup: {
         inline_keyboard: [
