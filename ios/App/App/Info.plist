@@ -38,8 +38,16 @@
 	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
+		<!-- **مطلوبةٌ لـCarPlay.** شاشةُ السيارة مشهدٌ **ثانٍ** يعمل مع مشهد
+		     الهاتف في وقتٍ واحد، وهذا المفتاحُ هو الذي يسمح بمشهدين معاً —
+		     ومثالُ آبل الرسميُّ في «Displaying Content in CarPlay» يضعه `true`
+		     في المقطع نفسِه الذي يُعلن دورَ السيارة.
+
+		     وله أثرٌ جانبيٌّ واحدٌ على آيباد: يصير فتحُ نافذتين ممكناً. وهو
+		     مقبولٌ هنا — التطبيقُ نافذةٌ على الموقع، ونافذتان منه لا تكسران
+		     شيئاً — وليس له بديلٌ يفتح السيارةَ ويُغلق الآيباد. -->
 		<key>UIApplicationSupportsMultipleScenes</key>
-    <false/>
+    <true/>
     <key>UISceneConfigurations</key>
     <dict>
       <!-- **دورُ شاشة السيارة.** بلا هذا الإعلان لا يُنشئ iOS المشهدَ إطلاقاً،
@@ -52,6 +60,10 @@
       <key>CPTemplateApplicationSceneSessionRoleApplication</key>
       <array>
         <dict>
+            <!-- صنفُ المشهد يُسمّى صراحةً كما في مثال آبل: بدونه لا يعرف
+                 النظامُ أنّ هذا المشهدَ `CPTemplateApplicationScene`. -->
+            <key>UISceneClassName</key>
+            <string>CPTemplateApplicationScene</string>
             <key>UISceneConfigurationName</key>
             <string>CarPlay Configuration</string>
             <key>UISceneDelegateClassName</key>
