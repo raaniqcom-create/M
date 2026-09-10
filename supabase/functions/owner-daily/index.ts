@@ -55,6 +55,22 @@ const WINDOW_MIN = 20;
  *  ولا يتغيّر شيءٌ في الإيصال: كلُّها تُدفَع كما كانت. */
 const THREAD_KINDS = new Set(['stale_stock', 'stale_withdrawn', 'no_stock']);
 
+/** يُكتب سببُ الرفض — وأوّلُ ثلاثةٍ تكفي.
+ *
+ *  **كان الفشلُ يُبتلع كلُّه** في `failed++` بلا سطرٍ في أيّ سجلّ: اثنان
+ *  وعشرون جهازَ آيفون لم يصلها شيءٌ أسبوعاً، ولوحةُ الحالة خضراء، ولا أثرَ
+ *  يُقرأ. فصار السببُ يُكتب — «BadDeviceToken» غيرُ «TopicDisallowed» غيرُ
+ *  «ExpiredProviderToken»، وثلاثةُ أبوابٍ لا يُفرَّق بينها بلا نصٍّ.
+ *
+ *  وثلاثةٌ لا أكثر: خمسون صفّاً متطابقاً في كلّ ربع ساعةٍ تُغرق السجلَّ فلا
+ *  يُقرأ، وهو عمًى من نوعٍ آخر. */
+let pushErrs = 0;
+async function logPush(kind: string, r: Response) {
+  if (pushErrs >= 3) return;
+  pushErrs++;
+  console.error(`${kind} ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`);
+}
+
 const SLOT_MIN = 180;
 // **والحدُّ يتبع يومَ العمل، لا رقماً اختير.**
 //
@@ -904,13 +920,24 @@ ${body}`,
               'apns-priority': '10',
             },
             body: JSON.stringify({
-              aps: { alert: { title, body }, sound: 'alert.caf' },
+              aps: {
+                alert: { title, body },
+                sound: 'alert.caf',
+                // **يخترق أوضاعَ التركيز، وبلا هذا يُجمَّع في «ملخّص الإشعارات».**
+                //
+                // `notify` تضعه منذ زمنٍ وتصل، وهذا الملفُّ لا يضعه — فتذكيرٌ
+                // يصل هاتفاً في «وضع القيادة» أو «عدم الإزعاج» يُؤجَّل إلى
+                // ملخّصٍ مسائيّ، فيقول صاحبُ المحطة إنّه لم يصله شيء وهو محقّ:
+                // لم يره. وتذكيرُ تحديثِ الوقود في ساعات العمل حسّاسٌ للوقت
+                // بتعريفه — بعد ساعتين لا معنى له.
+                'interruption-level': 'time-sensitive',
+              },
               url: deepLink,
             }),
           });
           if (r.status === 410) await db.from('device_tokens').delete().eq('token', t.token);
           else if (r.ok) sent++;
-          else failed++;
+          else { failed++; await logPush('apns', r); }
         } else if (t.platform === 'web' && webReady) {
           // A browser subscription, not a device token. This is the branch that
           // did not exist — which is why an owner who runs their station from
@@ -948,10 +975,11 @@ ${body}`,
           );
           if (r.status === 404) await db.from('device_tokens').delete().eq('token', t.token);
           else if (r.ok) sent++;
-          else failed++;
+          else { failed++; await logPush('fcm', r); }
         }
-      } catch {
+      } catch (e) {
         failed++;
+        console.error('push', e instanceof Error ? e.message : String(e));
       }
     }
     // آخرُ العناوين، وبعد سكوت ما قبله. ويُختم في owner_pings بنوعٍ خاصّ
