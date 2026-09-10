@@ -2581,6 +2581,32 @@ async function linkBack(chat: number, lines: ScheduleLine[], forDate: string) {
   }
 }
 
+/** يُنبّه أصحابَ المحطات كلَّهم بضرورة تحديث حالتهم، ويردّ سطراً للمدير.
+ *
+ *  ولا نسخةَ ثانيةً من حلقة الإيصال: `owner-daily` تملكها — APNs وFCM ودفعَ
+ *  المتصفّح وتيليغرام وتنظيفَ الرموز الميتة — وتُنادى هنا بوضعِ `schedule`
+ *  كما تُنادى `notify` و`announce` من هذا الملفّ نفسِه.
+ *
+ *  والفشلُ يُقال ولا يُبتلع: سطرٌ يظنّه المديرُ نجاحاً أسوأُ من سطرٍ يقول
+ *  «تعذّر». */
+async function alertStationOwners(): Promise<string> {
+  const cron = Deno.env.get('CRON_SECRET');
+  if (!cron) return `${NL}⚠️ لم يُنبَّه أصحابُ المحطات: CRON_SECRET غيرُ مضبوط.`;
+  try {
+    const r = await fetch(
+      `${Deno.env.get('SUPABASE_URL')}/functions/v1/owner-daily?schedule=1`,
+      { method: 'POST', headers: { 'x-cron-secret': cron } }
+    );
+    if (!r.ok) return `${NL}⚠️ تعذّر تنبيهُ أصحاب المحطات (${r.status}).`;
+    const o = (await r.json()) as { stations?: number; sent?: number; failed?: number };
+    const n = o.stations ?? 0;
+    const f = o.failed ? ` · ${o.failed} لم يصلها` : '';
+    return `${NL}🏪 ونُبِّه ${countWord(n)} لتحديث حالتها${f}.`;
+  } catch (e) {
+    return `${NL}⚠️ تعذّر تنبيهُ أصحاب المحطات: ${esc(e instanceof Error ? e.message : String(e))}`;
+  }
+}
+
 async function publishSchedule(
   chat: number,
   userId: number,
@@ -2742,12 +2768,27 @@ async function publishSchedule(
       .eq('batch_id', batch_id);
   }
 
+  // ── وأصحابُ المحطات يُنادَون كلُّهم ──────────────────────────────────────
+  //
+  // طلبُ صاحب المنصّة: «المحطات الموجودة في الجدول أو غير موجودة — أيّ حساب
+  // محطة — يُرسل لها إشعارٌ بضرورة تحديث الحالة، وحساب المدير يُرسل له أنّه
+  // أُرسل كي يتابع».
+  //
+  // ولماذا الكلُّ لا المذكورون: الجدولُ خبرٌ عن التوزيع لا عن محطةٍ بعينها،
+  // ومن لم يُذكر فيه يحتاج أن يقول «ليس عندي» بقدر ما يحتاج المذكورُ أن يقول
+  // «عندي». واللوحةُ تصدق بالجوابين معاً.
+  //
+  // **ومع «انشر وأشعِر» وحدَها.** من اختار الصمتَ للثمانية آلاف اختاره
+  // للأربعين أيضاً — وإلّا صار الزرُّ يفعل ما لا يقوله.
+  const owners = await alertStationOwners();
+
   await send(
     chat,
     `✅ ${replace ? 'استُبدل' : 'نُشر'} جدولُ ${esc(productsLabel(d.lines))} — ${countWord(d.lines.length)}.${swap}${resumed}${NL}` +
       (sent
         ? `📣 يخرج الإشعارُ إلى ${sent} مشتركاً.`
-        : `⚠️ ولم يخرج الإشعار: ${esc(why)}${NL}أعِده بأمر /اشعار.`)
+        : `⚠️ ولم يخرج الإشعار: ${esc(why)}${NL}أعِده بأمر /اشعار.`) +
+      owners
   );
 }
 

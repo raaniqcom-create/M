@@ -492,6 +492,24 @@ Deno.serve(async (req) => {
   // في الحلقة كما يمضي التذكير. والفروقُ ثلاثةُ شروطٍ صغيرة: النصُّ من الصفّ،
   // والرابطُ يفتح تبويب الرسائل، ولا علامةَ في owner_pings ولا صفَّ جديد في
   // المجرى — فالرسالةُ مكتوبةٌ فيه أصلاً.
+  // ── نداءُ الجميع عند نشر الجدول ─────────────────────────────────────────
+  //
+  // طلبُ صاحب المنصّة: «المحطات الموجودة في الجدول أو غير موجودة — أيّ حساب
+  // محطة — يُرسل لها إشعارٌ على الهاتف بضرورة تحديث الحالة».
+  //
+  // **وبالمرور في الحلقة نفسِها كما تمرّ رسالةُ المحادثة**، للسبب المكتوب
+  // أعلاه حرفاً: خمسةٌ وثمانون سطراً تعرف APNs وFCM ودفعَ المتصفّح وتيليغرام
+  // وتنظيفَ الرموز الميتة، ونسخُها يصنع مسارَين يفترقان في أوّل إصلاح.
+  //
+  // ولا علامةَ في `owner_pings`: هذه دعوةٌ يُطلقها إنسانٌ عند النشر، لا موعدٌ
+  // تحرسه المِكنسةُ من التكرار. ومن نشر مرّتين وأشعَر مرّتين أراد ذلك.
+  const sched = url.searchParams.get('schedule');
+  if (sched) {
+    if (req.headers.get('x-cron-secret') !== CRON_SECRET) {
+      return new Response('forbidden', { status: 403 });
+    }
+  }
+
   const deliverId = url.searchParams.get('deliver');
   let chatMsg: { station: Station; body: string } | null = null;
   if (deliverId) {
@@ -630,7 +648,12 @@ Deno.serve(async (req) => {
   // Which of the three, if any, is due for each station right now
   const due: { station: (typeof stations)[number]; kind: string }[] = [];
   if (chatMsg) due.push({ station: stations[0], kind: 'chat' });
-  for (const s of chatMsg ? [] : stations) {
+  // والمغلقةُ مؤقّتاً تُستثنى وحدَها: من أغلق لحادثٍ لا يُطلب منه تحديثُ حالةٍ
+  // لا يستطيع تغييرها. وما عداها يُنادى — في الجدول أو خارجَه.
+  if (sched) for (const s of stations) {
+    if (!s.temp_closed) due.push({ station: s, kind: 'sched_alert' });
+  }
+  for (const s of chatMsg || sched ? [] : stations) {
     // a 24-hour station has no opening or closing moment; its day is judged at
     // 07:00 and 21:00, the hours a forecourt actually changes hands
     const open = s.is_24h ? 420 : toMinutes(s.opens_at);
@@ -892,7 +915,12 @@ ${body}`,
     const targets = byStation.get(station.id) ?? [];
     const { title, body } = chatMsg
       ? { title: `${station.name} — رسالة من الإدارة`, body: chatMsg.body.slice(0, 300) }
-      : MESSAGES[baseKind(kind)](station.name, watchersFor(station.city), station.city);
+      : kind === 'sched_alert'
+        ? {
+            title: 'صدر جدول التوزيع',
+            body: `حدّث حالة ${station.name} الآن — المتوفّر لديك يظهر للناس فوراً.`,
+          }
+        : MESSAGES[baseKind(kind)](station.name, watchersFor(station.city), station.city);
     // الدفعُ يفتح تبويبَ الرسائل مباشرةً، لا اللوحةَ ثمّ بحثاً عنه
     const deepLink = chatMsg ? '/owner?chat=1' : '/owner';
 
@@ -989,7 +1017,7 @@ ${body}`,
       if (paid) { sent += paid; marks.push({ station_id: station.id, kind: 'stale_sms', day }); }
     }
 
-    if (!chatMsg) {
+    if (!chatMsg && kind !== 'sched_alert') {
       marks.push({ station_id: station.id, kind, day });
       // **والتذكيرُ يدخل المجرى — وصل أم لم يصل.**
       //
@@ -1017,7 +1045,13 @@ ${body}`,
   if (threadErr) console.error('station_messages', threadErr.message);
 
   return new Response(
-    JSON.stringify(chatMsg ? { ok: true, sent, failed } : { at: minutes, day, due: due.length, sent, failed, sms }),
+    JSON.stringify(
+      chatMsg
+        ? { ok: true, sent, failed }
+        : sched
+          ? { ok: true, stations: due.length, sent, failed }
+          : { at: minutes, day, due: due.length, sent, failed, sms }
+    ),
     { headers: { 'Content-Type': 'application/json' } }
   );
 });
