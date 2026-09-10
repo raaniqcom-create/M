@@ -187,29 +187,66 @@ export function StationRegisterForm() {
       password,
     });
 
-    if (signUpError || !auth.user) {
-      setBusy(false);
-      if (signUpError?.message.includes('already')) {
-        // عبر دالّة: anon لم يعد يقرأ عمود الهاتف، وهذه تُرجع الاسم والمدينة
-        // والعنوان فقط — وكلُّها ظاهرةٌ أصلاً لكل مستخدم.
-        const { data: rows } = await supabase.rpc('station_by_phone', {
-          p_phone: displayPhone(loginPhone),
+    let ownerId = auth.user?.id ?? null;
+
+    if (signUpError || !ownerId) {
+      // ── الحسابُ اليتيم ────────────────────────────────────────────────
+      //
+      // **التسجيلُ خطوتان في القاعدة، والسقوطُ بينهما يُقفل البابَ إلى الأبد.**
+      // يُنشأ الحسابُ أوّلاً ثمّ يُدرج صفُّ المحطة؛ فإن انقطعت الشبكةُ أو ردَّت
+      // القاعدةُ خطأً بينهما، بقي حسابٌ بلا محطة. ثمّ تعود المحطةُ لتسجّل
+      // فيقول لها النظام «الرقم مسجّل» — و`station_by_phone` لا تجد شيئاً،
+      // فتُعرض شاشةُ «مسجّلةٌ سلفاً» فارغةً بلا اسمٍ ولا مدينة. طريقٌ مسدود،
+      // وصاحبُ المحطة لا يفهم لماذا.
+      //
+      // قِيس على القاعدة الحيّة: حسابٌ واحدٌ في هذه الحال (٢٠٢٦-٠٩-١٠ ٠٢:١٨)،
+      // وهو الذي جاءت منه الشكوى.
+      //
+      // فالعلاجُ أن يُكمَل ما انقطع: من يعرف كلمةَ المرور التي وضعها للتوّ هو
+      // صاحبُ الحساب — وهي الحدُّ نفسُه الذي يحرس تسجيلَ الدخول — فيُسجَّل
+      // دخولُه وتُدرج محطتُه ويتمّ التسجيل. ولا بابَ جديدٌ يُفتح: من لا يعرفها
+      // يرى شاشةَ «مسجّلةٌ سلفاً» كما كان.
+      const already = signUpError?.message.includes('already');
+      if (already) {
+        const { data: signedIn } = await supabase.auth.signInWithPassword({
+          email: phoneToEmail(loginPhone),
+          password,
         });
-        const row = Array.isArray(rows) ? rows[0] : null;
-        setExisting(row ? { ...row, phone: displayPhone(loginPhone) } : null);
+        if (signedIn?.user) {
+          const { data: mine } = await supabase
+            .from('stations')
+            .select('id')
+            .eq('owner_id', signedIn.user.id)
+            .limit(1);
+          // وله محطةٌ فعلاً؟ إذاً ليس يتيماً — تُعرض شاشتُها كما كان.
+          if (!mine?.length) ownerId = signedIn.user.id;
+        }
       }
-      setError(
-        signUpError?.message.includes('already')
-          ? 'ALREADY'
-          : 'تعذّر إنشاء الحساب. تأكد أن كلمة المرور 6 أحرف على الأقل وحاول مجدداً.'
-      );
-      return;
+
+      if (!ownerId) {
+        setBusy(false);
+        if (already) {
+          // عبر دالّة: anon لم يعد يقرأ عمود الهاتف، وهذه تُرجع الاسم والمدينة
+          // والعنوان فقط — وكلُّها ظاهرةٌ أصلاً لكل مستخدم.
+          const { data: rows } = await supabase.rpc('station_by_phone', {
+            p_phone: displayPhone(loginPhone),
+          });
+          const row = Array.isArray(rows) ? rows[0] : null;
+          setExisting(row ? { ...row, phone: displayPhone(loginPhone) } : null);
+        }
+        setError(
+          already
+            ? 'ALREADY'
+            : 'تعذّر إنشاء الحساب. تأكد أن كلمة المرور 6 أحرف على الأقل وحاول مجدداً.'
+        );
+        return;
+      }
     }
 
     const { data: station, error: stationError } = await supabase
       .from('stations')
       .insert({
-        owner_id: auth.user.id,
+        owner_id: ownerId,
         name: name.trim(),
         address: address.trim(),
         city,
@@ -223,7 +260,10 @@ export function StationRegisterForm() {
 
     if (stationError || !station) {
       setBusy(false);
-      setError('تم إنشاء الحساب لكن تعذّر حفظ بيانات المحطة. سجّل الدخول وأكمل البيانات.');
+      // ولا تُقال «سجّل الدخول وأكمل البيانات» — لا شاشةَ إكمالٍ في اللوحة.
+      // والطريقُ الصحيحُ صار إعادةَ التسجيل بالرقم وكلمة المرور نفسِها، فالنموذجُ
+      // يلتقط الحسابَ اليتيمَ ويُكمل ما انقطع.
+      setError('تعذّر حفظ بيانات المحطة. أعد المحاولة بالرقم وكلمة المرور نفسها.');
       return;
     }
 
