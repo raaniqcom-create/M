@@ -36,6 +36,14 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- **بلا هذا تكذب `canOpenURL`.** تردّ `false` عن تطبيقٍ مثبَّتٍ فعلاً ما لم
+	     يكن مخطّطُه معلَناً هنا — فيسقط ترتيبُ «ويز ثمّ جوجل» إلى خرائط آبل
+	     دائماً، بلا خطأٍ يظهر. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>waze</string>
+		<string>comgooglemaps</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<!-- **مطلوبةٌ لـCarPlay.** شاشةُ السيارة مشهدٌ **ثانٍ** يعمل مع مشهد

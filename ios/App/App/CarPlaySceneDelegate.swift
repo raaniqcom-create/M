@@ -127,16 +127,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             // على الهاتف (`CarData.swift:6`)، فقد لا يكون هناك مشهدُ نافذةٍ
             // أصلاً — فيُرفض الفتحُ بلا أثرٍ يراه السائق.
             poi.primaryButton = CPTextButton(title: "الطريق", textStyle: .confirm) { [weak self] _ in
-                let carScene = UIApplication.shared.connectedScenes
-                    .first { $0 is CPTemplateApplicationScene }
-                item.openInMaps(
-                    launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving],
-                    from: carScene,
-                    completionHandler: { ok in
-                        if !ok {
-                            DispatchQueue.main.async { self?.carAlert("تعذّر فتح الخرائط") }
-                        }
-                    })
+                self?.navigate(to: item, lat: station.lat, lng: station.lng)
             }
 
             // ومحطةٌ تُخفي رقمها لا زرَّ اتّصالٍ لها — لا زرٌّ معطَّل. زرٌّ يبدو
@@ -167,6 +158,51 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     // MARK: - أدوات
+
+    /// يفتح الطريقَ — ويز أوّلاً، ثمّ خرائط جوجل، ثمّ خرائط آبل.
+    ///
+    /// ── وحدٌّ من النظام لا من هذه الشيفرة ────────────────────────────────
+    ///
+    /// وثيقةُ آبل «Displaying Content in CarPlay» تقول: «Navigation apps are
+    /// the **only** app category that have access to this window». فتطبيقُ
+    /// فئة الوقود لا يملك أن يضع تطبيقاً آخرَ على شاشة السيّارة، ولا واجهةَ
+    /// برمجيّةً تفعل ذلك أصلاً.
+    ///
+    /// فويز وجوجل يُفتحان **على الهاتف**، وخرائطُ آبل وحدَها تنتقل إلى شاشة
+    /// السيّارة لأنّ `openInMaps` تسليمٌ خاصٌّ من النظام إلى تطبيقه. والترتيبُ
+    /// أدناه قرارُ صاحب المنصّة، وهذا ثمنُه معلوماً.
+    ///
+    /// و`canOpenURL` تكذب بلا `LSApplicationQueriesSchemes` في `Info.plist` —
+    /// تردّ `false` عن تطبيقٍ مثبَّت. فالمخطّطان مُعلَنان هناك.
+    private func navigate(to item: MKMapItem, lat: Double, lng: Double) {
+        let app = UIApplication.shared
+
+        let candidates: [URL] = [
+            URL(string: "waze://?ll=\(lat),\(lng)&navigate=yes"),
+            URL(string: "comgooglemaps://?daddr=\(lat),\(lng)&directionsmode=driving"),
+        ].compactMap { $0 }
+
+        for url in candidates where app.canOpenURL(url) {
+            app.open(url, options: [:]) { [weak self] ok in
+                if !ok { DispatchQueue.main.async { self?.appleMaps(item) } }
+            }
+            return
+        }
+
+        appleMaps(item)
+    }
+
+    /// خرائطُ آبل — وهي الوحيدةُ التي تظهر على شاشة السيّارة.
+    private func appleMaps(_ item: MKMapItem) {
+        let carScene = UIApplication.shared.connectedScenes
+            .first { $0 is CPTemplateApplicationScene }
+        item.openInMaps(
+            launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving],
+            from: carScene,
+            completionHandler: { [weak self] ok in
+                if !ok { DispatchQueue.main.async { self?.carAlert("تعذّر فتح الخرائط") } }
+            })
+    }
 
     /// خطأٌ يُقال على شاشة السيارة.
     ///
