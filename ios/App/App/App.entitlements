@@ -8,5 +8,15 @@
 	     development builds. -->
 	<key>aps-environment</key>
 	<string>production</string>
+
+	<!-- CarPlay — فئةُ الوقود. مُنح لهذا الحساب من آبل بتاريخ ٢٠٢٦-٠٩-٠٩:
+	     «The entitlement for CarPlay Fueling App has been assigned to your
+	     account». ولا يُمنح بطلبٍ في Xcode: آبل تُسنده إلى الحساب أوّلاً، ثمّ
+	     يظهر في مِلف التزويد.
+
+	     وبلا هذا المفتاح لا يصل مشهدُ السيارة إلى التطبيق أصلاً، ولو أُعلن
+	     الدورُ في Info.plist. -->
+	<key>com.apple.developer.carplay-fueling</key>
+	<true/>
 </dict>
 </plist>

@@ -42,6 +42,22 @@
     <false/>
     <key>UISceneConfigurations</key>
     <dict>
+      <!-- **دورُ شاشة السيارة.** بلا هذا الإعلان لا يُنشئ iOS المشهدَ إطلاقاً،
+           فيبقى `CarPlaySceneDelegate` مصرَّفاً لا يعمل — وهي الحالُ التي كان
+           عليها الملفُّ حتى وصل الإذن.
+
+           والاسمُ يطابق ما يبنيه `AppDelegate.configurationForConnecting`
+           حرفاً بحرف («CarPlay Configuration»)، وذاك يفرّق بالدور فيُسند
+           مندوبَ السيارة ولا يبني `CAPBridgeViewController` عليها. -->
+      <key>CPTemplateApplicationSceneSessionRoleApplication</key>
+      <array>
+        <dict>
+            <key>UISceneConfigurationName</key>
+            <string>CarPlay Configuration</string>
+            <key>UISceneDelegateClassName</key>
+            <string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
+        </dict>
+      </array>
       <key>UIWindowSceneSessionRoleApplication</key>
       <array>
         <dict>
