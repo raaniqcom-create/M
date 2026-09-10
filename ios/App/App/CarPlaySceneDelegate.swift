@@ -189,10 +189,21 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             return
         }
 
-        appleMaps(item)
+        // ── وخرائطُ آبل لا تعرف الطريقَ في العراق ────────────────────────
+        //
+        // جُرّبت على شاشةِ سيّارةٍ حقيقيّةٍ في الرمادي ٢٠٢٦-٠٩-١٠: فُتحت وعرضت
+        // الدبّوسَ وقالت «Directions Not Available — Directions are not
+        // available from this location». فالمسارُ غيرُ متاحٍ في البلد كلِّه،
+        // لا في هذه النقطة.
+        //
+        // فلا تُفتح احتياطاً: دبّوسٌ لا طريقَ إليه يأخذ عينَ السائق ولا يعطيه
+        // شيئاً. والصدقُ سطرٌ يقول ما ينقص — وويز وجوجل كلاهما يعمل هنا.
+        carAlert("للطريق ثبّت ويز أو خرائط جوجل")
     }
 
-    /// خرائطُ آبل — وهي الوحيدةُ التي تظهر على شاشة السيّارة.
+    /// خرائطُ آبل — تُنادى حين يُقبل فتحُ ويز أو جوجل ثمّ يفشل فعليّاً.
+    ///
+    /// ولا تُنادى احتياطاً عند غيابهما: لا مساراتِ آبل في العراق.
     private func appleMaps(_ item: MKMapItem) {
         let carScene = UIApplication.shared.connectedScenes
             .first { $0 is CPTemplateApplicationScene }
