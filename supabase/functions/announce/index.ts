@@ -130,6 +130,12 @@ Deno.serve(async (req) => {
   const title = String(body?.title ?? '').trim().slice(0, 64);
   const text = String(body?.body ?? '').trim().slice(0, 178);
   const dryRun = body?.dryRun === true;
+  // فاصلُ الكبح بالدقائق. الافتراضُ خمسٌ وأربعون كما كان دائماً، وصفرٌ يرفعه —
+  // ولا يُمرَّر إلّا من جدول التوزيع الرسميّ (`_shared/alert.ts`). ويُقصَر على
+  // نطاقٍ معقول: قيمةٌ عمياء من جسمٍ خارجيّ لا تصير ساعاتٍ ولا سالباً.
+  const minGap = Number.isFinite(body?.minGap)
+    ? Math.min(Math.max(Math.trunc(body.minGap), 0), 1440)
+    : 45;
   // Where the tap lands. Defaults to the home page, as before.
   const url = typeof body?.url === 'string' && body.url.startsWith('/') ? body.url : '/';
   // Optional targeting. Without it this stays the broadcast it has always been.
@@ -169,6 +175,9 @@ Deno.serve(async (req) => {
           p_city: city,
           p_products: products.length ? products : ALL_PRODUCTS,
           p_stamp: !dryRun,
+          // صفرٌ يرفع حاجزَ الخمس والأربعين دقيقة — للجدول الرسميّ وحدَه.
+          // والافتراضُ خمسٌ وأربعون كما كان، فكلُّ نداءٍ لا يمرّرها لا يتغيّر.
+          p_min_gap: minGap,
         })
         .range(0, 99_999);
       if (error) return json({ error: `alerts_for: ${error.message}` }, 500);
