@@ -21,9 +21,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private var interface: CPInterfaceController?
 
+    /// مشهدُ السيّارة — وهو **الذي يفتح التطبيقات**، لا `UIApplication`.
+    /// `weak` لأنّ النظامَ يملكه ويهدمه عند الفصل.
+    private weak var carScene: CPTemplateApplicationScene?
+
     func templateApplicationScene(_ scene: CPTemplateApplicationScene,
                                   didConnect interfaceController: CPInterfaceController) {
         interface = interfaceController
+        carScene = scene
         interfaceController.setRootTemplate(loadingTemplate(), animated: false, completion: nil)
         refresh()
     }
@@ -31,6 +36,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     func templateApplicationScene(_ scene: CPTemplateApplicationScene,
                                   didDisconnectInterfaceController interfaceController: CPInterfaceController) {
         interface = nil
+        carScene = nil
     }
 
     // MARK: - الجذر
@@ -116,7 +122,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     : CarData.since(station.confirmedMin),
                 pinImage: nil)
 
-            // والطريقُ إلى ويز أو جوجل — لا إلى خرائط آبل. انظر `navigate`.
+            // والطريقُ يفتح ويز على شاشة السيّارة. انظر `navigate`.
             poi.primaryButton = CPTextButton(title: "الطريق", textStyle: .confirm) { [weak self] _ in
                 self?.navigate(lat: station.lat, lng: station.lng)
             }
@@ -150,48 +156,51 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     // MARK: - أدوات
 
-    /// يفتح الطريقَ — ويز أوّلاً، ثمّ خرائط جوجل، ولا ثالثَ لهما.
+    /// يفتح ويز — ولا ثانيَ له.
     ///
-    /// ── ولا خرائطَ آبل هنا بحال ──────────────────────────────────────────
+    /// ── ولمَ المشهدُ لا `UIApplication` ──────────────────────────────────
     ///
-    /// جُرّبت على شاشةِ سيّارةٍ حقيقيّةٍ في الرمادي ٢٠٢٦-٠٩-١٠: فُتحت وعرضت
-    /// الدبّوسَ وقالت «Directions Not Available — Directions are not available
-    /// from this location». فالمسارُ غيرُ متاحٍ في العراق كلِّه لا في تلك
-    /// النقطة، ودبّوسٌ لا طريقَ إليه يأخذ عينَ السائق ولا يعطيه شيئاً.
+    /// **كنتُ مخطئاً.** ظننتُ أنّ تطبيقَ فئة الوقود لا يملك أن يضع تطبيقاً
+    /// آخرَ على شاشة السيّارة، فكتبتُ `UIApplication.shared.open` — وهي تفتح
+    /// على **الهاتف** لا على السيّارة، وتردّ `false` والهاتفُ مقفل. وذلك ما
+    /// رآه صاحبُ المنصّة ٢٠٢٦-٠٩-١٠ الساعةَ ١٩:٥٥: ويز في رصيف السيّارة أمام
+    /// عينه، ورسالةُ «أيقظ الشاشة» على الشاشة.
     ///
-    /// **وسقوطُ الفتح ينتقل إلى التالي لا إلى آبل.** كانت `open` إن ردّت
-    /// `false` تفتح خرائطَ آبل — وهو ما رآه صاحبُ المنصّة على شاشته: ويز
-    /// مثبَّتٌ ومُعلَن، ومع ذلك ظهرت آبل. فالآن يُجرَّب جوجل، ثمّ يُقال ما نقص.
+    /// وجوابُ آبل في منتداها (thread/128945) صريح: يُفتح من **مشهد السيّارة**
+    /// — `CPTemplateApplicationScene.open` — لا من `UIApplication`، «وإلّا
+    /// فُتح التطبيقُ الهدفُ على شاشة الجهاز بدل شاشة السيّارة». ومثالُها
+    /// الرسميُّ «CarPlay Quick Ordering» تطبيقُ **طلبات** لا ملاحة، ويفتح به
+    /// الخرائطَ على شاشة السيّارة. فالقيدُ الذي ظننتُه ليس هنا.
     ///
-    /// ── وحدٌّ من النظام لا من هذه الشيفرة ────────────────────────────────
+    /// ── وويز وحده ────────────────────────────────────────────────────────
     ///
-    /// وثيقةُ آبل «Displaying Content in CarPlay» تقول: «Navigation apps are
-    /// the **only** app category that have access to this window». فتطبيقُ
-    /// فئة الوقود لا يملك أن يضع تطبيقاً آخرَ على شاشة السيّارة — فويز وجوجل
-    /// يُفتحان على الهاتف، وذلك ثمنٌ معلوم.
+    /// قرارُ صاحب المنصّة، ومن أرضِ الواقع: في العراق ويز وحده يعطي الطريق،
+    /// وخرائطُ جوجل لا تعطي شيئاً، وخرائطُ آبل لا تعرف البلدَ أصلاً. فلا
+    /// احتياطَ يُعرض — بديلٌ لا يوصل أسوأُ من لا شيء.
     ///
-    /// و`canOpenURL` تكذب بلا `LSApplicationQueriesSchemes` في `Info.plist` —
-    /// تردّ `false` عن تطبيقٍ مثبَّت. فالمخطّطان مُعلَنان هناك.
+    /// و`canOpenURL` تكذب بلا `LSApplicationQueriesSchemes` في `Info.plist`.
     private func navigate(lat: Double, lng: Double) {
-        let app = UIApplication.shared
-        let urls = [
-            "waze://?ll=\(lat),\(lng)&navigate=yes",
-            "comgooglemaps://?daddr=\(lat),\(lng)&directionsmode=driving",
-        ].compactMap { URL(string: $0) }.filter { app.canOpenURL($0) }
-        open(urls, at: 0)
-    }
+        guard let url = URL(string: "waze://?ll=\(lat),\(lng)&navigate=yes") else { return }
 
-    /// ورسالتان لا واحدة: «لا تطبيقَ» غيرُ «تطبيقٌ رفض أن يُفتح». وبلا التفريق
-    /// لا يُعرف — لا للسائق ولا لمن يصلح — أيُّ البابين أُغلق.
-    private func open(_ urls: [URL], at index: Int) {
-        guard index < urls.count else {
-            carAlert(urls.isEmpty
-                     ? "للطريق ثبّت ويز أو خرائط جوجل"
-                     : "أيقظ شاشة الهاتف ثمّ أعد المحاولة")
+        guard UIApplication.shared.canOpenURL(url) else {
+            carAlert("ويز غيرُ مثبَّتٍ على هاتفك — وهو وحده يعطي الطريق في العراق. ثبّته من App Store.",
+                     "ثبّت ويز من App Store")
             return
         }
-        UIApplication.shared.open(urls[index], options: [:]) { [weak self] ok in
-            if !ok { DispatchQueue.main.async { self?.open(urls, at: index + 1) } }
+
+        guard let scene = carScene else {
+            carAlert("انقطع وصلُ السيّارة — افصل الكابل وأعِده.", "أعِد وصلَ الهاتف")
+            return
+        }
+
+        scene.open(url, options: nil) { [weak self] ok in
+            guard !ok else { return }
+            DispatchQueue.main.async {
+                self?.carAlert(
+                    "لم يفتح ويز. افتح قفل هاتفك، شغّل ويز مرّةً، ثمّ عُد واضغط «الطريق».",
+                    "افتح قفل الهاتف وشغّل ويز، ثمّ أعد المحاولة",
+                    "افتح ويز على هاتفك")
+            }
         }
     }
 
@@ -200,9 +209,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// ولا Mac في هذا المشروع يقرأ سجلّاً، ولا Xcode يُوصَل بهاتف — فالبناءُ
     /// كلُّه على خادمٍ سحابيّ والتجربةُ في سيّارة. فبلا هذا التنبيه لا يُفرَّق
     /// بين «الزرُّ لم يُنادَ» و«نُودي فرُفض الفتح»، وهما بابان مختلفان.
-    private func carAlert(_ text: String) {
+    private func carAlert(_ variants: String...) {
         interface?.presentTemplate(
-            CPAlertTemplate(titleVariants: [text], actions: [
+            CPAlertTemplate(titleVariants: variants, actions: [
                 CPAlertAction(title: "حسناً", style: .cancel) { [weak self] _ in
                     self?.interface?.dismissTemplate(animated: true, completion: nil)
                 },
