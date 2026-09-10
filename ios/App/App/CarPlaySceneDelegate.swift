@@ -85,10 +85,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             }
         }
 
-        let title = result.outOfRange
-            ? "أيّ وقودٍ تريد؟ · تُقاس من مركز الرمادي"
-            : "أيّ وقودٍ تريد؟"
-        let grid = CPGridTemplate(title: title, gridButtons: buttons)
+        // شريطُ العنوان يقطع ما زاد بثلاث نقاط، فلا يُحمَّل ما لا يتّسع له.
+        let grid = CPGridTemplate(title: "أيّ وقودٍ تريد؟", gridButtons: buttons)
         grid.trailingNavigationBarButtons = [reloadBarButton()]
         return grid
     }
@@ -118,16 +116,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     : CarData.since(station.confirmedMin),
                 pinImage: nil)
 
-            // ── والفتحُ يسمّي مشهدَه ──────────────────────────────────────
-            //
-            // **هنا كان العطل.** `openInMaps(launchOptions:)` صيغةٌ بلا مشهد،
-            // وُضعت يومَ كان للتطبيق مشهدٌ واحد. وقد صار له اثنان معلَنان في
-            // `Info.plist` — نافذةُ الهاتف وقالبُ السيّارة — فلا يعرف النظامُ
-            // على أيّ شاشةٍ يفتح الخريطة. وشاشةُ السيارة تعمل والتطبيقُ مغلقٌ
-            // على الهاتف (`CarData.swift:6`)، فقد لا يكون هناك مشهدُ نافذةٍ
-            // أصلاً — فيُرفض الفتحُ بلا أثرٍ يراه السائق.
+            // والطريقُ إلى ويز أو جوجل — لا إلى خرائط آبل. انظر `navigate`.
             poi.primaryButton = CPTextButton(title: "الطريق", textStyle: .confirm) { [weak self] _ in
-                self?.navigate(to: item, lat: station.lat, lng: station.lng)
+                self?.navigate(lat: station.lat, lng: station.lng)
             }
 
             // ومحطةٌ تُخفي رقمها لا زرَّ اتّصالٍ لها — لا زرٌّ معطَّل. زرٌّ يبدو
@@ -159,60 +150,49 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     // MARK: - أدوات
 
-    /// يفتح الطريقَ — ويز أوّلاً، ثمّ خرائط جوجل، ثمّ خرائط آبل.
+    /// يفتح الطريقَ — ويز أوّلاً، ثمّ خرائط جوجل، ولا ثالثَ لهما.
+    ///
+    /// ── ولا خرائطَ آبل هنا بحال ──────────────────────────────────────────
+    ///
+    /// جُرّبت على شاشةِ سيّارةٍ حقيقيّةٍ في الرمادي ٢٠٢٦-٠٩-١٠: فُتحت وعرضت
+    /// الدبّوسَ وقالت «Directions Not Available — Directions are not available
+    /// from this location». فالمسارُ غيرُ متاحٍ في العراق كلِّه لا في تلك
+    /// النقطة، ودبّوسٌ لا طريقَ إليه يأخذ عينَ السائق ولا يعطيه شيئاً.
+    ///
+    /// **وسقوطُ الفتح ينتقل إلى التالي لا إلى آبل.** كانت `open` إن ردّت
+    /// `false` تفتح خرائطَ آبل — وهو ما رآه صاحبُ المنصّة على شاشته: ويز
+    /// مثبَّتٌ ومُعلَن، ومع ذلك ظهرت آبل. فالآن يُجرَّب جوجل، ثمّ يُقال ما نقص.
     ///
     /// ── وحدٌّ من النظام لا من هذه الشيفرة ────────────────────────────────
     ///
     /// وثيقةُ آبل «Displaying Content in CarPlay» تقول: «Navigation apps are
     /// the **only** app category that have access to this window». فتطبيقُ
-    /// فئة الوقود لا يملك أن يضع تطبيقاً آخرَ على شاشة السيّارة، ولا واجهةَ
-    /// برمجيّةً تفعل ذلك أصلاً.
-    ///
-    /// فويز وجوجل يُفتحان **على الهاتف**، وخرائطُ آبل وحدَها تنتقل إلى شاشة
-    /// السيّارة لأنّ `openInMaps` تسليمٌ خاصٌّ من النظام إلى تطبيقه. والترتيبُ
-    /// أدناه قرارُ صاحب المنصّة، وهذا ثمنُه معلوماً.
+    /// فئة الوقود لا يملك أن يضع تطبيقاً آخرَ على شاشة السيّارة — فويز وجوجل
+    /// يُفتحان على الهاتف، وذلك ثمنٌ معلوم.
     ///
     /// و`canOpenURL` تكذب بلا `LSApplicationQueriesSchemes` في `Info.plist` —
     /// تردّ `false` عن تطبيقٍ مثبَّت. فالمخطّطان مُعلَنان هناك.
-    private func navigate(to item: MKMapItem, lat: Double, lng: Double) {
+    private func navigate(lat: Double, lng: Double) {
         let app = UIApplication.shared
-
-        let candidates: [URL] = [
-            URL(string: "waze://?ll=\(lat),\(lng)&navigate=yes"),
-            URL(string: "comgooglemaps://?daddr=\(lat),\(lng)&directionsmode=driving"),
-        ].compactMap { $0 }
-
-        for url in candidates where app.canOpenURL(url) {
-            app.open(url, options: [:]) { [weak self] ok in
-                if !ok { DispatchQueue.main.async { self?.appleMaps(item) } }
-            }
-            return
-        }
-
-        // ── وخرائطُ آبل لا تعرف الطريقَ في العراق ────────────────────────
-        //
-        // جُرّبت على شاشةِ سيّارةٍ حقيقيّةٍ في الرمادي ٢٠٢٦-٠٩-١٠: فُتحت وعرضت
-        // الدبّوسَ وقالت «Directions Not Available — Directions are not
-        // available from this location». فالمسارُ غيرُ متاحٍ في البلد كلِّه،
-        // لا في هذه النقطة.
-        //
-        // فلا تُفتح احتياطاً: دبّوسٌ لا طريقَ إليه يأخذ عينَ السائق ولا يعطيه
-        // شيئاً. والصدقُ سطرٌ يقول ما ينقص — وويز وجوجل كلاهما يعمل هنا.
-        carAlert("للطريق ثبّت ويز أو خرائط جوجل")
+        let urls = [
+            "waze://?ll=\(lat),\(lng)&navigate=yes",
+            "comgooglemaps://?daddr=\(lat),\(lng)&directionsmode=driving",
+        ].compactMap { URL(string: $0) }.filter { app.canOpenURL($0) }
+        open(urls, at: 0)
     }
 
-    /// خرائطُ آبل — تُنادى حين يُقبل فتحُ ويز أو جوجل ثمّ يفشل فعليّاً.
-    ///
-    /// ولا تُنادى احتياطاً عند غيابهما: لا مساراتِ آبل في العراق.
-    private func appleMaps(_ item: MKMapItem) {
-        let carScene = UIApplication.shared.connectedScenes
-            .first { $0 is CPTemplateApplicationScene }
-        item.openInMaps(
-            launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving],
-            from: carScene,
-            completionHandler: { [weak self] ok in
-                if !ok { DispatchQueue.main.async { self?.carAlert("تعذّر فتح الخرائط") } }
-            })
+    /// ورسالتان لا واحدة: «لا تطبيقَ» غيرُ «تطبيقٌ رفض أن يُفتح». وبلا التفريق
+    /// لا يُعرف — لا للسائق ولا لمن يصلح — أيُّ البابين أُغلق.
+    private func open(_ urls: [URL], at index: Int) {
+        guard index < urls.count else {
+            carAlert(urls.isEmpty
+                     ? "للطريق ثبّت ويز أو خرائط جوجل"
+                     : "أيقظ شاشة الهاتف ثمّ أعد المحاولة")
+            return
+        }
+        UIApplication.shared.open(urls[index], options: [:]) { [weak self] ok in
+            if !ok { DispatchQueue.main.async { self?.open(urls, at: index + 1) } }
+        }
     }
 
     /// خطأٌ يُقال على شاشة السيارة.

@@ -123,14 +123,9 @@ public final class ProductScreen extends Screen {
                     .build();
         }
 
-        // خارجُ النطاق يُقال في العنوان، ولا يُترك المستعملُ يقيس مسافاتٍ من
-        // مكانٍ ليس فيه.
-        String title = (data != null && data.outOfRange)
-                ? "أيّ وقودٍ تريد؟ · تُقاس من مركز الرمادي"
-                : "أيّ وقودٍ تريد؟";
-
+        // شريطُ العنوان يقطع ما زاد بثلاث نقاط، فلا يُحمَّل ما لا يتّسع له.
         return new ListTemplate.Builder()
-                .setTitle(title)
+                .setTitle("أيّ وقودٍ تريد؟")
                 .setHeaderAction(Action.APP_ICON)
                 .setActionStrip(strip)
                 .setSingleList(list.build())
