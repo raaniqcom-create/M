@@ -278,23 +278,18 @@ Deno.serve(async (req) => {
   //
   // Fire-and-forget, like the sibling insert in notify: a logging failure must
   // never be why somebody does not hear an announcement.
-  {
-    const addresses = [...web.keys(), ...devices.map((d) => d.token)];
-    if (addresses.length) {
-      db.from('notification_log')
-        .insert(
-          addresses.map((address) => ({
-            address,
-            kind: 'announcement',
-            title,
-            body: text,
-          }))
-        )
-        .then(({ error }) => {
-          if (error) console.error('notification_log', error.message);
-        });
-    }
-  }
+  // **وقُتل العاملُ ثانيةً — والسببُ هذه المرّة هنا، لا في الإرسال.**
+  //
+  // ٢٠٢٦-٠٩-١٠، جدولُ سبعين محطةً إلى ١٣٬٥٨٦ جهازاً: بُنيت هنا مصفوفةٌ من
+  // ١٣٬٥٨٦ كائناً، كلٌّ يحمل نسخةً من العنوان والمتن، ثمّ تُسلسَل نصّاً
+  // وتُرسَل في طلبٍ واحد — ميغاباياتٌ تُخصَّص **قبل الردّ**، فوق `devices`
+  // و`web` و`seen`. فردّت المنصّةُ 546 WORKER_RESOURCE_LIMIT قبل أن يبدأ
+  // الإرسالُ أصلاً، ولم يصل أحداً شيء. وقِيس: صفرُ صفٍّ في `notification_log`
+  // مقابل ١٣٬٥٨٦ ختماً في `alerts`.
+  //
+  // فالسجلُّ نزل إلى `deliver` ويُكتب دفعاتٍ محدودة، وليس بينه وبين الردّ
+  // شيء. وهو نافلةٌ على كلّ حال: «a logging failure must never be why somebody
+  // does not hear an announcement» — والقاعدةُ تُقرأ الآن في الاتجاهين.
 
   // ── الإرسالُ يبدأ، والردُّ لا ينتظره ────────────────────────────────
   //
@@ -306,7 +301,9 @@ Deno.serve(async (req) => {
   //
   // فالجمهورُ يُحسب ويُختم أوّلاً — وهو ما يهمّ المُنادي — ثمّ يُردّ، ثمّ
   // يُكمَل الإرسالُ في الخلفيّة بدفعاتٍ محدودة.
-  const CHUNK = 200;
+  // مئةٌ وعشرون لا مئتان: مئتان نجحت عند ١١٬٨٧٦ وسقطت عند ١٣٬٥٨٦. والوقتُ
+  // لا يُخشى عليه — الإرسالُ في الخلفيّة بعد الردّ — والذاكرةُ تُخشى.
+  const CHUNK = 120;
 
   async function inChunks<T>(items: T[], fn: (x: T) => Promise<void>) {
     for (let i = 0; i < items.length; i += CHUNK) {
@@ -409,6 +406,24 @@ Deno.serve(async (req) => {
           }
         }
     });
+  }
+
+  // والسجلُّ بعد الإرسال، بخمسِ مئةٍ في الطلب — لا ثلاثةَ عشرَ ألفاً.
+  const LOG_CHUNK = 500;
+  const logged = [...web.keys(), ...devices.map((d) => d.token)];
+  for (let i = 0; i < logged.length; i += LOG_CHUNK) {
+    const { error } = await db.from('notification_log').insert(
+      logged.slice(i, i + LOG_CHUNK).map((address) => ({
+        address,
+        kind: 'announcement',
+        title,
+        body: text,
+      }))
+    );
+    if (error) {
+      console.error('notification_log', error.message);
+      break;
+    }
   }
 
   console.log('announce', JSON.stringify({ ...results, errors: results.errors.slice(0, 5) }));
