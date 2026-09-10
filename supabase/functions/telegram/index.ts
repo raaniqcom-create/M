@@ -3129,7 +3129,26 @@ Deno.serve(async (req) => {
       // إعادةُ الإشعار لجدولٍ نُشر ولم يخرج خبرُه — أو تأجيلُه إلى ساعةٍ
       // لائقة: النشرُ يقع ليلاً، والإشعارُ الثالثةَ فجراً إزعاجٌ لا خبر.
       if (text === '/اشعار' || text === '/alert') {
-        const day = baghdadDay();
+        // ── واليومُ يُختار بالحاجة لا بالتقويم ────────────────────────────
+        //
+        // **كان مكتوباً على `baghdadDay()` — أي اليومَ دائماً.** وجدولُ الغد
+        // يُنشر ليلاً، فإن سقط إشعارُه لم يبلغه هذا الأمرُ أبداً: يُعيد إعلانَ
+        // جدولِ اليومِ الذي خرج خبرُه أمس.
+        //
+        // ووقع: ٢٠٢٦-٠٩-١٠ نُشر جدولُ ٠٩-١١ من سبعين محطة، فقُتل العاملُ ولم
+        // يخرج الإشعار. وقالت الرسالةُ «أعِده بأمر /اشعار» — وهو يُعلن يوماً
+        // آخر.
+        //
+        // فيُختار **أحدثُ يومٍ فيه صفٌّ لم يخرج خبرُه** — وهو تعريفُ هذا
+        // الأمر بنصّ تعليقه: «إعادةُ الإشعار لجدولٍ نُشر ولم يخرج خبرُه».
+        const { data: pending } = await db
+          .from('fuel_schedule')
+          .select('for_date')
+          .gte('for_date', baghdadDay())
+          .is('alerted_at', null)
+          .order('for_date', { ascending: false })
+          .limit(1);
+        const day = pending?.[0]?.for_date ?? baghdadDay();
         const { data: rows } = await db
           .from('fuel_schedule')
           .select('product, city')
@@ -3138,9 +3157,10 @@ Deno.serve(async (req) => {
           await send(chat, `لا جدولَ منشوراً لليوم (${day}).`);
           return new Response('ok');
         }
+        const when = day === baghdadDay() ? 'اليوم' : day === baghdadDay(1) ? 'غداً' : day;
         const cities = [...new Set(rows.map((r) => r.city).filter(Boolean))] as string[];
         const products = [...new Set(rows.map((r) => r.product))] as string[];
-        const { sent, why } = await sendScheduleAlert(cities, products, rows.length, 'اليوم');
+        const { sent, why } = await sendScheduleAlert(cities, products, rows.length, when);
         if (sent) {
           await db
             .from('fuel_schedule')
@@ -3151,8 +3171,8 @@ Deno.serve(async (req) => {
         await send(
           chat,
           sent
-            ? `📣 يخرج الإشعارُ إلى ${sent} مشتركاً في ${esc(cities.join(' · '))}.`
-            : `⚠️ لم يخرج الإشعار: ${esc(why)}`
+            ? `📣 يخرج إشعارُ جدول ${when} (${day}) إلى ${sent} مشتركاً في ${esc(cities.join(' · '))}.`
+            : `⚠️ لم يخرج إشعارُ جدول ${when} (${day}): ${esc(why)}`
         );
         return new Response('ok');
       }
