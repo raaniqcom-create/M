@@ -80,6 +80,21 @@ export function resolveBoardDay(schedule: { for_date: string }[]): string {
   if (schedule.some((r) => r.for_date === want)) return want;
   const today = baghdadDate();
   if (today !== want && schedule.some((r) => r.for_date === today)) return today;
+
+  // ── ولا لوحةٌ فارغةٌ ويومٌ قادمٌ مملوء ─────────────────────────────────
+  //
+  // الرجوعُ إلى اليوم أحاديُّ الاتّجاه عمداً — «من رجّح إلى يومٍ لا شيءَ فيه
+  // وترك يوماً مملوءاً فقد رجّح ضدّ قارئه» — وكان يقف عند ذلك، فيبقى القارئ
+  // أمام «لا جدولَ بعد» وفي القاعدة جدولُ غدٍ منشورٌ كامل.
+  //
+  // فيُقدَّم أقربُ يومٍ **قادم** فيه صفّ. والعنوانُ يتبعه («محطات غداً»)،
+  // فلا يُقرأ جدولُ غدٍ على أنّه اليوم.
+  const ahead = schedule
+    .map((r) => r.for_date)
+    .filter((d) => d > want)
+    .sort();
+  if (ahead.length) return ahead[0];
+
   return want;
 }
 

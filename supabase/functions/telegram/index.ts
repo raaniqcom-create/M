@@ -2782,10 +2782,13 @@ async function publishSchedule(
     return;
   }
 
+  // محطاتٌ مميّزةٌ لا أسطر: السطرُ محطةٌ ومنتج، ومحطةٌ بأربعة منتجاتٍ أربعةُ
+  // أسطر. والقارئُ يفهم «محطة» محطةً.
+  const stationCount = new Set(d.lines.map((l) => l.name)).size;
   const { sent, why } = await sendScheduleAlert(
     schedCities(d.lines),
     schedProducts(d.lines),
-    d.lines.length,
+    stationCount,
     when
   );
   if (sent) {
@@ -3151,7 +3154,7 @@ Deno.serve(async (req) => {
         const day = pending?.[0]?.for_date ?? baghdadDay();
         const { data: rows } = await db
           .from('fuel_schedule')
-          .select('product, city')
+          .select('product, city, station_name')
           .eq('for_date', day);
         if (!rows?.length) {
           await send(chat, `لا جدولَ منشوراً لليوم (${day}).`);
@@ -3160,7 +3163,8 @@ Deno.serve(async (req) => {
         const when = day === baghdadDay() ? 'اليوم' : day === baghdadDay(1) ? 'غداً' : day;
         const cities = [...new Set(rows.map((r) => r.city).filter(Boolean))] as string[];
         const products = [...new Set(rows.map((r) => r.product))] as string[];
-        const { sent, why } = await sendScheduleAlert(cities, products, rows.length, when);
+        const stations = new Set(rows.map((r) => r.station_name)).size;
+        const { sent, why } = await sendScheduleAlert(cities, products, stations, when);
         if (sent) {
           await db
             .from('fuel_schedule')
