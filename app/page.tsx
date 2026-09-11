@@ -3,7 +3,7 @@
 import { StaleBanner } from '@/components/StaleBanner';
 import { STATUS_RECHECK } from '@/lib/status';
 import { readFailure, withDeadline } from '@/lib/fn';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -169,6 +169,31 @@ export default function HomePage() {
     const target = homeFor(role, branch);
     if (target) router.replace(target);
   }, [signedIn, role, router]);
+
+  // ── ولا قائمةَ لمن معه جلسة ──────────────────────────────────────────────
+  //
+  // التحويلُ أعلاه يقع بعد الرسم، فكان صاحبُ المحطة يرى القائمةَ العامّة —
+  // «من أعلن ومن لم يُعلن» — ريثما تُحسم `role` من نداء `profiles`. وقد لاحظه
+  // صاحبُ المنصّة. فمن يحمل جلسةً محفوظة (مفتاحُها في localStorage، قراءةٌ
+  // متزامنة) ولم يطلب عرضَ الزائر بـ?view تُعرض له دوّارةٌ حتى تُحسم.
+  //
+  // `useSyncExternalStore` لا `useState`: لقطةُ الخادم `false` تطابق التصديرَ
+  // الساكن فلا يختلف الترطيبُ، ولقطةُ العميل تُقرأ بعده مباشرة. والزائرُ بلا
+  // مفتاحٍ لا ينتظر شيئاً — وهو أربعةَ عشرَ ألفاً.
+  const holding = useSyncExternalStore(
+    () => () => {},
+    () => {
+      try {
+        return (
+          !!localStorage.getItem('muhta-auth') &&
+          !new URLSearchParams(window.location.search).has('view')
+        );
+      } catch {
+        return false;
+      }
+    },
+    () => false
+  );
 
   // the realtime handler is registered once; read favourites through a ref so
   // it always sees the current set instead of the one captured on mount
@@ -609,6 +634,16 @@ export default function HomePage() {
     for (const s of stations ?? []) m.set(s.city, (m.get(s.city) ?? 0) + 1);
     return m;
   }, [stations]);
+
+  // بعد الخطّافات كلِّها. وتبقى الدوّارةُ حتى ينقلَه التحويلُ أعلاه — ومن
+  // معه جلسةٌ ولا لوحةَ له (لا دورَ) ترى القائمةَ بعد الحسم كما كانت.
+  if (holding && (!ready || (signedIn && homeFor(role, branch)))) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center">
+        <SpinnerIcon className="h-6 w-6 text-brand" />
+      </main>
+    );
+  }
 
   return (
     <>

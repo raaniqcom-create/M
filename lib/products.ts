@@ -213,6 +213,19 @@ export function trafficSource(
   return stillFresh && station.manual_traffic_level && voteAt <= setAt ? 'station' : 'people';
 }
 
+/** ازدحامُ طابور منتجٍ بعينه — أو لا شيء.
+ *
+ *  القواعدُ نفسُها التي لازدحام المحطة: لا يُعرض والمحطةُ مغلقة، ويسقط بعد
+ *  `MANUAL_TRAFFIC_MINUTES`. ولا تصويتَ هنا — الناسُ يصوّتون على الساحة كلِّها. */
+export function productTrafficLevel(
+  station: TrafficStation,
+  row: { traffic_level?: TrafficLevel | null; traffic_set_at?: string | null } | undefined | null
+): TrafficLevel | null {
+  if (!row?.traffic_level || !row.traffic_set_at || !isOpenNow(station)) return null;
+  const fresh = Date.now() - new Date(row.traffic_set_at).getTime() < MANUAL_TRAFFIC_MINUTES * 60_000;
+  return fresh ? row.traffic_level : null;
+}
+
 /** هل هذا المنتج متوفّرٌ الآن فعلاً — المقياس الوحيد في المنصّة كلها.
  *
  *  ثلاثة شروط لا واحد: أعلنته المحطة، وأعلنته خلال نافذة الحداثة، وهي مفتوحة
@@ -279,6 +292,22 @@ export function isListed(
     (!!row?.is_available && !isWithdrawn(row.updated_at) && !hasRunOut(row.runs_out_at)) ||
     !!row?.expected_at
   );
+}
+
+/** هل يستحقّ هذا الصفُّ إشعاراً حين يُرسل المالكُ تحديثَه؟
+ *
+ *  متوفّرٌ الآن، أو **موعودٌ بموعدٍ لم يفت**. و«غير متوفر» لا يُشعَر به: من
+ *  يُطفئ الكلَّ تُحفظ حالتُه ولا يُبعث بها أحد — وهو نصُّ طلب صاحب المنصّة.
+ *
+ *  وتختلف عن `isListed` في ثلاث: لا تنظر في عمر الخبر (الإرسالُ يختمه الآن)،
+ *  ولا في موعد النفاد (الخادمُ يحرسه بنفسه في `notify`)، وترفض الوعدَ الفائت
+ *  (وعدٌ مضى ليس خبراً يُبعث). */
+export function isAnnounceable(
+  row: { is_available?: boolean | null; expected_at?: string | null } | undefined | null
+): boolean {
+  if (!row) return false;
+  if (row.is_available) return true;
+  return !!row.expected_at && !isExpectedLate(row.expected_at);
 }
 
 export function hasSomethingToShow(station: {

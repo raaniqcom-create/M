@@ -1,4 +1,4 @@
-import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, expectedText, isExpectedLate, isListed, isOffered, isStaleOffer, trafficSource } from '@/lib/products';
+import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, expectedText, isExpectedLate, isListed, isOffered, isStaleOffer, productTrafficLevel, trafficSource } from '@/lib/products';
 import { formatTime, isFresh, isOpenNow, openingLine, PERIOD_LABELS, runsOutLabel, statusNote } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { StationWithStatus } from '@/types/database';
@@ -145,6 +145,8 @@ export function StationCard({
             const row = byProduct.get(product)!;
             const inStock = isOffered(station, row);
             const stale = isStaleOffer(row);
+            // طابورُ هذا المنتج بعينه إن قاله صاحبُ المحطة — على الخضراء وحدَها.
+            const queue = inStock ? productTrafficLevel(station, row) : null;
             return (
               <span
                 key={product}
@@ -161,6 +163,11 @@ export function StationCard({
                     يسقط المنتج من isOffered فلا شريحةَ أصلاً. */}
                 {inStock && row.runs_out_at && (
                   <span className="font-normal"> · حتى {runsOutLabel(row.runs_out_at)}</span>
+                )}
+                {queue && (
+                  <span className={`font-normal ${TRAFFIC_COLORS[queue].text}`}>
+                    {' '}· <span className={`inline-block h-1.5 w-1.5 rounded-full align-middle ${TRAFFIC_COLORS[queue].dot}`} /> {TRAFFIC_LABELS[queue]}
+                  </span>
                 )}
                 {stale && !row.expected_at && (
                   <span className="font-normal"> · {agoLabel(row.updated_at)}</span>

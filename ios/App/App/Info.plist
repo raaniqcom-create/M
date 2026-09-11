@@ -12,6 +12,9 @@
 	</array>
 	<!-- Without this string iOS denies the site's geolocation call silently and
 	     "أقرب محطة إليك" never works. -->
+	<!-- بلا هذا السطر يرفض النظامُ Face ID صامتاً — والبصمةُ لا تحتاجه. -->
+	<key>NSFaceIDUsageDescription</key>
+	<string>لفتح لوحة محطتك بوجهك بدل كلمة المرور.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>يُستخدم موقعك لترتيب المحطات حسب قربها منك. لا يُرسل إلى أي جهة.</string>
 	<!-- Answers App Store Connect's export-compliance question once, instead of

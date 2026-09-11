@@ -25,22 +25,29 @@ import type { Station, StationProduct } from '@/types/database';
  *  الأهمَّ وتحمل الفعلَ نفسَه. ولوحان أحمران متجاوران يُقرآن عتاباً مضاعفاً
  *  على غلطةٍ واحدة، فيسقط أثرُهما معاً. فحين تظهر تلك يبقى هذا على وجهه
  *  الهادئ: العددُ خبرٌ نافع في الحالين. */
+export type Audience = { watchers: number; followers: number };
+
 export function AudienceBanner({
   station,
   products,
   muted = false,
+  audience: given,
 }: {
   station: Station;
   products: StationProduct[];
   muted?: boolean;
+  /** إن جاء من الأعلى لم يُنادَ الخادمُ ثانيةً — لوحةُ المالك تحتاجه لزرّها. */
+  audience?: Audience | null;
 }) {
-  const [audience, setAudience] = useState<{ watchers: number; followers: number } | null>(null);
+  const [fetched, setFetched] = useState<Audience | null>(null);
+  const audience = given === undefined ? fetched : given;
 
   useEffect(() => {
+    if (given !== undefined) return;
     supabase
       .rpc('station_audience', { p_station: station.id })
-      .then(({ data }) => data && setAudience(data as { watchers: number; followers: number }));
-  }, [station.id]);
+      .then(({ data }) => data && setFetched(data as Audience));
+  }, [station.id, given]);
 
   // Nothing to say until the number is known — a banner that reads «0 شخص»
   // while loading argues against itself.
@@ -67,8 +74,8 @@ export function AudienceBanner({
           ولم تُحدَّث حالة منتجاتك اليوم بعد، فلا يصلهم عنك شيء.
         </p>
         <p className="mt-2 rounded-lg bg-white/70 p-2.5 text-xs font-bold leading-relaxed text-red-900">
-          تحديثٌ واحد يكفي — ضغطة على المنتج المتوفّر، فيصلهم الإشعار في اللحظة
-          نفسها بلا أي خطوة أخرى منك.
+          تحديثٌ واحد يكفي — اضبط المنتجات ثمّ اضغط الزرَّ الأخضر تحت، فيصلهم
+          إشعارٌ واحد.
         </p>
       </section>
     );
@@ -84,7 +91,7 @@ export function AudienceBanner({
         نؤكّد لك أن <b>{n}</b> مشتركاً في <b>{station.city}</b> على المحطة التقنية
         يهتمّون بما يتوفّر في <b>{station.name}</b>
         {f > 0 ? <> ، و<b>{f}</b> منهم يتابعونك بعينك</> : null}.{' '}
-        {updatedToday ? 'حدّثتَ اليوم فوصلهم خبرك.' : 'وضغطةُ التأكيد أعلاه تُوصله إليهم.'}
+        {updatedToday ? 'حدّثتَ اليوم فوصلهم خبرك.' : 'والزرُّ الأخضر تحت يُوصله إليهم.'}
       </p>
       <p className="mt-2 text-xs leading-relaxed text-brand-800">
         {updatedToday

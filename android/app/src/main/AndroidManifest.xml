@@ -58,6 +58,8 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- بصمةٌ أو وجهٌ لفتح لوحة المالك (capacitor-native-biometric) -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <!-- قوالبُ الخرائط في السيارة — يلزم لـPlaceListMapTemplate. -->
     <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
 

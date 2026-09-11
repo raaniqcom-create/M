@@ -1,11 +1,12 @@
 'use client';
 
 import { readFailure } from '@/lib/fn';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { rebuildSite } from '@/lib/rebuild';
-import { AudienceBanner } from '@/components/AudienceBanner';
+import { AudienceBanner, type Audience } from '@/components/AudienceBanner';
+import { num } from '@/lib/num';
 import { OwnerDeviceLink } from '@/components/OwnerDeviceLink';
 import { cancelTrafficReminder, scheduleTrafficReminder } from '@/lib/trafficReminder';
 import {
@@ -15,8 +16,9 @@ import {
   MANUAL_TRAFFIC_MINUTES,
   TRAFFIC_COLORS,
   TRAFFIC_LABELS,
-  expectedLabel,
+  isAnnounceable,
   isListed,
+  productTrafficLevel,
 } from '@/lib/products';
 import { ShareButton } from '@/components/ShareButton';
 import { StationLinkCard } from '@/components/StationLinkCard';
@@ -28,10 +30,14 @@ import { OwnerReminders } from '@/components/OwnerReminders';
 import { StationChat } from '@/components/StationChat';
 import { JoinPoster } from '@/components/JoinPoster';
 import { ChangePassword } from '@/components/ChangePassword';
-import { FRESH_HOURS, WITHDRAW_HOURS, ageLabel } from '@/lib/hours';
+import { FRESH_HOURS, WITHDRAW_HOURS, ageLabel, hasRunOut } from '@/lib/hours';
 import { DeleteAccount } from '@/components/DeleteAccount';
 import type { ExpectedPeriod } from '@/lib/hours';
-import { FuelIcon, LogOutIcon, SpinnerIcon } from '@/components/icons';
+import { FuelIcon, LockIcon, LogOutIcon, SpinnerIcon } from '@/components/icons';
+import { OwnerHomeIcons, type OwnerView } from '@/components/OwnerHomeIcons';
+import { OwnerComplaints } from '@/components/OwnerComplaints';
+import { BiometricLockToggle } from '@/components/BiometricLockToggle';
+import { biometricLockEnabled, verifyOwner } from '@/lib/biometric';
 import type { FuelProduct, Station, StationProduct, TrafficLevel } from '@/types/database';
 
 const LEVELS: TrafficLevel[] = ['green', 'yellow', 'red'];
@@ -42,15 +48,25 @@ export default function OwnerPage() {
   const [netErr, setNetErr] = useState<string | null>(null);
   const [station, setStation] = useState<Station | null>(null);
   const [products, setProducts] = useState<StationProduct[]>([]);
-  /** ما أشعله المالك في هذه الجلسة وحده — وهو وحده ما يُعلَن. */
-  const [turnedOn, setTurnedOn] = useState<Set<FuelProduct>>(new Set());
+  /** ما أشعله المالك أو وعد به في هذه الجلسة وحده — وهو وحده ما يُعلَن. */
+  const [changed, setChanged] = useState<Set<FuelProduct>>(new Set());
+  /** لُمس منتجٌ ولم يُرسل بعد — فيُقال له في الأعلى أين زرُّ الإرسال. */
+  const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
+  /** الجلسةُ موجودةٌ والوجهُ أو البصمةُ لم تُقبل بعد — في التطبيق وحده. */
+  const [locked, setLocked] = useState(false);
   const [savingProduct, setSavingProduct] = useState<FuelProduct | null>(null);
+  /** المنتجُ المفتوحةُ تفاصيلُه — واحدٌ لا أكثر، فلا تطول الشاشة. */
+  const [openProduct, setOpenProduct] = useState<FuelProduct | null>(null);
   // كتابةٌ سقطت تُقال. وكانت تُبتلع في مسارين من ثلاثة.
   const [saveErr, setSaveErr] = useState<string | null>(null);
-  const [view, setView] = useState<'main' | 'info' | 'data' | 'chat'>('main');
+  const [view, setView] = useState<OwnerView>('home');
   /** ما لم يقرأه صاحبُ المحطة من الإدارة أو من المنصّة */
   const [unread, setUnread] = useState(0);
+  /** شكاوى مفتوحةٌ على محطته — رقمٌ على الأيقونة */
+  const [complaints, setComplaints] = useState(0);
+  /** من ينتظر خبرَه في مدينته — الرقمُ على زرّ الإرسال وفي اللافتة */
+  const [audience, setAudience] = useState<Audience | null>(null);
   const [trafficNote, setTrafficNote] = useState<string | null>(null);
   const [phoneNote, setPhoneNote] = useState<string | null>(null);
 
@@ -93,12 +109,21 @@ export default function OwnerPage() {
         .neq('sender', 'owner')
         .is('read_at', null)
         .then(({ count }) => setUnread(count ?? 0));
+      supabase
+        .from('complaints')
+        .select('id', { count: 'exact', head: true })
+        .eq('station_id', st.id)
+        .is('resolved_at', null)
+        .then(({ count }) => setComplaints(count ?? 0));
+      supabase
+        .rpc('station_audience', { p_station: st.id })
+        .then(({ data }) => data && setAudience(data as Audience));
     }
     setLoading(false);
   }, []);
 
-  // رابطُ الإشعار يحمل ?chat=1، فيفتح تبويبَ الرسائل بدل أن يترك صاحبَ
-  // المحطة يبحث عنه. ويُقرأ من location لا بـuseSearchParams: الأخيرة تُلزم
+  // رابطُ الإشعار يحمل ?chat=1، فيفتح شاشةَ الرسائل بدل أن يترك صاحبَ
+  // المحطة يبحث عنها. ويُقرأ من location لا بـuseSearchParams: الأخيرة تُلزم
   // حدَّ Suspense في بناء التصدير الساكن، وهذه قراءةٌ واحدة عند التركيب.
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.search.includes('chat=1')) {
@@ -110,13 +135,26 @@ export default function OwnerPage() {
   useEffect(() => {
     // stored session, not a round trip — a dropped request must not read as
     // "not signed in" and send a station owner back to the login form
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       const user = data.session?.user;
       if (!user) {
         router.replace('/login');
         return;
       }
       setUserId(user.id);
+      // ── القفلُ بالبصمة أو الوجه — في التطبيق، وحيث فُعّل ─────────────
+      //
+      // الجلسةُ محفوظةٌ في مخزن التطبيق فلا كلمةَ مرور، والبصمةُ هي البابُ
+      // إليها. رفضُها لا يُخرج أحداً: شاشةُ قفلٍ فيها «حاول ثانيةً» و«أدخل
+      // بكلمة المرور». والمتصفّحُ يمرّ من هنا بلا سؤال (`biometricLockEnabled`
+      // تردّ «لا» خارج التطبيق).
+      if (await biometricLockEnabled()) {
+        if (!(await verifyOwner())) {
+          setLocked(true);
+          setLoading(false);
+          return;
+        }
+      }
       // بـ`return`: بدونه يخرج رفضُ `load` من هذه السلسلة فلا يمسكه شيء،
       // فيبقى `loading` صحيحاً ويدور المغزلُ أبداً بلا نصٍّ ولا زرّ.
       return load(user.id);
@@ -208,13 +246,14 @@ export default function OwnerPage() {
     // No push here. An owner who switches on five products would fire five
     // notifications, and someone who receives five buzzes in ten seconds
     // deletes the app — which costs us every future alert, not just these.
-    // The announcement belongs to the confirm button, once, for all of them.
-    setTurnedOn((s) => {
+    // The announcement belongs to the send button, once, for all of them.
+    setChanged((s) => {
       const n = new Set(s);
       if (next === 'in') n.add(product);
       else n.delete(product);
       return n;
     });
+    setDirty(true);
   }
 
   /** «متى تتوقّع نفاده؟» — ساعاتٌ من الآن لا ساعةُ حائط: صاحبُ المحطة يعرف
@@ -224,7 +263,9 @@ export default function OwnerPage() {
       hours === null ? null : new Date(Date.now() + hours * 3600_000).toISOString();
     // والختمُ يُجدَّد: من ضبط موعدَ نفادٍ تكلّم الآن، فلا تُلاحقه رسالةُ
     // «وقودك معروضٌ بخبرٍ قديم» عن لوحةٍ لمسها بيده.
-    await patchProduct(product, { runs_out_at, updated_at: new Date().toISOString() });
+    if (await patchProduct(product, { runs_out_at, updated_at: new Date().toISOString() })) {
+      setDirty(true);
+    }
   }
 
   /** موعدُ الوصول — يوماً، ومعه فترةٌ أو ساعةٌ لا كلتاهما.
@@ -240,7 +281,7 @@ export default function OwnerPage() {
   ) {
     const was = products.find((p) => p.product === product)?.is_available === true;
     const now = new Date().toISOString();
-    await patchProduct(product, {
+    const ok = await patchProduct(product, {
       expected_at,
       expected_period: expected_at === null ? null : period,
       expected_time: expected_at === null ? null : time,
@@ -250,14 +291,24 @@ export default function OwnerPage() {
         ? { is_available: false, ...(was ? { runs_out_at: now } : {}) }
         : {}),
     } as Partial<StationProduct>);
+    if (!ok) return;
+    // والوعدُ خبرٌ يُبعث كالتوفّر: «يصل غداً» يُغني سائقاً عن رحلة اليوم.
+    setChanged((s) => {
+      const n = new Set(s);
+      if (expected_at) n.add(product);
+      else n.delete(product);
+      return n;
+    });
+    setDirty(true);
   }
 
   /** Confirms the list as it stands and stamps the moment. An owner who
    *  changed nothing today still needs a way to say "this is still true" —
    *  otherwise the poster carries a date that makes fresh stock look stale. */
-  const posterRef = useRef<HTMLDivElement>(null);
   const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
   const [notifyNote, setNotifyNote] = useState<string | null>(null);
+  /** أُرسل ولا إشعار — ويُقال، فالصمتُ يُقرأ عطلاً. */
+  const [quietNote, setQuietNote] = useState<string | null>(null);
 
   /** أحدثُ ختمٍ على منتجٍ معروضٍ متوفراً — نفسُ مقياس `owner-daily`
    *  (lastAvailable هناك): محطةٌ تلمس منتجاً غير متوفر يبدو لوحها حديثاً
@@ -270,6 +321,14 @@ export default function OwnerPage() {
   const staleAge = lastAvailable ? Date.now() - new Date(lastAvailable).getTime() : 0;
   const staleSince = lastAvailable && staleAge >= FRESH_HOURS * 3600_000 ? lastAvailable : null;
   const withdrawnNow = staleAge >= WITHDRAW_HOURS * 3600_000;
+
+  /** أصار منتجٌ متوفّراً في هذه الجلسة؟ — هو ما يُبدّل اسمَ الزرّ وفعلَه. */
+  const willNotify = products.some((p) => changed.has(p.product) && p.is_available);
+  const sendLabel = willNotify
+    ? audience?.watchers
+      ? `أرسل إشعاراً لـ${num(audience.watchers)} شخص الآن`
+      : 'أرسل الإشعار الآن'
+    : 'احفظ الحالة';
 
   async function confirmAvailability() {
     if (!station) return;
@@ -285,30 +344,43 @@ export default function OwnerPage() {
     // الضغطة، وموعدٌ لم يحن لا تمسّه — ولو صُفّرت كلُّها لضاع على المالك ما
     // ضبطه قبل دقيقة. وبلا الإحياء يختم الزرُّ الوقتَ ولا يُعيد شيئاً
     // معروضاً، ويقول له «حالتك محدّثة ✅» عن محطةٍ ما زالت مخفيّة.
+    //
+    // وما أطفأه كرونُ `expire_run_outs` لا يُحيا من هنا: صار «غير متوفر» بكلمة
+    // صاحبه، وعودتُه ضغطةُ «متوفر» لا ضغطةُ حفظ.
     await supabase
       .from('station_products')
       .update({ runs_out_at: null })
       .eq('station_id', station.id)
+      .eq('is_available', true)
       .lt('runs_out_at', now);
     setProducts((prev) =>
-      prev.map((p) => (p.runs_out_at && p.runs_out_at < now ? { ...p, runs_out_at: null } : p))
+      prev.map((p) =>
+        p.is_available && p.runs_out_at && p.runs_out_at < now ? { ...p, runs_out_at: null } : p
+      )
     );
     setConfirmedAt(now);
     setNotifyNote(null);
+    setQuietNote(null);
+    setDirty(false);
 
-    // خبرُ وصولٍ لا خبرُ حالة: يُعلَن ما **صار** متوفراً في هذه الجلسة، لا
-    // كل ما هو متوفر.
+    // خبرُ وصولٍ لا خبرُ حالة: يُعلَن ما **صار** متوفراً أو موعوداً في هذه
+    // الجلسة، لا كل ما هو متوفر.
     //
     // كان يُرسل كل متوفر: فمالكٌ يُطفئ الغاز — والغاز نفد فعلاً — ثم يضغط
     // «تأكيد» فيُعاد إعلان البانزين كأنه وصل للتوّ. الفعل إطفاء والنتيجة
     // بشارة، ووصلت الناسَ إشعاراتُ وصولٍ من محطات كانت تُغلق منتجاتها.
     //
-    // و«تأكيد» يبقى على معناه الأصلي: يختم الوقت فتعود الحالة طازجة على
-    // اللوحة والملصق — ويُعلن فقط إن كان ثمّة جديدٌ يستحقّ الإعلان.
-    const available = products
-      .filter((p) => p.is_available && turnedOn.has(p.product))
-      .map((p) => p.product);
-    if (available.length) {
+    // والزرُّ لا يكذب: يقول «أرسل إشعاراً» حين صار منتجٌ **متوفّراً** في هذه
+    // الجلسة، و«احفظ الحالة» فيما سوى ذلك — ويفعل ما قال. والموعودُ يركب مع
+    // إشعار التوفّر («⛽ كاز · متوقّع: بانزين غداً») ولا يُبعث وحدَه: قرارُ
+    // صاحب المنصّة ١١ أيلول ٢٠٢٦. و«غير متوفر» لا يُبعث أبداً.
+    const available = willNotify
+      ? products.filter((p) => changed.has(p.product) && isAnnounceable(p)).map((p) => p.product)
+      : [];
+    if (!available.length) {
+      setQuietNote('حُفظت الحالة — بلا إشعار.');
+      setChanged(new Set());
+    } else {
       // notify only speaks for a station on its owner's or an admin's word, so
       // the session token rides along — the endpoint used to answer anyone.
       const { data: sess } = await supabase.auth.getSession();
@@ -326,8 +398,8 @@ export default function OwnerPage() {
       })
         .then(async (r) => {
           if (r.ok) {
-            // ما أُعلن لا يُعاد إعلانه بضغطة تأكيدٍ ثانية.
-            setTurnedOn(new Set());
+            // ما أُعلن لا يُعاد إعلانه بضغطة إرسالٍ ثانية.
+            setChanged(new Set());
             return;
           }
           // ورسالة الخادم تُعرض كما هي: «محطتك مغلقة الآن» جوابٌ يفهمه المالك
@@ -342,7 +414,6 @@ export default function OwnerPage() {
         );
     }
 
-    posterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   /** Show the station's number to the public, or keep it for the admin only.
@@ -441,9 +512,36 @@ export default function OwnerPage() {
     }
   }
 
+  /** شاشةٌ فرعيّة تُفتح من الأيقونات، وتعود بـ«الرئيسية». */
+  function openView(next: OwnerView) {
+    setView(next);
+    if (next === 'chat') setUnread(0);
+    window.scrollTo(0, 0);
+  }
+
+  /** ازدحامُ طابور منتجٍ بعينه — ضغطةٌ ثانية على المضيء تُلغيه، كازدحام المحطة. */
+  async function setProductTraffic(product: FuelProduct, level: TrafficLevel) {
+    if (!station) return;
+    const row = products.find((p) => p.product === product);
+    const next = productTrafficLevel(station, row) === level ? null : level;
+    await patchProduct(product, {
+      traffic_level: next,
+      traffic_set_at: next ? new Date().toISOString() : null,
+    });
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     router.replace('/login');
+  }
+
+  /** «حاول ثانيةً» من شاشة القفل. */
+  async function unlock() {
+    if (!userId) return;
+    if (!(await verifyOwner())) return;
+    setLocked(false);
+    setLoading(true);
+    await load(userId);
   }
 
   if (netErr) {
@@ -470,78 +568,68 @@ export default function OwnerPage() {
     );
   }
 
+  if (locked) {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
+        <LockIcon className="h-8 w-8 text-brand" />
+        <h1 className="mt-3 text-base font-bold">لوحتك مقفلة</h1>
+        <p className="mt-2 text-sm text-slate-500">افتحها بوجهك أو بصمتك، أو ادخل بكلمة المرور.</p>
+        <button type="button" onClick={unlock} className="btn-primary mt-5 w-full max-w-xs">
+          افتح بالبصمة أو الوجه
+        </button>
+        <button type="button" onClick={signOut} className="btn-ghost mt-2 w-full max-w-xs">
+          أدخل بكلمة المرور
+        </button>
+      </main>
+    );
+  }
+
+  const TITLES: Record<Exclude<OwnerView, 'home'>, string> = {
+    chat: 'الرسائل',
+    info: 'معلومات المحطة',
+    designs: 'التصاميم',
+    complaints: 'الشكاوي',
+    traffic: 'حالة الازدحام',
+    account: 'حسابي',
+  };
+
   return (
     <main className="mx-auto max-w-md px-4 pb-16 pt-6">
-      <header className="flex items-center justify-between">
-        <div>
+      <header className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-lg font-extrabold text-brand">لوحة صاحب المحطة</h1>
-          <a href="/?view=user" className="text-[11px] font-bold text-slate-400">
-            عرض المنصة كمستخدم ↗
-          </a>
+          {station && (
+            <p className="truncate text-[11px] font-bold text-slate-400">
+              {station.name} · {station.city}
+            </p>
+          )}
         </div>
         <button
           type="button"
           onClick={signOut}
           aria-label="تسجيل الخروج"
-          className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 text-slate-500"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500"
         >
           <LogOutIcon />
         </button>
       </header>
 
-      {/* At the very top, above the panel itself: the point of the whole
-          platform stated as a number of people, not as a nag. */}
-      {station && (
-        <div className="mt-4 space-y-3">
-          <OwnerDeviceLink stationId={station.id} />
-
-          {/* **التذكيرُ الداخلي — لمن فتح اللوحة ولم يصله شيء.**
-            *
-            *  ثلاثُ محطاتٍ من ثمانٍ وعشرين لها جهازٌ مربوط. فالإشعارُ لا يصل
-            *  أكثرَهم، وحين يفتح صاحبُ المحطة لوحته بنفسه تكون هذه آخرَ فرصة
-            *  لقول ما لم يبلغه: وقودُك معروضٌ بخبرٍ فائت، وهذه ضغطةُ إصلاحه.
-            *
-            *  ويستدعي `confirmAvailability` نفسَها التي في أسفل الصفحة — لا
-            *  نسخةً منها: هي تختم كلَّ الصفوف وتُعلن الجديدَ وحدَه، ونسخةٌ
-            *  ثانية تفترق عنها في أوّل تعديل. */}
-          {staleSince && (
-            <section
-              className={`card p-4 ${withdrawnNow ? 'border-2 border-traffic-red bg-red-50' : 'border-traffic-yellow bg-amber-50'}`}
-            >
-              <h3 className={`text-sm font-extrabold ${withdrawnNow ? 'text-traffic-red' : 'text-amber-900'}`}>
-                {withdrawnNow ? 'سُحب توفّرك من العرض' : 'وقودك معروض بخبر قديم'}
-              </h3>
-              <p className={`mt-1 text-xs leading-relaxed ${withdrawnNow ? 'text-red-900' : 'text-amber-900/80'}`}>
-                آخر تأكيد لمنتجاتك <b>{ageLabel(staleSince)}</b>.{' '}
-                {withdrawnNow ? (
-                  <>
-                    مضى أكثر من {WITHDRAW_HOURS} ساعة بلا تأكيد، فلم يعد وقودُك معروضاً للناس
-                    ولا تظهر محطتك في «المتاح الآن». <b>أكّده ليعود في الحال.</b>
-                  </>
-                ) : (
-                  <>
-                    ما زال معروضاً على صفحتك، لكنه بالرمادي ومعه عمره. أكّده ليعود أخضرَ —
-                    وإن نفد فأطفئه من الأعلى.
-                  </>
-                )}
-              </p>
-              <button type="button" onClick={confirmAvailability} className="btn-primary mt-3 w-full">
-                ✅ أكّد التوفّر الآن
-              </button>
-            </section>
-          )}
-
-          <AudienceBanner station={station} products={products} muted={!!staleSince} />
-
-          {/* بعد ما يُفعل الآن، وقبل الدخول إلى التبويبات: أوّلُ ما يحتاجه
-              صاحبُ المحطة يومَ اعتماده — ولا تُعرض لمن لم تُعتمد محطتُه. */}
-          {station.status === 'approved' && (
-            <JoinPoster stationId={station.id} name={station.name} slug={station.slug} />
-          )}
+      {/* ── التنبيهُ في الأعلى — ويلتصق عند التمرير ─────────────────────────
+        *
+        *  ضغطةُ «متوفر» تُكتب في القاعدة فوراً، لكنّ الإشعارَ لا يخرج إلّا
+        *  بزرٍّ في أسفل القائمة. فصاحبُ محطةٍ يضبط سبعةَ منتجاتٍ ويُغلق الهاتف
+        *  يظنّ الناسَ قد عرفوا — ولم يعرف أحد. السطرُ يقول ما ينقص ويسمّي
+        *  الزرَّ باسمه، ويبقى حتى يُضغط. `sticky` لا `fixed`: لا يغطّي شيئاً. */}
+      {dirty && (
+        <div
+          role="status"
+          className="sticky top-0 z-30 -mx-4 mt-3 border-b border-amber-300 bg-amber-50 px-4 py-2.5 text-center text-[12px] font-bold text-amber-900"
+        >
+          عند إتمام ضبط المنتجات اضغط «{willNotify ? 'أرسل إشعاراً' : 'احفظ الحالة'}»
         </div>
       )}
 
-      <div className="mt-5">
+      <div className="mt-4">
         {!station && (
           <div className="card p-6 text-center">
             <h2 className="text-base font-bold">لا توجد محطة مرتبطة بحسابك</h2>
@@ -573,105 +661,35 @@ export default function OwnerPage() {
           </div>
         )}
 
-        {station?.status === 'approved' && (
+        {/* ── الرئيسية: أيقوناتٌ ثمّ المنتجاتُ ثمّ الإرسال ─────────────────
+          *
+          *  هذا ما يفتح عليه صاحبُ المحطة. لا بطاقةَ قبل المنتجات إلّا سطرُ
+          *  الإغلاق المؤقّت — لأنّ محطةً مغلقةً لا تظهر للناس مهما ضبط، فيجب
+          *  أن يراه قبل أن يعمل. */}
+        {station?.status === 'approved' && view === 'home' && (
           <div className="space-y-4">
-            <section className="card p-5">
-              <h2 className="text-base font-bold">{station.name}</h2>
-              <p className="mt-0.5 text-sm text-slate-500">
-                {station.city} — {station.address}
-              </p>
-              {station.temp_closed && (
-                <p className="mt-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] font-bold text-traffic-red">
-                  ⛔ مغلقة مؤقتاً — لا تظهر كمفتوحة للمستخدمين
-                </p>
-              )}
-              {/* Closing for an incident beats the timetable: a driver sent to
-                  a shut forecourt is the wasted trip this platform prevents. */}
+            {station.temp_closed && (
               <button
                 type="button"
                 onClick={toggleTempClose}
-                className={`mt-3 w-full rounded-xl border py-2.5 text-sm font-bold ${
-                  station.temp_closed
-                    ? 'border-brand bg-brand-50 text-brand'
-                    : 'border-slate-200 text-slate-600'
-                }`}
+                className="w-full rounded-xl border border-traffic-red bg-red-50 px-3 py-2.5 text-center text-[12px] font-extrabold text-traffic-red"
               >
-                {station.temp_closed ? 'إعادة الفتح الآن' : '⛔ إغلاق مؤقت (حادث أو صيانة)'}
+                ⛔ محطتك مغلقة مؤقتاً ولا تظهر مفتوحةً للناس — اضغط لإعادة الفتح
               </button>
-            </section>
+            )}
 
-            <nav className="grid grid-cols-4 gap-1 rounded-xl bg-brand-50 p-1">
-              {([
-                ['main', 'اللوحة'],
-                ['chat', 'الرسائل'],
-                ['info', 'المحطة'],
-                ['data', 'حسابي'],
-              ] as const).map(([k, label]) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => { setView(k); if (k === 'chat') setUnread(0); }}
-                  aria-pressed={view === k}
-                  className={`relative min-h-[40px] rounded-lg text-xs font-bold transition-colors duration-200 ${
-                    view === k ? 'bg-white text-brand shadow-soft' : 'text-brand-700'
-                  }`}
-                >
-                  {label}
-                  {/* نقطةٌ لا رقم: العددُ الدقيق لا يُغيّر الفعل — والفعلُ فتحُ
-                      التبويب. والنقطةُ تُقرأ في لمحةٍ على شاشةٍ ضيّقة، والأسماءُ
-                      قُصِّرت لأن أربعةً في صفٍّ على 360 بكسل لا تتّسع. */}
-                  {k === 'chat' && unread > 0 && (
-                    <span
-                      aria-label={`${unread} رسالة غير مقروءة`}
-                      className="absolute end-1.5 top-1.5 h-2 w-2 rounded-full bg-traffic-red"
-                    />
-                  )}
-                </button>
-              ))}
-            </nav>
+            <OwnerHomeIcons
+              unread={unread}
+              complaints={complaints}
+              tempClosed={!!station.temp_closed}
+              onOpen={openView}
+              onTempClose={toggleTempClose}
+            />
 
-            {view === 'main' && (
-              <>
-            <section className="card p-5">
-              <h3 className="text-sm font-bold">حالة الازدحام</h3>
-              <p className="mt-1 text-xs text-slate-400">
-                أنت الوحيد الذي يرى ساحتك، فتحديدك يظهر للمستخدمين بدل تصويتهم. ويبقى{' '}
-                {MANUAL_TRAFFIC_MINUTES} دقيقة ثم يُمسح — كما يسقط تصويتهم بعد المدّة نفسها،
-                فحالةٌ من ساعة مضت لا تصف الساحة الآن. اضغط مرة أخرى للإلغاء.
-              </p>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {LEVELS.map((level) => {
-                  // بالصلاحية لا بالحقل وحده: حالةٌ انتهت مدّتها لا تُعرض مضيئة
-                  const active = activeTrafficLevel(station) === level;
-                  return (
-                    <button
-                      key={level}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => setTraffic(level)}
-                      className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border text-sm font-semibold transition-colors duration-200 ${
-                        active
-                          ? `${TRAFFIC_COLORS[level].bg} ${TRAFFIC_COLORS[level].text} ${TRAFFIC_COLORS[level].border}`
-                          : 'border-slate-200 bg-white text-slate-600'
-                      }`}
-                    >
-                      <span className={`h-2.5 w-2.5 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
-                      {TRAFFIC_LABELS[level]}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {trafficNote && (
-                <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-xs font-semibold leading-relaxed text-brand-700">
-                  {trafficNote}
-                </p>
-              )}
-            </section>
             <section className="card p-5">
               <h3 className="text-sm font-bold">توفر المنتجات</h3>
               <p className="mt-1 text-xs text-slate-400">
-                عند تفعيل منتج يصل تنبيه فوري لمتابعي محطتك
+                اضبط كلَّ منتج، ثمّ اضغط الزرَّ الأخضر في الأسفل مرّةً واحدة.
               </p>
               <ul className="mt-2 divide-y divide-slate-100">
                 {PRODUCT_ORDER.map((product) => (
@@ -680,6 +698,8 @@ export default function OwnerPage() {
                     product={product}
                     row={products.find((p) => p.product === product)}
                     saving={savingProduct === product}
+                    open={openProduct === product}
+                    onFocus={() => setOpenProduct(product)}
                     onSetState={(next: ProductState) => setState(product, next)}
                     onSetExpected={(date, period, time) =>
                       setExpected(product, date, period, time)
@@ -692,8 +712,7 @@ export default function OwnerPage() {
                 <p className="mt-2 text-[11.5px] font-bold text-traffic-red">{saveErr}</p>
               )}
             </section>
-            {/* One deliberate act at the end, not a poster that jumps on every
-                toggle while the owner is still working through six products. */}
+
             {/* حين يُطفأ الأخير — يُقال في اللحظة، لا في رسالة الغد.
               *
               *  المحطة التي لا متوفر لديها ولا متوقَّع لم تعد تظهر في القائمة.
@@ -718,23 +737,59 @@ export default function OwnerPage() {
               </section>
             )}
 
-            <section className="card p-5">
-              <h3 className="text-sm font-bold">تأكيد ونشر التوفّر</h3>
-              <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                بعد ضبط المنتجات أعلاه، أكّد القائمة: يُختم الوقت، ويصل للمستخدمين إشعار
-                واحد يجمع كل المنتجات المتوفرة، ويجهز المنشور للنشر.
-              </p>
+            {/* **التذكيرُ الداخلي — لمن فتح اللوحة ولم يصله شيء.**
+              *
+              *  ثلاثُ محطاتٍ من ثمانٍ وعشرين لها جهازٌ مربوط. فالإشعارُ لا يصل
+              *  أكثرَهم، وحين يفتح صاحبُ المحطة لوحته بنفسه تكون هذه آخرَ فرصة
+              *  لقول ما لم يبلغه: وقودُك معروضٌ بخبرٍ فائت، وزرُّ إصلاحه تحته
+              *  مباشرة — `confirmAvailability` نفسُها، لا نسخةٌ منها. */}
+            {staleSince && (
+              <section
+                className={`card p-4 ${withdrawnNow ? 'border-2 border-traffic-red bg-red-50' : 'border-traffic-yellow bg-amber-50'}`}
+              >
+                <h3 className={`text-sm font-extrabold ${withdrawnNow ? 'text-traffic-red' : 'text-amber-900'}`}>
+                  {withdrawnNow ? 'سُحب توفّرك من العرض' : 'وقودك معروض بخبر قديم'}
+                </h3>
+                <p className={`mt-1 text-xs leading-relaxed ${withdrawnNow ? 'text-red-900' : 'text-amber-900/80'}`}>
+                  آخر تأكيد لمنتجاتك <b>{ageLabel(staleSince)}</b>.{' '}
+                  {withdrawnNow ? (
+                    <>
+                      مضى أكثر من {WITHDRAW_HOURS} ساعة بلا تأكيد، فلم يعد وقودُك معروضاً للناس
+                      ولا تظهر محطتك في «المتاح الآن». <b>أرسل التحديث ليعود في الحال.</b>
+                    </>
+                  ) : (
+                    <>
+                      ما زال معروضاً على صفحتك، لكنه بالرمادي ومعه عمره. أرسل التحديث ليعود
+                      أخضرَ — وإن نفد فأطفئه من الأعلى.
+                    </>
+                  )}
+                </p>
+              </section>
+            )}
+
+            {/* الرقمُ الذي هو غايةُ المنصّة — قبل الزرّ مباشرةً: هؤلاء من ينتظر. */}
+            <AudienceBanner
+              station={station}
+              products={products}
+              muted={!!staleSince}
+              audience={audience}
+            />
+
+            {/* الزرُّ يقول ما يفعل، فلا شرحَ فوقه: «أرسل إشعاراً لـ٢٠٧ شخص الآن»
+                حين صار شيءٌ متوفّراً، و«احفظ الحالة» فيما سوى ذلك. */}
+            <section className="card p-4">
               {notifyNote && (
-                <p className="mt-3 rounded-lg bg-red-50 p-2.5 text-xs font-bold leading-relaxed text-red-700">
+                <p className="mb-3 rounded-lg bg-red-50 p-2.5 text-xs font-bold leading-relaxed text-red-700">
                   {notifyNote}
                 </p>
               )}
-              <button type="button" onClick={confirmAvailability} className="btn-primary mt-3 w-full">
-                ✅ تأكيد ونشر التوفّر
+              <button type="button" onClick={confirmAvailability} className="btn-primary w-full">
+                {willNotify ? '📤 ' : ''}
+                {sendLabel}
               </button>
               {confirmedAt && (
                 <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-xs font-bold text-brand-700">
-                  تم التأكيد{' '}
+                  تمّ الإرسال{' '}
                   {new Intl.DateTimeFormat('ar-IQ', {
                     timeZone: 'Asia/Baghdad',
                     day: '2-digit',
@@ -742,53 +797,164 @@ export default function OwnerPage() {
                     hour: '2-digit',
                     minute: '2-digit',
                     hour12: true,
-                  }).format(new Date(confirmedAt))}{' '}
-                  — المنشور جاهز في الأسفل.
+                  }).format(new Date(confirmedAt))}
+                  {quietNote ? '.' : ' — والإشعارُ في طريقه، وصورةُ الإعلان جاهزة في «التصاميم».'}
+                </p>
+              )}
+              {quietNote && (
+                <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                  {quietNote}
                 </p>
               )}
             </section>
 
-            <div ref={posterRef}>
-            <AvailabilityPoster
-              name={station.name}
-              slug={station.slug}
-              products={products.filter((p) => p.is_available).map((p) => p.product)}
-            />
+            <OwnerDeviceLink stationId={station.id} />
+          </div>
+        )}
+
+        {/* ── الشاشاتُ الفرعيّة ─────────────────────────────────────────── */}
+        {station?.status === 'approved' && view !== 'home' && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => openView('home')}
+                className="btn-ghost shrink-0 px-3 py-2 text-xs"
+              >
+                ‹ الرئيسية
+              </button>
+              <h2 className="text-sm font-bold">{TITLES[view]}</h2>
             </div>
-            <ShareButton
-              stationId={station.id}
-              name={station.name}
-              available={products.filter((p) => p.is_available).map((p) => p.product)}
-              /* activeTrafficLevel, not the raw column: the raw value survives
-                 both the 30-minute expiry and closing time, so «الازدحام: خفيف»
-                 could be shared hours after it stopped being true. */
-              traffic={activeTrafficLevel(station)}
-            />
-              </>
-            )}
 
             {view === 'chat' && <StationChat stationId={station.id} as="owner" />}
 
-            {view === 'info' && (
+            {view === 'complaints' && <OwnerComplaints stationId={station.id} />}
+
+            {view === 'traffic' && (
+              <section className="card p-5">
+                <h3 className="text-sm font-bold">حالة الازدحام</h3>
+                <p className="mt-1 text-xs text-slate-400">
+                  أنت الوحيد الذي يرى ساحتك، فتحديدك يظهر للمستخدمين بدل تصويتهم. ويبقى{' '}
+                  {MANUAL_TRAFFIC_MINUTES} دقيقة ثم يُمسح — كما يسقط تصويتهم بعد المدّة نفسها،
+                  فحالةٌ من ساعة مضت لا تصف الساحة الآن. اضغط مرة أخرى للإلغاء.
+                </p>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {LEVELS.map((level) => {
+                    // بالصلاحية لا بالحقل وحده: حالةٌ انتهت مدّتها لا تُعرض مضيئة
+                    const active = activeTrafficLevel(station) === level;
+                    return (
+                      <button
+                        key={level}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => setTraffic(level)}
+                        className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border text-sm font-semibold transition-colors duration-200 ${
+                          active
+                            ? `${TRAFFIC_COLORS[level].bg} ${TRAFFIC_COLORS[level].text} ${TRAFFIC_COLORS[level].border}`
+                            : 'border-slate-200 bg-white text-slate-600'
+                        }`}
+                      >
+                        <span className={`h-2.5 w-2.5 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
+                        {TRAFFIC_LABELS[level]}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {trafficNote && (
+                  <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-xs font-semibold leading-relaxed text-brand-700">
+                    {trafficNote}
+                  </p>
+                )}
+
+                {/* ── ولكلّ منتجٍ طابورُه ──────────────────────────────────
+                  *
+                  *  طابورُ الكاز غيرُ طابور البانزين في الساحة نفسِها. فالمتوفّرُ
+                  *  الآن يُعرض هنا بأزراره الثلاثة، وما يُختار يظهر على شريحة
+                  *  المنتج في بطاقة المحطة. اختياريٌّ، ويسقط بعد ثلاثين دقيقة
+                  *  كازدحام المحطة. */}
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <p className="text-[12px] font-bold text-slate-700">ولكلّ منتجٍ طابورُه (اختياري)</p>
+                  {products.filter((p) => p.is_available && !hasRunOut(p.runs_out_at)).length === 0 ? (
+                    <p className="mt-1 text-xs text-slate-400">فعّل منتجاً في الرئيسية ليظهر هنا.</p>
+                  ) : (
+                    <ul className="mt-2 divide-y divide-slate-100">
+                      {products
+                        .filter((p) => p.is_available && !hasRunOut(p.runs_out_at))
+                        .map((p) => {
+                          const current = productTrafficLevel(station, p);
+                          return (
+                            <li key={p.product} className="flex items-center gap-2 py-2">
+                              <span className="w-[64px] shrink-0 text-[12px] font-bold leading-tight">
+                                {PRODUCT_LABELS[p.product]}
+                              </span>
+                              <div className="grid flex-1 grid-cols-3 gap-1">
+                                {LEVELS.map((level) => {
+                                  const active = current === level;
+                                  return (
+                                    <button
+                                      key={level}
+                                      type="button"
+                                      aria-pressed={active}
+                                      disabled={savingProduct === p.product}
+                                      onClick={() => setProductTraffic(p.product, level)}
+                                      className={`flex min-h-[36px] items-center justify-center gap-1 rounded-lg border text-[12px] font-semibold transition-colors duration-200 disabled:opacity-50 ${
+                                        active
+                                          ? `${TRAFFIC_COLORS[level].bg} ${TRAFFIC_COLORS[level].text} ${TRAFFIC_COLORS[level].border}`
+                                          : 'border-slate-200 bg-white text-slate-600'
+                                      }`}
+                                    >
+                                      <span className={`h-2 w-2 rounded-full ${TRAFFIC_COLORS[level].dot}`} />
+                                      {TRAFFIC_LABELS[level]}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </li>
+                          );
+                        })}
+                    </ul>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {view === 'designs' && (
               <>
-            <WorkingHours
-              station={station}
-              onChange={(patch) => setStation({ ...station, ...patch })}
-            />
-            <StationLinkCard
-              stationId={station.id}
-              name={station.name}
-              slug={station.slug}
-              onSlugChange={(slug) => setStation({ ...station, slug })}
-            />
-            <StationPoster key={station.slug ?? 'none'} name={station.name} slug={station.slug} />
+                <AvailabilityPoster
+                  name={station.name}
+                  slug={station.slug}
+                  products={products.filter((p) => p.is_available).map((p) => p.product)}
+                />
+                <ShareButton
+                  stationId={station.id}
+                  name={station.name}
+                  available={products.filter((p) => p.is_available).map((p) => p.product)}
+                  /* activeTrafficLevel, not the raw column: the raw value survives
+                     both the 30-minute expiry and closing time, so «الازدحام: خفيف»
+                     could be shared hours after it stopped being true. */
+                  traffic={activeTrafficLevel(station)}
+                />
+                <JoinPoster stationId={station.id} name={station.name} slug={station.slug} />
+                {/* keyed on the slug so the poster redraws when the link changes */}
+                <StationPoster key={station.slug ?? 'none'} name={station.name} slug={station.slug} />
               </>
             )}
 
-            {view === 'data' && (
+            {view === 'info' && (
               <>
+                <WorkingHours
+                  station={station}
+                  onChange={(patch) => setStation({ ...station, ...patch })}
+                />
+                <StationLinkCard
+                  stationId={station.id}
+                  name={station.name}
+                  slug={station.slug}
+                  onSlugChange={(slug) => setStation({ ...station, slug })}
+                />
                 <section className="card p-5">
-                  <h3 className="text-sm font-bold">بيانات الحساب</h3>
+                  <h3 className="text-sm font-bold">بيانات المحطة</h3>
                   <dl className="mt-3 space-y-2 text-sm">
                     <div className="flex justify-between gap-3">
                       <dt className="text-slate-500">اسم المستخدم</dt>
@@ -859,21 +1025,17 @@ export default function OwnerPage() {
                     محطة يعتمد عليها المستخدمون دون مراجعة.
                   </p>
                 </section>
-            <ChangePassword />
-
-            <OwnerReminders stationId={station.id} />
-            <DeleteAccount phone={station.phone} />
               </>
             )}
 
-
-
-
-            {/* keyed on the slug so the poster redraws when the link changes */}
-
-
-
-
+            {view === 'account' && (
+              <>
+                <BiometricLockToggle />
+                <ChangePassword />
+                <OwnerReminders stationId={station.id} />
+                <DeleteAccount phone={station.phone} />
+              </>
+            )}
           </div>
         )}
       </div>

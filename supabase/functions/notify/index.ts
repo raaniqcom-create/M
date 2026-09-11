@@ -25,8 +25,24 @@ const PRODUCT_LABELS: Record<string, string> = {
  *  app for sat on the second line where the OS truncates. The verb went too
  *  — the notification firing IS «available now», and the phone stamps the
  *  time beside it for free. */
-function headline(products: string[]): string {
-  return `⛽ ${products.map((p) => PRODUCT_LABELS[p] ?? p).join(' و')}`;
+function headline(live: string[], soon: { product: string; day: string }[] = []): string {
+  const now = live.map((p) => PRODUCT_LABELS[p] ?? p).join(' و');
+  const later = soon.map((s) => `${PRODUCT_LABELS[s.product] ?? s.product} ${s.day}`).join(' و');
+  if (!later) return `⛽ ${now}`;
+  // وعدٌ لا وصول: الساعةُ الرمليّة لا المضخّة، كي لا يقرأ السائقُ «الآن».
+  if (!now) return `🕒 متوقّع: ${later}`;
+  return `⛽ ${now} · متوقّع: ${later}`;
+}
+
+/** «غداً» لا «2026-09-12» — والفرقُ يُحسب بيوم بغداد لا بيوم UTC: بعد التاسعة
+ *  مساءً يكون غدُ بغداد هو يومَ UTC نفسَه، فتُكذَب «غداً» ثلاثَ ساعاتٍ كلَّ ليلة. */
+function dayWord(isoDate: string, today: string): string {
+  const days = Math.round((Date.parse(isoDate) - Date.parse(today)) / 86400000);
+  if (days <= 0) return 'اليوم';
+  if (days === 1) return 'غداً';
+  if (days === 2) return 'بعد غد';
+  const [, m, d] = isoDate.split('-');
+  return `يوم ${Number(d)}/${Number(m)}`;
 }
 
 /** Where, on one line: the station, then the city. */
@@ -146,8 +162,8 @@ async function ownerDevices(stationId: string): Promise<Listener[]> {
  *  the log rather than quietly dropped — the number is the argument for
  *  applying for a template.  ponytail: template approval when the miss rate
  *  justifies the paperwork. */
-async function notifyWhatsapp(stationId: string, stationName: string, products: string[]) {
-  if (!products.length) return;
+async function notifyWhatsapp(stationId: string, stationName: string, title: string | null) {
+  if (!title) return;
   const token = Deno.env.get('WHATSAPP_TOKEN');
   const phoneId = Deno.env.get('WHATSAPP_PHONE_ID');
   if (!token || !phoneId) return;
@@ -159,7 +175,7 @@ async function notifyWhatsapp(stationId: string, stationName: string, products: 
   if (!favs?.length) return;
 
   const body =
-    headline(products) + NL + NL +
+    title + NL + NL +
     stationName + NL + (st?.city ?? '') + NL + NL +
     SITE + '/station/' + stationId;
 
@@ -192,8 +208,8 @@ async function notifyWhatsapp(stationId: string, stationName: string, products: 
 
 /** Fires the bot alert immediately rather than waiting for the scheduled
  *  sweep — fuel queues form within minutes, so a delay is a real cost. */
-async function notifyTelegram(stationId: string, stationName: string, products: string[]) {
-  if (!products.length) return; // an approval announcement names no fuel
+async function notifyTelegram(stationId: string, stationName: string, title: string | null) {
+  if (!title) return; // an approval announcement names no fuel
   const [{ data: favs }, { data: st }] = await Promise.all([
     db.from('telegram_favorites').select('chat_id').eq('station_id', stationId),
     db.from('stations').select('city').eq('id', stationId).maybeSingle(),
@@ -201,7 +217,7 @@ async function notifyTelegram(stationId: string, stationName: string, products: 
   if (!favs?.length) return;
 
   const text =
-    `<b>${headline(products)}</b>\n\n` +
+    `<b>${title}</b>\n\n` +
     `<b>${stationName}</b>\n${st?.city ?? ''}\n\n` +
     `${SITE}/station/${stationId}`;
 
@@ -586,6 +602,42 @@ Deno.serve(async (req) => {
 
   if (!station || station.status !== 'approved') return json({ error: 'station not found' }, 404);
 
+  // only announce fuel that is genuinely in stock right now, so a forged call
+  // cannot tell drivers to drive to an empty station
+  //
+  // وموعدُ النفاد المُعلَن حارسٌ ثانٍ هنا: هذه بوّابةُ الفتحات الخمس كلِّها —
+  // دفعُ الويب، وFCM، وAPNs، ومفضّلو تيليجرام، ومفضّلو واتساب — فسطرٌ واحدٌ
+  // يمنع الخمسة من الإعلان عن وقودٍ قال صاحبُه إنه نفد.
+  //
+  // **والموعودُ يُعلَن كالمتوفّر** — بموعدٍ لم يفت. «يصل غداً» يُغني سائقاً عن
+  // رحلة اليوم، وكان يُكتب في القاعدة ولا يبلغ أحداً. واليومُ يومُ بغداد.
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Baghdad' });
+  const nowIso = new Date().toISOString();
+  const { data: rows } = await db
+    .from('station_products')
+    .select('product, is_available, expected_at, runs_out_at')
+    .eq('station_id', stationId)
+    .in('product', wanted)
+    .or(`and(is_available.eq.true,or(runs_out_at.is.null,runs_out_at.gt.${nowIso})),expected_at.gte.${today}`);
+
+  // متوفّرٌ لم ينفد؛ وما سواه بموعدٍ قادم فموعود — ومنه «نفد الآن ويصل غداً».
+  const isLive = (r: { is_available: boolean; runs_out_at: string | null }) =>
+    r.is_available && (!r.runs_out_at || r.runs_out_at > nowIso);
+
+  // Order by our own list, not the database's: the message reads in the
+  // order drivers see on the station card.
+  const live: string[] = [];
+  const soon: { product: string; day: string }[] = [];
+  for (const p of Object.keys(PRODUCT_LABELS)) {
+    const r = rows?.find((x) => x.product === p);
+    if (!r) continue;
+    if (isLive(r)) live.push(p);
+    else if (r.expected_at) soon.push({ product: p, day: dayWord(r.expected_at, today) });
+  }
+  if (!isNewStation && !live.length && !soon.length) {
+    return json({ error: 'product not available' }, 409);
+  }
+
   // ولا يخرج خبرُ وصولٍ من محطة مغلقة.
   //
   // الحارس هنا لا في alerts_for: فرعا تيليجرام وواتساب يقرآن جداول المفضّلة
@@ -598,7 +650,10 @@ Deno.serve(async (req) => {
   //
   // وخبرُ الموافقة يمرّ: وجهته جهاز المالك نفسه لا الناس، ومحطةٌ وافقنا
   // عليها ليلاً يجب أن يعلم صاحبها الآن لا في الصباح.
-  if (!isNewStation) {
+  //
+  // **وعلى المتوفّر وحده.** محطةٌ مغلقةٌ مساءً تقول «يصل غداً» تقول صدقاً؛
+  // والحارسُ هنا يمنع «متوفّرٌ الآن» من محطةٍ لا أحدَ فيها.
+  if (!isNewStation && live.length) {
     const { data: openNow, error: openErr } = await db.rpc('station_open_now_id', {
       p_id: stationId,
     });
@@ -615,30 +670,10 @@ Deno.serve(async (req) => {
     }
   }
 
-  // only announce fuel that is genuinely in stock right now, so a forged call
-  // cannot tell drivers to drive to an empty station
-  //
-  // وموعدُ النفاد المُعلَن حارسٌ ثانٍ هنا: هذه بوّابةُ الفتحات الخمس كلِّها —
-  // دفعُ الويب، وFCM، وAPNs، ومفضّلو تيليجرام، ومفضّلو واتساب — فسطرٌ واحدٌ
-  // يمنع الخمسة من الإعلان عن وقودٍ قال صاحبُه إنه نفد.
-  const { data: rows } = await db
-    .from('station_products')
-    .select('product')
-    .eq('station_id', stationId)
-    .eq('is_available', true)
-    .or(`runs_out_at.is.null,runs_out_at.gt.${new Date().toISOString()}`)
-    .in('product', wanted);
-
-  // Order by our own list, not the database's: the message reads in the
-  // order drivers see on the station card.
-  const live = Object.keys(PRODUCT_LABELS).filter((p) =>
-    rows?.some((r) => r.product === p)
-  );
-  if (!isNewStation && !live.length) return json({ error: 'product not available' }, 409);
   // The approval message is written for its reader. It used to say «محطة
   // جديدة» to a whole city; it now tells the one person who can act on it
   // what to do next.
-  const alertTitle = isNewStation ? 'تمّت الموافقة على محطتك' : headline(live);
+  const alertTitle = isNewStation ? 'تمّت الموافقة على محطتك' : headline(live, soon);
   // وذِكرُ الصورة في النصّ لا في اللوحة وحدها: البطاقةُ في أعلى /owner لا
   // يعرفها من لم يفتح اللوحة، والإشعارُ هو ما يفتحها.
   const alertBody = isNewStation
@@ -654,7 +689,7 @@ Deno.serve(async (req) => {
   try {
     listeners = isNewStation
       ? await ownerDevices(stationId)
-      : await audienceFor(station.city, live, true, stationId);
+      : await audienceFor(station.city, [...live, ...soon.map((s) => s.product)], true, stationId);
   } catch (e) {
     // 502 لا 200: النشر وقع في القاعدة، والإخطار لم يقع. واللوحة تعرض الفرق.
     return json({ error: `تعذّر تحديد المستقبِلين: ${(e as Error).message}` }, 502);
@@ -734,8 +769,10 @@ Deno.serve(async (req) => {
   // وهذا يُعيد فتح العمى نفسه الذي أخفى انقطاع مفتاح APNs ستة أيام، وهو
   // السبب الذي كُتبت من أجله هذه التقارير أصلاً.
   const [tg, wa, fcm, apns] = await Promise.allSettled([
-    notifyTelegram(stationId, station.name, isNewStation ? [] : live),
-    notifyWhatsapp(stationId, station.name, isNewStation ? [] : live),
+    // العنوانُ نفسُه في القنوات الخمس — فلا يقرأ مشترِكُ تيليجرام «متوفّر»
+    // عن وعدٍ قرأه مشترِكُ الهاتف «متوقّع غداً».
+    notifyTelegram(stationId, station.name, isNewStation ? null : alertTitle),
+    notifyWhatsapp(stationId, station.name, isNewStation ? null : alertTitle),
     notifyAndroidApps(stationId, alertTitle, alertBody, alertUrl, pick('android').map((l) => l.address)),
     notifyIosApps(stationId, alertTitle, alertBody, alertUrl, pick('ios').map((l) => l.address)),
   ]);

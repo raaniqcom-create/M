@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getPushSubscription } from '@/lib/push';
 import { BellRingIcon, CheckIcon, SpinnerIcon } from './icons';
+import { Sheet } from './Sheet';
 
 /** يربط لوحة المحطة بجهاز صاحبها — من المتصفح، لا من التطبيق وحده.
  *
@@ -13,11 +14,14 @@ import { BellRingIcon, CheckIcon, SpinnerIcon } from './icons';
  *  يدير محطته من المتصفح لا يملكه، فلا يُربط أبداً — ولا يُنبَّه أنه غير مربوط.
  *
  *  ولا يُطلب إذنٌ من تلقاء الصفحة: إن كان ممنوحاً أصلاً يقع الربط بصمت، وإلا
- *  فبطاقةٌ تشرح ما يُفتقد وتنتظر ضغطة. */
+ *  فورقةٌ منبثقةٌ تشرح ما يُفتقد وتنتظر ضغطة — منبثقةٌ لا بطاقةٌ في آخر
+ *  الصفحة، لأنّ آخرَ الصفحة لا يُقرأ (طلبُ صاحب المنصّة ١١ أيلول ٢٠٢٦).
+ *  و«لاحقاً» يُغلقها لهذه الزيارة، ولا يُلحّ عليه في كلّ رسم. */
 export function OwnerDeviceLink({ stationId }: { stationId: string }) {
   const [state, setState] = useState<'checking' | 'linked' | 'ask' | 'working' | 'failed'>(
     'checking'
   );
+  const [dismissed, setDismissed] = useState(false);
 
   const link = useCallback(async () => {
     const sub = await getPushSubscription();
@@ -48,21 +52,21 @@ export function OwnerDeviceLink({ stationId }: { stationId: string }) {
     setState((await link()) ? 'linked' : 'failed');
   }
 
-  // الصامت هو الصحيح: مربوطٌ فلا داعي لبطاقة، أو لمّا يُعرف بعدُ فلا يُخوَّف.
-  if (state === 'checking' || state === 'linked') return null;
+  // الصامت هو الصحيح: مربوطٌ فلا داعي لورقة، أو لمّا يُعرف بعدُ فلا يُخوَّف.
+  const open = !dismissed && state !== 'checking' && state !== 'linked';
 
   return (
-    <section className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
+    <Sheet open={open} onClose={() => setDismissed(true)} title="لا يصلك تنبيه من المنصة">
       <p className="flex items-center gap-2 text-sm font-extrabold text-amber-900">
         <BellRingIcon className="h-5 w-5 shrink-0" />
-        لا يصلك تنبيه من المنصة
+        جهازك غير مربوط بلوحة محطتك
       </p>
-      <p className="mt-2 text-xs leading-relaxed text-amber-900">
-        جهازك غير مربوط بلوحة محطتك، فلا يصلك تذكير الصباح ولا تنبيه أن اليوم مضى
-        بلا تحديث. ضغطة واحدة تكفي، ولا نطلب منك شيئاً بعدها.
+      <p className="mt-2 text-xs leading-relaxed text-slate-600">
+        فلا يصلك تذكير الصباح ولا تنبيه أن اليوم مضى بلا تحديث. اسمح بالتنبيهات مرّةً
+        واحدة، ولا نطلب منك شيئاً بعدها.
       </p>
       {state === 'failed' && (
-        <p className="mt-2 rounded-lg bg-white/70 p-2.5 text-xs leading-relaxed text-red-700">
+        <p className="mt-2 rounded-lg bg-red-50 p-2.5 text-xs leading-relaxed text-red-700">
           تعذّر الربط في هذا المتصفح. إن كنت في وضع التصفّح الخفي أو رفضت الإذن
           سابقاً فأعد فتح اللوحة من نافذة عادية، أو افتحها من التطبيق المثبَّت.
         </p>
@@ -70,15 +74,22 @@ export function OwnerDeviceLink({ stationId }: { stationId: string }) {
       <button
         onClick={enable}
         disabled={state === 'working'}
-        className="btn-primary mt-3 w-full gap-2 disabled:opacity-60"
+        className="btn-primary mt-4 w-full gap-2 disabled:opacity-60"
       >
         {state === 'working' ? (
           <SpinnerIcon className="h-4 w-4" />
         ) : (
           <CheckIcon className="h-4 w-4" />
         )}
-        فعّل تنبيهات محطتي
+        السماح بالتنبيهات
       </button>
-    </section>
+      <button
+        type="button"
+        onClick={() => setDismissed(true)}
+        className="btn-ghost mt-2 w-full"
+      >
+        لاحقاً
+      </button>
+    </Sheet>
   );
 }

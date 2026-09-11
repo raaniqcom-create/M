@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { Preferences } from '@capacitor/preferences';
 
 // A hanging request never settles, so callers' .catch() never runs and the UI
 // spins forever — the normal case on a weak mobile connection. Time every
@@ -19,6 +20,47 @@ export function timeoutSignal(ms: number): AbortSignal | undefined {
   return c.signal;
 }
 
+/** أفي التطبيق الأصليّ نحن؟ — القراءةُ نفسُها التي في `lib/alerts.ts`. */
+function isNative(): boolean {
+  const cap = (globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+  return !!cap?.isNativePlatform?.();
+}
+
+/** ــ مخزنُ الجلسة: في التطبيق مخزنٌ أصليّ، وفي المتصفّح localStorage ــــــ
+ *
+ *  `localStorage` داخل WKWebView يُمسح بعد أسبوعٍ من غير استعمالٍ (ITP) وعند
+ *  ضيق التخزين — فيفتح صاحبُ المحطة تطبيقَه فيجد نموذجَ الدخول بلا سببٍ يراه.
+ *  و`Preferences` هي UserDefaults على آيفون وSharedPreferences على أندرويد،
+ *  ولا تُمسّ إلّا بحذف التطبيق.
+ *
+ *  ويُكتب في الاثنين معاً على المنصّة الأصليّة: الأصليُّ هو الباقي، والمتصفّحيُّ
+ *  هو ما تقرؤه الرئيسةُ قراءةً متزامنةً لتحجب القائمةَ عمّن معه جلسة
+ *  (`app/page.tsx`). وجلسةٌ حُفظت قبل هذا التحديث في localStorage وحدَه تُقرأ
+ *  منه احتياطاً فتُنسخ إلى الأصليّ من نفسِها — فلا يُخرَج أحدٌ بالتحديث.
+ *  والمتصفّحُ لا يمرّ بالجسر أصلاً: `Preferences` على الويب تلتفّ على
+ *  localStorage بلا زيادة. */
+const sessionStore = {
+  async getItem(key: string): Promise<string | null> {
+    if (typeof localStorage === 'undefined') return null;
+    if (!isNative()) return localStorage.getItem(key);
+    const { value } = await Preferences.get({ key });
+    if (value !== null) return value;
+    const legacy = localStorage.getItem(key);
+    if (legacy !== null) await Preferences.set({ key, value: legacy });
+    return legacy;
+  },
+  async setItem(key: string, value: string): Promise<void> {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(key, value);
+    if (isNative()) await Preferences.set({ key, value });
+  },
+  async removeItem(key: string): Promise<void> {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.removeItem(key);
+    if (isNative()) await Preferences.remove({ key });
+  },
+};
+
 export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -30,6 +72,7 @@ export const supabase = createClient(
       persistSession: true,
       autoRefreshToken: true,
       storageKey: 'muhta-auth',
+      storage: sessionStore,
     },
     global: {
       fetch: (input, init) =>

@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { PRODUCT_LABELS, expectedText, isoDateIn } from '@/lib/products';
-import { PERIODS, PERIOD_LABELS, runsOutLabel, type ExpectedPeriod } from '@/lib/hours';
-import { CalendarIcon, CheckIcon, SpinnerIcon, XIcon } from './icons';
+import { PERIODS, PERIOD_LABELS, hasRunOut, runsOutLabel, type ExpectedPeriod } from '@/lib/hours';
+import { SpinnerIcon } from './icons';
 import type { FuelProduct, StationProduct } from '@/types/database';
 
 /** الحالاتُ الثلاث كما يقولها صاحبُ المحطة لزبونه. */
@@ -47,6 +47,8 @@ export function ProductControl({
   product,
   row,
   saving,
+  open,
+  onFocus,
   onSetState,
   onSetExpected,
   onSetRunsOut,
@@ -54,6 +56,10 @@ export function ProductControl({
   product: FuelProduct;
   row: StationProduct | undefined;
   saving: boolean;
+  /** أهذا المنتجُ هو المفتوح؟ — واحدٌ فقط تُفتح تفاصيلُه (موعدُ النفاد أو
+   *  الوصول)، فلا تطول القائمةُ بسبعة صناديقَ مفتوحة. والصفحةُ تملك الجواب. */
+  open: boolean;
+  onFocus: () => void;
   onSetState: (next: ProductState) => void;
   onSetExpected: (
     date: string | null,
@@ -68,34 +74,45 @@ export function ProductControl({
   const expectedTime = row?.expected_time ?? null;
   const runsOutAt = row?.runs_out_at ?? null;
 
-  const state: ProductState = available ? 'in' : expectedAt ? 'soon' : 'out';
+  // ونفادٌ مضى موعدُه «غير متوفر» وإن بقي الصفُّ مضاءً دقائقَ قبل أن يطفئه
+  // كرونُ `expire_run_outs` — فلا يقرأ صاحبُ المحطة «متوفر» عمّا قال إنّه نفد.
+  const state: ProductState =
+    available && !hasRunOut(runsOutAt) ? 'in' : expectedAt ? 'soon' : 'out';
 
   // «متوقّع» تُضغط فيُفتح السؤال، والحالةُ لا تتغيّر حتى يُختار يوم. فمن ضغطها
   // ثمّ عدل بقي على ما كان، ولم تُكتب في لوحته كلمةٌ لم يقلها.
   const [asking, setAsking] = useState(false);
-  const showExpected = state === 'soon' || asking;
+  const showRunsOut = open && state === 'in';
+  const showExpected = open && (state === 'soon' || asking);
 
+  // كلُّ ضغطةٍ تفتح هذا المنتجَ وتُغلق غيرَه. وضغطةٌ على الحالة القائمة لا
+  // تكتب شيئاً — تفتح تفاصيلَه فقط، فلا يُختم الوقتُ عن لمسةٍ لم تغيّر حرفاً.
   const pick = (next: ProductState) => {
+    onFocus();
     setAsking(next === 'soon');
-    if (next !== 'soon') onSetState(next);
+    if (next !== 'soon' && next !== state) onSetState(next);
   };
 
   const chip = (on: boolean, tone: string, open = false) =>
-    `flex min-h-[44px] items-center justify-center gap-1 rounded-xl border text-[13px] font-bold transition-colors duration-200 disabled:opacity-50 ${
+    `flex min-h-[38px] items-center justify-center gap-1 rounded-lg border px-1 text-[12px] font-bold transition-colors duration-200 disabled:opacity-50 ${
       on ? tone : open ? 'border-amber-500 bg-white text-amber-700' : 'border-slate-200 bg-white text-slate-500'
     }`;
 
   return (
-    <li className="py-3.5">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-bold">{PRODUCT_LABELS[product]}</span>
-        {saving && <SpinnerIcon className="h-4 w-4 text-slate-400" />}
-      </div>
-
-      {/* ثلاثةٌ في صفٍّ واحد: على شاشةِ ٣٦٠ يبقى لكلٍّ نحوُ مئةِ بكسل، و«غير
-          متوفر» تسعُها بلا التفاف. والاتّجاهُ يتبع الوثيقة، فتُقرأ من اليمين
-          متوفر ← متوقّع ← غير متوفر: التوفّرُ نازلاً. */}
-      <div className="mt-2 grid grid-cols-3 gap-1.5">
+    <li className="py-2">
+      {/* ── الاسمُ والأزرارُ الثلاثة في سطرٍ واحد ──────────────────────────
+        *
+        *  كان الاسمُ سطراً والأزرارُ سطراً، فسبعةُ منتجاتٍ تحتاج شاشةً ونصفاً
+        *  ولا يرى صاحبُ المحطة إلّا أربعة. وطلبُه: «صغّر المساحة كي تكون أمام
+        *  عين المستخدم مباشرة». فعلى ٣٦٠ بكسل: الاسمُ ٧٢ والأزرارُ الثلاثة في
+        *  الباقي — نحوُ ٨٥ لكلٍّ، و«غير متوفر» بحرف ١٢ تسعُها. والترتيبُ يتبع
+        *  الوثيقة: متوفر ← متوقّع ← غير متوفر، التوفّرُ نازلاً. */}
+      <div className="flex items-center gap-2">
+        <span className="flex w-[64px] shrink-0 items-center gap-1 text-[12px] font-bold leading-tight">
+          {PRODUCT_LABELS[product]}
+          {saving && <SpinnerIcon className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
+        </span>
+        <div className="grid flex-1 grid-cols-3 gap-1">
         <button
           type="button"
           aria-pressed={state === 'in'}
@@ -103,7 +120,6 @@ export function ProductControl({
           onClick={() => pick('in')}
           className={chip(state === 'in', 'border-brand bg-brand text-white')}
         >
-          <CheckIcon className="h-3.5 w-3.5" />
           متوفر
         </button>
         <button
@@ -120,7 +136,6 @@ export function ProductControl({
             asking && state !== 'soon'
           )}
         >
-          <CalendarIcon className="h-3.5 w-3.5" />
           متوقّع
         </button>
         <button
@@ -130,16 +145,30 @@ export function ProductControl({
           onClick={() => pick('out')}
           className={chip(state === 'out', 'border-traffic-red bg-traffic-red text-white')}
         >
-          <XIcon className="h-3.5 w-3.5" />
           غير متوفر
         </button>
+        </div>
       </div>
 
-      {state === 'in' && (
+      {showRunsOut && (
         <div className="mt-2.5 rounded-xl bg-brand-50 p-2.5">
           <p className="text-[11px] font-semibold text-brand-800">متى تتوقع نفاده؟ (اختياري)</p>
 
+          {/* و«بلا موعد» زرٌّ قائمٌ لا غيابُ اختيار: «الأعدادُ غيرُ متوقَّعة، ولا
+              يريد أن يُجبر نفسَه» — صاحبُ المنصّة. فمن لا يعرف يقولها صراحةً
+              ويرى زرَّه مضيئاً، بدل أن يترك الثلاثةَ ويظنّ أنّه نسي. */}
           <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              aria-pressed={!runsOutAt}
+              disabled={saving}
+              onClick={() => runsOutAt && onSetRunsOut(null)}
+              className={`min-h-[34px] rounded-lg px-3 text-[12px] font-semibold transition-colors duration-200 disabled:opacity-50 ${
+                runsOutAt ? 'bg-white text-brand-800' : 'bg-brand text-white'
+              }`}
+            >
+              بلا موعد
+            </button>
             {RUNS_OUT.map((opt) => (
               <button
                 key={opt.hours}
@@ -151,16 +180,6 @@ export function ProductControl({
                 {opt.label}
               </button>
             ))}
-            {runsOutAt && (
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => onSetRunsOut(null)}
-                className="min-h-[34px] px-2 text-[12px] font-semibold text-traffic-red disabled:opacity-50"
-              >
-                إلغاء
-              </button>
-            )}
           </div>
 
           <p className="mt-2 text-[11px] leading-relaxed font-bold text-brand-900">

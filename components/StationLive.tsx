@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { PRODUCT_LABELS, PRODUCT_ORDER, expectedText, isExpectedLate, isOffered, isStaleOffer } from '@/lib/products';
+import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_LABELS, expectedText, isExpectedLate, isOffered, isStaleOffer, productTrafficLevel } from '@/lib/products';
 import { hoursLabel, isFresh, isOpenNow, PERIOD_LABELS, runsOutLabel } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
 import type { Station, StationProduct } from '@/types/database';
@@ -110,6 +110,7 @@ export function StationLive({
           const inStock = isOffered(station, row);
           const stale = isStaleOffer(row);
           const staleAge = stale ? agoLabel(row?.updated_at) : null;
+          const queue = inStock ? productTrafficLevel(station, row) : null;
 
           return (
             <li key={product} className="flex items-center justify-between gap-2 py-2.5 text-sm">
@@ -128,9 +129,8 @@ export function StationLive({
                 }`}
               >
                 {inStock
-                  ? row?.runs_out_at
-                    ? `متوفر حتى ${runsOutLabel(row.runs_out_at)}`
-                    : 'متوفر'
+                  ? (row?.runs_out_at ? `متوفر حتى ${runsOutLabel(row.runs_out_at)}` : 'متوفر') +
+                    (queue ? ` · الطابور ${TRAFFIC_LABELS[queue]}` : '')
                   : expected
                     ? expectedText(row ?? { expected_at: expected })
                     : stale

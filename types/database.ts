@@ -53,6 +53,10 @@ export interface StationProduct {
   // ISO timestamptz: نفادٌ متوقَّع أعلنه صاحبُ المحطة لمنتجٍ متوفّر. بعد
   // مروره لا يُعرض ولا يُعلَن عنه، ويعود بأيّ تفعيلٍ أو تأكيدٍ يُصفّره.
   runs_out_at: string | null;
+  // ازدحامُ طابور هذا المنتج بعينه — اختياريٌّ فوق ازدحام المحطة، ويسقط بعد
+  // ٣٠ دقيقة كما يسقط ازدحامُ المحطة (clear_stale_traffic).
+  traffic_level: TrafficLevel | null;
+  traffic_set_at: string | null;
   updated_at: string;
 }
 
