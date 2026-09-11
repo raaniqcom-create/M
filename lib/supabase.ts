@@ -40,24 +40,45 @@ function isNative(): boolean {
  *  والمتصفّحُ لا يمرّ بالجسر أصلاً: `Preferences` على الويب تلتفّ على
  *  localStorage بلا زيادة. */
 const sessionStore = {
+  // ── وكلُّ نداءٍ للإضافة الأصليّة محروس ────────────────────────────────
+  //
+  // **وقع العطل**: الموقعُ يُنشر في دقيقتين، والتطبيقُ المثبَّتُ على الهواتف
+  // بناءٌ قديمٌ **بلا** إضافة Preferences. فنداؤها في WebView قديم يرمي
+  // «not implemented on ios» — فسقطت `getSession` على كلّ مالكٍ في التطبيق
+  // وخرجوا جميعاً، ورُفض الدخولُ لأنّ `setItem` ترمي بعد نجاح الخادم.
+  // فالإضافةُ زيادةٌ حين تكون، وlocalStorage هو الأصلُ الذي لا يسقط.
   async getItem(key: string): Promise<string | null> {
     if (typeof localStorage === 'undefined') return null;
-    if (!isNative()) return localStorage.getItem(key);
-    const { value } = await Preferences.get({ key });
-    if (value !== null) return value;
-    const legacy = localStorage.getItem(key);
-    if (legacy !== null) await Preferences.set({ key, value: legacy });
-    return legacy;
+    const local = localStorage.getItem(key);
+    if (!isNative()) return local;
+    try {
+      const { value } = await Preferences.get({ key });
+      if (value !== null) return value;
+      if (local !== null) await Preferences.set({ key, value: local });
+    } catch {
+      /* بناءٌ قديمٌ بلا الإضافة */
+    }
+    return local;
   },
   async setItem(key: string, value: string): Promise<void> {
     if (typeof localStorage === 'undefined') return;
     localStorage.setItem(key, value);
-    if (isNative()) await Preferences.set({ key, value });
+    if (!isNative()) return;
+    try {
+      await Preferences.set({ key, value });
+    } catch {
+      /* بناءٌ قديمٌ بلا الإضافة */
+    }
   },
   async removeItem(key: string): Promise<void> {
     if (typeof localStorage === 'undefined') return;
     localStorage.removeItem(key);
-    if (isNative()) await Preferences.remove({ key });
+    if (!isNative()) return;
+    try {
+      await Preferences.remove({ key });
+    } catch {
+      /* بناءٌ قديمٌ بلا الإضافة */
+    }
   },
 };
 

@@ -37,12 +37,20 @@ export async function biometricAvailable(): Promise<boolean> {
  *  ومن لا يريده يطفئه من «حسابي». */
 export async function biometricLockEnabled(): Promise<boolean> {
   if (!(await biometricAvailable())) return false;
-  const { value } = await Preferences.get({ key: KEY });
-  return value !== '0';
+  try {
+    const { value } = await Preferences.get({ key: KEY });
+    return value !== '0';
+  } catch {
+    return false;
+  }
 }
 
 export async function setBiometricLock(on: boolean): Promise<void> {
-  await Preferences.set({ key: KEY, value: on ? '1' : '0' });
+  try {
+    await Preferences.set({ key: KEY, value: on ? '1' : '0' });
+  } catch {
+    /* بناءٌ قديمٌ بلا الإضافة */
+  }
 }
 
 /** يسأل الوجهَ أو البصمة. `true` حين تُقبل — وكلُّ ما سواه رفض. */
