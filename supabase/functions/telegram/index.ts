@@ -692,6 +692,8 @@ type Draft = {
     source_ref?: string;
     /** المصفى المجهِّز — يُحفظ في `note` ولا يُعرض للناس. */
     note?: string;
+    /** اختار صاحبُ المنصّة اليومَ بيده (📅 أو جوابُ سؤال النشر) — فلا يُسأل ثانيةً. */
+    dayConfirmed?: boolean;
   };
 };
 
@@ -2464,6 +2466,7 @@ async function editRoute(chat: number, userId: number, data: string, msgId?: num
     // اليومُ يُقلب بزرّ: منشورُ الليلة يُراجَع بعد منتصف الليل أحياناً، والترجيحُ
     // ترجيحٌ لا يقين.
     sched.for_date = sched.for_date === baghdadDay() ? baghdadDay(1) : baghdadDay();
+    sched.dayConfirmed = true;
     await save();
     return void (await showSchedule(chat, sched, msgId));
   }
@@ -2647,6 +2650,34 @@ async function publishSchedule(
     await answer(queryId, 'انتهت الجلسة');
     return;
   }
+
+  // ── واليومُ يُراجَع ساعةَ النشر لا ساعةَ اللصق ─────────────────────────
+  //
+  // المسوّدةُ تحمل تاريخَها من لحظة اللصق. فمنشورٌ لُصق صباحاً ونُشر مساءً
+  // يحمل «اليوم» — والمقصودُ الغد. وقع ٢٠٢٦-٠٩-١١ الساعةَ ١٨:٢٩: اثنان
+  // وخمسون صفّاً على تاريخ اليوم، فاستُبدل جدولُ اليوم القائمُ وضاع، وقال
+  // صاحبُ المنصّة «أنا أريده يكتب جدول غداً». فإن كان التاريخُ اليومَ
+  // والساعةُ بعد الظهر ولم يختره بيده، يُسأل قبل أن يُكتب صفّ.
+  if (d.for_date === baghdadDay() && baghdadHour() >= 12 && !d.dayConfirmed) {
+    await answer(queryId);
+    const flags = `${notify ? 1 : 0}${replace ? 1 : 0}`;
+    await send(
+      chat,
+      `⏰ الساعةُ ${baghdadHour()} مساءً وهذا الجدولُ على تاريخ <b>اليوم</b> ${d.for_date}.${NL}أهو لليوم أم للغد؟`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: `📅 للغد ${baghdadDay(1)}`, callback_data: `sday:t:${flags}` },
+              { text: 'لليوم كما هو', callback_data: `sday:k:${flags}` },
+            ],
+          ],
+        },
+      }
+    );
+    return;
+  }
+
   // تُمسح أوّلاً: ضغطتان متتاليتان على الزرّ نفسِه كانتا ستكتبان الجدولَ مرّتين.
   await clearDraft(userId);
 
@@ -2959,6 +2990,19 @@ Deno.serve(async (req) => {
         } else {
           await answer(cb.id);
           await boardRoute(chat, data, messageId);
+        }
+      } else if (data.startsWith('sday:')) {
+        // جوابُ سؤال اليوم: يُثبَّت التاريخُ في المسوّدة ثمّ يُنشر بالأعلام نفسِها.
+        const [, pick, flags] = data.split(':');
+        const dr = await getDraft(from);
+        const sched = dr?.data?.sched;
+        if (!sched?.lines?.length) {
+          await answer(cb.id, 'انتهت الجلسة');
+        } else {
+          if (pick === 't') sched.for_date = baghdadDay(1);
+          sched.dayConfirmed = true;
+          await saveDraft(from, chat, 'sched', { sched });
+          await publishSchedule(chat, from, cb.id, flags?.[0] === '1', flags?.[1] === '1');
         }
       } else if (data === 'sch:go') {
         await publishSchedule(chat, from, cb.id, true);
