@@ -280,6 +280,20 @@ export const AlertTriangleIcon = ({ className = 'h-5 w-5' }: IconProps) => (
   </svg>
 );
 
+export const ChartIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+    <path d="M7 16v-5M12 16V8M17 16v-3" />
+  </svg>
+);
+
+export const MegaphoneIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="m3 11 18-5v12L3 14v-3z" />
+    <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+  </svg>
+);
+
 export const CarIcon = ({ className = 'h-5 w-5' }: IconProps) => (
   <svg className={className} {...base}>
     <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" />

@@ -430,12 +430,15 @@ function Panel() {
 
       {/* ما نقوله بجوار ما سيقوله النظام: الإدارةُ ترى تذكيراتِ اليوم قبل
           أن تكتب، فلا تُعيد ما قيل ولا تناقضه. */}
-      <StationChat
-        stationId={station.id}
-        as="admin"
-        phone={station.phone}
-        name={station.contact_name}
-      />
+      {/* مرساةٌ يقفز إليها زرُّ «مراسلة» في قائمة المحطات. */}
+      <div id="chat">
+        <StationChat
+          stationId={station.id}
+          as="admin"
+          phone={station.phone}
+          name={station.contact_name}
+        />
+      </div>
 
       <OwnerMessagePreview stationId={station.id} />
 
@@ -447,7 +450,7 @@ function Panel() {
        *  hours, or the map pin drivers actually navigate by. The owner cannot
        *  either — that is deliberate, since these are the fields people drive
        *  on — so a wrong pin had no route to being fixed at all. */}
-      <section className="card mt-4 p-5">
+      <section id="edit" className="card mt-4 p-5">
         <h2 className="text-sm font-bold">تعديل بيانات المحطة</h2>
         <p className="mt-1 text-xs text-slate-400">
           العنوان والمدينة والموقع وأوقات العمل. الموقع هو ما يقود الناس إليها،

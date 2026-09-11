@@ -4,7 +4,31 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { metresToKnownFuel, SUSPICIOUS_M } from '@/lib/nearbyFuel';
-import { CheckIcon, LogOutIcon, MapPinIcon, SpinnerIcon, WhatsappIcon, XIcon } from '@/components/icons';
+import {
+  BellRingIcon,
+  CalendarIcon,
+  ChartIcon,
+  CheckIcon,
+  EyeIcon,
+  ImageIcon,
+  ListIcon,
+  LockIcon,
+  LogOutIcon,
+  MapPinIcon,
+  MegaphoneIcon,
+  MessageIcon,
+  PhoneIcon,
+  PlusIcon,
+  SlidersIcon,
+  SpinnerIcon,
+  StarIcon,
+  StoreIcon,
+  WhatsappIcon,
+  XIcon,
+} from '@/components/icons';
+import { IconGrid } from '@/components/IconGrid';
+import { BiometricLockToggle } from '@/components/BiometricLockToggle';
+import { biometricLockEnabled, verifyOwner } from '@/lib/biometric';
 import { whatsappLink, whatsappVerifyLocation, whatsappVerifyRole } from '@/lib/phone';
 import { ScheduleAdmin } from '@/components/ScheduleAdmin';
 import { AdminStationForm } from '@/components/AdminStationForm';
@@ -23,7 +47,7 @@ import { PlatformNotice } from '@/components/PlatformNotice';
 import { PendingAnnouncements } from '@/components/PendingAnnouncements';
 import { findSimilar } from '@/lib/similar';
 import { announceStation, rebuildSite } from '@/lib/rebuild';
-import { KIND_LABELS, KIND_STYLES, KINDS } from '@/lib/stationMeta';
+import { KIND_LABELS, KIND_STYLES } from '@/lib/stationMeta';
 import type { Station, StationKind } from '@/types/database';
 
 interface Ad {
@@ -57,6 +81,10 @@ export default function AdminPage() {
     | 'schedule'
   >('stations');
   const [q, setQ] = useState('');
+  /** تصفيةُ المحطات بمدينةٍ واحدة — فارغةٌ = الكلّ. */
+  const [city, setCity] = useState('');
+  /** الجلسةُ موجودةٌ والوجهُ أو البصمةُ لم تُقبل بعد — في التطبيق وحده. */
+  const [locked, setLocked] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState<Station[]>([]);
   const [live, setLive] = useState<Station[]>([]);
@@ -68,7 +96,12 @@ export default function AdminPage() {
   const load = useCallback(async () => {
     const [{ data: st }, { data: ap }, { data: ad }, { data: un }] = await Promise.all([
       supabase.from('stations').select('*').eq('status', 'pending').order('created_at'),
-      supabase.from('stations').select('*').in('status', ['approved', 'suspended']).order('city'),
+      // من الأحدث إلى الأقدم — طلبُ صاحب المنصّة؛ والمدينةُ مرشّحٌ لا ترتيب.
+      supabase
+        .from('stations')
+        .select('*')
+        .in('status', ['approved', 'suspended'])
+        .order('created_at', { ascending: false }),
       supabase.from('ads').select('*').order('created_at', { ascending: false }),
       // **بلا هذا لا تعرف الإدارةُ أن أحداً ردّ** إلا إن صادف أن وصل إشعار.
       // والقائمةُ بشاراتها هي صندوقُ البريد عند ثمانٍ وعشرين محطة — فصفحةٌ
@@ -92,6 +125,13 @@ export default function AdminPage() {
       if (!user) {
         router.replace('/login');
         return;
+      }
+      // القفلُ بالبصمة أو الوجه — كما في لوحة المالك، وفي التطبيق وحده.
+      if (await biometricLockEnabled()) {
+        if (!(await verifyOwner())) {
+          setLocked(true);
+          return;
+        }
       }
       const { data: profile, error } = await supabase
         .from('profiles')
@@ -271,6 +311,36 @@ export default function AdminPage() {
     );
   }
 
+  if (locked) {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
+        <LockIcon className="h-8 w-8 text-brand" />
+        <h1 className="mt-3 text-base font-bold">لوحة الإدارة مقفلة</h1>
+        <p className="mt-2 text-sm text-slate-500">افتحها بوجهك أو بصمتك، أو ادخل بكلمة المرور.</p>
+        <button
+          type="button"
+          onClick={async () => {
+            // إعادةُ التحميل تُعيد الحارسَ من أوّله: البصمةُ ثمّ الدورُ ثمّ الجلب.
+            if (await verifyOwner()) window.location.reload();
+          }}
+          className="btn-primary mt-5 w-full max-w-xs"
+        >
+          افتح بالبصمة أو الوجه
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            await supabase.auth.signOut();
+            router.replace('/login');
+          }}
+          className="btn-ghost mt-2 w-full max-w-xs"
+        >
+          أدخل بكلمة المرور
+        </button>
+      </main>
+    );
+  }
+
   if (allowed === null) {
     return (
       <main className="flex min-h-dvh items-center justify-center">
@@ -296,22 +366,16 @@ export default function AdminPage() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-extrabold text-brand">لوحة الإدارة</h1>
-          {/* ?view=user stops the home page bouncing a signed-in admin
-              straight back here, so the site can be inspected the way an
-              ordinary visitor sees it without giving up the session. */}
-          <a href="/?view=user" className="text-[11px] font-bold text-slate-400">
-            عرض المنصة كمستخدم ↗
-          </a>
-          {/* والصلاحيةُ قائمةٌ سلفاً — is_branch_viewer() تُجيب المديرَ بنعم
-              (20260906_branch_viewer.sql:88). الناقصُ كان البابَ لا المفتاح.
-              وهنا وحدَه: القائمةُ الجانبية تفرّع «المديرَ أوّلاً» عمداً، ووضعُ
-              البند فيها أيضاً طريقٌ ثانٍ إلى الصفحة نفسِها. */}
-          <a
-            href="/branch"
-            className="mt-0.5 block text-[11px] font-bold text-brand-700"
-          >
-            لوحة الفرع — التوزيع في عموم الأنبار ↗
-          </a>
+          {/* «شاهد كمواطن» و«لوحة الفرع» صارا أيقونتين في الشبكة تحت. */}
+          {tab !== 'stations' && (
+            <button
+              type="button"
+              onClick={() => { setTab('stations'); window.scrollTo(0, 0); }}
+              className="mt-0.5 text-[11px] font-bold text-brand-700"
+            >
+              ‹ الرئيسية
+            </button>
+          )}
         </div>
         <button
           type="button"
@@ -360,35 +424,32 @@ export default function AdminPage() {
         ))}
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-brand-50 p-1">
-        {([
-          ['stations', `المحطات (${live.length})`],
-          ['requests', `الطلبات${pending.length ? ` (${pending.length})` : ''}`],
-          // ثالثاً لا عاشراً: بابٌ في آخر الصفّ الرابع بابٌ لا يُرى، وهذه
-          // بُنيت ونُشرت فلم تُعثَر — فموضعُها هو إصلاحُها.
-          ['messages', `الرسائل${totalUnread ? ` (${totalUnread})` : ''}`],
-          ['add', 'إضافة محطة'],
-          ['announce', 'الإشعارات'],
-          ['schedule', 'جدول الوقود'],
-          ['system', 'النظام'],
-          ['stats', 'الإحصائيات'],
-          ['ads', 'الإعلانات'],
-          ['offers', 'العروض'],
-          ['reviews', 'التقييمات'],
-        ] as const).map(([t, label]) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            aria-pressed={tab === t}
-            className={`min-h-[44px] rounded-lg px-1 text-[12px] font-semibold transition-colors duration-200 ${
-              tab === t ? 'bg-white text-brand shadow-soft' : 'text-brand-700'
-            } ${t === 'requests' && pending.length ? 'text-traffic-red' : ''}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* ── الأقسامُ أيقوناتٍ كشاشة الهاتف — على الرئيسية وحدَها ──────────
+        *
+        *  كانت أحدَ عشرَ تبويباً نصّيّاً في أربعة صفوفٍ ضيّقة. والشبكةُ نفسُها
+        *  التي في لوحة المالك (`IconGrid`)، بطلب صاحب المنصّة. والرئيسيةُ هي
+        *  قائمةُ المحطات؛ وما سواها يُفتح بأيقونته ويعود بـ«‹ الرئيسية». */}
+      {tab === 'stations' && (
+        <div className="mt-3">
+          <IconGrid
+            label="أقسام الإدارة"
+            items={[
+              { key: 'requests', label: 'الطلبات', icon: ListIcon, badge: pending.length, tone: pending.length ? 'red' : undefined, onClick: () => setTab('requests') },
+              { key: 'messages', label: 'الرسائل', icon: MessageIcon, badge: totalUnread, onClick: () => setTab('messages') },
+              { key: 'add', label: 'إضافة محطة', icon: PlusIcon, onClick: () => setTab('add') },
+              { key: 'announce', label: 'الإشعارات', icon: BellRingIcon, onClick: () => setTab('announce') },
+              { key: 'schedule', label: 'جدول الوقود', icon: CalendarIcon, onClick: () => setTab('schedule') },
+              { key: 'stats', label: 'الإحصائيات', icon: ChartIcon, onClick: () => setTab('stats') },
+              { key: 'ads', label: 'الإعلانات', icon: ImageIcon, onClick: () => setTab('ads') },
+              { key: 'offers', label: 'العروض', icon: MegaphoneIcon, onClick: () => setTab('offers') },
+              { key: 'reviews', label: 'التقييمات', icon: StarIcon, onClick: () => setTab('reviews') },
+              { key: 'system', label: 'النظام', icon: SlidersIcon, onClick: () => setTab('system') },
+              { key: 'branch', label: 'لوحة الفرع', icon: MapPinIcon, href: '/branch' },
+              { key: 'citizen', label: 'شاهد كمواطن', icon: EyeIcon, href: '/?view=user' },
+            ]}
+          />
+        </div>
+      )}
 
       {tab === 'schedule' && (
         <div className="mt-4">
@@ -417,6 +478,7 @@ export default function AdminPage() {
         </div>
       )}
 
+      {tab === 'system' && <div className="mt-4"><BiometricLockToggle /></div>}
       {tab === 'system' && (
         <div className="mt-4">
           <AdminHealth />
@@ -434,13 +496,30 @@ export default function AdminPage() {
 
       {tab === 'stations' && (
         <div className="mt-4 space-y-4">
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="ابحث باسم المحطة أو المدينة"
-            className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm"
-          />
+          <div className="flex gap-2">
+            <input
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="ابحث باسم المحطة"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm"
+            />
+            {/* المدنُ من القائمة نفسِها لا من قائمةٍ ثابتة: مدينةٌ بلا محطةٍ
+                خيارٌ فارغ. */}
+            <select
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              aria-label="المدينة"
+              className="h-11 w-[9.5rem] shrink-0 rounded-xl border border-slate-200 bg-white px-2 text-sm"
+            >
+              <option value="">كلّ المدن</option>
+              {[...new Set(live.map((s) => s.city))].sort((a, b) => a.localeCompare(b, 'ar')).map((c) => (
+                <option key={c} value={c}>
+                  {c} ({live.filter((s) => s.city === c).length})
+                </option>
+              ))}
+            </select>
+          </div>
           <section className="card p-5">
             {/* «المحطات» لا «المعتمدة»: القائمة تحمل الموقوفة أيضاً لتُدار
                 من هنا، وعنوانٌ يقول «المعتمدة» فوق عددٍ يشملها هو التناقض
@@ -449,7 +528,7 @@ export default function AdminPage() {
             <p className="mt-1 text-xs text-slate-400">
               {suspended.length
                 ? `${approvedOnly.length} معتمدة تظهر للناس · ${suspended.length} موقوفة لا تظهر`
-                : 'اضغط على النوع لتبديله بين حكومية وأهلية'}
+                : 'الأحدثُ أوّلاً · اضغط النوعَ لتبديله · الاسمُ يفتح صفحةَ المحطة'}
             </p>
 
             {demoStations.length > 0 && (
@@ -462,8 +541,9 @@ export default function AdminPage() {
                 حذف المحطات التجريبية ({demoStations.length})
               </button>
             )}
-            <ul className="mt-3 space-y-3">
+            <ul className="mt-2">
               {live
+                .filter((s) => !city || s.city === city)
                 .filter(
                   (s) =>
                     !q.trim() ||
@@ -472,66 +552,63 @@ export default function AdminPage() {
                     s.address.includes(q.trim())
                 )
                 .map((s) => (
-                <li key={s.id} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
-                  {/* the name is the way in: everything per-station lives on
-                      its own page rather than swelling this list */}
-                  <a href={`/admin/station/?id=${s.id}`} className="block">
-                    <p className="flex items-center gap-1.5 text-sm font-bold text-brand-700 underline">
-                      {s.name}
-                      {!!unread.get(s.id) && (
-                        <span className="rounded-full bg-traffic-red px-1.5 py-px text-[10px] font-extrabold text-white no-underline">
-                          {unread.get(s.id)}
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {s.city} — {s.address}
-                    </p>
-                  </a>
-                  {/* The whole reason a contact name is collected: reaching
-                      that person. Tapping it opens WhatsApp with the greeting
-                      already written, so following up on a station is one tap
-                      rather than copy, switch app, paste, retype. */}
-                  {s.contact_name && (
-                    <a
-                      href={whatsappLink(s.phone, s.contact_name)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 inline-flex min-h-[44px] items-center gap-1.5 pt-1 text-xs font-semibold text-brand"
-                    >
-                      <WhatsappIcon className="h-4 w-4" />
-                      {s.contact_name}
-                      <span className="font-normal text-slate-400" dir="ltr">
-                        {s.phone}
-                      </span>
+                <li key={s.id} className="border-b border-slate-100 py-2.5 last:border-0">
+                  {/* ── سطرٌ للاسم وسطرٌ للأفعال ───────────────────────────
+                    *
+                    *  «سهّل طريقة العرض» ثمّ «ضع حذف، مراسلة، زر اتصال، تعديل
+                    *  بيانات، أرسل واتساب» — صاحبُ المنصّة. فالاسمُ والمدينةُ
+                    *  والتاريخُ والنوعُ في سطر، والأفعالُ الخمسة أيقوناتٍ تحته
+                    *  بحجمٍ يُضغط بالإبهام. */}
+                  <div className="flex items-center gap-2">
+                    <a href={`/admin/station/?id=${s.id}`} className="min-w-0 flex-1">
+                      <p className="flex items-center gap-1.5 truncate text-[13px] font-bold text-brand-700">
+                        {s.name}
+                        {!!unread.get(s.id) && (
+                          <span className="shrink-0 rounded-full bg-traffic-red px-1.5 py-px text-[10px] font-extrabold text-white">
+                            {unread.get(s.id)}
+                          </span>
+                        )}
+                      </p>
+                      <p className="truncate text-[11px] text-slate-500">
+                        {s.city} · سُجّلت{' '}
+                        {new Intl.DateTimeFormat('ar-IQ', { timeZone: 'Asia/Baghdad', day: 'numeric', month: 'numeric' }).format(new Date(s.created_at))}
+                        {s.status === 'suspended' && (
+                          <span className="mr-1.5 font-bold text-traffic-red">⛔ موقوفة</span>
+                        )}
+                      </p>
                     </a>
-                  )}
-                  {s.status === 'suspended' && (
-                    <p className="mt-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-bold text-traffic-red">
-                      ⛔ موقوفة — لا تظهر للمستخدمين
-                    </p>
-                  )}
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    {KINDS.map((k) => (
-                      <button
-                        key={k}
-                        type="button"
-                        aria-pressed={s.kind === k}
-                        onClick={() => setKind(s.id, k)}
-                        className={`min-h-[36px] rounded-lg px-3 text-xs font-semibold ${
-                          s.kind === k ? KIND_STYLES[k] : 'bg-slate-100 text-slate-400'
-                        }`}
+                    <button
+                      type="button"
+                      onClick={() => setKind(s.id, s.kind === 'government' ? 'private' : 'government')}
+                      title="اضغط لتبديل النوع"
+                      className={`min-h-[32px] shrink-0 rounded-lg px-2.5 text-[11px] font-semibold ${KIND_STYLES[s.kind]}`}
+                    >
+                      {KIND_LABELS[s.kind]}
+                    </button>
+                  </div>
+                  <div className="mt-1.5 grid grid-cols-5 gap-1">
+                    {([
+                      { key: 'call', label: 'اتصال', icon: PhoneIcon, href: `tel:${s.phone}` },
+                      { key: 'chat', label: 'مراسلة', icon: MessageIcon, href: `/admin/station/?id=${s.id}#chat` },
+                      { key: 'edit', label: 'تعديل', icon: SlidersIcon, href: `/admin/station/?id=${s.id}#edit` },
+                      { key: 'wa', label: 'واتساب', icon: WhatsappIcon, href: whatsappLink(s.phone, s.contact_name ?? s.name), external: true },
+                    ] as const).map((a) => (
+                      <a
+                        key={a.key}
+                        href={a.href}
+                        {...('external' in a && a.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                        className="flex min-h-[40px] flex-col items-center justify-center gap-0.5 rounded-lg bg-brand-50 text-[10px] font-bold text-brand-800"
                       >
-                        {KIND_LABELS[k]}
-                      </button>
+                        <a.icon className="h-4 w-4" />
+                        {a.label}
+                      </a>
                     ))}
                     <button
                       type="button"
                       onClick={() => removeStation(s.id, s.name)}
-                      aria-label={`حذف ${s.name}`}
-                      className="mr-auto flex min-h-[36px] items-center gap-1 rounded-lg px-2.5 text-xs font-semibold text-traffic-red"
+                      className="flex min-h-[40px] flex-col items-center justify-center gap-0.5 rounded-lg bg-red-50 text-[10px] font-bold text-traffic-red"
                     >
-                      <XIcon className="h-3.5 w-3.5" />
+                      <XIcon className="h-4 w-4" />
                       حذف
                     </button>
                   </div>
