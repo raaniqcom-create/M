@@ -32,12 +32,16 @@ export function AudienceBanner({
   products,
   muted = false,
   audience: given,
+  ticker = false,
 }: {
   station: Station;
   products: StationProduct[];
   muted?: boolean;
   /** إن جاء من الأعلى لم يُنادَ الخادمُ ثانيةً — لوحةُ المالك تحتاجه لزرّها. */
   audience?: Audience | null;
+  /** شريطٌ إخباريٌّ مثبَّتٌ في أسفل الشاشة بدل بطاقةٍ في الصفحة — طلبُ صاحب
+   *  المنصّة: الجملةُ تبقى، ولا تأخذ من الشاشة الأولى بكسلاً. */
+  ticker?: boolean;
 }) {
   const [fetched, setFetched] = useState<Audience | null>(null);
   const audience = given === undefined ? fetched : given;
@@ -59,6 +63,48 @@ export function AudienceBanner({
 
   const n = num(audience.watchers);
   const f = audience.followers;
+
+  if (ticker) {
+    const items = !updatedToday
+      ? [
+          `${n} شخص ينتظرون خبرك اليوم`,
+          `${n} مشتركاً في ${station.city} فعّلوا التنبيهات ليعرفوا أين يتوفّر الوقود${f > 0 ? `، ومنهم ${f} يتابعون ${station.name} بعينها` : ''}`,
+          'تحديثٌ واحد يكفي — اضبط المنتجات ثمّ اضغط الزرَّ الأخضر',
+        ]
+      : [
+          `خبرك وصل اليوم إلى ${n} شخص`,
+          `${n} مشتركاً في ${station.city} يهتمّون بما يتوفّر في ${station.name}${f > 0 ? `، و${f} منهم يتابعونك بعينك` : ''}`,
+          'استمرّ على هذا: أنت تكسب زبائنك، ونحن نكسب ثقتهم',
+        ];
+    // النسختان والانزلاقُ نصفَ المسار — الحلقةُ نفسُها التي في NewsTicker.
+    const track = [...items, ...items];
+    return (
+      <div
+        className={`fixed inset-x-0 bottom-0 z-40 border-t text-white ${
+          updatedToday ? 'border-brand-600 bg-brand-700' : 'border-red-700 bg-traffic-red'
+        }`}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <div className="mx-auto flex max-w-md items-stretch">
+          <span className={`z-10 flex shrink-0 items-center px-3 text-xs font-bold ${updatedToday ? 'bg-brand-900' : 'bg-red-800'}`}>
+            {updatedToday ? <CheckIcon className="h-4 w-4" /> : <BellRingIcon className="h-4 w-4" />}
+          </span>
+          <div dir="ltr" className="relative flex-1 overflow-hidden py-2">
+            <div
+              className="flex w-max animate-ticker items-center whitespace-nowrap"
+              style={{ animationDuration: `${Math.max(20, items.length * 7)}s` }}
+            >
+              {track.map((text, i) => (
+                <span key={i} dir="rtl" className="mx-6 shrink-0 text-xs font-semibold">
+                  {text}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!updatedToday && !muted) {
     return (

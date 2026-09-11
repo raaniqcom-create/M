@@ -594,7 +594,7 @@ export default function OwnerPage() {
   };
 
   return (
-    <main className="mx-auto max-w-md px-4 pb-16 pt-6">
+    <main className="mx-auto max-w-md px-4 pb-24 pt-6">
       <header className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-lg font-extrabold text-brand">لوحة صاحب المحطة</h1>
@@ -711,6 +711,40 @@ export default function OwnerPage() {
               {saveErr && (
                 <p className="mt-2 text-[11.5px] font-bold text-traffic-red">{saveErr}</p>
               )}
+
+              {/* الزرُّ في نهاية الجدول نفسِه، ويقول ما يفعل — فلا شرحَ فوقه:
+                  «أرسل إشعاراً لـ٢٠٧ شخص الآن» حين صار شيءٌ متوفّراً، و«احفظ
+                  الحالة» فيما سوى ذلك. */}
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                {notifyNote && (
+                  <p className="mb-3 rounded-lg bg-red-50 p-2.5 text-xs font-bold leading-relaxed text-red-700">
+                    {notifyNote}
+                  </p>
+                )}
+                <button type="button" onClick={confirmAvailability} className="btn-primary w-full">
+                  {willNotify ? '📤 ' : ''}
+                  {sendLabel}
+                </button>
+                {confirmedAt && (
+                  <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-xs font-bold text-brand-700">
+                    تمّ الإرسال{' '}
+                    {new Intl.DateTimeFormat('ar-IQ', {
+                      timeZone: 'Asia/Baghdad',
+                      day: '2-digit',
+                      month: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                    }).format(new Date(confirmedAt))}
+                    {quietNote ? '.' : ' — والإشعارُ في طريقه، وصورةُ الإعلان جاهزة في «التصاميم».'}
+                  </p>
+                )}
+                {quietNote && (
+                  <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                    {quietNote}
+                  </p>
+                )}
+              </div>
             </section>
 
             {/* حين يُطفأ الأخير — يُقال في اللحظة، لا في رسالة الغد.
@@ -767,48 +801,17 @@ export default function OwnerPage() {
               </section>
             )}
 
-            {/* الرقمُ الذي هو غايةُ المنصّة — قبل الزرّ مباشرةً: هؤلاء من ينتظر. */}
+            <OwnerDeviceLink stationId={station.id} />
+
+            {/* الرقمُ الذي هو غايةُ المنصّة — شريطاً في أسفل الشاشة، لا بطاقةً
+                تزاحم المنتجات. */}
             <AudienceBanner
               station={station}
               products={products}
               muted={!!staleSince}
               audience={audience}
+              ticker
             />
-
-            {/* الزرُّ يقول ما يفعل، فلا شرحَ فوقه: «أرسل إشعاراً لـ٢٠٧ شخص الآن»
-                حين صار شيءٌ متوفّراً، و«احفظ الحالة» فيما سوى ذلك. */}
-            <section className="card p-4">
-              {notifyNote && (
-                <p className="mb-3 rounded-lg bg-red-50 p-2.5 text-xs font-bold leading-relaxed text-red-700">
-                  {notifyNote}
-                </p>
-              )}
-              <button type="button" onClick={confirmAvailability} className="btn-primary w-full">
-                {willNotify ? '📤 ' : ''}
-                {sendLabel}
-              </button>
-              {confirmedAt && (
-                <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-xs font-bold text-brand-700">
-                  تمّ الإرسال{' '}
-                  {new Intl.DateTimeFormat('ar-IQ', {
-                    timeZone: 'Asia/Baghdad',
-                    day: '2-digit',
-                    month: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true,
-                  }).format(new Date(confirmedAt))}
-                  {quietNote ? '.' : ' — والإشعارُ في طريقه، وصورةُ الإعلان جاهزة في «التصاميم».'}
-                </p>
-              )}
-              {quietNote && (
-                <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
-                  {quietNote}
-                </p>
-              )}
-            </section>
-
-            <OwnerDeviceLink stationId={station.id} />
           </div>
         )}
 
