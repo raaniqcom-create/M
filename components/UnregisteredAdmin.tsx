@@ -129,7 +129,7 @@ export function UnregisteredAdmin() {
           type="time"
           value={closeHm}
           onChange={(e) => setCloseHm(e.target.value)}
-          className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold"
+          className="rounded-lg border border-slate-200 px-2 py-1 font-bold"
           dir="ltr"
         />
         <button

@@ -133,7 +133,7 @@ export function RoadPlanner() {
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
                 aria-label="نقطة الانطلاق"
-                className="h-10 w-full bg-transparent text-[13px] font-bold text-slate-800 outline-none"
+                className="h-10 w-full bg-transparent font-bold text-slate-800 outline-none"
               >
                 {TRIP_POINTS.map((c) => (
                   <option key={c} value={c}>
@@ -173,7 +173,7 @@ export function RoadPlanner() {
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
                 aria-label="الوجهة"
-                className="h-10 w-full bg-transparent text-[13px] font-bold text-slate-800 outline-none"
+                className="h-10 w-full bg-transparent font-bold text-slate-800 outline-none"
               >
                 {TRIP_POINTS.map((c) => (
                   <option key={c} value={c}>

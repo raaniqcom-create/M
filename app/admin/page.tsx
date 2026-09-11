@@ -502,7 +502,7 @@ export default function AdminPage() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="ابحث باسم المحطة"
-              className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3 text-sm"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3"
             />
             {/* المدنُ من القائمة نفسِها لا من قائمةٍ ثابتة: مدينةٌ بلا محطةٍ
                 خيارٌ فارغ. */}
@@ -510,7 +510,7 @@ export default function AdminPage() {
               value={city}
               onChange={(e) => setCity(e.target.value)}
               aria-label="المدينة"
-              className="h-11 w-[9.5rem] shrink-0 rounded-xl border border-slate-200 bg-white px-2 text-sm"
+              className="h-11 w-[9.5rem] shrink-0 rounded-xl border border-slate-200 bg-white px-2"
             >
               <option value="">كلّ المدن</option>
               {[...new Set(live.map((s) => s.city))].sort((a, b) => a.localeCompare(b, 'ar')).map((c) => (

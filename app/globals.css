@@ -17,11 +17,15 @@
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
   }
-  /* iOS zooms the page when a font-size < 16px input is focused */
+  /* iOS zooms the page when a font-size < 16px input is focused — and the
+     zoom stays after the keyboard goes, so the whole panel sits cut off at
+     the left edge (seen on the admin search box, 2026-09-12: «لا أريد تكبيراً
+     هكذا للتطبيق»). `!important` because a Tailwind `text-sm` on the element
+     silently beats this base rule, which is exactly how it crept back in. */
   input,
   select,
   textarea {
-    font-size: 16px;
+    font-size: 16px !important;
   }
   :focus-visible {
     outline: 2px solid theme('colors.brand.DEFAULT');
