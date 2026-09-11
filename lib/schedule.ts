@@ -266,6 +266,12 @@ const ALIAS_PAIRS: [string, string][] = [
   ['البو ريشة', HIGHWAY],
   ['البوريشة', HIGHWAY],
   ['البو يشة', HIGHWAY],
+  // والوجهةُ قد تكون اسمَ **محطةٍ في المنصّة** لا في المسح: «الجهدي» اسمُ
+  // القناة لمحطة المحمدي في هيت، وليست في قائمة المسح أصلاً. فالمرادفُ يُطبَّق
+  // على السطر قبل الخطوتين — البحثِ في المسح والربطِ بالاسم — لا على الأولى
+  // وحدَها. قالها صاحبُ المنصّة ٢٠٢٦-٠٩-١١ عن جدول الغد.
+  ['الجهدي المشيدة', 'محطة وقود المحمدي'],
+  ['الجهدي', 'محطة وقود المحمدي'],
 ];
 
 // بالمفتاح المطبَّع: «البريشة» و«البريشه» و«البريشـة» مفتاحٌ واحد.
@@ -339,7 +345,9 @@ export function matchLine(
   platform: PlatformStation[],
   product: FuelProduct = 'gasoline_regular'
 ): ScheduleLine {
-  const [top] = searchKnownFuel(ALIASES.get(normalizeName(raw)) ?? raw, 1);
+  // المرادفُ يُبدّل السطرَ كلَّه: للبحث في المسح وللربط بالاسم معاً.
+  const text = ALIASES.get(normalizeName(raw)) ?? raw;
+  const [top] = searchKnownFuel(text, 1);
   // **دون الحدّ لا مرشَّح.**
   //
   // قِيس على أسماء القناة نفسِها: الصحيحُ يقع بين ٧٥ و١٠٠، و«البو يشة» تُطابق
@@ -352,7 +360,7 @@ export function matchLine(
   // فما دون الحدّ يبقى كما وصل، بلا مدينة، ويُعلَّم ❓ ليكتبها إنسان. وتُحفظ
   // الدرجةُ المرفوضة في match_score كي يُقاس لاحقاً أين يُخطئ المطابق.
   const hit = top && top.score >= MATCH_FLOOR ? top : null;
-  const key = normalizeName(raw);
+  const key = normalizeName(text);
 
   /** محطةُ المنصّة التي يسمّيها هذا السطر — بالتساوي أوّلاً، ثمّ بالاحتواء.
    *
