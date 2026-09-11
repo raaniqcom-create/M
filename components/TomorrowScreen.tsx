@@ -67,6 +67,8 @@ export function TomorrowScreen() {
   const [day, setDay] = useState('');
   const [more, setMore] = useState(0);
   const [open, setOpen] = useState(false);
+  /** لا منطقةَ مختارة — فتُعرض دعوةٌ إلى اختيارها، لا الجدولُ كلُّه. */
+  const [prompt, setPrompt] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -127,15 +129,31 @@ export function TomorrowScreen() {
         const myProducts = new Set<string>(choice?.products ?? []);
 
         let rows = applyOverrides(buildBoard(schedule, stations, shown), await loadOverrides(), shown);
+        if (!rows.length) return;
+
         // ── والشاشةُ تتبع الإشعارَ حرفيّاً ──────────────────────────────
         //
         // إشعارُ النشر يمرّ بـ`alerts_for` فلا يصل إلا من اختار تلك المنطقة
         // وذلك الوقود. فلو ظهرت الشاشةُ للجميع لَناقضت الإشعارَ على الجهاز
         // نفسِه: مَن في القائم لا يُشعَر بجدول الرمادي ثمّ يُحبَس خلفه.
         //
-        // ومن لم يختر شيئاً يرى كلَّ شيء: لم يقل لنا ما يعنيه.
+        // **ومن لم يختر منطقةً لا يرى الجدولَ كلَّه** — كان يراه، فقرأ صاحبُ
+        // المنصّة الفلوجةَ والرماديَ على هاتفٍ لا يعنيه منهما شيء: «كلُّ شخصٍ
+        // واهتماماتُه، لا كلُّ الجدول يظهر للناس». فتُعرض له دعوةٌ إلى اختيار
+        // منطقته، والجدولُ كاملاً زرٌّ لمن أراده.
+        if (!myCities.size) {
+          try {
+            sessionStorage.setItem(SEEN, shown);
+          } catch {
+            /* تصفّحٌ خاصّ */
+          }
+          setDay(shown);
+          setPrompt(true);
+          setOpen(true);
+          return;
+        }
         if (myProducts.size) rows = rows.filter((r) => myProducts.has(r.product));
-        if (myCities.size) rows = rows.filter((r) => r.city && myCities.has(r.city));
+        rows = rows.filter((r) => r.city && myCities.has(r.city));
         if (!rows.length) return;
 
         const mine = groupBoard(rows, choice?.cities ?? []);
@@ -158,9 +176,59 @@ export function TomorrowScreen() {
     };
   }, []);
 
-  if (!groups || !open) return null;
+  if (!open) return null;
 
   const when = day === baghdadDate() ? 'اليوم' : 'غداً';
+
+  if (prompt) {
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`محطات ${when}`}
+        className="fixed inset-0 z-[84] overflow-y-auto bg-gradient-to-b from-brand via-brand-600 to-brand-700 text-center text-white"
+      >
+        <div className="flex min-h-full flex-col items-center justify-center px-5 py-8">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/icons/icon-192.png"
+            alt=""
+            width={56}
+            height={56}
+            className="rounded-[14px] shadow-[0_10px_26px_rgba(0,0,0,.32)] ring-1 ring-white/15"
+            style={{ height: 56, width: 56 }}
+          />
+          <h1 className="mt-3 text-[17px] font-extrabold">صدر جدولُ محطات {when}</h1>
+          <p className="mt-2 max-w-[19rem] text-[12.5px] leading-relaxed text-white/80">
+            اختر منطقتك ليظهر لك ما يخصّك منه — ويصلك إشعارٌ كلَّما صدر جدولٌ جديد.
+          </p>
+          <div className="mt-5 flex items-center gap-3">
+            <a
+              href="/alerts"
+              className="rounded-full bg-white px-5 py-2.5 text-[12.5px] font-extrabold text-brand-900"
+            >
+              اختر منطقتي
+            </a>
+            <a
+              href="/schedule"
+              className="rounded-full bg-white/15 px-5 py-2.5 text-[12.5px] font-bold text-white"
+            >
+              الجدول كاملاً
+            </a>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="mt-4 text-[12px] font-bold text-white/70"
+          >
+            إغلاق
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!groups) return null;
 
   return (
     <div
