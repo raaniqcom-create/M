@@ -36,6 +36,7 @@ import type { ExpectedPeriod } from '@/lib/hours';
 import { FuelIcon, LockIcon, LogOutIcon, SpinnerIcon } from '@/components/icons';
 import { OwnerHomeIcons, type OwnerView } from '@/components/OwnerHomeIcons';
 import { OwnerComplaints } from '@/components/OwnerComplaints';
+import { OwnerLocation } from '@/components/OwnerLocation';
 import { BiometricLockToggle } from '@/components/BiometricLockToggle';
 import { biometricLockEnabled, verifyOwner } from '@/lib/biometric';
 import type { FuelProduct, Station, StationProduct, TrafficLevel } from '@/types/database';
@@ -950,6 +951,10 @@ export default function OwnerPage() {
                   station={station}
                   onChange={(patch) => setStation({ ...station, ...patch })}
                 />
+                <OwnerLocation
+                  station={station}
+                  onSaved={(patch) => setStation({ ...station, ...patch })}
+                />
                 <StationLinkCard
                   stationId={station.id}
                   name={station.name}
@@ -1024,8 +1029,9 @@ export default function OwnerPage() {
                     طلب تعديل بيانات المحطة
                   </a>
                   <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-                    تعديل الاسم أو الرقم أو الموقع يمرّ بالإدارة للتحقق، حتى لا تتغيّر بيانات
-                    محطة يعتمد عليها المستخدمون دون مراجعة.
+                    تعديل الاسم أو الرقم أو المدينة يمرّ بالإدارة للتحقق، حتى لا تتغيّر بيانات
+                    محطة يعتمد عليها المستخدمون دون مراجعة. أمّا العنوان والموقع على الخريطة
+                    فتعدّلهما من البطاقة أعلاه.
                   </p>
                 </section>
               </>
