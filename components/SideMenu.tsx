@@ -17,6 +17,7 @@ import { shareApp } from '@/lib/shareApp';
 import {
   BellRingIcon,
   CalendarIcon,
+  CanIcon,
   DownloadIcon,
   FuelIcon,
   InfoIcon,
@@ -259,13 +260,24 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                   و`ready` شرط: قراءةُ الدور جولتان على الشبكة، وبدونه يومض
                   البندُ للجميع ثمّ يختفي. */}
               {ready && role === 'admin' && (
-                <Item
-                  href="/road"
-                  icon={MapIcon}
-                  title="مساعد الطريق"
-                  note="محطات طريقك بين المدن — وأين لا محطة"
-                  accent
-                />
+                <>
+                  <Item
+                    href="/road"
+                    icon={MapIcon}
+                    title="مساعد الطريق"
+                    note="محطات طريقك بين المدن — وأين لا محطة"
+                    accent
+                  />
+                  {/* لا يهمّ الجميع — فبابُه هنا لا في الرئيسية: «هل نجعلها
+                      بالقائمة الجانبية؟» — صاحبُ المنصّة. للإدارة حتى الاعتماد. */}
+                  <Item
+                    href="/jalon"
+                    icon={CanIcon}
+                    title="تعبئة الجالونات"
+                    note="للدرّاجات والمولّدات — أين تعبّئ بعد قرار المنع"
+                    accent
+                  />
+                </>
               )}
 
               {/* «غداً» قبل «الآن» في هذا القسم عمداً: من يفتح القائمةَ مساءً

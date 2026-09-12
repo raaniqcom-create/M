@@ -302,3 +302,12 @@ export const CarIcon = ({ className = 'h-5 w-5' }: IconProps) => (
     <circle cx="17" cy="17" r="2" />
   </svg>
 );
+
+export const CanIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="M7 3h6v3H7z" />
+    <path d="M5 6h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z" />
+    <path d="M4 10h5l2-2 2 2h7" />
+    <path d="M15 3h3l2 2" />
+  </svg>
+);
