@@ -126,23 +126,43 @@ function CarScreen() {
           <p className="pt-3 text-center text-[11px] font-extrabold text-white">أيّ وقودٍ تريد؟</p>
           <div className="mx-auto mt-3 grid w-[13rem] grid-cols-3 gap-2 text-center text-[10px] font-bold text-white/90">
             {['كاز · 12', 'بانزين محسن · 2', 'بانزين عادي · 1', 'غاز · 2', 'LPG · 1'].map((t, i) => (
-              <span key={t} className={`rounded-xl bg-white/10 px-1 py-3 ${i === 0 ? 'demo-pick ring-2 ring-white' : ''}`}>
+              <span key={t} className={`rounded-xl bg-white/10 px-1 py-3 ${i === 1 ? 'demo-pick ring-2 ring-white bg-brand/40' : ''}`}>
                 ⛽<br />{t}
               </span>
             ))}
           </div>
         </div>
 
-        {/* اللقطة ٣ — الطريق */}
+        {/* اللقطة ٣ — الطريق، وخلفَه الأنبارُ: الفراتُ ومدنُه دلالةً لا خريطةً */}
         <div className="demo-frame demo-3 absolute inset-0 pr-12">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_60%_40%,#1e3a5f_0,#0f172a_70%)]" />
-          <svg viewBox="0 0 200 120" className="absolute inset-0 h-full w-full">
-            <path className="demo-route" d="M20 100 C 60 90, 80 40, 140 45 S 180 30, 185 20" fill="none" stroke="#22c55e" strokeWidth="4" strokeLinecap="round" />
-            <circle cx="20" cy="100" r="5" fill="#fff" />
-            <circle cx="185" cy="20" r="6" fill="#ef4444" />
+          <div className="absolute inset-0 bg-[#0b1a2b]" />
+          <svg viewBox="0 0 200 120" className="absolute inset-0 h-full w-full" style={{ fontFamily: 'inherit' }}>
+            {/* الفراتُ من القائم إلى الفلوجة */}
+            <path d="M-5 18 C 30 22, 45 40, 70 48 S 105 62, 125 78 S 160 96, 205 100" fill="none" stroke="#3b82f6" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" />
+            <path d="M-5 18 C 30 22, 45 40, 70 48 S 105 62, 125 78 S 160 96, 205 100" fill="none" stroke="#93c5fd" strokeWidth="1" strokeOpacity="0.5" strokeLinecap="round" />
+            {/* مدنٌ على النهر */}
+            {[
+              ['حديثة', 52, 40],
+              ['هيت', 92, 60],
+              ['الرمادي', 128, 80],
+              ['الفلوجة', 172, 98],
+            ].map(([name, x, y]) => (
+              <g key={name as string}>
+                <circle cx={x as number} cy={y as number} r="2.2" fill="#cbd5e1" />
+                <text x={(x as number) - 4} y={(y as number) - 5} fontSize="7" fill="#cbd5e1" textAnchor="end" direction="rtl">
+                  {name}
+                </text>
+              </g>
+            ))}
+            {/* الطريقُ من السيّارة إلى المحطة */}
+            <path className="demo-route" d="M40 104 C 70 100, 90 90, 112 86 S 132 72, 138 66" fill="none" stroke="#22c55e" strokeWidth="4" strokeLinecap="round" />
+            <circle cx="40" cy="104" r="4.5" fill="#fff" />
+            <circle cx="40" cy="104" r="8" fill="#fff" fillOpacity="0.25" />
+            <path d="M138 66 c -6 -8 -6 -18 0 -18 s 6 10 0 18 z" fill="#ef4444" />
+            <circle cx="138" cy="55" r="2.5" fill="#fff" />
           </svg>
           <div className="absolute bottom-3 left-3 right-14 flex items-center justify-between rounded-xl bg-black/60 px-3 py-2 text-[10.5px] font-bold text-white">
-            <span>محطة وقود الفتح المبين</span>
+            <span>محطة وقود الأنبار · بانزين محسن</span>
             <span className="rounded-full bg-brand px-2.5 py-1">الطريق · ويز ←</span>
           </div>
         </div>
