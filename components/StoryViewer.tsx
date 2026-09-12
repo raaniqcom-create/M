@@ -3,10 +3,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { drawAvailabilityPoster, POSTER_SITE } from './AvailabilityPoster';
 import { RouteButton } from './RouteButton';
-import { XIcon } from './icons';
+import { EyeIcon, XIcon } from './icons';
 import { ageLabel } from '@/lib/hours';
-import { markSeen, type Story } from '@/lib/stories';
+import { isSeen, markSeen, type Story } from '@/lib/stories';
+import { supabase } from '@/lib/supabase';
 import type { StationWithStatus } from '@/types/database';
+
+/** عدّادُ المشاهدات — «أضف عدّاداً للمشاهدات على الحالات». يُحصى الجهازُ مرّةً
+ *  لكلّ نسخةٍ من الحالة (`at`) ويعود الرقمُ بعد الزيادة؛ وإن سبق أن رُئيت يعود
+ *  الرقمُ بلا زيادة. هنا لا في lib/stories — تلك تُستورد في اختبارات Node بلا
+ *  supabase. والفشلُ يعود null فلا يُكتب شيء ولا تُحجب القصّة. */
+async function recordView(id: string, at: string, fresh: boolean): Promise<number | null> {
+  try {
+    const { data, error } = await supabase.rpc('story_view', { p_story: id, p_at: at, p_new: fresh });
+    return error ? null : Number(data);
+  } catch {
+    return null;
+  }
+}
 
 const STEP_MS = 6000;
 
@@ -29,6 +43,7 @@ export function StoryViewer({
   const [i, setI] = useState(start);
   const [paused, setPaused] = useState(false);
   const [drawn, setDrawn] = useState(false);
+  const [views, setViews] = useState<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const story = stories[i];
   const station = stations.find((s) => s.id === story?.id);
@@ -44,11 +59,18 @@ export function StoryViewer({
   // الرسمُ عند كلّ قصّة، والعلامةُ «رُئيت» معها. وقصّةُ المنصّة نصٌّ لا رسم.
   useEffect(() => {
     if (!story) return;
+    // العدّادُ: جديدةٌ على هذا الجهاز؟ تُحصى — وإلّا يُقرأ الرقمُ وحدَه.
+    const fresh = !isSeen(story.id, story.at);
     markSeen(story.id, story.at);
+    setViews(null);
+    let counting = true;
+    recordView(story.id, story.at, fresh).then((n) => counting && setViews(n));
     setDrawn(false);
     if (story.kind === 'platform') {
       setDrawn(true);
-      return;
+      return () => {
+        counting = false;
+      };
     }
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -65,6 +87,7 @@ export function StoryViewer({
     }).then(() => alive && setDrawn(true));
     return () => {
       alive = false;
+      counting = false;
     };
   }, [story]);
 
@@ -160,8 +183,13 @@ export function StoryViewer({
       <div className="flex items-center justify-between px-4 pt-3">
         <div className="min-w-0">
           <p className="truncate text-[14px] font-extrabold drop-shadow">{story.name}</p>
-          <p className="text-[11px] text-white/80">
+          <p className="flex items-center gap-1 text-[11px] text-white/80">
             {story.kind === 'platform' ? `جديد المحطة · ${ageLabel(story.at)}` : `${story.city} · أُكّد ${ageLabel(story.at)}`}
+            {views !== null && (
+              <span className="flex items-center gap-0.5" aria-label={`${views} مشاهدة`}>
+                · <EyeIcon className="h-3.5 w-3.5" /> {views}
+              </span>
+            )}
           </p>
         </div>
         <button
