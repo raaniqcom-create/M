@@ -39,6 +39,19 @@ export function CarPlayUpdate() {
       cap.getPlatform?.() === 'ios' &&
       !cap.isPluginAvailable?.('Preferences');
     setShow(preview || (ROLLOUT && oldIos));
+
+    // ── `&t=2.5` يُجمّد الحركةَ عند لحظةٍ — لتصوير الفيديو الترويجيّ ──────
+    // لقطةٌ لكلّ لحظةٍ بمتصفّحٍ بلا رأس ثمّ ffmpeg. لا أثرَ له بغير المعامل.
+    const t = Number(new URLSearchParams(window.location.search).get('t'));
+    if (preview && Number.isFinite(t) && t > 0) {
+      const at = (delay: number) => `animation-play-state: paused !important; animation-delay: ${delay - t}s !important;`;
+      const style = document.createElement('style');
+      style.textContent = `
+        .carplay-demo .demo-1, .carplay-demo .demo-icon { ${at(0)} }
+        .carplay-demo .demo-2, .carplay-demo .demo-pick { ${at(3)} }
+        .carplay-demo .demo-3, .carplay-demo .demo-route { ${at(6)} }`;
+      document.head.appendChild(style);
+    }
   }, []);
 
   if (!show) return null;
@@ -138,14 +151,13 @@ function CarScreen() {
           <div className="absolute inset-0 bg-[#0b1a2b]" />
           <svg viewBox="0 0 200 120" className="absolute inset-0 h-full w-full" style={{ fontFamily: 'inherit' }}>
             {/* الفراتُ من القائم إلى الفلوجة */}
-            <path d="M-5 18 C 30 22, 45 40, 70 48 S 105 62, 125 78 S 160 96, 205 100" fill="none" stroke="#3b82f6" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" />
-            <path d="M-5 18 C 30 22, 45 40, 70 48 S 105 62, 125 78 S 160 96, 205 100" fill="none" stroke="#93c5fd" strokeWidth="1" strokeOpacity="0.5" strokeLinecap="round" />
+            <path d="M-5 30 C 30 34, 45 50, 70 58 S 105 70, 125 84 S 160 100, 205 104" fill="none" stroke="#3b82f6" strokeWidth="3" strokeOpacity="0.55" strokeLinecap="round" />
+            <path d="M-5 30 C 30 34, 45 50, 70 58 S 105 70, 125 84 S 160 100, 205 104" fill="none" stroke="#93c5fd" strokeWidth="1" strokeOpacity="0.5" strokeLinecap="round" />
             {/* مدنٌ على النهر */}
             {[
-              ['حديثة', 52, 40],
-              ['هيت', 92, 60],
-              ['الرمادي', 128, 80],
-              ['الفلوجة', 172, 98],
+              ['حديثة', 52, 50],
+              ['هيت', 92, 68],
+              ['الفلوجة', 172, 102],
             ].map(([name, x, y]) => (
               <g key={name as string}>
                 <circle cx={x as number} cy={y as number} r="2.2" fill="#cbd5e1" />
@@ -154,16 +166,17 @@ function CarScreen() {
                 </text>
               </g>
             ))}
-            {/* الطريقُ من السيّارة إلى المحطة */}
-            <path className="demo-route" d="M40 104 C 70 100, 90 90, 112 86 S 132 72, 138 66" fill="none" stroke="#22c55e" strokeWidth="4" strokeLinecap="round" />
-            <circle cx="40" cy="104" r="4.5" fill="#fff" />
-            <circle cx="40" cy="104" r="8" fill="#fff" fillOpacity="0.25" />
-            <path d="M138 66 c -6 -8 -6 -18 0 -18 s 6 10 0 18 z" fill="#ef4444" />
-            <circle cx="138" cy="55" r="2.5" fill="#fff" />
+            {/* الطريقُ من السيّارة إلى محطة الرمادي */}
+            <path className="demo-route" d="M28 108 C 60 106, 84 98, 104 92 S 122 86, 128 84" fill="none" stroke="#22c55e" strokeWidth="4" strokeLinecap="round" />
+            <circle cx="28" cy="108" r="4.5" fill="#fff" />
+            <circle cx="28" cy="108" r="8" fill="#fff" fillOpacity="0.25" />
+            <path d="M128 84 c -6 -8 -6 -18 0 -18 s 6 10 0 18 z" fill="#ef4444" />
+            <circle cx="128" cy="73" r="2.5" fill="#fff" />
+            <text x="122" y="64" fontSize="7" fill="#fff" textAnchor="end" direction="rtl">الرمادي</text>
           </svg>
-          <div className="absolute bottom-3 left-3 right-14 flex items-center justify-between rounded-xl bg-black/60 px-3 py-2 text-[10.5px] font-bold text-white">
+          <div className="absolute left-2 right-14 top-2 flex items-center justify-between rounded-xl bg-black/60 px-2.5 py-1.5 text-[10px] font-bold text-white">
+            <span className="rounded-full bg-brand px-2 py-0.5">الطريق · ويز ←</span>
             <span>محطة وقود الأنبار · بانزين محسن</span>
-            <span className="rounded-full bg-brand px-2.5 py-1">الطريق · ويز ←</span>
           </div>
         </div>
       </div>
