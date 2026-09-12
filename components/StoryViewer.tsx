@@ -33,22 +33,23 @@ export function StoryViewer({
   const story = stories[i];
   const station = stations.find((s) => s.id === story?.id);
 
+  // خارج مُحدِّث الحالة: نداءُ `onClose` داخله يُحدّث الشريطَ أثناء رسم العارض —
+  // وريأكت يرفض ذلك بحقّ.
   const next = useCallback(() => {
-    setI((k) => {
-      if (k + 1 >= stories.length) {
-        onClose();
-        return k;
-      }
-      return k + 1;
-    });
-  }, [stories.length, onClose]);
+    if (i + 1 >= stories.length) onClose();
+    else setI(i + 1);
+  }, [i, stories.length, onClose]);
   const prev = () => setI((k) => Math.max(0, k - 1));
 
-  // الرسمُ عند كلّ قصّة، والعلامةُ «رُئيت» معها.
+  // الرسمُ عند كلّ قصّة، والعلامةُ «رُئيت» معها. وقصّةُ المنصّة نصٌّ لا رسم.
   useEffect(() => {
     if (!story) return;
     markSeen(story.id, story.at);
     setDrawn(false);
+    if (story.kind === 'platform') {
+      setDrawn(true);
+      return;
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
     let alive = true;
@@ -96,13 +97,29 @@ export function StoryViewer({
     >
       {/* الصورةُ تملأ الشاشةَ كلَّها، وما عداها طبقاتٌ فوقها */}
       <div className="absolute inset-0">
-        <canvas
-          ref={canvasRef}
-          width={1080}
-          height={1920}
-          className="h-full w-full"
-          aria-label={`صورة إعلان توفر ${story.name}`}
-        />
+        {story.kind === 'platform' && story.news ? (
+          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-b from-brand-900 via-brand-700 to-brand px-7 text-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icons/icon-192.png" alt="" width={72} height={72} className="rounded-[18px] shadow-[0_10px_26px_rgba(0,0,0,.35)]" />
+            <span className="mt-5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold tracking-wide">
+              جديدٌ في المحطة التقنية
+            </span>
+            <h2 className="mt-3 text-[26px] font-extrabold leading-tight">{story.news.title}</h2>
+            <ul className="mt-5 space-y-3 text-[14px] leading-relaxed text-white/90">
+              {story.news.lines.map((l) => (
+                <li key={l}>{l}</li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <canvas
+            ref={canvasRef}
+            width={1080}
+            height={1920}
+            className="h-full w-full"
+            aria-label={`صورة إعلان توفر ${story.name}`}
+          />
+        )}
       </div>
       {/* مناطقُ النقر: يمينٌ للسابقة، وسطٌ للإيقاف، يسارٌ للتالية */}
       <button type="button" aria-label="السابقة" onClick={prev} className="absolute inset-y-0 right-0 w-1/3" />
@@ -144,7 +161,7 @@ export function StoryViewer({
         <div className="min-w-0">
           <p className="truncate text-[14px] font-extrabold drop-shadow">{story.name}</p>
           <p className="text-[11px] text-white/80">
-            {story.city} · أُكّد {ageLabel(story.at)}
+            {story.kind === 'platform' ? `جديد المحطة · ${ageLabel(story.at)}` : `${story.city} · أُكّد ${ageLabel(story.at)}`}
           </p>
         </div>
         <button
@@ -163,23 +180,34 @@ export function StoryViewer({
         className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/60 to-transparent px-4 pt-10"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 14px)' }}
       >
-        {station && (
-          <div className="flex-1 rounded-xl bg-white text-brand-900">
-            <RouteButton
-              lat={station.lat}
-              lng={station.lng}
-              stationId={station.id}
-              stationName={station.name}
-              compact
-            />
-          </div>
+        {story.kind === 'platform' && story.news ? (
+          <a
+            href={story.news.href}
+            className="flex min-h-[40px] flex-1 items-center justify-center rounded-xl bg-white text-[13px] font-extrabold text-brand-900"
+          >
+            {story.news.label}
+          </a>
+        ) : (
+          <>
+            {station && (
+              <div className="flex-1 rounded-xl bg-white text-brand-900">
+                <RouteButton
+                  lat={station.lat}
+                  lng={station.lng}
+                  stationId={station.id}
+                  stationName={station.name}
+                  compact
+                />
+              </div>
+            )}
+            <a
+              href={`/station/${story.id}`}
+              className="flex min-h-[34px] flex-1 items-center justify-center rounded-xl bg-white/15 text-[12px] font-bold"
+            >
+              صفحة المحطة
+            </a>
+          </>
         )}
-        <a
-          href={`/station/${story.id}`}
-          className="flex min-h-[34px] flex-1 items-center justify-center rounded-xl bg-white/15 text-[12px] font-bold"
-        >
-          صفحة المحطة
-        </a>
       </div>
     </div>
   );

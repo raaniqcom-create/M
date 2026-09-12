@@ -1,4 +1,5 @@
 import type { AlertChoice } from './alerts.ts';
+import { NEWS } from './news.ts';
 import { isOffered } from './products.ts';
 import type { FuelProduct, StationWithStatus } from '../types/database.ts';
 
@@ -20,6 +21,24 @@ export interface Story {
   products: FuelProduct[];
   /** أحدثُ تأكيدٍ بين منتجاتها — وهو ما يُختم على الصورة. */
   at: string;
+  /** قصّةُ المنصّة نفسِها: «جديدُ المحطة التقنية» — تُعرض نصّاً لا صورةً. */
+  kind?: 'station' | 'platform';
+  news?: { title: string; lines: string[]; href: string; label: string };
+}
+
+/** حالةُ المنصّة — أوّلَ الشريط دائماً، كحالة صاحب الحساب في إنستغرام. */
+export function platformStory(): Story {
+  return {
+    id: NEWS.id,
+    name: 'المحطة التقنية',
+    short: 'جديد المحطة',
+    slug: null,
+    city: '',
+    products: [],
+    at: NEWS.at,
+    kind: 'platform',
+    news: { title: NEWS.title, lines: NEWS.lines, href: NEWS.href, label: NEWS.label },
+  };
 }
 
 /** «محطة وقود الحق المشيدة» ← «الحق المشيدة». للعرض تحت الحلقة — لا يلمس
@@ -55,12 +74,14 @@ export function storiesFor(
       at,
     });
   }
-  // غيرُ المرئيّ أوّلاً ثمّ الأحدث — كترتيب إنستغرام نفسِه.
-  return out.sort((a, b) => {
+  // غيرُ المرئيّ أوّلاً ثمّ الأحدث — كترتيب إنستغرام نفسِه. وقصّةُ المنصّة
+  // قبل الكلّ، تظهر ولو لم تكن قصّةُ محطةٍ واحدة.
+  out.sort((a, b) => {
     const sa = isSeen(a.id, a.at) ? 1 : 0;
     const sb = isSeen(b.id, b.at) ? 1 : 0;
     return sa - sb || b.at.localeCompare(a.at);
   });
+  return [platformStory(), ...out];
 }
 
 export const SEEN = 'story-seen:';

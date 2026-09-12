@@ -17,14 +17,20 @@ import type { StationWithStatus } from '@/types/database';
 export function StoryStrip({
   stations,
   choice,
+  withNews = true,
 }: {
   stations: StationWithStatus[];
   choice: AlertChoice | null;
+  /** قصّةُ «جديد المحطة» أوّلَ الشريط — تُحجب في المعاينة عن غير الإدارة. */
+  withNews?: boolean;
 }) {
   const [open, setOpen] = useState<number | null>(null);
   // «رُئيت» تُقرأ من localStorage — فتُعاد الحسبةُ بعد الإغلاق لتصير الحلقةُ رماديّة.
   const [tick, setTick] = useState(0);
-  const stories = useMemo(() => storiesFor(stations, choice), [stations, choice, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stories = useMemo(
+    () => storiesFor(stations, choice).filter((s) => withNews || s.kind !== 'platform'),
+    [stations, choice, withNews, tick] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   useEffect(() => {
     if (open === null) setTick((t) => t + 1);
@@ -50,8 +56,13 @@ export function StoryStrip({
                   seen ? 'bg-slate-200' : 'bg-gradient-to-tr from-brand-700 via-brand to-emerald-300'
                 }`}
               >
-                <span className="flex h-full w-full items-center justify-center rounded-full border-2 border-white bg-white">
-                  <FuelIcon className={`h-6 w-6 ${seen ? 'text-slate-400' : 'text-brand'}`} />
+                <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white">
+                  {s.kind === 'platform' ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src="/icons/icon-192.png" alt="" width={48} height={48} className={`h-full w-full ${seen ? 'opacity-60 grayscale' : ''}`} />
+                  ) : (
+                    <FuelIcon className={`h-6 w-6 ${seen ? 'text-slate-400' : 'text-brand'}`} />
+                  )}
                 </span>
               </span>
               <span className={`w-full truncate text-center text-[10.5px] font-bold ${seen ? 'text-slate-400' : 'text-slate-700'}`}>

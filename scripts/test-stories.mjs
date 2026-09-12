@@ -3,7 +3,10 @@
 // القاعدةُ قاعدةُ `isOffered`: متوفّرٌ أُكّد خلال ٢٤ ساعة، لم يمرّ موعدُ نفاده،
 // والمحطةُ مفتوحة. والتصفيةُ باهتمامات القارئ: مدنُه ومنتجاتُه، والفارغُ الكلّ.
 import assert from 'node:assert/strict';
-import { shortName, storiesFor } from '../lib/stories.ts';
+import { shortName, storiesFor as allStories } from '../lib/stories.ts';
+
+// قصّةُ المنصّة أوّلَ الشريط دائماً — تُفصل عن قصص المحطات في الفحوص.
+const storiesFor = (stations, choice) => allStories(stations, choice).filter((s) => s.kind !== 'platform');
 
 const H = 3600e3;
 const ago = (h) => new Date(Date.now() - h * H).toISOString();
@@ -97,6 +100,12 @@ ok('shortName يُسقط «محطة وقود» ويُبقي كلمتين', () =>
   assert.equal(shortName('محطة تعبئة وقود الرمادي الحكومية الطريق السريع'), 'الرمادي الحكومية');
   assert.equal(shortName('الأمن'), 'الأمن');
   assert.equal(shortName('محطة'), 'محطة');
+});
+ok('قصّةُ المنصّة أوّلاً ولو بلا محطات', () => {
+  const s = allStories([], null);
+  assert.equal(s.length, 1);
+  assert.equal(s[0].kind, 'platform');
+  assert.ok(s[0].news.href);
 });
 
 console.log(`\n✔ ${n} تحقّقاً — القصّةُ اشتقاقٌ من isOffered، والاهتماماتُ ترشّح.`);

@@ -2,6 +2,8 @@
 
 import { StaleBanner } from '@/components/StaleBanner';
 import { StoryStrip } from '@/components/StoryStrip';
+import { PlateTurn } from '@/components/PlateTurn';
+import { RATION } from '@/lib/ration';
 import { STATUS_RECHECK } from '@/lib/status';
 import { readFailure, withDeadline } from '@/lib/fn';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -745,7 +747,15 @@ export default function HomePage() {
 
         {/* «حالة المحطة» — حلقاتُ القصص قبل كلّ شيء: الخبرُ الطازج أوّلاً.
             اعتمدها صاحبُ المنصّة ١٢ أيلول ٢٠٢٦ بعد معاينةٍ للإدارة وحدَها. */}
-        {stations && view === 'list' && <StoryStrip stations={stations} choice={choice} />}
+        {stations && view === 'list' && (
+          <StoryStrip stations={stations} choice={choice} withNews={role === 'admin'} />
+        )}
+
+        {/* الفرديُّ والزوجيّ — قرارٌ مؤقّت؛ تختفي البطاقةُ بإطفاء RATION.active.
+            **معاينةٌ للإدارة وحدَها** حتى الاعتماد. */}
+        {RATION.active && stations && view === 'list' && role === 'admin' && (
+          <PlateTurn stations={stations} />
+        )}
 
         <TripAsk stations={stations} />
         {/* لوحة المنتجات والشريط الترويجي للقائمة وحدها.
