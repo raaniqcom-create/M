@@ -7,6 +7,7 @@ import { TomorrowScreen } from '@/components/TomorrowScreen';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { NativePush } from '@/components/NativePush';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { BackBar } from '@/components/BackBar';
 import { CarPlayUpdate } from '@/components/CarPlayUpdate';
 import { APPLE_APP_ID } from '@/lib/stores';
 
@@ -86,6 +87,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* تحتها في الترتيب: الصيانةُ ثمّ الإنذارُ بها ثمّ خبرُ الغد.
             والمكوّنُ نفسُه يمتنع إن كانت المنصّةُ في صيانة. */}
         <TomorrowScreen />
+        {/* «‹ رجوع» لكلّ صفحةٍ داخليّة من نقطةٍ واحدة — ويمتنع في الرئيسية واللوحات. */}
+        <BackBar />
         {children}
       </body>
     </html>

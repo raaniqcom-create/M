@@ -260,24 +260,13 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                   و`ready` شرط: قراءةُ الدور جولتان على الشبكة، وبدونه يومض
                   البندُ للجميع ثمّ يختفي. */}
               {ready && role === 'admin' && (
-                <>
-                  <Item
-                    href="/road"
-                    icon={MapIcon}
-                    title="مساعد الطريق"
-                    note="محطات طريقك بين المدن — وأين لا محطة"
-                    accent
-                  />
-                  {/* لا يهمّ الجميع — فبابُه هنا لا في الرئيسية: «هل نجعلها
-                      بالقائمة الجانبية؟» — صاحبُ المنصّة. للإدارة حتى الاعتماد. */}
-                  <Item
-                    href="/jalon"
-                    icon={CanIcon}
-                    title="تعبئة الجالونات"
-                    note="للدرّاجات والمولّدات — أين تعبّئ بعد قرار المنع"
-                    accent
-                  />
-                </>
+                <Item
+                  href="/road"
+                  icon={MapIcon}
+                  title="مساعد الطريق"
+                  note="محطات طريقك بين المدن — وأين لا محطة"
+                  accent
+                />
               )}
 
               {/* «غداً» قبل «الآن» في هذا القسم عمداً: من يفتح القائمةَ مساءً
@@ -301,6 +290,16 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                   onAvailableOnly?.();
                   setOpen(false);
                 }}
+              />
+
+              {/* لا يهمّ الجميع — فبابُه هنا لا في الرئيسية: «هل نجعلها بالقائمة
+                  الجانبية؟» — صاحبُ المنصّة. اعتمدها للجميع ١٣ أيلول ٢٠٢٦. */}
+              <Item
+                href="/abwat"
+                icon={CanIcon}
+                title="العبوات البلاستيكية"
+                note="أين تعبّئ عبوتك بعد قرار المنع — للدرّاجات والمولّدات"
+                accent
               />
 
               <Label>حسابي</Label>
