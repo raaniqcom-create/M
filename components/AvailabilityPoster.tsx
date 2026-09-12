@@ -41,7 +41,13 @@ function fitFont(
  *  الحقيقيّ — فصار دالّةً تأخذ `at`، والمكوّنُ يناديها بـ`new Date()` كما كان. */
 export async function drawAvailabilityPoster(
   canvas: HTMLCanvasElement,
-  { name, link, products, at }: { name: string; link: string; products: FuelProduct[]; at: Date }
+  {
+    name,
+    link,
+    products,
+    at,
+    height,
+  }: { name: string; link: string; products: FuelProduct[]; at: Date; height?: number }
 ): Promise<void> {
   if (products.length === 0) return;
   const c = canvas.getContext('2d');
@@ -49,8 +55,20 @@ export async function drawAvailabilityPoster(
 
   await document.fonts.ready;
 
-  const H = heightFor(products.length);
+  // ارتفاعٌ مفروض (شاشةُ الحالة بنسبة الهاتف) أو الطبيعيّ (منشورٌ مربّع يطول
+  // بالمنتجات). وفي المفروض تتوسّط الكتلةُ عموديّاً والرابطُ يبقى في الأسفل.
+  const natural = heightFor(products.length);
+  const H = height ?? natural;
   canvas.height = H;
+  const labelsCount = products.length;
+  const naturalAfterList = labelsCount === 1 ? 400 : 268 + labelsCount * 96;
+  const blockBottom = naturalAfterList + 230 + 214; // آخرُ الشعار
+  // في شاشة الحالة تحجب طبقتان طرفَي الصورة: شرائطُ التقدّم والاسمُ فوق، وزرّا
+  // الطريق والصفحة تحت — نحوُ ٩٠ بكسلاً على الهاتف = ٢٦٠ في مقياس اللوحة.
+  const reserve = height ? 260 : 0;
+  const top = height
+    ? Math.max(reserve, Math.round(reserve + (H - reserve * 2 - 190 - blockBottom) / 2))
+    : 0;
 
   const g = c.createLinearGradient(0, 0, SIZE, H);
   g.addColorStop(0, '#166534');
@@ -71,11 +89,11 @@ export async function drawAvailabilityPoster(
   // "available now" badge
   c.fillStyle = '#fef08a';
   c.beginPath();
-  c.roundRect(SIZE / 2 - 165, 96, 330, 78, 39);
+  c.roundRect(SIZE / 2 - 165, top + 96, 330, 78, 39);
   c.fill();
   c.fillStyle = '#713f12';
   c.font = '800 42px Tajawal';
-  c.fillText('متوفر الآن', SIZE / 2, 150);
+  c.fillText('متوفر الآن', SIZE / 2, top + 150);
 
   // the products themselves, as the headline
   const labels = products.map((p) => PRODUCT_LABELS[p] ?? p);
@@ -83,9 +101,9 @@ export async function drawAvailabilityPoster(
     const s = fitFont(c, labels[0], SIZE - 130, 104);
     c.fillStyle = '#ffffff';
     c.font = `800 ${s}px Tajawal`;
-    c.fillText(labels[0], SIZE / 2, 320);
+    c.fillText(labels[0], SIZE / 2, top + 320);
   } else {
-    const start = 268;
+    const start = top + 268;
     const step = 96;
     labels.forEach((label, i) => {
       const s = fitFont(c, label, SIZE - 200, 72);
@@ -95,7 +113,7 @@ export async function drawAvailabilityPoster(
     });
   }
 
-  const afterList = labels.length === 1 ? 400 : 268 + labels.length * 96;
+  const afterList = top + (labels.length === 1 ? 400 : 268 + labels.length * 96);
 
   c.fillStyle = 'rgba(255,255,255,0.85)';
   c.font = '500 36px Tajawal';
@@ -159,7 +177,7 @@ export async function drawAvailabilityPoster(
 
   const pillW = 720;
   const pillH = 92;
-  const pillY = H - 190;
+  const pillY = H - 190 - reserve;
   c.fillStyle = '#ffffff';
   c.beginPath();
   c.roundRect((SIZE - pillW) / 2, pillY, pillW, pillH, 46);
@@ -174,7 +192,7 @@ export async function drawAvailabilityPoster(
   c.direction = 'rtl';
   c.fillStyle = 'rgba(255,255,255,0.7)';
   c.font = '400 27px Tajawal';
-  c.fillText('تابع توفر الوقود لدينا على المحطة التقنية', SIZE / 2, H - 55);
+  c.fillText('تابع توفر الوقود لدينا على المحطة التقنية', SIZE / 2, H - 55 - reserve);
 
 }
 

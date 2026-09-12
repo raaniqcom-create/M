@@ -52,11 +52,15 @@ export function StoryViewer({
     const canvas = canvasRef.current;
     if (!canvas) return;
     let alive = true;
+    // بنسبة الشاشة نفسِها — فتملأ الهاتفَ كالحالة، لا مربّعاً كالمنشور.
+    const box = canvas.parentElement;
+    const ratio = box ? box.clientHeight / box.clientWidth : 16 / 9;
     drawAvailabilityPoster(canvas, {
       name: story.name,
       link: story.slug ? `${POSTER_SITE}/${story.slug}` : POSTER_SITE,
       products: story.products,
       at: new Date(story.at),
+      height: Math.round(1080 * ratio),
     }).then(() => alive && setDrawn(true));
     return () => {
       alive = false;
@@ -88,11 +92,34 @@ export function StoryViewer({
       role="dialog"
       aria-modal="true"
       aria-label={`حالة ${story.name}`}
-      className="fixed inset-0 z-[65] flex flex-col bg-black text-white"
-      style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+      className="fixed inset-0 z-[65] bg-black text-white"
     >
-      {/* شرائطُ التقدّم — من اليمين */}
-      <div className="flex gap-1 px-3 pt-3" dir="rtl">
+      {/* الصورةُ تملأ الشاشةَ كلَّها، وما عداها طبقاتٌ فوقها */}
+      <div className="absolute inset-0">
+        <canvas
+          ref={canvasRef}
+          width={1080}
+          height={1920}
+          className="h-full w-full"
+          aria-label={`صورة إعلان توفر ${story.name}`}
+        />
+      </div>
+      {/* مناطقُ النقر: يمينٌ للسابقة، وسطٌ للإيقاف، يسارٌ للتالية */}
+      <button type="button" aria-label="السابقة" onClick={prev} className="absolute inset-y-0 right-0 w-1/3" />
+      <button
+        type="button"
+        aria-label={paused ? 'متابعة' : 'إيقاف'}
+        onClick={() => setPaused((p) => !p)}
+        className="absolute inset-y-0 left-1/3 w-1/3"
+      />
+      <button type="button" aria-label="التالية" onClick={next} className="absolute inset-y-0 left-0 w-1/3" />
+
+      {/* الطبقةُ العليا: شرائطُ التقدّم والاسم — على تدرّجٍ داكنٍ لتُقرأ */}
+      <div
+        className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/60 to-transparent pb-8"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 10px)' }}
+      >
+      <div className="flex gap-1 px-3" dir="rtl">
         {stories.map((s, k) => (
           <span key={s.id} className="h-0.5 flex-1 overflow-hidden rounded-full bg-white/30">
             <span
@@ -115,8 +142,8 @@ export function StoryViewer({
 
       <div className="flex items-center justify-between px-4 pt-3">
         <div className="min-w-0">
-          <p className="truncate text-[14px] font-extrabold">{story.name}</p>
-          <p className="text-[11px] text-white/70">
+          <p className="truncate text-[14px] font-extrabold drop-shadow">{story.name}</p>
+          <p className="text-[11px] text-white/80">
             {story.city} · أُكّد {ageLabel(story.at)}
           </p>
         </div>
@@ -124,32 +151,18 @@ export function StoryViewer({
           type="button"
           onClick={onClose}
           aria-label="إغلاق"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20"
         >
           <XIcon className="h-5 w-5" />
         </button>
       </div>
-
-      {/* الصورةُ — ونقرُ الأطراف للتنقّل */}
-      <div className="relative flex min-h-0 flex-1 items-center justify-center px-4 py-3">
-        <canvas
-          ref={canvasRef}
-          width={1080}
-          height={1080}
-          className="max-h-full w-auto max-w-full rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,.6)]"
-          aria-label={`صورة إعلان توفر ${story.name}`}
-        />
-        <button type="button" aria-label="السابقة" onClick={prev} className="absolute inset-y-0 right-0 w-1/3" />
-        <button
-          type="button"
-          aria-label={paused ? 'متابعة' : 'إيقاف'}
-          onClick={() => setPaused((p) => !p)}
-          className="absolute inset-y-0 left-1/3 w-1/3"
-        />
-        <button type="button" aria-label="التالية" onClick={next} className="absolute inset-y-0 left-0 w-1/3" />
       </div>
 
-      <div className="flex items-center gap-2 px-4 pb-4">
+      {/* الطبقةُ السفلى: الطريقُ وصفحةُ المحطة */}
+      <div
+        className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/60 to-transparent px-4 pt-10"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 14px)' }}
+      >
         {station && (
           <div className="flex-1 rounded-xl bg-white text-brand-900">
             <RouteButton
