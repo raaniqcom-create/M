@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Sheet } from './Sheet';
-import { FuelIcon, MapPinIcon } from './icons';
+import { ChevronDownIcon, FuelIcon, MapPinIcon } from './icons';
 import { baghdadDate } from '@/lib/board';
 import { PRODUCT_LABELS, isOffered } from '@/lib/products';
 import { PARITY_LABEL, RATION, dayParity, plateDigit, shortDate, turnFor } from '@/lib/ration';
@@ -58,6 +58,8 @@ export function PlateTurn({
   const [plate, setPlate] = useState('');
   const [digit, setDigit] = useState<number | null>(null);
   const [decree, setDecree] = useState(false);
+  // «أريد هذا الجدول يعمل له إخفاء وظهور» — مطويٌّ ابتداءً، والعنوانُ يفتحه.
+  const [listOpen, setListOpen] = useState(false);
   /** جدولُ التوزيع الرسميّ — «المحطاتُ المتاحة» يومَ دورك تأتي منه لا من «الآن». */
   const [schedule, setSchedule] = useState<Awaited<ReturnType<typeof loadSchedule>> | null>(null);
 
@@ -207,16 +209,32 @@ export function PlateTurn({
 
           {/* محطاتُ البنزين يومَ دورك — من جدول التوزيع الرسميّ */}
           <div className="mt-3 rounded-2xl border border-slate-100 p-3">
-            <p className="flex items-center gap-1.5 text-[12.5px] font-extrabold text-slate-800">
-              <FuelIcon className="h-4 w-4 text-brand" />
-              {onSchedule && onSchedule.rows.length
-                ? `يصلها البنزين ${onSchedule.day === today ? 'اليوم' : onSchedule.day === baghdadDate(1) ? 'غداً' : 'يوم ' + shortDate(onSchedule.day)}${cityLabel}: ${stationsOf(onSchedule.rows.length)}`
-                : schedule === null
+            {onSchedule && onSchedule.rows.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setListOpen((v) => !v)}
+                aria-expanded={listOpen}
+                className="flex min-h-[40px] w-full items-center gap-1.5 text-right text-[12.5px] font-extrabold text-slate-800"
+              >
+                <FuelIcon className="h-4 w-4 shrink-0 text-brand" />
+                <span className="flex-1">
+                  {`يصلها البنزين ${onSchedule.day === today ? 'اليوم' : onSchedule.day === baghdadDate(1) ? 'غداً' : 'يوم ' + shortDate(onSchedule.day)}${cityLabel}: ${stationsOf(onSchedule.rows.length)}`}
+                </span>
+                <span className="flex shrink-0 items-center gap-0.5 text-[11px] font-bold text-brand-700">
+                  {listOpen ? 'إخفاء' : 'عرض'}
+                  <ChevronDownIcon className={`h-4 w-4 transition-transform ${listOpen ? 'rotate-180' : ''}`} />
+                </span>
+              </button>
+            ) : (
+              <p className="flex items-center gap-1.5 text-[12.5px] font-extrabold text-slate-800">
+                <FuelIcon className="h-4 w-4 text-brand" />
+                {schedule === null
                   ? 'جدولُ التوزيع…'
                   : onSchedule && onSchedule.all > 0
                     ? `لا محطةَ${cityLabel} في جدول ${onSchedule.day === baghdadDate(1) ? 'الغد' : shortDate(onSchedule.day)}`
                     : `لم يُنشر جدولُ ${turnDay === baghdadDate(1) ? 'الغد' : 'يوم ' + shortDate(turnDay ?? today)} بعد`}
-            </p>
+              </p>
+            )}
             {onSchedule && onSchedule.rows.length === 0 && onSchedule.all > 0 && (
               <p className="mt-0.5 text-[11px] text-slate-500">
                 في الجدول {stationsOf(onSchedule.all)} في مناطقَ أخرى —{' '}
@@ -229,12 +247,12 @@ export function PlateTurn({
                 <a href="/alerts" className="font-bold text-brand-700 underline">اختر منطقتك</a> لترى ما يخصّك.
               </p>
             )}
-            {onSchedule && !onSchedule.exact && onSchedule.rows.length > 0 && (
+            {listOpen && onSchedule && !onSchedule.exact && onSchedule.rows.length > 0 && (
               <p className="mt-0.5 text-[10.5px] text-amber-700">
                 جدولُ يوم دورك لم يُنشر بعد — هذا أقربُ جدولٍ منشور.
               </p>
             )}
-            {onSchedule && onSchedule.rows.length > 0 && (
+            {listOpen && onSchedule && onSchedule.rows.length > 0 && (
               <table className="mt-2 w-full text-[11.5px]">
                 <thead>
                   <tr className="text-[10px] font-bold text-slate-400">
@@ -281,7 +299,7 @@ export function PlateTurn({
                 </tbody>
               </table>
             )}
-            {onSchedule && onSchedule.rows.length > 8 && (
+            {listOpen && onSchedule && onSchedule.rows.length > 8 && (
               <a href="/schedule" className="mt-2 block text-center text-[11.5px] font-bold text-brand-700 underline">
                 و{ar(onSchedule.rows.length - 8)} أخرى — الجدولُ كاملاً
               </a>
