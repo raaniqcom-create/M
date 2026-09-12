@@ -43,11 +43,14 @@ type TurnRow = {
 export function PlateTurn({
   stations,
   choice,
+  onPlate,
 }: {
   stations: StationWithStatus[];
   /** مدنُ القارئ من «التنبيهات» — الفارغُ الكلّ. «ما فائدةُ شخصٍ في الرمادي
    *  يشاهد محطةً في القائم إذا لم يخترها؟» */
   choice: AlertChoice | null;
+  /** هل كُتبت لوحةٌ (الآن أو من قبل)؟ — لصفحة /dori كي تُظهر ذيلَها بعدها. */
+  onPlate?: (has: boolean) => void;
 }) {
   const today = baghdadDate();
   const cities = useMemo(() => new Set(choice?.cities ?? []), [choice]);
@@ -74,10 +77,13 @@ export function PlateTurn({
       if (saved !== null && /^\d$/.test(saved)) {
         setDigit(Number(saved));
         setPlate(saved);
+        onPlate?.(true);
       }
     } catch {
       /* تصفّحٌ خاصّ */
     }
+    // عند التركيب وحدَه — onPlate ثابتةٌ من الأب.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const turn = useMemo(() => (digit === null ? null : turnFor(String(digit), today)), [digit, today]);
@@ -87,6 +93,7 @@ export function PlateTurn({
     const d = plateDigit(plate);
     if (d === null) return;
     setDigit(d);
+    onPlate?.(true);
     try {
       localStorage.setItem(KEY, String(d));
     } catch {

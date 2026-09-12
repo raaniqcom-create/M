@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { PlateTurn } from './PlateTurn';
 import { useAlertChoice } from '@/lib/alerts';
 import { SpinnerIcon } from './icons';
+import { SiteFooter } from './SiteFooter';
 import { loadCachedStations, loadStations } from '@/lib/stations';
 import { RATION } from '@/lib/ration';
 import type { StationWithStatus } from '@/types/database';
@@ -16,6 +17,8 @@ export function DoriScreen() {
   const [stations, setStations] = useState<StationWithStatus[] | null>(null);
   const [err, setErr] = useState(false);
   const { choice } = useAlertChoice();
+  // «الحقوقُ غيرُ ظاهرةٍ عند الدخول، وعند كتابة الرقم تظهر» — صاحبُ المنصّة.
+  const [hasPlate, setHasPlate] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -52,5 +55,10 @@ export function DoriScreen() {
     );
   }
 
-  return <PlateTurn stations={stations} choice={choice} />;
+  return (
+    <>
+      <PlateTurn stations={stations} choice={choice} onPlate={setHasPlate} />
+      {hasPlate && <SiteFooter />}
+    </>
+  );
 }

@@ -1,12 +1,29 @@
 import type { Metadata } from 'next';
 import { DoriScreen } from '@/components/DoriScreen';
-import { SiteFooter } from '@/components/SiteFooter';
 import { FuelIcon } from '@/components/icons';
 
+/** ما يراه من وصله الرابطُ في واتساب قبل أن يفتحه: اسمُ الخدمة وتعريفُها
+ *  وصورتُها — لا «muhta.online/dori» عاريةً. الصورةُ في public/og-dori.png،
+ *  مصدرُها docs/promo/og-dori.html. */
 export const metadata: Metadata = {
-  title: 'دوري — الفرديّ والزوجيّ',
-  description:
-    'أدخل رقم لوحة سيّارتك واعرف دورك في توزيع البنزين بالفرديّ والزوجيّ في الأنبار، والمحطات التي فيها بنزينٌ الآن.',
+  title: 'اعرف دورك في البنزين — الفرديّ والزوجيّ',
+  description: 'أدخل رقم سيارتك مرّةً واحدة — يظهر دورك في الفرديّ والزوجيّ اليوم أم غداً، والمحطات التي يصلها البنزين في مدينتك، والطريق إليها. من المحطة التقنية — منصّة وقود الأنبار.',
+  alternates: { canonical: '/dori' },
+  openGraph: {
+    type: 'website',
+    locale: 'ar_IQ',
+    url: 'https://muhta.online/dori',
+    siteName: 'المحطة التقنية',
+    title: 'اعرف دورك في البنزين — الفرديّ والزوجيّ',
+    description: 'أدخل رقم سيارتك مرّةً واحدة — يظهر دورك في الفرديّ والزوجيّ اليوم أم غداً، والمحطات التي يصلها البنزين في مدينتك، والطريق إليها. من المحطة التقنية — منصّة وقود الأنبار.',
+    images: [{ url: '/og-dori.png', width: 1200, height: 630, alt: 'اعرف دورك في البنزين — المحطة التقنية' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'اعرف دورك في البنزين — الفرديّ والزوجيّ',
+    description: 'أدخل رقم سيارتك مرّةً واحدة — يظهر دورك في الفرديّ والزوجيّ اليوم أم غداً، والمحطات التي يصلها البنزين في مدينتك، والطريق إليها. من المحطة التقنية — منصّة وقود الأنبار.',
+    images: ['/og-dori.png'],
+  },
 };
 
 /** `/dori` — «دوري»: بابٌ مباشرٌ لبطاقة الفرديّ والزوجيّ، يُشارَك رابطاً.
@@ -31,8 +48,6 @@ export default function DoriPage() {
       <div className="mt-6">
         <DoriScreen />
       </div>
-
-      <SiteFooter />
     </main>
   );
 }
