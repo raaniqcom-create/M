@@ -263,10 +263,10 @@ export function PlateTurn({
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label={`الطريق إلى ${r.name}`}
-                          className="inline-flex min-h-[32px] items-center gap-0.5 rounded-lg px-2 text-[10px] font-bold text-brand-700 active:bg-brand-50"
+                          className="inline-flex min-h-[32px] items-center gap-0.5 whitespace-nowrap rounded-lg px-1.5 text-[10px] font-bold text-brand-700 active:bg-brand-50"
                         >
                           <MapPinIcon className="h-4 w-4" />
-                          ويز
+                          توجّه لها
                         </a>
                       </td>
                     </tr>
