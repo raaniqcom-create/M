@@ -7,6 +7,7 @@ import { TomorrowScreen } from '@/components/TomorrowScreen';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { NativePush } from '@/components/NativePush';
 import { PullToRefresh } from '@/components/PullToRefresh';
+import { CarPlayUpdate } from '@/components/CarPlayUpdate';
 import { APPLE_APP_ID } from '@/lib/stores';
 
 const tajawal = Tajawal({
@@ -75,6 +76,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ServiceWorkerRegister />
         <NativePush />
         <PullToRefresh />
+        <CarPlayUpdate />
         {/* نقطةُ تركيبٍ واحدةٌ تغطّي كلَّ مسار — أصغرُ من حراسةٍ في كلّ صفحة،
             وتشمل /owner و/admin اللتين تُنسيان في أيّ حلٍّ صفحةً صفحة. */}
         <Maintenance />
