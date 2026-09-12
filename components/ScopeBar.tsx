@@ -64,25 +64,52 @@ export function ScopeBar({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="mt-3 flex w-full items-center gap-2 rounded-xl border border-white/25 bg-white/15 px-3 py-2.5 text-sm text-white transition-colors hover:bg-white/25"
-      >
-        <MapPinIcon className="h-4 w-4 shrink-0" />
-        <span className="font-extrabold">{label}</span>
-        {extra > 0 && (
-          <span className="rounded-full bg-white/25 px-2 py-px text-[10.5px] font-bold">
-            +{extra}
+      {/* المدينةُ يميناً، والفراغُ بجانبها أزرارُ الوقود المتوفّر الآن —
+          «هل نستطيع أن نضع به أزراراً صغيرة للوقود المتوفّر الآن بدل المنتجات
+          المتوفّرة الآن؟» — صاحبُ المنصّة. فذهبت لوحةُ المنتجات وبقيت الأرقامُ
+          نفسُها هنا، بمقياس النطاق نفسِه. */}
+      <div className="mt-3 flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex min-w-0 shrink items-center gap-1.5 rounded-xl border border-white/25 bg-white/15 px-2.5 py-2 text-sm text-white transition-colors hover:bg-white/25"
+        >
+          <MapPinIcon className="h-4 w-4 shrink-0" />
+          <span className="truncate font-extrabold">{label}</span>
+          {extra > 0 && (
+            <span className="rounded-full bg-white/25 px-1.5 py-px text-[10.5px] font-bold">
+              +{extra}
+            </span>
+          )}
+          <span className="text-white/45">·</span>
+          <span className="whitespace-nowrap text-[11px] font-medium text-white/85">
+            {total === 0 ? 'لا محطة' : plural(total, 'محطة', 'محطتان', 'محطات', 'محطة')}
           </span>
+          <ChevronDownIcon className="h-3.5 w-3.5 shrink-0" />
+        </button>
+
+        {productCounts.length > 0 && (
+          <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+            {productCounts.map(({ product, n }) => {
+              const on = activeProduct === product;
+              return (
+                <button
+                  key={product}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => onPickProduct(product)}
+                  className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1.5 text-[11px] font-bold transition-colors ${
+                    on ? 'border-white bg-white text-brand-800' : 'border-white/25 bg-white/15 text-white'
+                  }`}
+                >
+                  <span className="text-[12px] font-extrabold">{n}</span>
+                  {PRODUCT_LABELS[product]}
+                </button>
+              );
+            })}
+          </div>
         )}
-        <span className="text-white/45">·</span>
-        <span className="text-xs font-medium text-white/85">
-          {total === 0 ? 'لا محطة' : plural(total, 'محطة واحدة', 'محطتان', 'محطات', 'محطة')}
-        </span>
-        <span className="flex-1" />
-        <ChevronDownIcon className="h-3.5 w-3.5 shrink-0" />
-      </button>
+      </div>
 
       <Sheet
         open={open}

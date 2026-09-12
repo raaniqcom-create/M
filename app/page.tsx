@@ -18,7 +18,8 @@ import { SoundToggle } from '@/components/SoundToggle';
 import { NotificationBell } from '@/components/NotificationBell';
 import { SideMenu } from '@/components/SideMenu';
 import { isFresh, isOpenNow } from '@/lib/hours';
-import { PRODUCT_LABELS, hasSomethingToShow, isOffered } from '@/lib/products';
+import { PRODUCT_LABELS, PRODUCT_ORDER, expectedText, isExpectedLate, isOffered, listTier } from '@/lib/products';
+import { plural } from '@/lib/freshness';
 import { CITY_NAMES } from '@/lib/cities';
 import { StationCard } from '@/components/StationCard';
 import { PromoStrip } from '@/components/PromoStrip';
@@ -27,9 +28,8 @@ import { useAlertChoice, useFollowedStations } from '@/lib/alerts';
 import { TripAsk } from '@/components/TripAsk';
 import { UnregisteredBoard } from '@/components/UnregisteredBoard';
 import { AvailabilityPopup } from '@/components/AvailabilityPopup';
-import { forCities, useOpenAnnouncements } from '@/lib/announcements';
+import { useOpenAnnouncements } from '@/lib/announcements';
 
-import { ProductsDashboard } from '@/components/ProductsDashboard';
 import { NewsTicker } from '@/components/NewsTicker';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import { SplashScreen } from '@/components/SplashScreen';
@@ -97,6 +97,7 @@ export default function HomePage() {
   const [picked, setPicked] = useState<string[] | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   /** «اعرض المحطات التي لا وقود لديها» — لحظيّ لا محفوظ. */
+  const [showRest, setShowRest] = useState(false);
   const [locating, setLocating] = useState(false);
 
   /** تبديل العرض يُعيد القارئ إلى أوّله.
@@ -489,15 +490,6 @@ export default function HomePage() {
     const q = query.trim();
     if (q) rows = rows.filter((s) => s.name.includes(q) || s.address.includes(q) || s.city.includes(q));
 
-    // A station with nothing in stock used to be hidden outright. That reads as
-    // an empty app whenever owners haven't updated yet, and it hides the one
-    // thing we do know — that the station exists and where it is. Sink them
-    // instead: pinned first, then anything a driver can act on now.
-    const actionable = (s: StationWithStatus) =>
-      s.products.some(
-        (p) => isOffered(s, p) || !!p.expected_at
-      );
-
     // والمسافة تسبق كل شيء متى عُرف الموقع.
     //
     // كانت rows تُرتَّب بالمسافة أعلاه ثم يُعاد فرزها هنا بالمتابَعة ثم
@@ -506,11 +498,13 @@ export default function HomePage() {
     // ومن ضغط «أقرب محطة» يرى ترتيباً لا علاقة له بالقُرب.
     //
     // فمتى ضغط الزرّ صراحةً، القُرب هو السؤال — والباقي تفاضلٌ عند التساوي.
+    //
+    // وفرزُ التوفّر ليس هنا: الطبقاتُ (`tiers` أدناه) تفصل الآن عن المتوقّع
+    // عن الباقي، والفرزُ مستقرّ فيبقى ترتيبُ المسافة داخل كلّ طبقة.
     return [...rows].sort(
       (a, b) =>
         (origin ? (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity) : 0) ||
-        Number(isFollowed(b.id)) - Number(isFollowed(a.id)) ||
-        Number(actionable(b)) - Number(actionable(a))
+        Number(isFollowed(b.id)) - Number(isFollowed(a.id))
     );
   }, [stations, origin, filters, query, isFollowed, myCities, showAll]);
 
@@ -529,27 +523,6 @@ export default function HomePage() {
     );
   }, [inScope, filters.product, filters.availableOnly]);
 
-  // كم محطة تُخفيها التصفية — الرقم نفسه الذي يظهر على الزرّ.
-  const hiddenElsewhere = useMemo(() => {
-    const mine = myCities;
-    if (!mine || showAll || filters.city) return 0;
-    return (stations ?? []).filter((s) => !mine.includes(s.city)).length;
-  }, [stations, myCities, showAll, filters.city]);
-
-  // ما يُعرض الآن، لا ما سيحدث عند الضغط.
-  //
-  // ولا يظهر أصلاً لمن لا اشتراك له أو لمن لا محطات خارج مدنه: زرٌّ لا يغيّر
-  // شيئاً هو أثاثٌ يُشغل مكاناً ويُعلَّم أنه بلا فائدة.
-  const scopeLabel = useMemo(() => {
-    const mine = myCities;
-    if (!mine || filters.city) return null;
-    if (showAll) return 'محطات كل الأنبار';
-    if (!hiddenElsewhere) return null;
-    // الأسماء صريحة: «محطات الرمادي، الفلوجة» أوضح من «محطات مدني (2)» —
-    // القارئ يرى نطاقه بلا أن يفتح إعداداته ليتذكّره.
-    return `محطات ${mine.join('، ')}`;
-  }, [myCities, choice, showAll, filters.city, hiddenElsewhere]);
-
   // كم محطة يجدها البحث نفسه خارج مدنه.
   //
   // لوحة المنتجات تعدّ الأنبار كلها، والقائمة تحتها مقصورة على مدنه. فيقرأ
@@ -561,6 +534,8 @@ export default function HomePage() {
     const q = query.trim();
     return stations.filter((s) => {
       if (mineCities.includes(s.city)) return false;
+      // ما سيصل مطويّاً خلف «بلا وقودٍ الآن» ليس وعداً يُقطع بزرّ «اعرض كل الأنبار».
+      if (listTier(s, filters.product) === 'rest') return false;
       if (filters.openOnly && !isOpenNow(s)) return false;
       if (filters.kind && s.kind !== filters.kind) return false;
       if (filters.availableOnly && !s.products.some((p) => isOffered(s, p))) return false;
@@ -586,50 +561,41 @@ export default function HomePage() {
     for (const s of inScope ?? []) {
       for (const pr of s.products) if (isOffered(s, pr)) m.set(pr.product, (m.get(pr.product) ?? 0) + 1);
     }
-    return [...m.entries()].map(([product, n]) => ({ product, n }));
+    // بترتيب المنتجات الثابت لا بترتيب المحطات — أزرارُ الرأس لا تتقافز.
+    return [...m.entries()]
+      .map(([product, n]) => ({ product, n }))
+      .sort((a, b) => PRODUCT_ORDER.indexOf(a.product) - PRODUCT_ORDER.indexOf(b.product));
   }, [inScope]);
 
-  /** محطةٌ كل منتجاتها غير متوفرة.
+  /** ــ ثلاثُ طبقات: الآن · متوقّع · الباقي ـــــــــــــــــــــــــــــــــ
    *
-   *  طلب المالك: من لا يُعلن شيئاً لا يظهر في البطاقات — فالقائمة تُفتح
-   *  للبحث عن وقود، وبطاقةٌ لا وقود فيها ضجيجٌ بين الأجوبة.
+   *  «لماذا تظهر هذه المحطاتُ وهي لا تخدم المستخدم؟ أظهر المحطاتِ التي فيها
+   *  منتجٌ فقط، والمتوقّعةُ جِد لها طريقةً مناسبة» — صاحبُ المنصّة، ١٢ أيلول.
    *
-   *  والمقياس is_available وحده — لا حداثةٌ ولا دوام. لأن حارس الحداثة يُخفي
-   *  خبراً شاخ، وحارس الدوام يُخفي المحطة كلها ليلاً: قِستُ الساعة 03:47
-   *  فوجدت صفراً من ثماني عشرة مفتوحة. فقاعدةٌ تتبعهما تُفرغ التطبيق كل ليلة.
+   *  وقبلَها كانت «تُفرز ولا تُخفى»: اتّصل صاحبُ محطةٍ فقال «نحن نُجبر على وضع
+   *  كلمة متوقع غداً» لأنّ الفارغةَ كانت تسقط. فالجوابُ ليس الحذفَ ولا العرضَ
+   *  كلَّه: الطبقةُ الثالثة تُطوى خلف زرٍّ يعدّها ويفتحها، والخريطةُ والبحثُ
+   *  يبلغانها — والبطاقةُ الكاملة تعود لحظةَ يُحدَّث شيء. والوعدُ الفائت لا
+   *  يُكافأ بصفٍّ في «متوقّع» (`isExpectedLate`) وإلّا صار الشريطُ مكانَ الكذبة.
    *
-   *  ولا تُحذف: البحث بالاسم يجدها، والخريطة تحملها، وسطرٌ أسفل القائمة
-   *  يقول كم هي ويفتحها. من يعرف أن «المنتصر بالله» موجودة ويقول له التطبيق
-   *  إنها ليست موجودة — يفقد الثقة بكل ما عداها. */
-  const hasStock = hasSomethingToShow;
-
-  /** ــ تُفرز ولا تُخفى ــــــــــــــــــــــــــــــــــــــــــــــــــــــ
-   *
-   *  اتّصل صاحبُ محطةٍ فقال: «نحن نجبر على وضع كلمة متوقع غدا وهذه عدم
-   *  مصداقية مع الزبون». وهذا السطرُ كان الإجبار: محطةٌ لا وقودَ عندها ولا
-   *  وعد تسقط من القائمة، فثمنُ ظهورها أن تخترع تاريخاً. وقِيس يومَ كُتب
-   *  هذا: **أربعَ عشرةَ محطةً من إحدى وأربعين تبقى ظاهرةً بالوعد وحدَه**.
-   *
-   *  والقرارُ المنقوضُ مكتوبٌ فوقُ وفي `lib/products.ts` — «بطاقةٌ لا وقود
-   *  فيها ولا وعدَ به ضجيجٌ بين الأجوبة» — وهو صحيحٌ لولا أنّه جعل الظهورَ
-   *  ثمناً يُدفع بكذبة. فتُعرض كلُّها، والفارغةُ في الذيل ببطاقةٍ تقول «لا
-   *  يوجد الآن» — نصٌّ مبنيٌّ في `StationCard` منذ زمنٍ ولم يُعرض قطّ.
-   *
-   *  ولا تُمسّ `isListed`: هي التي تختار شرائحَ المنتجات على البطاقة، فتغييرُها
-   *  يقلب كلَّ بطاقة. البوّابةُ هنا وحدَها.
-   *
-   *  والفرزُ مستقرّ، فترتيبُ المسافة يبقى داخل كلّ مجموعة. */
-  const listRows = useMemo(() => {
+   *  والمفضّلةُ بطاقةٌ دائماً في الأعلى ولا تُعدّ في `stocked`. والفرزُ مستقرّ
+   *  فترتيبُ المسافة والمتابَعة يبقى داخل كلّ طبقة. */
+  const tiers = useMemo(() => {
     if (!visible) return null;
-    return [...visible].sort((a, b) => Number(hasStock(b)) - Number(hasStock(a)));
-  }, [visible]);
+    const now: StationWithStatus[] = [];
+    const expected: StationWithStatus[] = [];
+    const rest: StationWithStatus[] = [];
+    let stocked = 0;
+    for (const s of visible) {
+      const t = listTier(s, filters.product);
+      if (t === 'now') stocked++;
+      (t === 'now' || isFollowed(s.id) ? now : t === 'expected' ? expected : rest).push(s);
+    }
+    return { now, expected, rest, stocked };
+  }, [visible, filters.product, isFollowed]);
 
-  /** والعدُّ يُفصل عن العرض.
-   *
-   *  القائمةُ تعرض الكلَّ، والعدّادُ يعدّ ما يُقصد. ولولا الفصلُ لقفز الرقمُ
-   *  إلى عدد المحطات كلِّه وفيه ما لا وقودَ فيه — فيصير وعداً يُخلَف، وهو
-   *  المبدأُ المكتوبُ في `inScope` نفسِها. */
-  const stocked = useMemo(() => (listRows ?? []).filter(hasStock).length, [listRows]);
+  /** والعدُّ يُفصل عن العرض: يعدّ ما يُؤخذ الآن وحدَه — كلوحة المنتجات فوقه. */
+  const stocked = tiers?.stocked ?? 0;
 
   const cityCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -677,7 +643,7 @@ export default function HomePage() {
             total={stocked}
             productCounts={productCounts}
             activeProduct={filters.product}
-            onPickProduct={(p) => setFilters({ ...filters, product: p })}
+            onPickProduct={(p) => setFilters({ ...filters, product: filters.product === p ? null : p })}
           />
 
           {/* إسنادٌ ساكن لا شريطٌ يتبدّل كل ثلاث ثوانٍ.
@@ -744,60 +710,14 @@ export default function HomePage() {
 
         {/* «حالة المحطة» — حلقاتُ القصص قبل كلّ شيء: الخبرُ الطازج أوّلاً.
             اعتمدها صاحبُ المنصّة ١٢ أيلول ٢٠٢٦ بعد معاينةٍ للإدارة وحدَها. */}
-        {stations && view === 'list' && (
-          <StoryStrip stations={stations} choice={choice} withNews={role === 'admin'} />
-        )}
+        {stations && view === 'list' && <StoryStrip stations={stations} choice={choice} />}
 
         {/* الفرديُّ والزوجيّ — قرارٌ مؤقّت؛ تختفي البطاقةُ بإطفاء RATION.active.
-            **معاينةٌ للإدارة وحدَها** حتى الاعتماد. */}
-        {RATION.active && stations && view === 'list' && role === 'admin' && (
-          <PlateTurn stations={stations} choice={choice} />
-        )}
+            اعتمدها صاحبُ المنصّة ١٢ أيلول ٢٠٢٦ بعد معاينةٍ للإدارة وحدَها؛ وشرطُ
+            الدور كان يُخفيها كلَّما تعثّرت قراءةُ profiles.role على الهاتف. */}
+        {RATION.active && stations && view === 'list' && <PlateTurn stations={stations} choice={choice} />}
 
         <TripAsk stations={stations} />
-        {/* لوحة المنتجات والشريط الترويجي للقائمة وحدها.
-            في وضع الخريطة كانا يدفعانها 424 بكسلاً لأسفل، فلا يظهر منها
-            إلا ثلاثة أرباعها — والخريطة تُفتح لتُرى كاملة. */}
-        {stations && view === 'list' && (
-          <div className="mb-4">
-            {/* onPickAnnounced: منتجٌ لا محطة مسجّلة له — الضغط يقود إلى خبره
-                لا إلى قائمة فارغة. وبمعرّفٍ في DOM لا بمرجع React، لأن اللوحة
-                تُركَّب داخل فرعٍ شرطيّ آخر فقد يكون المرجع فارغاً لحظة الضغط.
-
-                والتعليق هنا لا بين الخصائص: تعليقٌ داخل وسم JSX يبتلع الخاصّية
-                التي تليه صامتاً — تُمرَّر undefined، ويصير `?.()` لا شيء، ولا
-                خطأ في أي مكان. ضاع في تتبّعه وقتٌ يستحقّ هذا السطر. */}
-            {/* announced بلا تصفية مدن — كالأرقام التي بجانبها.
-             *
-             *  كانت الشارة تُحسب من مدن الجهاز والأرقام من الأنبار كلها، فصار
-             *  رقمان متجاوران بمقياسين. ولكل جهاز اختيارٌ في تخزينه: ظهرت «+٢»
-             *  على الويب و«+١» على آيفون ولا شيء على أندرويد — ثلاثتها صحيحة
-             *  بمقياسها، وثلاثتها تبدو عطلاً.
-             *
-             *  والوحدة أهمّ من الدقّة هنا: رقمٌ يختلف بين جهازين يُفقد الثقة بكل
-             *  رقم آخر، ولو كان كلٌّ منهما صادقاً في سياقه. */}
-            <ProductsDashboard
-              scopeLabel={scopeLabel ?? undefined}
-              live={!staleAt}
-              // النطاقُ لا القائمة: اللوحةُ أداةُ تصفية، وأداةٌ تُصفّي خياراتِها
-              // تُغيّر رقمَ منتجٍ بضغطةٍ على منتجٍ آخر. انظر `inScope`.
-              stations={inScope ?? stations}
-              filter={filters.product}
-              onPick={(product) => setFilters({ ...filters, product })}
-              announced={announcements}
-              onPickAnnounced={() => {
-                // الشارة تعدّ الأنبار كلها، فالضغطة توسّع النطاق لتفي بما وعدت.
-                if (announcements.some((a) => !forCities([a], choice?.cities).length)) {
-                  setShowAll(true);
-                }
-                document
-                  .getElementById(UNREGISTERED_BOARD_ID)
-                  ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }
-              }
-            />
-          </div>
-        )}
 
         {/* التنبيه فوق القائمة لا تحتها.
           *
@@ -849,7 +769,7 @@ export default function HomePage() {
                 <AvailabilityPopup rows={announcements} showAll={showAll} />
               </div>
 
-          {visible.length === 0 && (
+          {tiers && tiers.now.length === 0 && tiers.expected.length === 0 && (
                 <div className="card p-8 text-center">
                   <FuelIcon className="mx-auto h-8 w-8 text-brand-200" />
                   {/* The list is empty by design while the first stations
@@ -914,7 +834,7 @@ export default function HomePage() {
                 *  واللمعة تنطلق متدرّجةً بحسب الموضع فلا تومض تسعَ عشرة
                 *  مرّةً معاً. والتأخير يدور على ثمانٍ حتى لا تتباعد أواخر
                 *  القائمة عن أوائلها فتبدو ساكنة. */}
-              {(listRows ?? visible).map((station, i) => (
+              {tiers!.now.map((station, i) => (
                 <div key={station.id}>
                   {i > 0 && (
                     <div
@@ -932,6 +852,66 @@ export default function HomePage() {
                 </div>
               ))}
 
+              {/* متوقّع — بطاقةٌ واحدة لا بطاقةٌ لكلّ وعد: الاسمُ وموعدُه، وضغطُه يفتحها. */}
+              {tiers!.expected.length > 0 && (
+                <section className="card p-3" aria-label="محطات متوقّع وصول الوقود إليها">
+                  <h2 className="flex items-center gap-1.5 text-[13px] font-bold text-brand-900">
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">متوقّع</span>
+                    يصلها الوقود لاحقاً
+                  </h2>
+                  <ul className="mt-1 divide-y divide-slate-100">
+                    {tiers!.expected.map((s) => (
+                      <li key={s.id}>
+                        <a href={`/station/${s.id}`} className="flex min-h-[40px] items-center justify-between gap-2 py-1.5">
+                          <span className="min-w-0 truncate text-[12.5px] font-bold text-brand-900">
+                            {s.name} <span className="font-normal text-slate-400">· {s.city}</span>
+                          </span>
+                          <span className="flex shrink-0 flex-wrap justify-end gap-1">
+                            {s.products
+                              .filter(
+                                (p) =>
+                                  (!filters.product || p.product === filters.product) &&
+                                  !!p.expected_at &&
+                                  !isExpectedLate(p.expected_at)
+                              )
+                              .map((p) => (
+                                <span key={p.product} className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                                  {PRODUCT_LABELS[p.product]} · {expectedText(p)}
+                                </span>
+                              ))}
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {/* الباقي مطويٌّ لا محذوف: زرٌّ يعدّه ويفتحه. */}
+              {tiers!.rest.length > 0 && (
+                <button
+                  type="button"
+                  aria-expanded={showRest}
+                  onClick={() => setShowRest((v) => !v)}
+                  className="block w-full py-2 text-center text-[11.5px] font-bold text-slate-500"
+                >
+                  {showRest
+                    ? 'أخفِ المحطات بلا وقودٍ الآن'
+                    : `${plural(tiers!.rest.length, 'محطة أخرى', 'محطتان أخريان', 'محطات أخرى', 'محطة أخرى')} بلا وقودٍ الآن — اعرضها`}
+                </button>
+              )}
+              {showRest &&
+                tiers!.rest.map((station, i) => (
+                  <div key={station.id}>
+                    {i > 0 && <div className="card-sep mb-3" aria-hidden="true" />}
+                    <StationCard
+                      station={station}
+                      tinted={i % 2 === 1}
+                      isFavorite={isFollowed(station.id)}
+                      onToggleFavorite={() => onStar(station.id)}
+                    />
+                  </div>
+                ))}
             </div>
           )}
         </div>

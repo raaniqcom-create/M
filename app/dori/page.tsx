@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { AdminOnly } from '@/components/AdminOnly';
 import { DoriScreen } from '@/components/DoriScreen';
 import { SiteFooter } from '@/components/SiteFooter';
 import { FuelIcon } from '@/components/icons';
@@ -28,12 +27,10 @@ export default function DoriPage() {
         وأيّامَك في الأسبوع، <b className="text-slate-800">والمحطاتِ التي فيها بنزينٌ الآن</b>.
       </p>
 
-      {/* معاينةٌ للإدارة وحدَها حتى الاعتماد — ثمّ يُرفع الحارس. */}
-      <AdminOnly>
-        <div className="mt-6">
-          <DoriScreen />
-        </div>
-      </AdminOnly>
+      {/* اعتمدها صاحبُ المنصّة ١٢ أيلول ٢٠٢٦ بعد معاينةٍ للإدارة وحدَها. */}
+      <div className="mt-6">
+        <DoriScreen />
+      </div>
 
       <SiteFooter />
     </main>

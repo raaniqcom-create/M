@@ -323,6 +323,37 @@ export function hasSomethingToShow(station: {
   return station.products.some(isListed);
 }
 
+export type ListTier = 'now' | 'expected' | 'rest';
+
+/** طبقةُ المحطة في القائمة الرئيسية — «أظهر المحطاتِ التي فيها منتجٌ فقط،
+ *  والمتوقّعةُ جِد لها طريقةً مناسبة» — صاحبُ المنصّة، ١٢ أيلول ٢٠٢٦.
+ *
+ *  `now` وقودٌ يُؤخذ الآن (`isOffered`: طازجٌ، لم ينفد، والمحطةُ مفتوحة) ·
+ *  `expected` وعدٌ لم يفت · `rest` الباقي: وعدٌ فائت، خبرٌ شاخ، مغلقةٌ ولو
+ *  بإعلانٍ طازج، صامتة — يُطوى خلف زرٍّ يعدّه ولا يُحذف. وبمنتجٍ واحدٍ متى
+ *  صُفّيت القائمةُ به: «كاز» مضغوطةٌ تحكم على الكاز وحدَه. */
+export function listTier(
+  station: {
+    is_24h: boolean;
+    opens_at: string;
+    closes_at: string;
+    temp_closed?: boolean;
+    products: {
+      product: FuelProduct;
+      is_available?: boolean | null;
+      updated_at?: string | null;
+      runs_out_at?: string | null;
+      expected_at?: string | null;
+    }[];
+  },
+  product?: FuelProduct | null
+): ListTier {
+  const rows = product ? station.products.filter((p) => p.product === product) : station.products;
+  if (rows.some((p) => isOffered(station, p))) return 'now';
+  if (rows.some((p) => !!p.expected_at && !isExpectedLate(p.expected_at))) return 'expected';
+  return 'rest';
+}
+
 /** أُعلن متوفّراً، وفات عمر إعلانه. يُعرض بالرمادي مع عمره: لا يُخفى فتضيع
  *  المعلومة، ولا يُعرض أخضرَ فيُرسل الناس إلى وقود نفد.
  *
