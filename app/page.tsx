@@ -55,6 +55,8 @@ import type { FuelProduct, StationWithStatus } from '@/types/database';
 
 /** يربط بطاقة المنتج المعلَن بخبره أسفل الصفحة. */
 const UNREGISTERED_BOARD_ID = 'unregistered-board';
+/** مفتاحُ «كل الأنبار» المحفوظ على الجهاز. */
+const SCOPE_ALL = 'scope-all';
 // خريطةٌ فارغة ثابتة: تمنع شرائح المدن داخل الفلاتر، وتُنشأ مرّةً لا في
 // كل رسم — فلا تُعيد تركيب SearchBar بمرجعٍ جديد كل مرّة.
 const EMPTY_CITY_COUNTS: Map<string, number> = new Map();
@@ -86,8 +88,20 @@ export default function HomePage() {
   const [query, setQuery] = useState('');
   const [view, setView] = useState<'list' | 'map'>('list');
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
-  // «اعرض الباقي» — لحظيّ لا محفوظ: من وسّع مرةً لا يعني أنه غيّر اشتراكه.
+  // «كل الأنبار» يُحفظ على الجهاز — الإشعاراتُ تبقى على مدينته المحفوظة.
+  //
+  // كان لحظيّاً: «طلبتُ أن يعرض لي كلَّ محطات الأنبار، وعندما أدخل تظهر فقط
+  // المدينةُ الأساسية!» — صاحبُ المنصّة. فمن اختار المحافظةَ كلَّها يجدها حين
+  // يعود، ومن عاد إلى مدينةٍ بعينها يُمحى الاختيار. أمّا المدنُ المضافة
+  // للجلسة (`picked`) فتبقى لحظيّة كما هي.
   const [showAll, setShowAll] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(SCOPE_ALL) === '1') setShowAll(true);
+    } catch {
+      /* تصفّحٌ خاصّ */
+    }
+  }, []);
   // مدنٌ تُختار للحظتها ولا تُحفظ.
   //
   // 70% من المشتركين اختاروا مدينةً واحدة، وهي وحدها ما يُحفظ ويُبنى عليه
@@ -646,6 +660,12 @@ export default function HomePage() {
             onChange={(next, all) => {
               setPicked(next);
               setShowAll(all);
+              try {
+                if (all) localStorage.setItem(SCOPE_ALL, '1');
+                else localStorage.removeItem(SCOPE_ALL);
+              } catch {
+                /* تصفّحٌ خاصّ */
+              }
             }}
             cityCounts={cityCounts}
             cityNow={cityNow}
