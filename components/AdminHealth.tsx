@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { callFn } from '@/lib/fn';
 import { ageLabel, isFresh, isOpenNow } from '@/lib/hours';
 import { PRODUCT_LABELS } from '@/lib/products';
-import { announceBody } from '@/lib/announceTemplates';
+import { PLATFORM_NOTICES, announceBody } from '@/lib/announceTemplates';
 import { CheckIcon, SpinnerIcon, XIcon } from './icons';
 import type { Station } from '@/types/database';
 
@@ -47,6 +47,7 @@ export function AdminHealth() {
 
   const [title, setTitle] = useState('⛽ المحطة التقنية');
   const [text, setText] = useState('');
+  const [url, setUrl] = useState('/');
   const [reach, setReach] = useState<{ ios: number; android: number; web: number } | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
@@ -176,7 +177,7 @@ export function AdminHealth() {
       ok: number;
       failed: number;
       pruned: number;
-    }>('announce', { title, body: text, dryRun });
+    }>('announce', { title, body: text, url, dryRun });
     return { ok: r.ok, out: r.data, error: r.error };
   }
 
@@ -348,6 +349,25 @@ export function AdminHealth() {
           الإرسال لا بعده.
         </p>
 
+        {/* جاهزٌ بضغطة: نصٌّ كُتب بعناية وعُرض قبل أن يُرسل. */}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {PLATFORM_NOTICES.map((n) => (
+            <button
+              key={n.id}
+              type="button"
+              onClick={() => {
+                setTitle(n.title);
+                setText(n.body);
+                setUrl(n.url);
+                setConfirming(false);
+              }}
+              className="rounded-full border border-brand-100 bg-brand-50 px-3 py-1.5 text-[11.5px] font-bold text-brand-700"
+            >
+              {n.label}
+            </button>
+          ))}
+        </div>
+
         <label htmlFor="an-title" className="label mt-3">العنوان</label>
         <input
           id="an-title"
@@ -374,7 +394,9 @@ export function AdminHealth() {
           className="field py-2"
           placeholder="هذا صوت المنصة — ستسمعه عند توفر الوقود."
         />
-        <p className="mt-1 text-[11px] text-slate-400">{text.length} / 178 حرفاً</p>
+        <p className="mt-1 text-[11px] text-slate-400">
+          {text.length} / 178 حرفاً · يفتح <span dir="ltr">{url}</span>
+        </p>
 
         {!confirming ? (
           <button

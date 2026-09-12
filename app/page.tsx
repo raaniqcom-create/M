@@ -602,6 +602,14 @@ export default function HomePage() {
     for (const s of stations ?? []) m.set(s.city, (m.get(s.city) ?? 0) + 1);
     return m;
   }, [stations]);
+  // وما فيها وقودٌ الآن لكلّ مدينة — رقمُ ورقة المدن، بمقياس الرأس والقائمة.
+  const cityNow = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of stations ?? []) {
+      if (s.products.some((p) => isOffered(s, p))) m.set(s.city, (m.get(s.city) ?? 0) + 1);
+    }
+    return m;
+  }, [stations]);
 
   // بعد الخطّافات كلِّها. وتبقى الدوّارةُ حتى ينقلَه التحويلُ أعلاه — ومن
   // معه جلسةٌ ولا لوحةَ له (لا دورَ) ترى القائمةَ بعد الحسم كما كانت.
@@ -640,6 +648,7 @@ export default function HomePage() {
               setShowAll(all);
             }}
             cityCounts={cityCounts}
+            cityNow={cityNow}
             total={stocked}
             productCounts={productCounts}
             activeProduct={filters.product}

@@ -29,6 +29,7 @@ export function ScopeBar({
   allAnbar,
   onChange,
   cityCounts,
+  cityNow,
   total,
   productCounts,
   activeProduct,
@@ -40,7 +41,10 @@ export function ScopeBar({
   picked: string[] | null;
   allAnbar: boolean;
   onChange: (picked: string[] | null, allAnbar: boolean) => void;
+  /** محطاتُ كلّ مدينة — الوجود: من له محطةٌ واحدة له مدينةٌ في الورقة. */
   cityCounts: Map<string, number>;
+  /** وما فيها وقودٌ الآن — الرقمُ الذي يُعرض، بمقياس الرأس نفسِه. */
+  cityNow: Map<string, number>;
   total: number;
   productCounts: { product: FuelProduct; n: number }[];
   activeProduct: FuelProduct | null;
@@ -68,11 +72,11 @@ export function ScopeBar({
           «هل نستطيع أن نضع به أزراراً صغيرة للوقود المتوفّر الآن بدل المنتجات
           المتوفّرة الآن؟» — صاحبُ المنصّة. فذهبت لوحةُ المنتجات وبقيت الأرقامُ
           نفسُها هنا، بمقياس النطاق نفسِه. */}
-      <div className="mt-3 flex items-center gap-1.5">
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex min-w-0 shrink items-center gap-1.5 rounded-xl border border-white/25 bg-white/15 px-2.5 py-2 text-sm text-white transition-colors hover:bg-white/25"
+          className="flex max-w-full items-center gap-1.5 rounded-xl border border-white/25 bg-white/15 px-2.5 py-2 text-sm text-white transition-colors hover:bg-white/25"
         >
           <MapPinIcon className="h-4 w-4 shrink-0" />
           <span className="truncate font-extrabold">{label}</span>
@@ -88,27 +92,25 @@ export function ScopeBar({
           <ChevronDownIcon className="h-3.5 w-3.5 shrink-0" />
         </button>
 
-        {productCounts.length > 0 && (
-          <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-            {productCounts.map(({ product, n }) => {
-              const on = activeProduct === product;
-              return (
-                <button
-                  key={product}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => onPickProduct(product)}
-                  className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1.5 text-[11px] font-bold transition-colors ${
-                    on ? 'border-white bg-white text-brand-800' : 'border-white/25 bg-white/15 text-white'
-                  }`}
-                >
-                  <span className="text-[12px] font-extrabold">{n}</span>
-                  {PRODUCT_LABELS[product]}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {/* «المنتجاتُ لم تظهر كاملة!» — كانت شريطاً يُقصّ عند حافّة الشاشة؛
+            فصارت تلتفّ إلى سطرٍ ثانٍ حين يضيق المكان. */}
+        {productCounts.map(({ product, n }) => {
+          const on = activeProduct === product;
+          return (
+            <button
+              key={product}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onPickProduct(product)}
+              className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-1.5 text-[11px] font-bold transition-colors ${
+                on ? 'border-white bg-white text-brand-800' : 'border-white/25 bg-white/15 text-white'
+              }`}
+            >
+              <span className="text-[12px] font-extrabold">{n}</span>
+              {PRODUCT_LABELS[product]}
+            </button>
+          );
+        })}
       </div>
 
       <Sheet
@@ -121,22 +123,13 @@ export function ScopeBar({
             : 'اختر مدينةً أو أكثر لهذه الجلسة. ولحفظها ووصول الإشعارات، فعّل التنبيهات من «حسابي».'
         }
       >
+        {/* «أظهر المتوفّرَ الآن، والتي قريباً اجعلها عدداً» — صاحبُ المنصّة.
+            فالمدنُ التي فيها محطاتٌ وحدَها في الشبكة، ورقمُها ما فيها وقودٌ الآن
+            (مقياسُ الرأس نفسُه)، والخالياتُ سطرٌ واحدٌ يعدّها — لا تُحذف من
+            الورقة كلّيّاً: من في النخيب يقرأ أنّ مدينتَه على الطريق. */}
         <div className="grid grid-cols-2 gap-2">
-          {ANBAR_CITIES.map((c) => {
-            const n = cityCounts.get(c.name) ?? 0;
-            if (!n) {
-              // لا تُحذف الخالية: من في النخيب يظنّ التطبيق معطّلاً لو اختفت
-              // مدينته من القائمة. و«قريباً» تجيبه بصدق.
-              return (
-                <div
-                  key={c.name}
-                  className="flex items-center justify-between gap-1.5 rounded-xl border border-slate-200 p-2.5 opacity-50"
-                >
-                  <span className="text-xs font-bold text-slate-700">{c.name}</span>
-                  <span className="text-[9.5px] font-semibold text-slate-400">قريباً</span>
-                </div>
-              );
-            }
+          {ANBAR_CITIES.filter((c) => (cityCounts.get(c.name) ?? 0) > 0).map((c) => {
+            const n = cityNow.get(c.name) ?? 0;
             const on = !allAnbar && !!active?.includes(c.name);
             return (
               <button
@@ -156,7 +149,11 @@ export function ScopeBar({
                 <span className={`text-xs font-bold ${on ? 'text-white' : 'text-slate-700'}`}>
                   {c.name}
                 </span>
-                <span className={`text-[11px] font-extrabold ${on ? 'text-white/90' : 'text-brand-700'}`}>
+                <span
+                  className={`text-[11px] font-extrabold ${
+                    on ? 'text-white/90' : n ? 'text-brand-700' : 'text-slate-300'
+                  }`}
+                >
                   {n}
                 </span>
               </button>
@@ -171,9 +168,21 @@ export function ScopeBar({
               allAnbar ? 'border-brand bg-brand text-white' : 'border-slate-300 text-slate-700 hover:bg-brand-50'
             }`}
           >
-            كل الأنبار · {[...cityCounts.values()].reduce((a, b) => a + b, 0)}
+            كل الأنبار · {[...cityNow.values()].reduce((a, b) => a + b, 0)} فيها وقودٌ الآن
           </button>
         </div>
+        {ANBAR_CITIES.some((c) => !(cityCounts.get(c.name) ?? 0)) && (
+          <p className="mt-2 text-center text-[11px] text-slate-400">
+            و{plural(
+              ANBAR_CITIES.filter((c) => !(cityCounts.get(c.name) ?? 0)).length,
+              'مدينة واحدة',
+              'مدينتان',
+              'مدن',
+              'مدينة'
+            )}{' '}
+            قريباً إن شاء الله
+          </p>
+        )}
 
         {/* أنواع المنتجات هنا أيضاً: من فتح هذه الورقة يبحث عن شيء، وأقصر
             طريقٍ إليه أن يضغط نوعه مباشرةً بدل أن يُغلق ويبحث عن اللوحة. */}
@@ -191,14 +200,14 @@ export function ScopeBar({
                     onPickProduct(product);
                     setOpen(false);
                   }}
-                  className={`rounded-full border px-3 py-1.5 text-[11.5px] font-bold transition-colors ${
+                  className={`flex items-center gap-1 rounded-full border px-3 py-1.5 text-[11.5px] font-bold transition-colors ${
                     activeProduct === product
                       ? 'border-brand bg-brand text-white'
                       : 'border-slate-200 text-slate-600'
                   }`}
                 >
                   {PRODUCT_LABELS[product]}
-                  <span className="ms-1 text-[10px] opacity-75">{n}</span>
+                  <span className="text-[10px] opacity-75">{n}</span>
                 </button>
               ))}
             </div>
