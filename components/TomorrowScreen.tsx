@@ -5,6 +5,7 @@ import { PRODUCT_LABELS } from '@/lib/products';
 import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
 import { readChoice } from '@/lib/alerts';
+import { PlateTurnBadge } from './PlateTurnBadge';
 import { withDeadline } from '@/lib/fn';
 import { isDown, readStatus } from '@/lib/status';
 import {
@@ -256,6 +257,9 @@ export function TomorrowScreen() {
 
         <h1 className="mt-3 text-[17px] font-extrabold">محطات {when}</h1>
         <p className="mt-0.5 text-[11.5px] text-white/70">أين يصل الوقود — قبل أن يصل</p>
+        <div className="mt-3 w-full max-w-[21rem] text-right">
+          <PlateTurnBadge day={day} dark />
+        </div>
 
         <div className="mt-5 w-full max-w-[21rem] space-y-3">
           {groups.map((g) => (

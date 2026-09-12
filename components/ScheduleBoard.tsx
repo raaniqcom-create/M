@@ -1,5 +1,6 @@
 'use client';
 
+import { PlateTurnBadge } from './PlateTurnBadge';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
@@ -142,6 +143,9 @@ export function ScheduleBoard({
 
           وفيها ما طلبه حرفاً: أنّ الإعلانَ رسميّ، وأنّ النفادَ وارد، وأنّ
           الجوابَ عند المنصّة أو عند المحطة نفسِها. */}
+      {/* الفرديُّ والزوجيّ — لمن كتب لوحتَه فقط؛ الباقي كما هو. */}
+      <PlateTurnBadge day={day} />
+
       <p className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-slate-600">
         هذه المحطات أُعلن وقودُها <b className="text-slate-800">رسميّاً</b> ضمن جدول
         التوزيع. وقد ينفد المنتج أو يتغيّر توفّره خلال اليوم — فراجع المنصّة أو اتّصل
