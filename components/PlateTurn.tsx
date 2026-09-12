@@ -11,8 +11,8 @@ import type { StationWithStatus } from '@/types/database';
 
 const KEY = 'plate-last';
 const GASOLINE = new Set(['gasoline_regular', 'gasoline_premium', 'gasoline_super']);
-const DIGITS = '٠١٢٣٤٥٦٧٨٩';
-const ar = (n: number | string) => String(n).replace(/\d/g, (d) => DIGITS[Number(d)]);
+// الأرقامُ إنجليزيّةٌ في كلّ الواجهة — قرارُ صاحب المنصّة.
+const ar = (n: number | string) => String(n);
 
 /** «أدخل رقم سيارتك» — دورُك في الفرديّ والزوجيّ، والمحطاتُ التي فيها بنزينٌ الآن.
  *
