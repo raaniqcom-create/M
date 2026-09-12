@@ -1929,6 +1929,9 @@ async function showSchedule(
             { text: '✏️ تعديل', callback_data: 'sch:edit' },
             { text: flip, callback_data: 'sd' },
           ],
+          // «لديّ جدولُ الغد جاهزاً الآن — انشره في السادسة»: الموعدُ يُختار
+          // في الشاشة التالية، والتاريخُ هو تاريخُ المعاينة (📅 يقلبه).
+          [{ text: '⏰ جدولة النشر', callback_data: 'sch:when' }],
           [{ text: '✖️ ألغِ', callback_data: 'wx' }],
         ],
       },
@@ -2681,6 +2684,31 @@ async function publishSchedule(
   // تُمسح أوّلاً: ضغطتان متتاليتان على الزرّ نفسِه كانتا ستكتبان الجدولَ مرّتين.
   await clearDraft(userId);
 
+  const out = await publishDraft(d, chat, notify, replace);
+  if (!out.ok) {
+    // المسوّدةُ تُعاد: مُسحت قبل الكتابة منعاً للنشر مرّتين، فلو تُركت ممحوّةً
+    // بعد فشلٍ لَضاع الجدولُ كلُّه ولزم لصقُه من جديد.
+    await saveDraft(userId, chat, 'sched', { sched: d });
+    await answer(queryId, 'تعذّر النشر');
+    await send(chat, out.text);
+    return;
+  }
+  await answer(queryId, 'نُشر ✅');
+  await send(chat, out.text);
+}
+
+type SchedDraft = NonNullable<Draft['sched']>;
+
+/** النشرُ نفسُه — من زرٍّ أو من موعدٍ مجدوَل. يردّ النصَّ الذي يُقال للمدير.
+ *
+ *  لا يقرأ مسوّدةً ولا يجيب ضغطةً: هذا ما يجعل «جدولة النشر» تنشر الجدولَ
+ *  نفسَه بالطريقة نفسِها في السادسة مساءً والمديرُ نائم. */
+async function publishDraft(
+  d: SchedDraft,
+  chat: number,
+  notify: boolean,
+  replace: boolean
+): Promise<{ ok: boolean; text: string }> {
   const for_date = d.for_date ?? scheduleDay();
   const batch_id = crypto.randomUUID();
   // ــ ولا يتكرّر الكتابُ إن لُصق مرّتين ــــــــــــــــــــــــــــــــــــ
@@ -2726,9 +2754,7 @@ async function publishSchedule(
       .eq('for_date', for_date)
       .select('id');
     if (delErr) {
-      await saveDraft(userId, chat, 'sched', { sched: d });
-      await answer(queryId, 'تعذّر المسح');
-      return;
+      return { ok: false, text: `⚠️ تعذّر مسحُ جدول ${for_date}: ${esc(delErr.message)}${NL}المسوّدةُ محفوظة — أعد المحاولة.` };
     }
     removed = gone?.length ?? 0;
   }
@@ -2739,14 +2765,8 @@ async function publishSchedule(
         .upsert(rows, { onConflict: 'source_ref,raw_name', ignoreDuplicates: true })
     : await db.from('fuel_schedule').insert(rows);
   if (error) {
-    // المسوّدةُ تُعاد: مُسحت قبل الكتابة منعاً للنشر مرّتين، فلو تُركت ممحوّةً
-    // بعد فشلٍ لَضاع الجدولُ كلُّه ولزم لصقُه من جديد.
-    await saveDraft(userId, chat, 'sched', { sched: d });
-    await answer(queryId, 'تعذّر النشر');
-    await send(chat, `⚠️ ${esc(error.message)}${NL}المسوّدةُ محفوظة — أعد المحاولة.`);
-    return;
+    return { ok: false, text: `⚠️ ${esc(error.message)}${NL}المسوّدةُ محفوظة — أعد المحاولة.` };
   }
-  await answer(queryId, 'نُشر ✅');
 
   // ── والخبرُ يعود إلى لوحة المحطة ────────────────────────────────────────
   //
@@ -2806,11 +2826,10 @@ async function publishSchedule(
       .from('fuel_schedule')
       .update({ alerted_at: new Date().toISOString() })
       .eq('batch_id', batch_id);
-    await send(
-      chat,
-      `✅ ${replace ? 'استُبدل' : 'أُضيف إلى'} جدول ${for_date} — ${countWord(d.lines.length)}، بلا إشعار.${swap}${resumed}`
-    );
-    return;
+    return {
+      ok: true,
+      text: `✅ ${replace ? 'استُبدل' : 'أُضيف إلى'} جدول ${for_date} — ${countWord(d.lines.length)}، بلا إشعار.${swap}${resumed}`,
+    };
   }
 
   // محطاتٌ مميّزةٌ لا أسطر: السطرُ محطةٌ ومنتج، ومحطةٌ بأربعة منتجاتٍ أربعةُ
@@ -2843,19 +2862,173 @@ async function publishSchedule(
   // للأربعين أيضاً — وإلّا صار الزرُّ يفعل ما لا يقوله.
   const owners = await alertStationOwners();
 
-  await send(
-    chat,
-    `✅ ${replace ? 'استُبدل' : 'نُشر'} جدولُ ${esc(productsLabel(d.lines))} — ${countWord(d.lines.length)}.${swap}${resumed}${NL}` +
+  return {
+    ok: true,
+    text:
+      `✅ ${replace ? 'استُبدل' : 'نُشر'} جدولُ ${esc(productsLabel(d.lines))} — ${countWord(d.lines.length)}.${swap}${resumed}${NL}` +
       (sent
         ? `📣 يخرج الإشعارُ إلى ${sent} مشتركاً.`
         : `⚠️ ولم يخرج الإشعار: ${esc(why)}${NL}أعِده بأمر /اشعار.`) +
-      owners
+      owners,
+  };
+}
+
+// ---------- جدولةُ النشر ----------
+//
+// «لديّ جدولُ الغد جاهزاً الآن — انشره الساعةَ السادسة مساءً واستبدل القديم
+// وأشعِر». فالمسوّدةُ تُحفظ صفّاً في `scheduled_publishes` بموعدها، وكرونُ
+// الدقيقة ينادي `?run=scheduled` فيُنشر بـ`publishDraft` نفسِها.
+
+const SLOTS = ['06:00', '08:00', '12:00', '15:00', '18:00', '20:00', '21:00'];
+
+/** موعدٌ بتوقيت بغداد لليوم — أو لغدٍ إن كانت الساعةُ قد مضت. */
+function publishAtFor(hhmm: string): { at: Date; day: string } {
+  const today = baghdadDay();
+  let at = new Date(`${today}T${hhmm}:00+03:00`);
+  let day = today;
+  if (at.getTime() <= Date.now()) {
+    day = baghdadDay(1);
+    at = new Date(`${day}T${hhmm}:00+03:00`);
+  }
+  return { at, day };
+}
+
+async function askPublishTime(chat: number, userId: number, msgId?: number) {
+  const dr = await getDraft(userId);
+  const sched = dr?.data?.sched;
+  if (!sched?.lines?.length) return void (await send(chat, 'انتهت الجلسة. أعِد تحويلَ المنشور.'));
+  const day = sched.for_date ?? scheduleDay();
+  const dayWord = day === baghdadDay() ? 'اليوم' : day === baghdadDay(1) ? 'غداً' : day;
+  const rows: { text: string; callback_data: string }[][] = [];
+  for (let i = 0; i < SLOTS.length; i += 4) {
+    rows.push(SLOTS.slice(i, i + 4).map((t) => ({ text: t, callback_data: `sch:at:${t}` })));
+  }
+  await show(
+    chat,
+    msgId,
+    `⏰ <b>جدولة النشر</b>${NL}` +
+      `الجدولُ لتاريخ <b>${dayWord}</b> ${day} — ${countWord(sched.lines.length)}.${NL}` +
+      `متى يُنشر؟ (بتوقيت بغداد — وساعةٌ مضت تُحسب لغدٍ)${NL}` +
+      `عند الموعد: يُستبدل جدولُ ذلك اليوم إن وُجد، ويخرج الإشعار.`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          ...rows,
+          [
+            { text: `📅 ${day === baghdadDay() ? 'بل لتاريخ الغد' : 'بل لتاريخ اليوم'}`, callback_data: 'sch:when:flip' },
+            { text: '⬅️ رجوع', callback_data: 'sb' },
+          ],
+        ],
+      },
+    }
   );
+}
+
+async function schedulePublish(chat: number, userId: number, queryId: string, hhmm: string) {
+  const dr = await getDraft(userId);
+  const sched = dr?.data?.sched;
+  if (!sched?.lines?.length) return void (await answer(queryId, 'انتهت الجلسة'));
+  if (!/^\d{2}:\d{2}$/.test(hhmm)) return void (await answer(queryId, 'وقتٌ غيرُ مقروء'));
+
+  const { at, day: runDay } = publishAtFor(hhmm);
+  const for_date = sched.for_date ?? scheduleDay();
+  const { data: row, error } = await db
+    .from('scheduled_publishes')
+    .insert({
+      for_date,
+      publish_at: at.toISOString(),
+      notify: true,
+      replace: true,
+      sched,
+      chat_id: chat,
+      telegram_id: userId,
+    })
+    .select('id')
+    .single();
+  if (error || !row) {
+    await answer(queryId, 'تعذّرت الجدولة');
+    return void (await send(chat, `⚠️ تعذّرت الجدولة: ${esc(error?.message ?? '?')}`));
+  }
+  await clearDraft(userId);
+  await answer(queryId, 'جُدول ⏰');
+  const runWord = runDay === baghdadDay() ? 'اليوم' : 'غداً';
+  await send(
+    chat,
+    `⏰ <b>جُدول النشر.</b>${NL}` +
+      `يُنشر جدولُ <b>${for_date}</b> (${countWord(sched.lines.length)}) <b>${runWord} الساعةَ ${hhmm}</b> بتوقيت بغداد — ` +
+      `يُستبدل القديمُ ويخرج الإشعارُ ويُنبَّه أصحابُ المحطات، وتصلك النتيجةُ هنا.`,
+    { reply_markup: { inline_keyboard: [[{ text: '❌ إلغاء الجدولة', callback_data: `sch:cancel:${row.id}` }]] } }
+  );
+}
+
+async function cancelScheduled(chat: number, queryId: string, id: string) {
+  const { data, error } = await db
+    .from('scheduled_publishes')
+    .update({ status: 'cancelled', done_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('status', 'pending')
+    .select('for_date, publish_at');
+  if (error) return void (await answer(queryId, 'تعذّر الإلغاء'));
+  if (!data?.length) return void (await answer(queryId, 'سبق نشرُها أو إلغاؤها'));
+  await answer(queryId, 'أُلغيت');
+  await send(chat, `❌ أُلغيت جدولةُ نشر جدول ${data[0].for_date}. المسوّدةُ لم تُحفظ — أعد لصقَ المنشور إن أردتَه.`);
+}
+
+/** يُنادى من كرون الدقيقة. يلتقط الموعدَ ذرّيّاً ثمّ ينشر — فلا تنشره دقيقتان. */
+async function runScheduledPublishes(): Promise<number> {
+  const { data: due } = await db
+    .from('scheduled_publishes')
+    .select('id')
+    .eq('status', 'pending')
+    .lte('publish_at', new Date().toISOString())
+    .order('publish_at')
+    .limit(3);
+  let n = 0;
+  for (const { id } of due ?? []) {
+    // الالتقاطُ بالتحديث المشروط: صفٌّ التقطته دقيقةٌ لا تلتقطه الأخرى.
+    const { data: claimed } = await db
+      .from('scheduled_publishes')
+      .update({ status: 'done', done_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('status', 'pending')
+      .select('*')
+      .maybeSingle();
+    if (!claimed) continue;
+    const d = claimed.sched as SchedDraft;
+    try {
+      const out = await publishDraft(d, claimed.chat_id, claimed.notify, claimed.replace);
+      if (!out.ok) {
+        await db.from('scheduled_publishes').update({ status: 'failed', error: out.text }).eq('id', id);
+      }
+      await send(claimed.chat_id, `⏰ <b>نشرٌ مجدوَل</b> — ${claimed.for_date}${NL}${out.text}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await db.from('scheduled_publishes').update({ status: 'failed', error: msg }).eq('id', id);
+      await send(claimed.chat_id, `⏰⚠️ سقط النشرُ المجدوَل لجدول ${claimed.for_date}: ${esc(msg)}${NL}أعد لصقَ المنشور وانشره بيدك.`);
+    }
+    n++;
+  }
+  return n;
 }
 
 // ---------- Router ----------
 
 Deno.serve(async (req) => {
+  // ── كرونُ الدقيقة: النشرُ المجدوَل ─────────────────────────────────────
+  //
+  // بابٌ ثانٍ غيرُ توقيع تيليجرام: `?run=scheduled` بسرّ الكرون نفسِه الذي
+  // تحمله بقيّةُ الدوالّ. ولا يُلمس تحديثٌ من تيليجرام هنا.
+  if (new URL(req.url).searchParams.get('run') === 'scheduled') {
+    const cron = Deno.env.get('CRON_SECRET');
+    if (!cron || req.headers.get('x-cron-secret') !== cron) {
+      return new Response('forbidden', { status: 403 });
+    }
+    const n = await runScheduledPublishes();
+    return new Response(JSON.stringify({ published: n }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   // Telegram signs every call with the secret set at registerWebhook time
   if (req.headers.get('x-telegram-bot-api-secret-token') !== SECRET) {
     return new Response('forbidden', { status: 403 });
@@ -3004,6 +3177,22 @@ Deno.serve(async (req) => {
           await saveDraft(from, chat, 'sched', { sched });
           await publishSchedule(chat, from, cb.id, flags?.[0] === '1', flags?.[1] === '1');
         }
+      } else if (data === 'sch:when' || data === 'sch:when:flip') {
+        await answer(cb.id);
+        if (data.endsWith(':flip')) {
+          const dr = await getDraft(from);
+          const sched = dr?.data?.sched;
+          if (sched?.lines?.length) {
+            sched.for_date = sched.for_date === baghdadDay() ? baghdadDay(1) : baghdadDay();
+            sched.dayConfirmed = true;
+            await saveDraft(from, chat, 'sched', { sched });
+          }
+        }
+        await askPublishTime(chat, from, messageId);
+      } else if (data.startsWith('sch:at:')) {
+        await schedulePublish(chat, from, cb.id, data.slice('sch:at:'.length));
+      } else if (data.startsWith('sch:cancel:')) {
+        await cancelScheduled(chat, cb.id, data.slice('sch:cancel:'.length));
       } else if (data === 'sch:go') {
         await publishSchedule(chat, from, cb.id, true);
       } else if (data === 'sch:mute') {
