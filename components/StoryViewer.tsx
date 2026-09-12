@@ -184,7 +184,14 @@ export function StoryViewer({
         <div className="min-w-0">
           <p className="truncate text-[14px] font-extrabold drop-shadow">{story.name}</p>
           <p className="flex items-center gap-1 text-[11px] text-white/80">
-            {story.kind === 'platform' ? `جديد المحطة · ${ageLabel(story.at)}` : `${story.city} · أُكّد ${ageLabel(story.at)}`}
+            {story.kind === 'announced' && (
+              <span className="rounded-full bg-traffic-red px-1.5 py-px text-[10px] font-extrabold text-white">غير مسجّلة</span>
+            )}
+            {story.kind === 'platform'
+              ? `جديد المحطة · ${ageLabel(story.at)}`
+              : story.kind === 'announced'
+                ? `${story.city} · أُعلن ${ageLabel(story.at)}`
+                : `${story.city} · أُكّد ${ageLabel(story.at)}`}
             {views !== null && (
               <span className="flex items-center gap-0.5" aria-label={`${views} مشاهدة`}>
                 · <EyeIcon className="h-3.5 w-3.5" /> {views}
@@ -228,12 +235,22 @@ export function StoryViewer({
                 />
               </div>
             )}
-            <a
-              href={`/station/${story.id}`}
-              className="flex min-h-[34px] flex-1 items-center justify-center rounded-xl bg-white/15 text-[12px] font-bold"
-            >
-              صفحة المحطة
-            </a>
+            {story.kind === 'announced' ? (
+              // لا صفحةَ لغير المسجّلة — خبرُها وتصويتُ الناس عليه في اللوحة الحمراء.
+              <a
+                href="/#unregistered-board"
+                className="flex min-h-[34px] flex-1 items-center justify-center rounded-xl bg-white/15 text-[12px] font-bold"
+              >
+                الخبر والتصويت
+              </a>
+            ) : (
+              <a
+                href={`/station/${story.id}`}
+                className="flex min-h-[34px] flex-1 items-center justify-center rounded-xl bg-white/15 text-[12px] font-bold"
+              >
+                صفحة المحطة
+              </a>
+            )}
           </>
         )}
       </div>

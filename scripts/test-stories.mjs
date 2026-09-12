@@ -108,6 +108,22 @@ ok('shortName يُبقي الاسمَ البارزَ وحدَه', () => {
   assert.equal(shortName('الأمن'), 'الأمن');
   assert.equal(shortName('محطة'), 'محطة');
 });
+ok('خبرُ الإدارة عن محطةٍ غير مسجّلة قصّةٌ حمراء — بمدنه ومنتجه، ولا يُعرض المسجّلُ ولا المنتهي', () => {
+  const ann = (o) => ({
+    id: 'a1', station_name: 'محطة الرحاب', origin_city: 'الفلوجة', product: 'kerosene', cities: ['الفلوجة'],
+    send_at: ago(1), yes_votes: 0, no_votes: 0, admin_verdict: null, admin_until: null, station_id: null, as_popup: false, ...o,
+  });
+  const only = (rows, choice) => allStories([], choice, rows).filter((s) => s.kind === 'announced');
+  assert.equal(only([ann({})], null).length, 1);
+  assert.equal(only([ann({})], null)[0].id, 'ann:a1');
+  assert.equal(only([ann({})], null)[0].short, 'الرحاب');
+  assert.equal(only([ann({})], { cities: ['الرمادي'], products: [] }).length, 0);
+  assert.equal(only([ann({})], { cities: ['الفلوجة'], products: ['gasoline_regular'] }).length, 0);
+  assert.equal(only([ann({})], { cities: ['الفلوجة'], products: ['kerosene'] }).length, 1);
+  assert.equal(only([ann({ station_id: 'x' })], null).length, 0);
+  assert.equal(only([ann({ admin_verdict: 'gone' })], null).length, 0);
+});
+
 ok('قصّةُ المنصّة أوّلاً ولو بلا محطات', () => {
   const s = allStories([], null);
   assert.equal(s.length, 1);

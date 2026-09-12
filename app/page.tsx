@@ -739,7 +739,9 @@ export default function HomePage() {
 
         {/* «حالة المحطة» — حلقاتُ القصص قبل كلّ شيء: الخبرُ الطازج أوّلاً.
             اعتمدها صاحبُ المنصّة ١٢ أيلول ٢٠٢٦ بعد معاينةٍ للإدارة وحدَها. */}
-        {stations && view === 'list' && <StoryStrip stations={stations} choice={choice} />}
+        {stations && view === 'list' && (
+          <StoryStrip stations={stations} choice={choice} announced={announcements ?? []} />
+        )}
 
         {/* الفرديُّ والزوجيّ — قرارٌ مؤقّت؛ تختفي البطاقةُ بإطفاء RATION.active.
             اعتمدها صاحبُ المنصّة ١٢ أيلول ٢٠٢٦ بعد معاينةٍ للإدارة وحدَها؛ وشرطُ

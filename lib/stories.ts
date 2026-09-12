@@ -1,4 +1,5 @@
 import type { AlertChoice } from './alerts.ts';
+import type { OpenAnnouncement } from './announcements.ts';
 import { NEWS } from './news.ts';
 import { isOffered } from './products.ts';
 import type { FuelProduct, StationWithStatus } from '../types/database.ts';
@@ -21,8 +22,10 @@ export interface Story {
   products: FuelProduct[];
   /** أحدثُ تأكيدٍ بين منتجاتها — وهو ما يُختم على الصورة. */
   at: string;
-  /** قصّةُ المنصّة نفسِها: «جديدُ المحطة التقنية» — تُعرض نصّاً لا صورةً. */
-  kind?: 'station' | 'platform';
+  /** قصّةُ المنصّة نفسِها: «جديدُ المحطة التقنية» — تُعرض نصّاً لا صورةً.
+   *  و`announced`: محطةٌ **غيرُ مسجّلة** أعلنت عنها الإدارةُ بإشعار — حلقتُها
+   *  حمراء («أضفها إلى الحالات — غير مسجّلة وتظهر بالأحمر»). */
+  kind?: 'station' | 'platform' | 'announced';
   news?: { title: string; lines: string[]; href: string; label: string };
 }
 
@@ -58,11 +61,33 @@ export function shortName(name: string): string {
 
 export function storiesFor(
   stations: StationWithStatus[],
-  choice: AlertChoice | null
+  choice: AlertChoice | null,
+  /** أخبارُ اللوحة الحمراء — ما ليس مسجّلاً ولم تقل الإدارةُ إنّه انتهى. */
+  announced: OpenAnnouncement[] = []
 ): Story[] {
   const cities = new Set(choice?.cities ?? []);
   const wanted = new Set<FuelProduct>(choice?.products ?? []);
   const out: Story[] = [];
+  for (const a of announced) {
+    // المسجّلةُ لها قصّتُها من منتجاتها؛ وما حكمت الإدارةُ بنفاده سقط.
+    if (a.station_id || a.admin_verdict === 'gone') continue;
+    const inCity =
+      !cities.size ||
+      (a.origin_city !== null && cities.has(a.origin_city)) ||
+      !!a.cities?.some((c) => cities.has(c));
+    if (!inCity) continue;
+    if (wanted.size && a.product && !wanted.has(a.product)) continue;
+    out.push({
+      id: `ann:${a.id}`,
+      name: a.station_name,
+      short: shortName(a.station_name),
+      slug: null,
+      city: a.origin_city ?? a.cities?.[0] ?? '',
+      products: a.product ? [a.product] : [],
+      at: a.send_at,
+      kind: 'announced',
+    });
+  }
   for (const s of stations) {
     if (cities.size && !cities.has(s.city)) continue;
     let offered = s.products.filter((p) => isOffered(s, p));

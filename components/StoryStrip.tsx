@@ -6,6 +6,7 @@ import { StoryViewer } from './StoryViewer';
 import { ageLabel } from '@/lib/hours';
 import { isSeen, storiesFor } from '@/lib/stories';
 import type { AlertChoice } from '@/lib/alerts';
+import type { OpenAnnouncement } from '@/lib/announcements';
 import type { StationWithStatus } from '@/types/database';
 
 /** شريطُ «حالة المحطة» — حلقاتٌ خضراء بأسماءٍ قصيرة، كحالات إنستغرام.
@@ -17,10 +18,13 @@ import type { StationWithStatus } from '@/types/database';
 export function StoryStrip({
   stations,
   choice,
+  announced = [],
   withNews = true,
 }: {
   stations: StationWithStatus[];
   choice: AlertChoice | null;
+  /** أخبارُ المحطات غير المسجّلة — حلقاتٌ حمراء بين الخضراء. */
+  announced?: OpenAnnouncement[];
   /** قصّةُ «جديد المحطة» أوّلَ الشريط — تُحجب في المعاينة عن غير الإدارة. */
   withNews?: boolean;
 }) {
@@ -28,8 +32,8 @@ export function StoryStrip({
   // «رُئيت» تُقرأ من localStorage — فتُعاد الحسبةُ بعد الإغلاق لتصير الحلقةُ رماديّة.
   const [tick, setTick] = useState(0);
   const stories = useMemo(
-    () => storiesFor(stations, choice).filter((s) => withNews || s.kind !== 'platform'),
-    [stations, choice, withNews, tick] // eslint-disable-line react-hooks/exhaustive-deps
+    () => storiesFor(stations, choice, announced).filter((s) => withNews || s.kind !== 'platform'),
+    [stations, choice, announced, withNews, tick] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   useEffect(() => {
@@ -43,17 +47,22 @@ export function StoryStrip({
       <div className="no-scrollbar -mx-4 mb-3 flex gap-3 overflow-x-auto px-4 pt-1" aria-label="حالة المحطات">
         {stories.map((s, i) => {
           const seen = isSeen(s.id, s.at);
+          const red = s.kind === 'announced';
           return (
             <button
               key={s.id}
               type="button"
               onClick={() => setOpen(i)}
-              aria-label={`حالة ${s.name} — أُكّد ${ageLabel(s.at)}`}
+              aria-label={`حالة ${s.name} — ${red ? 'أُعلن' : 'أُكّد'} ${ageLabel(s.at)}`}
               className="flex w-[68px] shrink-0 flex-col items-center gap-1"
             >
               <span
                 className={`flex h-[60px] w-[60px] items-center justify-center rounded-full p-[3px] ${
-                  seen ? 'bg-slate-200' : 'bg-gradient-to-tr from-brand-700 via-brand to-emerald-300'
+                  seen
+                    ? 'bg-slate-200'
+                    : red
+                      ? 'bg-gradient-to-tr from-red-700 via-red-500 to-rose-300'
+                      : 'bg-gradient-to-tr from-brand-700 via-brand to-emerald-300'
                 }`}
               >
                 <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white">
@@ -61,11 +70,15 @@ export function StoryStrip({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src="/icons/icon-192.png" alt="" width={48} height={48} className={`h-full w-full ${seen ? 'opacity-60 grayscale' : ''}`} />
                   ) : (
-                    <FuelIcon className={`h-6 w-6 ${seen ? 'text-slate-400' : 'text-brand'}`} />
+                    <FuelIcon className={`h-6 w-6 ${seen ? 'text-slate-400' : red ? 'text-traffic-red' : 'text-brand'}`} />
                   )}
                 </span>
               </span>
-              <span className={`w-full truncate text-center text-[10.5px] font-bold ${seen ? 'text-slate-400' : 'text-slate-700'}`}>
+              <span
+                className={`w-full truncate text-center text-[10.5px] font-bold ${
+                  seen ? 'text-slate-400' : red ? 'text-traffic-red' : 'text-slate-700'
+                }`}
+              >
                 {s.short}
               </span>
             </button>
