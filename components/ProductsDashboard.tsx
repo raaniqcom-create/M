@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { PRODUCT_LABELS, PRODUCT_ORDER, isOffered } from '@/lib/products';
 import { isOpenNow } from '@/lib/hours';
 import type { FuelProduct, StationWithStatus } from '@/types/database';
@@ -49,10 +50,19 @@ export function ProductsDashboard({
     }
   }
 
+  // ثلاثةٌ في الصفّ، والباقي وراء «المزيد» — «حاول تصغيرها، وإذا اختار أكثر من
+  // ثلاثة منتجات يظهر له زرُّ المزيد». والمصفّى بمنتجٍ في الباقي يراه مفتوحاً.
+  const shown = PRODUCT_ORDER.filter(
+    (p) => (counts.get(p) ?? 0) > 0 || (announcedCounts.get(p) ?? 0) > 0 || filter === p
+  );
+  const [more, setMore] = useState(false);
+  const expanded = more || shown.length <= 3 || (filter !== null && shown.indexOf(filter) >= 3);
+  const visible = expanded ? shown : shown.slice(0, 3);
+
   return (
-    <section className="card p-4" aria-label="المنتجات المتوفرة الآن">
+    <section className="card p-3" aria-label="المنتجات المتوفرة الآن">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold text-brand-900">
+        <h2 className="text-[13px] font-bold text-brand-900">
           {scopeLabel ? `المتوفر الآن في ${scopeLabel}` : 'المنتجات المتوفرة الآن'}
         </h2>
         {/* ── ونقطةٌ خضراء لا تنبض على بياناتٍ ميّتة ─────────────────────
@@ -91,10 +101,8 @@ export function ProductsDashboard({
         *
         *  فيُعدّان معاً ويُعرضان متمايزين: الرقم الأخضر مسجّل، والأحمر الخفيف
         *  معلَنٌ بإشعار، وضغطُه يقود إلى اللوحة الحمراء لا إلى قائمة فارغة. */}
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {PRODUCT_ORDER.filter(
-          (p) => (counts.get(p) ?? 0) > 0 || (announcedCounts.get(p) ?? 0) > 0 || filter === p
-        ).map((product) => {
+      <div className="mt-2 grid grid-cols-3 gap-1.5">
+        {visible.map((product) => {
           const count = counts.get(product) ?? 0;
           const extra = announcedCounts.get(product) ?? 0;
           const active = filter === product;
@@ -106,7 +114,7 @@ export function ProductsDashboard({
               type="button"
               aria-pressed={active}
               onClick={() => (onlyAnnounced ? onPickAnnounced?.() : onPick(active ? null : product))}
-              className={`flex min-h-[64px] flex-col items-center justify-center rounded-xl border px-1 transition-colors duration-200 ${
+              className={`flex min-h-[50px] flex-col items-center justify-center rounded-xl border px-1 transition-colors duration-200 ${
                 active
                   ? 'border-brand bg-brand text-white'
                   : onlyAnnounced
@@ -114,10 +122,10 @@ export function ProductsDashboard({
                     : 'border-brand-100 bg-brand-50 text-brand-900'
               }`}
             >
-              <span className="text-lg font-extrabold leading-none">
+              <span className="text-base font-extrabold leading-none">
                 {onlyAnnounced ? extra : count}
               </span>
-              <span className="mt-1 text-[11px] font-semibold leading-tight">
+              <span className="mt-0.5 text-[10.5px] font-semibold leading-tight">
                 {PRODUCT_LABELS[product]}
               </span>
               {extra > 0 && !onlyAnnounced && (
@@ -132,12 +140,21 @@ export function ProductsDashboard({
           );
         })}
       </div>
+      {shown.length > 3 && (
+        <button
+          type="button"
+          onClick={() => setMore((v) => !v)}
+          className="mt-1.5 block w-full py-1 text-center text-[11.5px] font-bold text-brand-700"
+        >
+          {expanded ? 'أقلّ' : `المزيد (+${shown.length - 3})`}
+        </button>
+      )}
       {[...counts.values()].length === 0 && announcedCounts.size === 0 ? (
-        <p className="py-4 text-center text-sm text-slate-400">
+        <p className="py-3 text-center text-[12.5px] text-slate-400">
           {`لا يتوفر أي منتج في ${scopeLabel ?? 'المحطات'} المفتوحة الآن`}
         </p>
       ) : (
-        <p className="mt-2 text-center text-[11px] text-slate-400">
+        <p className="mt-1.5 text-center text-[10.5px] text-slate-400">
           {`العدد يمثل ${scopeLabel ?? 'المحطات'} المفتوحة الآن التي يتوفر فيها المنتج — اضغط للتصفية`}
         </p>
       )}

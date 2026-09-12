@@ -95,9 +95,16 @@ ok('at = أحدثُ تأكيدٍ بين المنتجات المعروضة', () =
   const s = storiesFor([station('a', 'الرمادي', [row('kerosene', { updated_at: ago(3) }), row('gas', { updated_at: ago(1) })])], null);
   assert.ok(Date.now() - Date.parse(s[0].at) < 1.5 * H);
 });
-ok('shortName يُسقط «محطة وقود» ويُبقي كلمتين', () => {
-  assert.equal(shortName('محطة وقود الحق المشيدة'), 'الحق المشيدة');
-  assert.equal(shortName('محطة تعبئة وقود الرمادي الحكومية الطريق السريع'), 'الرمادي الحكومية');
+ok('shortName يُبقي الاسمَ البارزَ وحدَه', () => {
+  assert.equal(shortName('محطة وقود الحق المشيدة'), 'الحق');
+  assert.equal(shortName('محطة تعبئة وقود الرمادي الحكومية الطريق السريع'), 'الرمادي');
+  assert.equal(shortName('محطة وقود الوئام المشيده'), 'الوئام');
+  assert.equal(shortName('محطة الهضاب مشيده'), 'الهضاب');
+  assert.equal(shortName('محطة ركن الجامعة'), 'ركن الجامعة');
+  assert.equal(shortName('محطة بوابة الرمادي النموذجيه'), 'بوابة الرمادي');
+  assert.equal(shortName('محطة دار السلام قرب سيطرة التحدي'), 'دار السلام');
+  assert.equal(shortName('محطة وقود الدليم المشيدة للمنتوجات النفطية'), 'الدليم');
+  assert.equal(shortName('محطة تعبئة الوقود النافع'), 'النافع');
   assert.equal(shortName('الأمن'), 'الأمن');
   assert.equal(shortName('محطة'), 'محطة');
 });

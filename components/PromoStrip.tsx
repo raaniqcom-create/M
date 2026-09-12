@@ -32,7 +32,7 @@ const SLIDES = [
   },
 ];
 
-export function PromoStrip() {
+export function PromoStrip({ inHeader = false }: { inHeader?: boolean }) {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
@@ -44,13 +44,21 @@ export function PromoStrip() {
   const Icon = slide.icon;
 
   const content = (
-    <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-l from-brand-700 to-brand p-4 text-white shadow-lift">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15">
-        <Icon className="h-5 w-5" />
+    <div
+      className={`flex items-center gap-3 text-white ${
+        inHeader
+          ? 'rounded-lg bg-white/15 px-3 py-2'
+          : 'rounded-2xl bg-gradient-to-l from-brand-700 to-brand p-4 shadow-lift'
+      }`}
+    >
+      <span
+        className={`flex shrink-0 items-center justify-center rounded-xl bg-white/15 ${inHeader ? 'h-8 w-8' : 'h-10 w-10'}`}
+      >
+        <Icon className={inHeader ? 'h-4 w-4' : 'h-5 w-5'} />
       </span>
       <div key={index} className="animate-fade-slide min-w-0">
-        <p className="truncate text-sm font-bold">{slide.title}</p>
-        <p className="truncate text-xs text-white/80">{slide.body}</p>
+        <p className={`truncate font-bold ${inHeader ? 'text-[12.5px]' : 'text-sm'}`}>{slide.title}</p>
+        <p className={`truncate text-white/80 ${inHeader ? 'text-[11px]' : 'text-xs'}`}>{slide.body}</p>
       </div>
       <div className="mr-auto flex gap-1">
         {SLIDES.map((_, i) => (

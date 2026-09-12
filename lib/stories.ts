@@ -41,13 +41,19 @@ export function platformStory(): Story {
   };
 }
 
-/** «محطة وقود الحق المشيدة» ← «الحق المشيدة». للعرض تحت الحلقة — لا يلمس
- *  `normalizeName` لأنّ تلك تطوي ة→ه للمطابقة لا للقراءة. */
+/** «محطة وقود الحق المشيدة» ← «الحق». الاسمُ البارزُ وحدَه تحت الحلقة —
+ *  «لا تُظهر كلماتِ المشيدة ومحطة، فقط الاسمُ البارز كي يكون أسهلَ للمستخدم».
+ *  لا يلمس `normalizeName` لأنّ تلك تطوي ة→ه للمطابقة لا للقراءة. */
 export function shortName(name: string): string {
   const NOISE = new Set(['محطة', 'محطه', 'وقود', 'الوقود', 'تعبئة', 'تعبئه']);
+  // ما يلي الاسمَ من صفةٍ أو موضع: «المشيدة»، «النموذجية»، «قرب سيطرة…».
+  const TAIL = /^(ال)?(مشيد|نموذجي|حكومي|حديث|اهلي|أهلي|نفطي)|^للمنتوجات$|^قرب$/;
   const words = name.trim().split(/\s+/).filter(Boolean);
   while (words.length > 1 && NOISE.has(words[0])) words.shift();
-  return words.slice(0, 2).join(' ');
+  const cut = words.findIndex((w, i) => i > 0 && TAIL.test(w));
+  const core = cut > 0 ? words.slice(0, cut) : words;
+  // «الحق» تكفي؛ و«ركن الجامعة» لا تُقطع — المضافُ بلا «ال» يحتاج مضافَه إليه.
+  return core.slice(0, core[0].startsWith('ال') ? 1 : 2).join(' ');
 }
 
 export function storiesFor(

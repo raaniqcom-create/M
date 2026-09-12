@@ -2,32 +2,61 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Sheet } from './Sheet';
-import { FuelIcon } from './icons';
+import { FuelIcon, MapPinIcon } from './icons';
 import { baghdadDate } from '@/lib/board';
-import { runsOutLabel } from '@/lib/hours';
-import { isOffered } from '@/lib/products';
+import { PRODUCT_LABELS, isOffered } from '@/lib/products';
 import { PARITY_LABEL, RATION, dayParity, plateDigit, shortDate, turnFor } from '@/lib/ration';
 import { loadSchedule } from '@/lib/scheduleData';
-import type { ScheduleRow } from '@/lib/board';
-import type { StationWithStatus } from '@/types/database';
+import type { AlertChoice } from '@/lib/alerts';
+import type { FuelProduct, StationWithStatus } from '@/types/database';
 
 const KEY = 'plate-last';
 const GASOLINE = new Set(['gasoline_regular', 'gasoline_premium', 'gasoline_super']);
 // الأرقامُ إنجليزيّةٌ في كلّ الواجهة — قرارُ صاحب المنصّة.
 const ar = (n: number | string) => String(n);
+// «3 محطات» و«18 محطة» — تمييزُ العدد.
+const stationsOf = (n: number) => `${ar(n)} ${n >= 3 && n <= 10 ? 'محطات' : 'محطة'}`;
+// «بانزين» مفهومةٌ من عنوان البطاقة — يبقى النوعُ وحدَه في العمود الضيّق.
+const kind = (p: FuelProduct) => PRODUCT_LABELS[p].replace('بانزين ', '');
+// ويز وحدَه يهدي في العراق — قرارُ صاحب المنصّة. المعتمدةُ بإحداثيّاتها،
+// وغيرُها بحثاً بالاسم.
+const wazeTo = (r: { name: string; city: string | null; lat?: number; lng?: number }) =>
+  r.lat != null && r.lng != null
+    ? `https://waze.com/ul?ll=${r.lat},${r.lng}&navigate=yes`
+    : `https://waze.com/ul?q=${encodeURIComponent([r.name, r.city].filter(Boolean).join(' '))}`;
+
+/** سطرٌ في جدول «دوري»: محطةٌ واحدةٌ بمنتجاتها — المعتمدةُ (المسجّلةُ في
+ *  المنصّة) لها إحداثيّاتٌ وصفحة، وقد يكون صاحبُها أعلن بنزيناً الآن. */
+type TurnRow = {
+  name: string;
+  city: string | null;
+  products: FuelProduct[];
+  station?: StationWithStatus;
+  liveNow: boolean;
+};
 
 /** «أدخل رقم سيارتك» — دورُك في الفرديّ والزوجيّ، والمحطاتُ التي فيها بنزينٌ الآن.
  *
  *  قرارٌ مؤقّت (`RATION.active`). القاعدةُ في `lib/ration.ts`، وهذه واجهتُها:
  *  لوحةٌ تُكتب مرّةً ويُحفظ آخرُ رقمها وحدَه، ثمّ الجواب: اليومَ أم غداً،
  *  وأسبوعٌ بدوائره، وأقربُ المحطات التي فيها بنزين. */
-export function PlateTurn({ stations }: { stations: StationWithStatus[] }) {
+export function PlateTurn({
+  stations,
+  choice,
+}: {
+  stations: StationWithStatus[];
+  /** مدنُ القارئ من «التنبيهات» — الفارغُ الكلّ. «ما فائدةُ شخصٍ في الرمادي
+   *  يشاهد محطةً في القائم إذا لم يخترها؟» */
+  choice: AlertChoice | null;
+}) {
   const today = baghdadDate();
+  const cities = useMemo(() => new Set(choice?.cities ?? []), [choice]);
+  const cityLabel = cities.size ? ` في ${[...cities].join(' و')}` : '';
   const [plate, setPlate] = useState('');
   const [digit, setDigit] = useState<number | null>(null);
   const [decree, setDecree] = useState(false);
   /** جدولُ التوزيع الرسميّ — «المحطاتُ المتاحة» يومَ دورك تأتي منه لا من «الآن». */
-  const [schedule, setSchedule] = useState<ScheduleRow[] | null>(null);
+  const [schedule, setSchedule] = useState<Awaited<ReturnType<typeof loadSchedule>> | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -53,20 +82,6 @@ export function PlateTurn({ stations }: { stations: StationWithStatus[] }) {
 
   const turn = useMemo(() => (digit === null ? null : turnFor(String(digit), today)), [digit, today]);
 
-  // فيها بنزينٌ الآن — بقاعدة العرض نفسِها، الأقربُ أوّلاً إن عُرف الموقع.
-  const withGas = useMemo(() => {
-    const rows = stations
-      .map((s) => ({ s, gas: s.products.filter((p) => GASOLINE.has(p.product) && isOffered(s, p)) }))
-      .filter((x) => x.gas.length);
-    rows.sort((a, b) => {
-      if (a.s.distanceKm != null && b.s.distanceKm != null) return a.s.distanceKm - b.s.distanceKm;
-      const la = a.gas.map((p) => p.updated_at).sort().at(-1) ?? '';
-      const lb = b.gas.map((p) => p.updated_at).sort().at(-1) ?? '';
-      return lb.localeCompare(la);
-    });
-    return rows;
-  }, [stations]);
-
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const d = plateDigit(plate);
@@ -84,20 +99,32 @@ export function PlateTurn({ stations }: { stations: StationWithStatus[] }) {
   // «لا توجد أيّ محطةٍ معقول!!» — صاحبُ المنصّة حين رأى «الآن: 0». والصوابُ
   // أنّ «الآن» صادقةٌ (لا محطةَ أكّدت بنزيناً هذه الساعة) لكنّها ليست السؤال:
   // من يعرف دورَه غداً يريد **أين يصل البنزينُ غداً** — وذلك في الجدول، لا في
-  // تأكيدات المحطات. فيومُ الدور يُقرأ من الجدول، ويُذكر «الآن» إن كان فيه شيء.
+  // تأكيدات المحطات. فيومُ الدور يُقرأ من الجدول وحدَه — «لا نعتمد حالةَ
+  // التوقّع لأنّ أغلبَ المحطات غيرُ مسجّلة» — والمسجّلةُ في المنصّة تتقدّم
+  // الصفوفَ بكلمة «معتمدة»، ومن أعلن صاحبُها بنزيناً الآن يُقال معها «الآن».
   const turnDay = turn?.nextOk ?? null;
   const onSchedule = useMemo(() => {
     if (!schedule || !turnDay) return null;
     const days = [...new Set(schedule.map((r) => r.for_date))].sort();
     // إن لم يُنشر جدولُ يوم الدور بعدُ يُعرض أقربُ جدولٍ منشورٍ بعده بتاريخه.
     const day = days.includes(turnDay) ? turnDay : days.find((d) => d > turnDay) ?? null;
-    if (!day) return { day: turnDay, rows: [] as ScheduleRow[], exact: false };
-    const rows = schedule.filter((r) => r.for_date === day && GASOLINE.has(r.product));
-    // محطةٌ واحدةٌ لا سطرٌ لكلّ منتج
-    const seen = new Set<string>();
-    const uniq = rows.filter((r) => (seen.has(r.station_name) ? false : (seen.add(r.station_name), true)));
-    return { day, rows: uniq, exact: day === turnDay };
-  }, [schedule, turnDay]);
+    if (!day) return { day: turnDay, rows: [] as TurnRow[], all: 0, exact: false };
+    // محطةٌ واحدةٌ بمنتجاتها لا سطرٌ لكلّ منتج
+    const byName = new Map<string, TurnRow>();
+    for (const r of schedule) {
+      if (r.for_date !== day || !GASOLINE.has(r.product)) continue;
+      const row: TurnRow = byName.get(r.station_name) ?? { name: r.station_name, city: r.city, products: [], liveNow: false };
+      if (!row.station && r.linked_station_id) {
+        row.station = stations.find((s) => s.id === r.linked_station_id);
+        row.liveNow = !!row.station?.products.some((p) => GASOLINE.has(p.product) && isOffered(row.station!, p));
+      }
+      if (!row.products.includes(r.product)) row.products.push(r.product);
+      byName.set(r.station_name, row);
+    }
+    const all = [...byName.values()].sort((a, b) => Number(!!b.station) - Number(!!a.station));
+    const mine = all.filter((r) => !cities.size || (r.city && cities.has(r.city)));
+    return { day, rows: mine, all: all.length, exact: day === turnDay };
+  }, [schedule, turnDay, cities, stations]);
 
   const todayParity = dayParity(today);
   const tone = todayParity === 'odd' ? 'bg-amber-100 text-amber-900' : 'bg-sky-100 text-sky-900';
@@ -176,65 +203,84 @@ export function PlateTurn({ stations }: { stations: StationWithStatus[] }) {
             <p className="flex items-center gap-1.5 text-[12.5px] font-extrabold text-slate-800">
               <FuelIcon className="h-4 w-4 text-brand" />
               {onSchedule && onSchedule.rows.length
-                ? `يصلها البنزين ${onSchedule.day === today ? 'اليوم' : onSchedule.day === baghdadDate(1) ? 'غداً' : 'يوم ' + shortDate(onSchedule.day)}: ${ar(onSchedule.rows.length)} ${onSchedule.rows.length === 1 ? 'محطة' : 'محطات'}`
+                ? `يصلها البنزين ${onSchedule.day === today ? 'اليوم' : onSchedule.day === baghdadDate(1) ? 'غداً' : 'يوم ' + shortDate(onSchedule.day)}${cityLabel}: ${stationsOf(onSchedule.rows.length)}`
                 : schedule === null
                   ? 'جدولُ التوزيع…'
-                  : `لم يُنشر جدولُ ${turnDay === baghdadDate(1) ? 'الغد' : 'يوم ' + shortDate(turnDay ?? today)} بعد`}
+                  : onSchedule && onSchedule.all > 0
+                    ? `لا محطةَ${cityLabel} في جدول ${onSchedule.day === baghdadDate(1) ? 'الغد' : shortDate(onSchedule.day)}`
+                    : `لم يُنشر جدولُ ${turnDay === baghdadDate(1) ? 'الغد' : 'يوم ' + shortDate(turnDay ?? today)} بعد`}
             </p>
+            {onSchedule && onSchedule.rows.length === 0 && onSchedule.all > 0 && (
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                في الجدول {stationsOf(onSchedule.all)} في مناطقَ أخرى —{' '}
+                <a href="/schedule" className="font-bold text-brand-700 underline">الجدولُ كاملاً</a>
+              </p>
+            )}
+            {!cities.size && (
+              <p className="mt-0.5 text-[10.5px] text-slate-400">
+                تُعرض كلُّ المناطق —{' '}
+                <a href="/alerts" className="font-bold text-brand-700 underline">اختر منطقتك</a> لترى ما يخصّك.
+              </p>
+            )}
             {onSchedule && !onSchedule.exact && onSchedule.rows.length > 0 && (
               <p className="mt-0.5 text-[10.5px] text-amber-700">
                 جدولُ يوم دورك لم يُنشر بعد — هذا أقربُ جدولٍ منشور.
               </p>
             )}
             {onSchedule && onSchedule.rows.length > 0 && (
-              <ul className="mt-2 grid grid-cols-2 gap-x-3">
-                {onSchedule.rows.slice(0, 8).map((r) => (
-                  <li key={r.id} className="flex items-center justify-between gap-1 border-b border-slate-100 py-1.5 text-[11.5px]">
-                    {r.linked_station_id ? (
-                      <a href={`/station/${r.linked_station_id}`} className="min-w-0 truncate font-bold text-brand-700">
-                        {r.station_name}
-                      </a>
-                    ) : (
-                      <span className="min-w-0 truncate font-bold text-slate-700">{r.station_name}</span>
-                    )}
-                    {r.city && <span className="shrink-0 text-[10px] text-slate-400">{r.city}</span>}
-                  </li>
-                ))}
-              </ul>
+              <table className="mt-2 w-full text-[11.5px]">
+                <thead>
+                  <tr className="text-[10px] font-bold text-slate-400">
+                    <th className="pb-1 text-right font-bold">المحطة</th>
+                    <th className="pb-1 text-right font-bold">الوقود</th>
+                    <th className="pb-1 text-center font-bold">الطريق</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {onSchedule.rows.slice(0, 8).map((r) => (
+                    <tr key={r.name} className="border-t border-slate-100">
+                      <td className="w-full max-w-0 py-1.5 pl-2">
+                        {r.station ? (
+                          <a href={`/station/${r.station.id}`} className="block truncate font-bold text-brand-700">
+                            {r.name}
+                          </a>
+                        ) : (
+                          <span className="block truncate font-bold text-slate-700">{r.name}</span>
+                        )}
+                        <span className="block truncate text-[10px] text-slate-400">
+                          {r.station && <b className="text-brand-700">معتمدة</b>}
+                          {r.station && r.city && ' · '}
+                          {r.city}
+                        </span>
+                      </td>
+                      <td className="w-px whitespace-nowrap py-1.5 pl-2 text-slate-700">
+                        {r.products.map(kind).join(' · ')}
+                        {r.liveNow && <b className="block text-[10px] text-brand-700">متوفّرٌ الآن</b>}
+                      </td>
+                      <td className="w-px py-1.5 text-center">
+                        <a
+                          href={wazeTo({ name: r.name, city: r.city, lat: r.station?.lat, lng: r.station?.lng })}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`الطريق إلى ${r.name}`}
+                          className="inline-flex min-h-[32px] items-center gap-0.5 rounded-lg px-2 text-[10px] font-bold text-brand-700 active:bg-brand-50"
+                        >
+                          <MapPinIcon className="h-4 w-4" />
+                          ويز
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
             {onSchedule && onSchedule.rows.length > 8 && (
               <a href="/schedule" className="mt-2 block text-center text-[11.5px] font-bold text-brand-700 underline">
                 و{ar(onSchedule.rows.length - 8)} أخرى — الجدولُ كاملاً
               </a>
             )}
-            {schedule !== null && onSchedule && onSchedule.rows.length === 0 && (
+            {schedule !== null && onSchedule && onSchedule.all === 0 && (
               <p className="mt-1 text-[11.5px] text-slate-500">يصل الجدولُ عادةً بعد التاسعة مساءً — ويصلك إشعارٌ إن اخترتَ منطقتك.</p>
-            )}
-
-            {/* والآن — إن كان ثمّة شيء */}
-            {withGas.length > 0 && (
-              <div className="mt-2 border-t border-slate-100 pt-2">
-                <p className="text-[11.5px] font-extrabold text-brand-800">
-                  وأكّدت بنزيناً الآن: {ar(withGas.length)} {withGas.length === 1 ? 'محطة' : 'محطات'}
-                </p>
-                <ul className="mt-1 divide-y divide-slate-100">
-                  {withGas.slice(0, 3).map(({ s, gas }) => {
-                    const ro = gas.map((p) => p.runs_out_at).filter(Boolean).sort()[0];
-                    return (
-                      <li key={s.id}>
-                        <a href={`/station/${s.id}`} className="flex items-center justify-between gap-2 py-1.5 text-[12px]">
-                          <span className="min-w-0 truncate font-bold text-slate-700">{s.name}</span>
-                          <span className="shrink-0 text-[11px] text-slate-500">
-                            {s.city}
-                            {s.distanceKm != null && ` · ${ar(Math.round(s.distanceKm))} كم`}
-                            {ro && ` · حتى ${runsOutLabel(ro)}`}
-                          </span>
-                        </a>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
             )}
           </div>
         </div>

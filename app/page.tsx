@@ -42,7 +42,6 @@ import { FirstRun } from '@/components/FirstRun';
 import { SearchBar, EMPTY_FILTERS, countActive, type Filters } from '@/components/SearchBar';
 import {
   BellIcon,
-  InfoIcon,
   DownloadIcon,
   FuelIcon,
   ListIcon,
@@ -690,13 +689,11 @@ export default function HomePage() {
             *
             *  والجملة تبقى لأنها تحمي المنصّة من لومٍ ليس لها: القارئ يظنّها
             *  هي التي تُحصي المحطات وتتفقّدها، فإن وجد خبراً قديماً لامها. */}
-          <p className="mt-2 flex items-start gap-2 rounded-lg bg-white/15 px-3 py-2 text-[11px] leading-relaxed text-white">
-            <InfoIcon className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              <b>توفّر المنتجات وتحديثها لحظةً بلحظة من إدارة المحطة نفسها</b> — والمنصّة تنقل
-              ما تُعلنه، ومعه وقتُه.
-            </span>
-          </p>
+          {/* «ارفع الإعلاناتِ المتبدّلة بدل الإعلان في الأعلى» — صاحبُ المنصّة.
+            *  فحلّت الشرائحُ الثلاث مكانَ سطر «توفّر المنتجات…». */}
+          <div className="mt-2">
+            <PromoStrip inHeader />
+          </div>
           {/* Both of these speak to someone browsing the site. Inside the app
               they are dead weight: the download already happened, and the
               "coming soon" badge contradicts the app in their hand. */}
@@ -754,7 +751,7 @@ export default function HomePage() {
         {/* الفرديُّ والزوجيّ — قرارٌ مؤقّت؛ تختفي البطاقةُ بإطفاء RATION.active.
             **معاينةٌ للإدارة وحدَها** حتى الاعتماد. */}
         {RATION.active && stations && view === 'list' && role === 'admin' && (
-          <PlateTurn stations={stations} />
+          <PlateTurn stations={stations} choice={choice} />
         )}
 
         <TripAsk stations={stations} />
@@ -814,12 +811,6 @@ export default function HomePage() {
           >
             {followNote}
           </p>
-        )}
-
-        {view === 'list' && (
-          <div className="mb-3">
-            <PromoStrip />
-          </div>
         )}
 
         <div className="mt-4">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { PlateTurn } from './PlateTurn';
+import { useAlertChoice } from '@/lib/alerts';
 import { SpinnerIcon } from './icons';
 import { loadCachedStations, loadStations } from '@/lib/stations';
 import { RATION } from '@/lib/ration';
@@ -14,6 +15,7 @@ export function DoriScreen() {
   // لا في المُهيّئ، وإلّا اختلف ما بُني عمّا يُعرض.
   const [stations, setStations] = useState<StationWithStatus[] | null>(null);
   const [err, setErr] = useState(false);
+  const { choice } = useAlertChoice();
 
   useEffect(() => {
     let alive = true;
@@ -50,5 +52,5 @@ export function DoriScreen() {
     );
   }
 
-  return <PlateTurn stations={stations} />;
+  return <PlateTurn stations={stations} choice={choice} />;
 }
