@@ -7,6 +7,8 @@ import { baghdadDate } from '@/lib/board';
 import { runsOutLabel } from '@/lib/hours';
 import { isOffered } from '@/lib/products';
 import { PARITY_LABEL, RATION, dayParity, plateDigit, shortDate, turnFor } from '@/lib/ration';
+import { loadSchedule } from '@/lib/scheduleData';
+import type { ScheduleRow } from '@/lib/board';
 import type { StationWithStatus } from '@/types/database';
 
 const KEY = 'plate-last';
@@ -24,6 +26,18 @@ export function PlateTurn({ stations }: { stations: StationWithStatus[] }) {
   const [plate, setPlate] = useState('');
   const [digit, setDigit] = useState<number | null>(null);
   const [decree, setDecree] = useState(false);
+  /** جدولُ التوزيع الرسميّ — «المحطاتُ المتاحة» يومَ دورك تأتي منه لا من «الآن». */
+  const [schedule, setSchedule] = useState<ScheduleRow[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    loadSchedule()
+      .then((rows) => alive && setSchedule(rows))
+      .catch(() => alive && setSchedule([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -64,6 +78,26 @@ export function PlateTurn({ stations }: { stations: StationWithStatus[] }) {
       /* تصفّحٌ خاصّ */
     }
   }
+
+  // ── محطاتُ البنزين يومَ دورك — من الجدول الرسميّ ──────────────────────
+  //
+  // «لا توجد أيّ محطةٍ معقول!!» — صاحبُ المنصّة حين رأى «الآن: 0». والصوابُ
+  // أنّ «الآن» صادقةٌ (لا محطةَ أكّدت بنزيناً هذه الساعة) لكنّها ليست السؤال:
+  // من يعرف دورَه غداً يريد **أين يصل البنزينُ غداً** — وذلك في الجدول، لا في
+  // تأكيدات المحطات. فيومُ الدور يُقرأ من الجدول، ويُذكر «الآن» إن كان فيه شيء.
+  const turnDay = turn?.nextOk ?? null;
+  const onSchedule = useMemo(() => {
+    if (!schedule || !turnDay) return null;
+    const days = [...new Set(schedule.map((r) => r.for_date))].sort();
+    // إن لم يُنشر جدولُ يوم الدور بعدُ يُعرض أقربُ جدولٍ منشورٍ بعده بتاريخه.
+    const day = days.includes(turnDay) ? turnDay : days.find((d) => d > turnDay) ?? null;
+    if (!day) return { day: turnDay, rows: [] as ScheduleRow[], exact: false };
+    const rows = schedule.filter((r) => r.for_date === day && GASOLINE.has(r.product));
+    // محطةٌ واحدةٌ لا سطرٌ لكلّ منتج
+    const seen = new Set<string>();
+    const uniq = rows.filter((r) => (seen.has(r.station_name) ? false : (seen.add(r.station_name), true)));
+    return { day, rows: uniq, exact: day === turnDay };
+  }, [schedule, turnDay]);
 
   const todayParity = dayParity(today);
   const tone = todayParity === 'odd' ? 'bg-amber-100 text-amber-900' : 'bg-sky-100 text-sky-900';
@@ -137,33 +171,70 @@ export function PlateTurn({ stations }: { stations: StationWithStatus[] }) {
             ))}
           </div>
 
-          {/* المحطاتُ التي فيها بنزينٌ الآن */}
+          {/* محطاتُ البنزين يومَ دورك — من جدول التوزيع الرسميّ */}
           <div className="mt-3 rounded-2xl border border-slate-100 p-3">
             <p className="flex items-center gap-1.5 text-[12.5px] font-extrabold text-slate-800">
               <FuelIcon className="h-4 w-4 text-brand" />
-              فيها بنزينٌ الآن: {ar(withGas.length)} {withGas.length === 1 ? 'محطة' : 'محطات'}
-              {!turn.todayOk && <span className="font-bold text-amber-700"> — ودورُك {turn.nextOk === baghdadDate(1) ? 'غداً' : ar(shortDate(turn.nextOk))}</span>}
+              {onSchedule && onSchedule.rows.length
+                ? `يصلها البنزين ${onSchedule.day === today ? 'اليوم' : onSchedule.day === baghdadDate(1) ? 'غداً' : 'يوم ' + shortDate(onSchedule.day)}: ${ar(onSchedule.rows.length)} ${onSchedule.rows.length === 1 ? 'محطة' : 'محطات'}`
+                : schedule === null
+                  ? 'جدولُ التوزيع…'
+                  : `لم يُنشر جدولُ ${turnDay === baghdadDate(1) ? 'الغد' : 'يوم ' + shortDate(turnDay ?? today)} بعد`}
             </p>
-            {withGas.length === 0 ? (
-              <p className="mt-1 text-[11.5px] text-slate-500">لا محطةَ أكّدت بنزيناً الآن — تابع الحالات أعلاه.</p>
-            ) : (
-              <ul className="mt-2 divide-y divide-slate-100">
-                {withGas.slice(0, 3).map(({ s, gas }) => {
-                  const ro = gas.map((p) => p.runs_out_at).filter(Boolean).sort()[0];
-                  return (
-                    <li key={s.id}>
-                      <a href={`/station/${s.id}`} className="flex items-center justify-between gap-2 py-2 text-[12px]">
-                        <span className="min-w-0 truncate font-bold text-slate-700">{s.name}</span>
-                        <span className="shrink-0 text-[11px] text-slate-500">
-                          {s.city}
-                          {s.distanceKm != null && ` · ${ar(Math.round(s.distanceKm))} كم`}
-                          {ro && ` · حتى ${runsOutLabel(ro)}`}
-                        </span>
+            {onSchedule && !onSchedule.exact && onSchedule.rows.length > 0 && (
+              <p className="mt-0.5 text-[10.5px] text-amber-700">
+                جدولُ يوم دورك لم يُنشر بعد — هذا أقربُ جدولٍ منشور.
+              </p>
+            )}
+            {onSchedule && onSchedule.rows.length > 0 && (
+              <ul className="mt-2 grid grid-cols-2 gap-x-3">
+                {onSchedule.rows.slice(0, 8).map((r) => (
+                  <li key={r.id} className="flex items-center justify-between gap-1 border-b border-slate-100 py-1.5 text-[11.5px]">
+                    {r.linked_station_id ? (
+                      <a href={`/station/${r.linked_station_id}`} className="min-w-0 truncate font-bold text-brand-700">
+                        {r.station_name}
                       </a>
-                    </li>
-                  );
-                })}
+                    ) : (
+                      <span className="min-w-0 truncate font-bold text-slate-700">{r.station_name}</span>
+                    )}
+                    {r.city && <span className="shrink-0 text-[10px] text-slate-400">{r.city}</span>}
+                  </li>
+                ))}
               </ul>
+            )}
+            {onSchedule && onSchedule.rows.length > 8 && (
+              <a href="/schedule" className="mt-2 block text-center text-[11.5px] font-bold text-brand-700 underline">
+                و{ar(onSchedule.rows.length - 8)} أخرى — الجدولُ كاملاً
+              </a>
+            )}
+            {schedule !== null && onSchedule && onSchedule.rows.length === 0 && (
+              <p className="mt-1 text-[11.5px] text-slate-500">يصل الجدولُ عادةً بعد التاسعة مساءً — ويصلك إشعارٌ إن اخترتَ منطقتك.</p>
+            )}
+
+            {/* والآن — إن كان ثمّة شيء */}
+            {withGas.length > 0 && (
+              <div className="mt-2 border-t border-slate-100 pt-2">
+                <p className="text-[11.5px] font-extrabold text-brand-800">
+                  وأكّدت بنزيناً الآن: {ar(withGas.length)} {withGas.length === 1 ? 'محطة' : 'محطات'}
+                </p>
+                <ul className="mt-1 divide-y divide-slate-100">
+                  {withGas.slice(0, 3).map(({ s, gas }) => {
+                    const ro = gas.map((p) => p.runs_out_at).filter(Boolean).sort()[0];
+                    return (
+                      <li key={s.id}>
+                        <a href={`/station/${s.id}`} className="flex items-center justify-between gap-2 py-1.5 text-[12px]">
+                          <span className="min-w-0 truncate font-bold text-slate-700">{s.name}</span>
+                          <span className="shrink-0 text-[11px] text-slate-500">
+                            {s.city}
+                            {s.distanceKm != null && ` · ${ar(Math.round(s.distanceKm))} كم`}
+                            {ro && ` · حتى ${runsOutLabel(ro)}`}
+                          </span>
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
           </div>
         </div>
