@@ -19,8 +19,10 @@ import { APP_STORE_URL } from '@/lib/stores';
  *
  *  لا زرَّ «لاحقاً»: التحديثُ ثلاثةُ ميغا، والميزةُ هي سببُ التحديث. فمن على
  *  بناءٍ قديمٍ لا يمرّ إلّا بالمتجر. */
-/** يُقلب إلى `true` بكلمة صاحب المنصّة بعد أن يراها على `?carplay=1`. */
-const ROLLOUT = false;
+/** موعدُ التعميم — بقرار صاحب المنصّة: **صباحُ الأحد ١٣ أيلول ٢٠٢٦ الثامنة
+ *  بتوقيت بغداد**، «كي يكون الناس في الدوام ويتحدّثون بينهم عن الميزة».
+ *  فالشاشةُ تُنشر الآن وتوقظ نفسَها في موعدها بلا نشرٍ ثانٍ. */
+const ROLLOUT_AT = Date.parse('2026-09-13T08:00:00+03:00');
 
 export function CarPlayUpdate() {
   const [show, setShow] = useState(false);
@@ -38,7 +40,7 @@ export function CarPlayUpdate() {
       !!cap?.isNativePlatform?.() &&
       cap.getPlatform?.() === 'ios' &&
       !cap.isPluginAvailable?.('Preferences');
-    setShow(preview || (ROLLOUT && oldIos));
+    setShow(preview || (oldIos && Date.now() >= ROLLOUT_AT));
 
     // ── `&t=2.5` يُجمّد الحركةَ عند لحظةٍ — لتصوير الفيديو الترويجيّ ──────
     // لقطةٌ لكلّ لحظةٍ بمتصفّحٍ بلا رأس ثمّ ffmpeg. لا أثرَ له بغير المعامل.
@@ -48,8 +50,9 @@ export function CarPlayUpdate() {
       const style = document.createElement('style');
       style.textContent = `
         .carplay-demo .demo-1, .carplay-demo .demo-icon { ${at(0)} }
-        .carplay-demo .demo-2, .carplay-demo .demo-pick { ${at(3)} }
-        .carplay-demo .demo-3, .carplay-demo .demo-route { ${at(6)} }`;
+        .carplay-demo .demo-2, .carplay-demo .demo-2 .demo-pick { ${at(3)} }
+        .carplay-demo .demo-3, .carplay-demo .demo-3 .demo-pick { ${at(6)} }
+        .carplay-demo .demo-4, .carplay-demo .demo-route { ${at(9)} }`;
       document.head.appendChild(style);
     }
   }, []);
@@ -82,6 +85,7 @@ export function CarPlayUpdate() {
             ['حدّث التطبيق', '3 ميغا فقط — ضغطةٌ واحدة في App Store.'],
             ['من شاشة السيّارة اختر أيقونة المحطة التقنية', 'تظهر بين تطبيقات CarPlay فورَ وصل الهاتف.'],
             ['اختر نوع الوقود', 'كاز · بانزين · غاز — المتوفّرُ الآن قربك.'],
+            ['اعرف المحطات القريبة منك واختر ما يناسبك', 'على الخريطة بالمسافة وآخر تأكيد — الأقربُ أوّلاً.'],
             ['توجّه إلى المحطة فوراً مع ويز', 'زرُّ «الطريق» يفتح ويز على شاشة السيّارة.'],
           ].map(([t, d], i) => (
             <li key={t} className="flex items-start gap-3 rounded-2xl bg-white/12 p-3">
@@ -146,8 +150,28 @@ function CarScreen() {
           </div>
         </div>
 
-        {/* اللقطة ٣ — الطريق، وخلفَه الأنبارُ: الفراتُ ومدنُه دلالةً لا خريطةً */}
+        {/* اللقطة ٣ — المحطاتُ القريبة: الأقربُ أوّلاً، بالمسافة وآخر تأكيد */}
         <div className="demo-frame demo-3 absolute inset-0 pr-12">
+          <p className="pt-2.5 text-center text-[11px] font-extrabold text-white">بانزين محسن · الأقرب إليك</p>
+          <div className="mx-auto mt-2 w-[14.5rem] space-y-1.5 text-[10px] text-white/90">
+            {[
+              ['محطة وقود الأنبار', '2.1 كم', 'أُكّد قبل 20 د'],
+              ['محطة الأمن', '4.8 كم', 'أُكّد قبل ساعة'],
+              ['محطة الحق', '6.3 كم', 'أُكّد قبل ساعتين'],
+            ].map(([n, d, c], i) => (
+              <div
+                key={n}
+                className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 ${i === 0 ? 'demo-pick bg-brand/40 ring-2 ring-white' : 'bg-white/10'}`}
+              >
+                <span className="text-[9px] text-white/70">{c}</span>
+                <span className="font-bold">{n} <span className="font-normal text-white/70">· {d}</span></span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* اللقطة ٤ — الطريق، وخلفَه الأنبارُ: الفراتُ ومدنُه دلالةً لا خريطةً */}
+        <div className="demo-frame demo-4 absolute inset-0 pr-12">
           <div className="absolute inset-0 bg-[#0b1a2b]" />
           <svg viewBox="0 0 200 120" className="absolute inset-0 h-full w-full" style={{ fontFamily: 'inherit' }}>
             {/* الفراتُ من القائم إلى الفلوجة */}

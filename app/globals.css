@@ -468,40 +468,44 @@
 }
 
 /* ── شاشةُ CarPlay المتحرّكة في «حدّث التطبيق» ─────────────────────────────
-   ثلاثُ لقطاتٍ في دورة تسع ثوانٍ: الأيقونةُ (٠–٣) ← أنواعُ الوقود (٣–٦) ←
-   الطريقُ (٦–٩). كلُّ لقطةٍ تُخفى بالشفافيّة لا بالحذف، فالانتقالُ ناعم. */
+   أربعُ لقطاتٍ في دورة اثنتي عشرة ثانية: الأيقونةُ (٠–٣) ← أنواعُ الوقود
+   (٣–٦) ← المحطاتُ القريبة (٦–٩) ← الطريقُ (٩–١٢). كلُّ لقطةٍ تُخفى بالشفافيّة
+   لا بالحذف، فالانتقالُ ناعم. و`&t=` في المكوّن يجمّدها للتصوير. */
 .carplay-demo .demo-frame {
-  animation: demo-frame 9s ease-in-out infinite;
+  animation: demo-frame 12s ease-in-out infinite;
   opacity: 0;
 }
 .carplay-demo .demo-1 { animation-delay: 0s; }
 .carplay-demo .demo-2 { animation-delay: 3s; }
 .carplay-demo .demo-3 { animation-delay: 6s; }
+.carplay-demo .demo-4 { animation-delay: 9s; }
 @keyframes demo-frame {
-  0%, 4% { opacity: 0; transform: scale(0.98); }
-  8%, 30% { opacity: 1; transform: scale(1); }
-  34%, 100% { opacity: 0; transform: scale(0.98); }
+  0%, 3% { opacity: 0; transform: scale(0.98); }
+  6%, 22% { opacity: 1; transform: scale(1); }
+  25%, 100% { opacity: 0; transform: scale(0.98); }
 }
-/* أيقونةُ الرصيف تنبض في اللقطة الأولى، والزرُّ المختارُ في الثانية */
-.carplay-demo .demo-icon { animation: demo-pulse 9s ease-in-out infinite; }
-.carplay-demo .demo-pick { animation: demo-pulse 9s ease-in-out infinite; animation-delay: 3s; }
+/* أيقونةُ الرصيف تنبض في اللقطة الأولى، والزرُّ المختارُ في الثانية والثالثة */
+.carplay-demo .demo-icon { animation: demo-pulse 12s ease-in-out infinite; }
+.carplay-demo .demo-pick { animation: demo-pulse 12s ease-in-out infinite; animation-delay: inherit; }
+.carplay-demo .demo-2 .demo-pick { animation-delay: 3s; }
+.carplay-demo .demo-3 .demo-pick { animation-delay: 6s; }
 @keyframes demo-pulse {
-  0%, 10%, 30%, 100% { transform: scale(1); }
-  20% { transform: scale(1.12); }
+  0%, 8%, 22%, 100% { transform: scale(1); }
+  15% { transform: scale(1.08); }
 }
-/* الطريقُ يُرسم في اللقطة الثالثة */
+/* الطريقُ يُرسم في اللقطة الرابعة */
 .carplay-demo .demo-route {
   stroke-dasharray: 320;
   stroke-dashoffset: 320;
-  animation: demo-route 9s ease-out infinite;
-  animation-delay: 6s;
+  animation: demo-route 12s ease-out infinite;
+  animation-delay: 9s;
 }
 @keyframes demo-route {
-  0%, 5% { stroke-dashoffset: 320; }
-  25%, 100% { stroke-dashoffset: 0; }
+  0%, 4% { stroke-dashoffset: 320; }
+  18%, 100% { stroke-dashoffset: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .carplay-demo .demo-frame { animation: none; opacity: 1; position: relative; }
-  .carplay-demo .demo-2, .carplay-demo .demo-3 { display: none; }
+  .carplay-demo .demo-2, .carplay-demo .demo-3, .carplay-demo .demo-4 { display: none; }
   .carplay-demo .demo-route { animation: none; stroke-dashoffset: 0; }
 }
