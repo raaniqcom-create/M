@@ -34,6 +34,152 @@ function fitFont(
   return size;
 }
 
+/** الرسمُ نفسُه — للوحة المالك وللقصص على الرئيسية.
+ *
+ *  كان جسمَ `useCallback` داخل المكوّن، فلا يُرسم إلّا ببطاقته وزرّه، وختمُ
+ *  الوقت فيه «الآن» لحظةَ الرسم. والقصّةُ تحتاج الصورةَ عاريةً وبوقت التأكيد
+ *  الحقيقيّ — فصار دالّةً تأخذ `at`، والمكوّنُ يناديها بـ`new Date()` كما كان. */
+export async function drawAvailabilityPoster(
+  canvas: HTMLCanvasElement,
+  { name, link, products, at }: { name: string; link: string; products: FuelProduct[]; at: Date }
+): Promise<void> {
+  if (products.length === 0) return;
+  const c = canvas.getContext('2d');
+  if (!c) return;
+
+  await document.fonts.ready;
+
+  const H = heightFor(products.length);
+  canvas.height = H;
+
+  const g = c.createLinearGradient(0, 0, SIZE, H);
+  g.addColorStop(0, '#166534');
+  g.addColorStop(0.6, '#15803d');
+  g.addColorStop(1, '#22c55e');
+  c.fillStyle = g;
+  c.fillRect(0, 0, SIZE, H);
+
+  const glow = c.createRadialGradient(SIZE / 2, 250, 0, SIZE / 2, 250, 700);
+  glow.addColorStop(0, 'rgba(255,255,255,0.16)');
+  glow.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = glow;
+  c.fillRect(0, 0, SIZE, H);
+
+  c.direction = 'rtl';
+  c.textAlign = 'center';
+
+  // "available now" badge
+  c.fillStyle = '#fef08a';
+  c.beginPath();
+  c.roundRect(SIZE / 2 - 165, 96, 330, 78, 39);
+  c.fill();
+  c.fillStyle = '#713f12';
+  c.font = '800 42px Tajawal';
+  c.fillText('متوفر الآن', SIZE / 2, 150);
+
+  // the products themselves, as the headline
+  const labels = products.map((p) => PRODUCT_LABELS[p] ?? p);
+  if (labels.length === 1) {
+    const s = fitFont(c, labels[0], SIZE - 130, 104);
+    c.fillStyle = '#ffffff';
+    c.font = `800 ${s}px Tajawal`;
+    c.fillText(labels[0], SIZE / 2, 320);
+  } else {
+    const start = 268;
+    const step = 96;
+    labels.forEach((label, i) => {
+      const s = fitFont(c, label, SIZE - 200, 72);
+      c.fillStyle = '#ffffff';
+      c.font = `800 ${s}px Tajawal`;
+      c.fillText(label, SIZE / 2, start + i * step);
+    });
+  }
+
+  const afterList = labels.length === 1 ? 400 : 268 + labels.length * 96;
+
+  c.fillStyle = 'rgba(255,255,255,0.85)';
+  c.font = '500 36px Tajawal';
+  c.fillText('لدى', SIZE / 2, afterList + 60);
+
+  const ns = fitFont(c, name, SIZE - 140, 62);
+  c.fillStyle = '#ffffff';
+  c.font = `800 ${ns}px Tajawal`;
+  c.fillText(name, SIZE / 2, afterList + 135);
+
+  // Baghdad time, so the post carries its own freshness
+  // Hour alone is ambiguous on a poster that stays on a page for days —
+  // the date is what tells a reader whether this is today's news.
+  const stamp = new Intl.DateTimeFormat('ar-IQ', {
+    timeZone: 'Asia/Baghdad',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).format(at);
+  c.fillStyle = 'rgba(255,255,255,0.75)';
+  c.font = '400 30px Tajawal';
+  c.fillText(`تأكيد التوفر ${stamp}`, SIZE / 2, afterList + 190);
+
+  // The gap between the update time and the link read as unfinished, and it
+  // is the natural place for the mark that ties the post to the platform.
+  const logo = new Image();
+  logo.crossOrigin = 'anonymous';
+  logo.src = '/logo-original.png';
+  await new Promise((res) => {
+    logo.onload = res;
+    logo.onerror = res;
+  });
+  if (logo.width) {
+    const box = 190;
+    const s = Math.min(box / logo.width, box / logo.height);
+    const w = logo.width * s;
+    const h = logo.height * s;
+    const x = (SIZE - w) / 2;
+    const y = afterList + 230;
+    const pad = 12;
+
+    c.save();
+    c.shadowColor = 'rgba(0,0,0,0.2)';
+    c.shadowBlur = 22;
+    c.shadowOffsetY = 6;
+    c.fillStyle = '#ffffff';
+    c.beginPath();
+    c.roundRect(x - pad, y - pad, w + pad * 2, h + pad * 2, 36);
+    c.fill();
+    c.restore();
+
+    c.save();
+    c.beginPath();
+    c.roundRect(x - pad, y - pad, w + pad * 2, h + pad * 2, 36);
+    c.clip();
+    c.drawImage(logo, x, y, w, h);
+    c.restore();
+  }
+
+  const pillW = 720;
+  const pillH = 92;
+  const pillY = H - 190;
+  c.fillStyle = '#ffffff';
+  c.beginPath();
+  c.roundRect((SIZE - pillW) / 2, pillY, pillW, pillH, 46);
+  c.fill();
+
+  c.direction = 'ltr';
+  c.fillStyle = '#14532d';
+  const ls = fitFont(c, link, pillW - 70, 40);
+  c.font = `800 ${ls}px Tajawal`;
+  c.fillText(link, SIZE / 2, pillY + pillH / 2 + ls / 3);
+
+  c.direction = 'rtl';
+  c.fillStyle = 'rgba(255,255,255,0.7)';
+  c.font = '400 27px Tajawal';
+  c.fillText('تابع توفر الوقود لدينا على المحطة التقنية', SIZE / 2, H - 55);
+
+}
+
+export const POSTER_SITE = SITE;
+
 /** Poster a station posts the moment fuel lands — the headline is the product,
  *  because that is the only thing a driver scanning a feed will stop for. */
 export function AvailabilityPoster({
@@ -52,138 +198,7 @@ export function AvailabilityPoster({
   const draw = useCallback(async () => {
     const canvas = canvasRef.current;
     if (!canvas || products.length === 0) return;
-    const c = canvas.getContext('2d');
-    if (!c) return;
-
-    await document.fonts.ready;
-
-    const H = heightFor(products.length);
-    canvas.height = H;
-
-    const g = c.createLinearGradient(0, 0, SIZE, H);
-    g.addColorStop(0, '#166534');
-    g.addColorStop(0.6, '#15803d');
-    g.addColorStop(1, '#22c55e');
-    c.fillStyle = g;
-    c.fillRect(0, 0, SIZE, H);
-
-    const glow = c.createRadialGradient(SIZE / 2, 250, 0, SIZE / 2, 250, 700);
-    glow.addColorStop(0, 'rgba(255,255,255,0.16)');
-    glow.addColorStop(1, 'rgba(255,255,255,0)');
-    c.fillStyle = glow;
-    c.fillRect(0, 0, SIZE, H);
-
-    c.direction = 'rtl';
-    c.textAlign = 'center';
-
-    // "available now" badge
-    c.fillStyle = '#fef08a';
-    c.beginPath();
-    c.roundRect(SIZE / 2 - 165, 96, 330, 78, 39);
-    c.fill();
-    c.fillStyle = '#713f12';
-    c.font = '800 42px Tajawal';
-    c.fillText('متوفر الآن', SIZE / 2, 150);
-
-    // the products themselves, as the headline
-    const labels = products.map((p) => PRODUCT_LABELS[p] ?? p);
-    if (labels.length === 1) {
-      const s = fitFont(c, labels[0], SIZE - 130, 104);
-      c.fillStyle = '#ffffff';
-      c.font = `800 ${s}px Tajawal`;
-      c.fillText(labels[0], SIZE / 2, 320);
-    } else {
-      const start = 268;
-      const step = 96;
-      labels.forEach((label, i) => {
-        const s = fitFont(c, label, SIZE - 200, 72);
-        c.fillStyle = '#ffffff';
-        c.font = `800 ${s}px Tajawal`;
-        c.fillText(label, SIZE / 2, start + i * step);
-      });
-    }
-
-    const afterList = labels.length === 1 ? 400 : 268 + labels.length * 96;
-
-    c.fillStyle = 'rgba(255,255,255,0.85)';
-    c.font = '500 36px Tajawal';
-    c.fillText('لدى', SIZE / 2, afterList + 60);
-
-    const ns = fitFont(c, name, SIZE - 140, 62);
-    c.fillStyle = '#ffffff';
-    c.font = `800 ${ns}px Tajawal`;
-    c.fillText(name, SIZE / 2, afterList + 135);
-
-    // Baghdad time, so the post carries its own freshness
-    // Hour alone is ambiguous on a poster that stays on a page for days —
-    // the date is what tells a reader whether this is today's news.
-    const stamp = new Intl.DateTimeFormat('ar-IQ', {
-      timeZone: 'Asia/Baghdad',
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    }).format(new Date());
-    c.fillStyle = 'rgba(255,255,255,0.75)';
-    c.font = '400 30px Tajawal';
-    c.fillText(`تأكيد التوفر ${stamp}`, SIZE / 2, afterList + 190);
-
-    // The gap between the update time and the link read as unfinished, and it
-    // is the natural place for the mark that ties the post to the platform.
-    const logo = new Image();
-    logo.crossOrigin = 'anonymous';
-    logo.src = '/logo-original.png';
-    await new Promise((res) => {
-      logo.onload = res;
-      logo.onerror = res;
-    });
-    if (logo.width) {
-      const box = 190;
-      const s = Math.min(box / logo.width, box / logo.height);
-      const w = logo.width * s;
-      const h = logo.height * s;
-      const x = (SIZE - w) / 2;
-      const y = afterList + 230;
-      const pad = 12;
-
-      c.save();
-      c.shadowColor = 'rgba(0,0,0,0.2)';
-      c.shadowBlur = 22;
-      c.shadowOffsetY = 6;
-      c.fillStyle = '#ffffff';
-      c.beginPath();
-      c.roundRect(x - pad, y - pad, w + pad * 2, h + pad * 2, 36);
-      c.fill();
-      c.restore();
-
-      c.save();
-      c.beginPath();
-      c.roundRect(x - pad, y - pad, w + pad * 2, h + pad * 2, 36);
-      c.clip();
-      c.drawImage(logo, x, y, w, h);
-      c.restore();
-    }
-
-    const pillW = 720;
-    const pillH = 92;
-    const pillY = H - 190;
-    c.fillStyle = '#ffffff';
-    c.beginPath();
-    c.roundRect((SIZE - pillW) / 2, pillY, pillW, pillH, 46);
-    c.fill();
-
-    c.direction = 'ltr';
-    c.fillStyle = '#14532d';
-    const ls = fitFont(c, link, pillW - 70, 40);
-    c.font = `800 ${ls}px Tajawal`;
-    c.fillText(link, SIZE / 2, pillY + pillH / 2 + ls / 3);
-
-    c.direction = 'rtl';
-    c.fillStyle = 'rgba(255,255,255,0.7)';
-    c.font = '400 27px Tajawal';
-    c.fillText('تابع توفر الوقود لدينا على المحطة التقنية', SIZE / 2, H - 55);
-
+    await drawAvailabilityPoster(canvas, { name, link, products, at: new Date() });
     setReady(true);
   }, [name, link, products]);
 

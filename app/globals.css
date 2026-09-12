@@ -509,3 +509,9 @@
   .carplay-demo .demo-2, .carplay-demo .demo-3, .carplay-demo .demo-4 { display: none; }
   .carplay-demo .demo-route { animation: none; stroke-dashoffset: 0; }
 }
+
+/* شريطُ تقدّم القصّة في StoryViewer — يمتلئ في مدّة القصّة */
+@keyframes story-fill {
+  from { width: 0%; }
+  to { width: 100%; }
+}

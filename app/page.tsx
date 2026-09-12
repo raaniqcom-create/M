@@ -1,6 +1,7 @@
 'use client';
 
 import { StaleBanner } from '@/components/StaleBanner';
+import { StoryStrip } from '@/components/StoryStrip';
 import { STATUS_RECHECK } from '@/lib/status';
 import { readFailure, withDeadline } from '@/lib/fn';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -740,6 +741,13 @@ export default function HomePage() {
             الاعتقادُ الخاطئ. قِيس في المتصفّح: كان يقع تحتها فعلاً. */}
         {staleAt && stations && (
           <StaleBanner at={staleAt} why={staleWhy} onRetry={() => refreshRef.current()} />
+        )}
+
+        {/* «حالة المحطة» — حلقاتُ القصص قبل كلّ شيء: الخبرُ الطازج أوّلاً.
+            **معاينةٌ للإدارة وحدَها** حتى يعتمدها صاحبُ المنصّة من هاتفه
+            (يفتح الرئيسةَ بـ«شاهد كمواطن»)؛ ثمّ يُحذف شرطُ الدور. */}
+        {stations && view === 'list' && role === 'admin' && (
+          <StoryStrip stations={stations} choice={choice} />
         )}
 
         <TripAsk stations={stations} />
