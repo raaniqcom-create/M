@@ -87,7 +87,7 @@ export function CarPlayUpdate() {
           href={APP_STORE_URL}
           className="mt-6 block w-full rounded-full bg-white px-6 py-3.5 text-[15px] font-extrabold text-brand-900 shadow-[0_10px_26px_rgba(0,0,0,.28)]"
         >
-          حدّث التطبيق الآن
+          حدّث التطبيق الآن — فقط 3 ميغا
         </a>
         <p className="mt-3 text-[10.5px] leading-relaxed text-white/60">
           إن لم يظهر زرُّ التحديث بعد، افتح App Store وابحث عن «المحطة التقنية».
