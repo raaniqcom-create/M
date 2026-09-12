@@ -33,12 +33,13 @@ import { ChangePassword } from '@/components/ChangePassword';
 import { FRESH_HOURS, WITHDRAW_HOURS, ageLabel, hasRunOut } from '@/lib/hours';
 import { DeleteAccount } from '@/components/DeleteAccount';
 import type { ExpectedPeriod } from '@/lib/hours';
-import { FuelIcon, LockIcon, LogOutIcon, SpinnerIcon } from '@/components/icons';
+import { FuelIcon, LogOutIcon, SpinnerIcon } from '@/components/icons';
 import { OwnerHomeIcons, type OwnerView } from '@/components/OwnerHomeIcons';
 import { OwnerComplaints } from '@/components/OwnerComplaints';
 import { OwnerLocation } from '@/components/OwnerLocation';
 import { BiometricLockToggle } from '@/components/BiometricLockToggle';
 import { biometricLockEnabled, verifyOwner } from '@/lib/biometric';
+import { BiometricLockScreen } from '@/components/BiometricLockScreen';
 import type { FuelProduct, Station, StationProduct, TrafficLevel } from '@/types/database';
 
 const LEVELS: TrafficLevel[] = ['green', 'yellow', 'red'];
@@ -536,14 +537,6 @@ export default function OwnerPage() {
     router.replace('/login');
   }
 
-  /** «حاول ثانيةً» من شاشة القفل. */
-  async function unlock() {
-    if (!userId) return;
-    if (!(await verifyOwner())) return;
-    setLocked(false);
-    setLoading(true);
-    await load(userId);
-  }
 
   if (netErr) {
     return (
@@ -571,17 +564,14 @@ export default function OwnerPage() {
 
   if (locked) {
     return (
-      <main className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
-        <LockIcon className="h-8 w-8 text-brand" />
-        <h1 className="mt-3 text-base font-bold">لوحتك مقفلة</h1>
-        <p className="mt-2 text-sm text-slate-500">افتحها بوجهك أو بصمتك، أو ادخل بكلمة المرور.</p>
-        <button type="button" onClick={unlock} className="btn-primary mt-5 w-full max-w-xs">
-          افتح بالبصمة أو الوجه
-        </button>
-        <button type="button" onClick={signOut} className="btn-ghost mt-2 w-full max-w-xs">
-          أدخل بكلمة المرور
-        </button>
-      </main>
+      <BiometricLockScreen
+        title="لوحتك مقفلة"
+        onUnlocked={() => {
+          setLocked(false);
+          setLoading(true);
+          if (userId) void load(userId);
+        }}
+      />
     );
   }
 

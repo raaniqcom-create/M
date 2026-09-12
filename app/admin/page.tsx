@@ -12,7 +12,6 @@ import {
   EyeIcon,
   ImageIcon,
   ListIcon,
-  LockIcon,
   LogOutIcon,
   MapPinIcon,
   MegaphoneIcon,
@@ -29,6 +28,7 @@ import {
 import { IconGrid } from '@/components/IconGrid';
 import { BiometricLockToggle } from '@/components/BiometricLockToggle';
 import { biometricLockEnabled, verifyOwner } from '@/lib/biometric';
+import { BiometricLockScreen } from '@/components/BiometricLockScreen';
 import { whatsappLink, whatsappVerifyLocation, whatsappVerifyRole } from '@/lib/phone';
 import { ScheduleAdmin } from '@/components/ScheduleAdmin';
 import { AdminStationForm } from '@/components/AdminStationForm';
@@ -312,33 +312,8 @@ export default function AdminPage() {
   }
 
   if (locked) {
-    return (
-      <main className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
-        <LockIcon className="h-8 w-8 text-brand" />
-        <h1 className="mt-3 text-base font-bold">لوحة الإدارة مقفلة</h1>
-        <p className="mt-2 text-sm text-slate-500">افتحها بوجهك أو بصمتك، أو ادخل بكلمة المرور.</p>
-        <button
-          type="button"
-          onClick={async () => {
-            // إعادةُ التحميل تُعيد الحارسَ من أوّله: البصمةُ ثمّ الدورُ ثمّ الجلب.
-            if (await verifyOwner()) window.location.reload();
-          }}
-          className="btn-primary mt-5 w-full max-w-xs"
-        >
-          افتح بالبصمة أو الوجه
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            await supabase.auth.signOut();
-            router.replace('/login');
-          }}
-          className="btn-ghost mt-2 w-full max-w-xs"
-        >
-          أدخل بكلمة المرور
-        </button>
-      </main>
-    );
+    // إعادةُ التحميل تُعيد الحارسَ من أوّله: البصمةُ (أو إطفاؤها) ثمّ الدورُ ثمّ الجلب.
+    return <BiometricLockScreen title="لوحة الإدارة مقفلة" onUnlocked={() => window.location.reload()} />;
   }
 
   if (allowed === null) {
