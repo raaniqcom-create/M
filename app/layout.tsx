@@ -6,6 +6,7 @@ import { SiteNotice } from '@/components/SiteNotice';
 import { TomorrowScreen } from '@/components/TomorrowScreen';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { NativePush } from '@/components/NativePush';
+import { PullToRefresh } from '@/components/PullToRefresh';
 import { APPLE_APP_ID } from '@/lib/stores';
 
 const tajawal = Tajawal({
@@ -73,6 +74,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-gray-50 font-sans text-gray-900 antialiased">
         <ServiceWorkerRegister />
         <NativePush />
+        <PullToRefresh />
         {/* نقطةُ تركيبٍ واحدةٌ تغطّي كلَّ مسار — أصغرُ من حراسةٍ في كلّ صفحة،
             وتشمل /owner و/admin اللتين تُنسيان في أيّ حلٍّ صفحةً صفحة. */}
         <Maintenance />

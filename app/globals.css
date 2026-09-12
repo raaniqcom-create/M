@@ -10,6 +10,8 @@
   }
   body {
     touch-action: manipulation;
+    /* سحبُ التحديث عندنا (PullToRefresh) لا سحبُ كروم — وإلّا وقع مرّتين. */
+    overscroll-behavior-y: contain;
     /* viewport-fit=cover starts every page at the physical top and bottom of
        the screen, so without these the first line hides under the Dynamic
        Island and the last one under the home indicator. Pages that want to
