@@ -744,11 +744,8 @@ export default function HomePage() {
         )}
 
         {/* «حالة المحطة» — حلقاتُ القصص قبل كلّ شيء: الخبرُ الطازج أوّلاً.
-            **معاينةٌ للإدارة وحدَها** حتى يعتمدها صاحبُ المنصّة من هاتفه
-            (يفتح الرئيسةَ بـ«شاهد كمواطن»)؛ ثمّ يُحذف شرطُ الدور. */}
-        {stations && view === 'list' && role === 'admin' && (
-          <StoryStrip stations={stations} choice={choice} />
-        )}
+            اعتمدها صاحبُ المنصّة ١٢ أيلول ٢٠٢٦ بعد معاينةٍ للإدارة وحدَها. */}
+        {stations && view === 'list' && <StoryStrip stations={stations} choice={choice} />}
 
         <TripAsk stations={stations} />
         {/* لوحة المنتجات والشريط الترويجي للقائمة وحدها.
