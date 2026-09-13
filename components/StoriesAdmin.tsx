@@ -101,7 +101,7 @@ export function StoriesAdmin() {
             onChange={(e) => setTitle(e.target.value)}
             maxLength={80}
             className="field"
-            placeholder="مثال: العبوات البلاستيكية أصبحت متوفرة"
+            placeholder="مثال: تعبئة العبوات البلاستيكية: أين؟"
           />
         </div>
 
