@@ -76,6 +76,8 @@ export function TomorrowScreen() {
     void (async () => {
       try {
         if (new URLSearchParams(window.location.search).get('live') === '1') return;
+        // معاينةُ حالةٍ برابط: شاشةٌ واحدة لا يعلوها شيء.
+        if (window.location.pathname.startsWith('/story-preview')) return;
 
         const status = await readStatus();
         if (!alive || isDown(status)) return;

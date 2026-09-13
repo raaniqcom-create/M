@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { ageLabel } from '@/lib/hours';
 import { platformStory, type PlatformStoryRow } from '@/lib/stories';
 import { StoryViewer } from './StoryViewer';
+import { encodeStory } from './StoryPreview';
 import { SpinnerIcon } from './icons';
 
 type Row = PlatformStoryRow & { active: boolean };
@@ -242,6 +243,15 @@ export function StoriesAdmin() {
                   <button type="button" onClick={() => setPreviewRow(r)} className="btn-ghost px-3 py-1 text-xs">
                     معاينة
                   </button>
+                  {/* رابطٌ يفتح المعاينةَ نفسَها على أيّ هاتفٍ بلا جلسة — للمراجعة قبل الموعد. */}
+                  <a
+                    href={`/story-preview?d=${encodeStory(r)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-ghost px-3 py-1 text-center text-xs"
+                  >
+                    رابط ↗
+                  </a>
                   <button
                     type="button"
                     onClick={() => (r.active ? stop(r) : republish(r))}
