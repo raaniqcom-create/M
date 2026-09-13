@@ -5,7 +5,7 @@ import { drawAvailabilityPoster, POSTER_SITE } from './AvailabilityPoster';
 import { RouteButton } from './RouteButton';
 import { EyeIcon, XIcon } from './icons';
 import { ageLabel } from '@/lib/hours';
-import { isSeen, markSeen, type Story } from '@/lib/stories';
+import { isSeen, isVideo, markSeen, type Story } from '@/lib/stories';
 import { supabase } from '@/lib/supabase';
 import type { StationWithStatus } from '@/types/database';
 
@@ -123,7 +123,17 @@ export function StoryViewer({
         {story.kind === 'platform' && story.news ? (
           <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-b from-brand-900 via-brand-700 to-brand px-7 text-center">
             {/* صورةٌ برابطٍ من الإدارة، أو شعارُ المحطة — «صورة عبر رابط أو شعار المحطة». */}
-            {story.news.image_url ? (
+            {story.news.image_url && isVideo(story.news.image_url) ? (
+              // فيديو الحالة (كفيديو CarPlay): بلا صوتٍ ويكرّر — كحالات إنستغرام.
+              <video
+                src={story.news.image_url}
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="max-h-[52vh] w-auto max-w-[84%] rounded-2xl object-contain shadow-[0_10px_26px_rgba(0,0,0,.35)]"
+              />
+            ) : story.news.image_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={story.news.image_url} alt="" className="max-h-[38vh] w-auto max-w-[84%] rounded-2xl object-contain shadow-[0_10px_26px_rgba(0,0,0,.35)]" />
             ) : (

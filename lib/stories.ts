@@ -132,6 +132,9 @@ export function storiesFor(
   return [...platform.map(platformStory), ...out];
 }
 
+/** رابطُ الحالة فيديو (mp4) لا صورة — يُعرض بـ<video> ويُترك للحلقة الشعار. */
+export const isVideo = (url: string | null | undefined): boolean => !!url && /\.(mp4|webm)(\?|$)/i.test(url);
+
 export const SEEN = 'story-seen:';
 
 /** رُئيت بهذا التأكيد بعينه: تأكيدٌ أحدثُ يعيدها خضراء. */

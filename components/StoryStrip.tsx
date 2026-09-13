@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { FuelIcon } from './icons';
 import { StoryViewer } from './StoryViewer';
 import { ageLabel } from '@/lib/hours';
-import { isSeen, storiesFor, type PlatformStoryRow } from '@/lib/stories';
+import { isSeen, isVideo, storiesFor, type PlatformStoryRow } from '@/lib/stories';
 import { supabase } from '@/lib/supabase';
 import type { AlertChoice } from '@/lib/alerts';
 import type { OpenAnnouncement } from '@/lib/announcements';
@@ -80,7 +80,7 @@ export function StoryStrip({
                 <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white">
                   {s.kind === 'platform' ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={s.news?.image_url || '/icons/icon-192.png'} alt="" width={48} height={48} className={`h-full w-full object-cover ${seen ? 'opacity-60 grayscale' : ''}`} />
+                    <img src={s.news?.image_url && !isVideo(s.news.image_url) ? s.news.image_url : '/icons/icon-192.png'} alt="" width={48} height={48} className={`h-full w-full object-cover ${seen ? 'opacity-60 grayscale' : ''}`} />
                   ) : (
                     <FuelIcon className={`h-6 w-6 ${seen ? 'text-slate-400' : red ? 'text-traffic-red' : 'text-brand'}`} />
                   )}

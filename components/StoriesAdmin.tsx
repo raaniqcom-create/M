@@ -26,6 +26,9 @@ export function StoriesAdmin() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
+  /** موعدُ النشر (اختياري) — فارغٌ = الآن. المستقبلُ لا يراه الزوّار حتى يحين (RLS). */
+  const [when, setWhen] = useState('');
+  const [previewRow, setPreviewRow] = useState<Row | null>(null);
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -54,12 +57,14 @@ export function StoriesAdmin() {
     if (!valid) return;
     setBusy(true);
     setNote(null);
+    const at = when ? new Date(when) : null;
     const { error } = await supabase.from('platform_stories').insert({
       title: draft.title,
       lines,
       image_url: draft.image_url,
       href: draft.href,
       label: draft.label,
+      ...(at && !Number.isNaN(at.getTime()) ? { published_at: at.toISOString() } : {}),
     });
     setBusy(false);
     if (error) return setNote('تعذّر الحفظ. أعد المحاولة.');
@@ -68,7 +73,10 @@ export function StoriesAdmin() {
     setImageUrl('');
     setHref('');
     setLabel('');
-    setNote('نُشرت — تظهر أوّلَ شريط الحالات لكلّ الزوّار.');
+    setWhen('');
+    setNote(at && at.getTime() > Date.now()
+      ? `جُدولت — تظهر للزوّار ${at.toLocaleString('ar-IQ')}.`
+      : 'نُشرت — تظهر أوّلَ شريط الحالات لكلّ الزوّار.');
     void load();
   }
 
@@ -141,12 +149,16 @@ export function StoriesAdmin() {
             <input
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
-              type="url"
               dir="ltr"
               className="field mt-2"
-              placeholder="https://…"
+              placeholder="https://… (صورة، أو فيديو mp4)"
             />
           )}
+        </div>
+
+        <div>
+          <label htmlFor="st-when" className="label">موعد النشر (اختياري — فارغٌ = الآن)</label>
+          <input id="st-when" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="field" dir="ltr" />
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -208,23 +220,36 @@ export function StoriesAdmin() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-bold text-slate-800">{r.title}</p>
                   <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500">
-                    <span
-                      className={`rounded-full px-1.5 py-px text-[10px] font-bold ${
-                        r.active ? 'bg-brand-100 text-brand-800' : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      {r.active ? 'منشورة' : 'موقوفة'}
-                    </span>
-                    نُشرت {ageLabel(r.published_at)}
+                    {(() => {
+                      const future = new Date(r.published_at).getTime() > Date.now();
+                      const cls = !r.active
+                        ? 'bg-slate-100 text-slate-500'
+                        : future
+                          ? 'bg-amber-50 text-amber-700'
+                          : 'bg-brand-100 text-brand-800';
+                      return (
+                        <span className={`rounded-full px-1.5 py-px text-[10px] font-bold ${cls}`}>
+                          {!r.active ? 'موقوفة' : future ? 'مجدولة' : 'منشورة'}
+                        </span>
+                      );
+                    })()}
+                    {new Date(r.published_at).getTime() > Date.now()
+                      ? `تُنشر ${new Date(r.published_at).toLocaleString('ar-IQ', { hour: '2-digit', minute: '2-digit', weekday: 'long' })}`
+                      : `نُشرت ${ageLabel(r.published_at)}`}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => (r.active ? stop(r) : republish(r))}
-                  className="btn-ghost shrink-0 px-3 py-1.5 text-xs"
-                >
-                  {r.active ? 'أوقف' : 'أعد النشر'}
-                </button>
+                <div className="flex shrink-0 flex-col gap-1">
+                  <button type="button" onClick={() => setPreviewRow(r)} className="btn-ghost px-3 py-1 text-xs">
+                    معاينة
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => (r.active ? stop(r) : republish(r))}
+                    className="btn-ghost px-3 py-1 text-xs"
+                  >
+                    {r.active ? 'أوقف' : 'أعد النشر'}
+                  </button>
+                </div>
               </article>
             ))}
           </div>
@@ -233,6 +258,14 @@ export function StoriesAdmin() {
 
       {preview && valid && (
         <StoryViewer stories={[platformStory(draft)]} start={0} stations={[]} onClose={() => setPreview(false)} />
+      )}
+      {previewRow && (
+        <StoryViewer
+          stories={[platformStory({ ...previewRow, id: 'preview' })]}
+          start={0}
+          stations={[]}
+          onClose={() => setPreviewRow(null)}
+        />
       )}
     </div>
   );
