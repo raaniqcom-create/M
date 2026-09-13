@@ -22,6 +22,12 @@ import {
 } from '@/lib/scheduleData';
 
 const SEEN = 'tomorrow-seen';
+/** الدعوةُ («اختر منطقتك») تُختم بمفتاحها هي — لا بمفتاح الجدول.
+ *
+ *  صورةُ مستخدمٍ جديد ليلةَ ١٣ أيلول: رأى الدعوة، اختار الرمادي، عاد — ولا
+ *  شيء. لأنّ الدعوةَ كانت تكتب `SEEN` فيُحسب أنّه رأى الجدول، والوعدُ
+ *  «ليظهر لك ما يخصّك منه» يُقطع ولا يُوفى. */
+const PROMPTED = 'tomorrow-prompted';
 
 /** أوّلُ ما يُفتح: أين يصل الوقودُ — قبل أن يصل.
  *
@@ -104,8 +110,11 @@ export function TomorrowScreen() {
         // مذكورٌ صراحةً: جدولٌ **جديد** يُنشر في أثناء الجلسة لا يفتح الشاشةَ
         // ثانيةً لمن رآها. وهو ثمنٌ مقبول — الإشعارُ يبلغه، والجدولُ في
         // `/schedule` كاملاً، مقابل استعلامين في كلّ صفحةٍ يفتحها كلُّ إنسان.
+        // بلا مدنٍ يُحرَس بالدعوة، وبمدنٍ يُحرَس بالجدول — فمن اختار منطقته بعد
+        // الدعوة يرى جدولَه في الفتحة التالية.
+        const hasCities = !!readChoice()?.cities?.length;
         try {
-          if (sessionStorage.getItem(SEEN) === target) return;
+          if (sessionStorage.getItem(hasCities ? SEEN : PROMPTED) === target) return;
         } catch {
           /* تصفّحٌ خاصّ — تُعرض في كلّ فتحة، وهو أهونُ من ألّا تُعرض */
         }
@@ -119,7 +128,7 @@ export function TomorrowScreen() {
         // ويُعاد فحصُ «رُئيت» على اليوم المحسوم — الأوّلُ كان على المرجَّح.
         if (shown !== target) {
           try {
-            if (sessionStorage.getItem(SEEN) === shown) return;
+            if (sessionStorage.getItem(hasCities ? SEEN : PROMPTED) === shown) return;
           } catch {
             /* تصفّحٌ خاصّ */
           }
@@ -146,7 +155,7 @@ export function TomorrowScreen() {
         // منطقته، والجدولُ كاملاً زرٌّ لمن أراده.
         if (!myCities.size) {
           try {
-            sessionStorage.setItem(SEEN, shown);
+            sessionStorage.setItem(PROMPTED, shown);
           } catch {
             /* تصفّحٌ خاصّ */
           }

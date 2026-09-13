@@ -151,7 +151,7 @@ export function ScopeBar({
                 </span>
                 <span
                   className={`text-[11px] font-extrabold ${
-                    on ? 'text-white/90' : n ? 'text-brand-700' : 'text-slate-300'
+                    on ? 'text-white/90' : n ? 'text-brand-700' : 'text-slate-400'
                   }`}
                 >
                   {n}
