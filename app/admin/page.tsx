@@ -192,7 +192,18 @@ export default function AdminPage() {
 
   async function decide(id: string, status: 'approved' | 'rejected') {
     setPending((prev) => prev.filter((s) => s.id !== id));
-    await supabase.from('stations').update({ status }).eq('id', id);
+    // الخطأُ كان يُبتلع: تُزال المحطةُ من القائمة ثمّ تعود بعد الجلب — «لم تتمّ
+    // الموافقة!» بلا سبب. فيُقال السببُ، وتبقى في القائمة.
+    // و`select` بعد التحديث: تحديثٌ لا يطال صفّاً (حجبته سياسةٌ) يعود بلا خطأ
+    // وبلا صفوف — فيُقال ذلك بدل الصمت.
+    const { data, error } = await supabase.from('stations').update({ status }).eq('id', id).select('id');
+    if (error || !data?.length) {
+      setNotice(
+        `تعذّر ${status === 'approved' ? 'الاعتماد' : 'الرفض'}: ${error?.message ?? 'لم يُحدَّث أيّ صفّ — أعد تسجيل الدخول وحاول ثانية'}`
+      );
+      load();
+      return;
+    }
     if (status === 'approved') {
       // Rebuild first and only announce if it was accepted. Announcing a
       // station whose page was never generated sends every subscriber to a 404.
