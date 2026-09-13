@@ -4,7 +4,7 @@ import { num } from '@/lib/num';
 import { useEffect, useState } from 'react';
 import { useSiteStats } from '@/lib/useSiteStats';
 import { NewsTicker } from './NewsTicker';
-import { CrosshairIcon, ListIcon, MapIcon, SearchIcon, UserIcon } from './icons';
+import { CrosshairIcon, MapIcon, SearchIcon, UserIcon } from './icons';
 import type { StationWithStatus } from '@/types/database';
 
 /** خمسة أزرار في متناول الإبهام، والشريط المتحرك تحتها.
@@ -22,7 +22,6 @@ export function BottomDock({
   view,
   near,
   stationCount,
-  onList,
   onMap,
   onNear,
   onSearch,
@@ -33,7 +32,6 @@ export function BottomDock({
   view: 'list' | 'map';
   near: boolean;
   stationCount: number;
-  onList: () => void;
   onMap: () => void;
   onNear: () => void;
   onSearch: () => void;
@@ -53,7 +51,6 @@ export function BottomDock({
   const value = live ? online : visits;
   const word = live ? 'متصل' : 'زائر';
 
-  const listActive = view === 'list' && !near;
   const mapActive = view === 'map' && !near;
 
   return (
@@ -63,18 +60,21 @@ export function BottomDock({
           <SearchIcon className="h-5 w-5" />
         </Tab>
 
-        <Tab label="قائمة" active={listActive} onClick={onList}>
-          <ListIcon className="h-5 w-5" />
+        {/* «بدل قائمة اجعل أقرب محطة» — صاحبُ المنصّة. والعودةُ من الخريطة إلى
+            القائمة بضغطة «خريطة» ثانية. */}
+        <Tab label="أقرب محطة" active={near} onClick={onNear}>
+          <CrosshairIcon className="h-5 w-5" />
         </Tab>
 
-        {/* في الوسط، وأكبر، وأخضر.
-          *
-          *  «أقرب محطة» ليست وجهاً ثالثاً للعرض بل الجواب المباشر على السؤال
-          *  الذي يُفتح التطبيق من أجله: أين أجد وقوداً قريباً الآن؟ وستّة
-          *  آلاف من سبعة آلاف زائر بلا اشتراك — لا مدينةَ محفوظة لهم، فالقُرب
-          *  هو ما يخدمهم وحده. فيأخذ موضع الإبهام ولونَ المنصّة. */}
-        <Tab label="أقرب محطة" active={near} onClick={onNear} hero>
-          <CrosshairIcon className="h-7 w-7" />
+        {/* في الوسط، وأكبر، وأخضر: «صاحب محطة» — «وزرّ أقرب محطة ضع صاحبَ محطة
+            بوسط الدائرة وأسفلها أضف محطتك مجاناً». المحطاتُ المسجّلة هي ما
+            يملأ التطبيقَ للجميع، فبابُ تسجيلها في موضع الإبهام. */}
+        <Tab label="أضف محطتك مجاناً" href="/register" hero>
+          <span className="px-1 text-center text-[9.5px] font-extrabold leading-tight">
+            صاحب
+            <br />
+            محطة
+          </span>
         </Tab>
 
         <Tab label="خريطة" active={mapActive} onClick={onMap} badge={stationCount}>

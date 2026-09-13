@@ -2,7 +2,7 @@
 
 import { StaleBanner } from '@/components/StaleBanner';
 import { StoryStrip } from '@/components/StoryStrip';
-import { PlateTurn } from '@/components/PlateTurn';
+import { PlateTurnStrip } from '@/components/PlateTurnStrip';
 import { RATION } from '@/lib/ration';
 import { STATUS_RECHECK } from '@/lib/status';
 import { readFailure, withDeadline } from '@/lib/fn';
@@ -745,10 +745,9 @@ export default function HomePage() {
           <StoryStrip stations={stations} choice={choice} announced={announcements ?? []} />
         )}
 
-        {/* الفرديُّ والزوجيّ — قرارٌ مؤقّت؛ تختفي البطاقةُ بإطفاء RATION.active.
-            اعتمدها صاحبُ المنصّة ١٢ أيلول ٢٠٢٦ بعد معاينةٍ للإدارة وحدَها؛ وشرطُ
-            الدور كان يُخفيها كلَّما تعثّرت قراءةُ profiles.role على الهاتف. */}
-        {RATION.active && stations && view === 'list' && <PlateTurn stations={stations} choice={choice} />}
+        {/* الفرديُّ والزوجيّ — سطرٌ يفتح /dori، لا بطاقةٌ في وسط الصفحة:
+            «وجودُه في وسط الصفحة شكّك الجميعَ بعدم وجود وقود». يختفي بإطفاء RATION.active. */}
+        {RATION.active && stations && view === 'list' && <PlateTurnStrip />}
 
         <TripAsk stations={stations} />
 
@@ -992,15 +991,15 @@ export default function HomePage() {
         view={view}
         near={!!origin}
         stationCount={stocked}
-        onList={() => {
-          setOrigin(null);
-          setView('list');
-        }}
+        // «خريطة» ثانيةً تعيد القائمة — بعد أن حلّت «أقرب محطة» محلَّ زرّ «قائمة».
         onMap={() => {
           setOrigin(null);
-          setView('map');
+          setView(view === 'map' ? 'list' : 'map');
         }}
-        onNear={locate}
+        onNear={() => {
+          setView('list');
+          locate();
+        }}
         onSearch={() => setSearchOpen(true)}
         onAccount={() => router.push('/alerts')}
         stations={stations ?? []}
