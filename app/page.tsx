@@ -739,6 +739,8 @@ export default function HomePage() {
 
         {/* «حالة المحطة» — حلقاتُ القصص قبل كلّ شيء: الخبرُ الطازج أوّلاً.
             اعتمدها صاحبُ المنصّة ١٢ أيلول ٢٠٢٦ بعد معاينةٍ للإدارة وحدَها. */}
+        {/* فتحةُ مؤشّر السحب — تحت الرأس الأخضر وفوق الحالات، كإنستغرام. */}
+        <div id="pull-refresh-slot" aria-hidden="true" />
         {stations && view === 'list' && (
           <StoryStrip stations={stations} choice={choice} announced={announcements ?? []} />
         )}
