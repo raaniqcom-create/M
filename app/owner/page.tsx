@@ -38,7 +38,8 @@ import { OwnerHomeIcons, type OwnerView } from '@/components/OwnerHomeIcons';
 import { OwnerComplaints } from '@/components/OwnerComplaints';
 import { OwnerLocation } from '@/components/OwnerLocation';
 import { BiometricLockToggle } from '@/components/BiometricLockToggle';
-import { biometricLockEnabled, verifyOwner } from '@/lib/biometric';
+import { FaceLoginSetup } from '@/components/FaceLoginSetup';
+import { biometricLockEnabled, forgetLogin, verifyOwner } from '@/lib/biometric';
 import { BiometricLockScreen } from '@/components/BiometricLockScreen';
 import type { FuelProduct, Station, StationProduct, TrafficLevel } from '@/types/database';
 
@@ -533,6 +534,8 @@ export default function OwnerPage() {
   }
 
   async function signOut() {
+    // خروجٌ مقصود: تُمحى بياناتُ الدخول من خزانة الهاتف أيضاً.
+    await forgetLogin();
     await supabase.auth.signOut();
     router.replace('/login');
   }
@@ -659,6 +662,8 @@ export default function OwnerPage() {
           *  أن يراه قبل أن يعمل. */}
         {station?.status === 'approved' && view === 'home' && (
           <div className="space-y-4">
+            {/* «أرسل لهم طلبَ التفعيل ببصمة الوجه» — البطاقةُ أوّلُ ما يُرى حتى يفعّل. */}
+            <FaceLoginSetup />
             {station.temp_closed && (
               <button
                 type="button"

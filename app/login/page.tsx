@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { phoneToEmail } from '@/lib/phone';
 import { isAborted } from '@/lib/fn';
+import { hasSavedLogin, loginWithFace, saveLogin } from '@/lib/biometric';
 import { EyeIcon, EyeOffIcon, FuelIcon, MessageIcon, PlusIcon, SpinnerIcon } from '@/components/icons';
 
 export default function LoginPage() {
@@ -14,6 +15,51 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** بياناتُ دخولٍ محفوظةٌ خلف الوجه على هذا الهاتف؟ — فالزرُّ الأخضر الأوّل. */
+  const [faceReady, setFaceReady] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    hasSavedLogin().then((ok) => alive && setFaceReady(ok));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /** بعد الجلسة: الدورُ يقرّر الوجهة — وتُحفظ بياناتُ الدخول خلف الوجه في التطبيق. */
+  async function finish(uid: string, email: string, pw: string) {
+    // لا انتظارَ على الحفظ: فشلُه (بناءٌ قديم، لا بصمة) لا يؤخّر الدخول.
+    void saveLogin(email, pw);
+    // ودورُ موظّف الفرع في القاعدة `owner`، فلولا هذا السؤال لاستُقبل بلوحة
+    // محطةٍ لا يملكها ودُعي إلى «إكمال تسجيل محطتك».
+    const [{ data: profile }, { data: branch }] = await Promise.all([
+      supabase.from('profiles').select('role').eq('id', uid).maybeSingle(),
+      supabase.rpc('is_branch_viewer'),
+    ]);
+    setBusy(false);
+    // replace, not push: the back button should not return to a login form the
+    // person has already passed
+    router.replace(
+      profile?.role === 'admin' ? '/admin' : branch === true ? '/branch' : '/owner',
+    );
+  }
+
+  async function withFace() {
+    setBusy(true);
+    setError(null);
+    const c = await loginWithFace();
+    if (!c) {
+      setBusy(false);
+      return setError('لم يُقبل الوجه — أدخل بكلمة المرور.');
+    }
+    const { data, error: e } = await supabase.auth.signInWithPassword({ email: c.username, password: c.password });
+    const uid = data.session?.user?.id;
+    if (e || !uid) {
+      setBusy(false);
+      return setError('بياناتُ الدخول المحفوظة لم تعد صالحة — أدخل بكلمة المرور مرّةً واحدة.');
+    }
+    await finish(uid, c.username, c.password);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -75,20 +121,7 @@ export default function LoginPage() {
       setError('تعذّر إنشاء الجلسة. حاول مجدداً.');
       return;
     }
-
-    // ودورُ موظّف الفرع في القاعدة `owner`، فلولا هذا السؤال لاستُقبل بلوحة
-    // محطةٍ لا يملكها ودُعي إلى «إكمال تسجيل محطتك».
-    const [{ data: profile }, { data: branch }] = await Promise.all([
-      supabase.from('profiles').select('role').eq('id', uid).maybeSingle(),
-      supabase.rpc('is_branch_viewer'),
-    ]);
-
-    setBusy(false);
-    // replace, not push: the back button should not return to a login form the
-    // person has already passed
-    router.replace(
-      profile?.role === 'admin' ? '/admin' : branch === true ? '/branch' : '/owner',
-    );
+    await finish(uid, email, password);
   }
 
   return (
@@ -100,6 +133,15 @@ export default function LoginPage() {
 
       <form onSubmit={submit} className="card space-y-4 p-5">
         <h1 className="text-base font-bold">الدخول إلى حسابي</h1>
+        {/* بياناتُ الدخول محفوظةٌ خلف الوجه على هذا الهاتف: زرٌّ واحدٌ قبل الحقلين. */}
+        {faceReady && (
+          <>
+            <button type="button" onClick={withFace} disabled={busy} className="btn-primary mt-3 w-full disabled:opacity-60">
+              {busy ? <SpinnerIcon className="h-4 w-4" /> : 'الدخول بالوجه أو البصمة'}
+            </button>
+            <p className="my-2 text-center text-[11px] text-slate-400">أو بكلمة المرور</p>
+          </>
+        )}
 
           <div>
             <label htmlFor="identifier" className="label">

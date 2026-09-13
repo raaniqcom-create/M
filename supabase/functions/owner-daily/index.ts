@@ -53,7 +53,7 @@ const WINDOW_MIN = 20;
  *  وقراءتُها غداً ضوضاء.
  *
  *  ولا يتغيّر شيءٌ في الإيصال: كلُّها تُدفَع كما كانت. */
-const THREAD_KINDS = new Set(['stale_stock', 'stale_withdrawn', 'no_stock']);
+const THREAD_KINDS = new Set(['stale_stock', 'stale_withdrawn', 'no_stock', 'face_login']);
 
 /** يُكتب سببُ الرفض — وأوّلُ ثلاثةٍ تكفي.
  *
@@ -509,6 +509,16 @@ Deno.serve(async (req) => {
       return new Response('forbidden', { status: 403 });
     }
   }
+  // ── نداءُ الجميع بخبر المنصّة: «فعّل الدخول بالوجه» ────────────────────
+  //
+  // «لمستخدمي إدارة المحطات أرسل لهم طلبَ التفعيل ببصمة الوجه الآن، لأنّ يوجد
+  // تسجيلُ خروجٍ للمحطات» — صاحبُ المنصّة، ١٤ أيلول. بالحلقة نفسِها، ويُختم في
+  // owner_pings (نوعٌ واحد في اليوم) فلا يتكرّر إن نودي مرّتين، ويدخل مجرى
+  // الرسائل ليقرأه من لم يرنّ هاتفُه.
+  const notice = url.searchParams.get('notice');
+  if (notice && req.headers.get('x-cron-secret') !== CRON_SECRET) {
+    return new Response('forbidden', { status: 403 });
+  }
 
   const deliverId = url.searchParams.get('deliver');
   let chatMsg: { station: Station; body: string } | null = null;
@@ -653,7 +663,10 @@ Deno.serve(async (req) => {
   if (sched) for (const s of stations) {
     if (!s.temp_closed) due.push({ station: s, kind: 'sched_alert' });
   }
-  for (const s of chatMsg || sched ? [] : stations) {
+  if (notice === 'face-login') for (const s of stations) {
+    if (!already.has(`${s.id}:face_login`)) due.push({ station: s, kind: 'face_login' });
+  }
+  for (const s of chatMsg || sched || notice ? [] : stations) {
     // a 24-hour station has no opening or closing moment; its day is judged at
     // 07:00 and 21:00, the hours a forecourt actually changes hands
     const open = s.is_24h ? 420 : toMinutes(s.opens_at);
@@ -920,7 +933,12 @@ ${body}`,
             title: 'صدر جدول التوزيع',
             body: `حدّث حالة ${station.name} الآن — المتوفّر لديك يظهر للناس فوراً.`,
           }
-        : MESSAGES[baseKind(kind)](station.name, watchersFor(station.city), station.city);
+        : kind === 'face_login'
+          ? {
+              title: `${station.name} — فعّل الدخول بالوجه`,
+              body: 'بعض المحطات خرجت من التطبيق واحتاجت كلمة المرور. افتح لوحتك وأدخل كلمتك مرّةً واحدة في بطاقة «فعّل الدخول بالوجه» — وبعدها تدخل بوجهك أو بصمتك دائماً.',
+            }
+          : MESSAGES[baseKind(kind)](station.name, watchersFor(station.city), station.city);
     // الدفعُ يفتح تبويبَ الرسائل مباشرةً، لا اللوحةَ ثمّ بحثاً عنه
     const deepLink = chatMsg ? '/owner?chat=1' : '/owner';
 
@@ -1048,7 +1066,7 @@ ${body}`,
     JSON.stringify(
       chatMsg
         ? { ok: true, sent, failed }
-        : sched
+        : sched || notice
           ? { ok: true, stations: due.length, sent, failed }
           : { at: minutes, day, due: due.length, sent, failed, sms }
     ),

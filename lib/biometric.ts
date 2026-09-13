@@ -53,6 +53,58 @@ export async function setBiometricLock(on: boolean): Promise<void> {
   }
 }
 
+/** ── الدخولُ بالوجه: بياناتُ الدخول في خزانة الهاتف ──────────────────────
+ *
+ *  القفلُ أعلاه يحرس جلسةً قائمة ولا يعيد جلسةً ضاعت — وقد ضاعت لبعض
+ *  المحطات («يوجد تسجيلُ خروجٍ للمحطات»). فتُحفظ بياناتُ الدخول في Keychain
+ *  على آيفون وKeystore على أندرويد، ولا تُقرأ إلّا بعد الوجه أو البصمة. كلُّ
+ *  نداءٍ محروس: بناءٌ قديمٌ بلا الإضافة يعود «لا» ولا يرمي. */
+const LOGIN_SERVER = 'muhta.online';
+
+export async function hasSavedLogin(): Promise<boolean> {
+  if (!isNative()) return false;
+  try {
+    const { NativeBiometric } = await import('@capgo/capacitor-native-biometric');
+    const { isSaved } = await NativeBiometric.isCredentialsSaved({ server: LOGIN_SERVER });
+    return isSaved;
+  } catch {
+    return false;
+  }
+}
+
+export async function saveLogin(username: string, password: string): Promise<boolean> {
+  if (!isNative()) return false;
+  try {
+    const { NativeBiometric } = await import('@capgo/capacitor-native-biometric');
+    await NativeBiometric.setCredentials({ username, password, server: LOGIN_SERVER });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function forgetLogin(): Promise<void> {
+  if (!isNative()) return;
+  try {
+    const { NativeBiometric } = await import('@capgo/capacitor-native-biometric');
+    await NativeBiometric.deleteCredentials({ server: LOGIN_SERVER });
+  } catch {
+    /* بناءٌ قديم، أو لا شيءَ محفوظ */
+  }
+}
+
+/** الوجهُ أو البصمة، ثمّ بياناتُ الدخول — أو null إن رُفض أو لا شيءَ محفوظ. */
+export async function loginWithFace(): Promise<{ username: string; password: string } | null> {
+  if (!(await verifyOwner())) return null;
+  try {
+    const { NativeBiometric } = await import('@capgo/capacitor-native-biometric');
+    const c = await NativeBiometric.getCredentials({ server: LOGIN_SERVER });
+    return c?.username && c?.password ? { username: c.username, password: c.password } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** يسأل الوجهَ أو البصمة. `true` حين تُقبل — وكلُّ ما سواه رفض. */
 export async function verifyOwner(): Promise<boolean> {
   try {

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { setBiometricLock, verifyOwner } from '@/lib/biometric';
+import { forgetLogin, setBiometricLock, verifyOwner } from '@/lib/biometric';
 import { LockIcon, SpinnerIcon } from './icons';
 
 /** شاشةُ القفل — والبابُ الثاني لا يُخرج أحداً.
@@ -105,6 +105,7 @@ export function BiometricLockScreen({
       <button
         type="button"
         onClick={async () => {
+          await forgetLogin();
           await supabase.auth.signOut();
           router.replace('/login');
         }}
