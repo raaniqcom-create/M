@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { biometricAvailable, biometricLockEnabled, setBiometricLock } from '@/lib/biometric';
+import { biometricAvailable, biometricLockEnabled, biometryLabel, setBiometricLock } from '@/lib/biometric';
+import { BiometricIcon, useBiometryKind } from './BiometricIcon';
 
 /** مفتاحُ «افتح اللوحة بالبصمة أو الوجه» — يظهر في التطبيق وحده، وحيث
  *  للجهاز بصمةٌ مسجَّلة. في المتصفّح لا يُرسم شيء. */
 export function BiometricLockToggle() {
   const [on, setOn] = useState<boolean | null>(null);
+  const kind = useBiometryKind();
 
   useEffect(() => {
     let alive = true;
@@ -23,7 +25,10 @@ export function BiometricLockToggle() {
 
   return (
     <section className="card p-5">
-      <h3 className="text-sm font-bold">الدخول بالبصمة أو الوجه</h3>
+      <h3 className="flex items-center gap-2 text-sm font-bold">
+        <BiometricIcon kind={kind} className="h-6 w-6 text-brand" />
+        الدخول بـ{biometryLabel(kind)}
+      </h3>
       <label className="mt-3 flex cursor-pointer items-start gap-3">
         <input
           type="checkbox"
@@ -36,7 +41,7 @@ export function BiometricLockToggle() {
           className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
         />
         <span className="text-xs leading-relaxed text-slate-600">
-          <b>افتح اللوحة بالبصمة أو الوجه</b>
+          <b>افتح اللوحة بـ{biometryLabel(kind)}</b>
           <span className="mt-1 block text-slate-500">
             تبقى داخلاً، وعند فتح التطبيق يُطلب وجهُك أو بصمتُك بدل كلمة المرور. وإن
             لم تُقبل تدخل بكلمة المرور كما كنت.

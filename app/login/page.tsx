@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { phoneToEmail } from '@/lib/phone';
 import { isAborted } from '@/lib/fn';
-import { hasSavedLogin, loginWithFace, saveLogin } from '@/lib/biometric';
+import { biometryLabel, hasSavedLogin, loginWithFace, saveLogin } from '@/lib/biometric';
+import { BiometricIcon, useBiometryKind } from '@/components/BiometricIcon';
 import { EyeIcon, EyeOffIcon, FuelIcon, MessageIcon, PlusIcon, SpinnerIcon } from '@/components/icons';
 
 export default function LoginPage() {
@@ -17,6 +18,7 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   /** بياناتُ دخولٍ محفوظةٌ خلف الوجه على هذا الهاتف؟ — فالزرُّ الأخضر الأوّل. */
   const [faceReady, setFaceReady] = useState(false);
+  const bioKind = useBiometryKind();
 
   useEffect(() => {
     let alive = true;
@@ -137,7 +139,14 @@ export default function LoginPage() {
         {faceReady && (
           <>
             <button type="button" onClick={withFace} disabled={busy} className="btn-primary mt-3 w-full disabled:opacity-60">
-              {busy ? <SpinnerIcon className="h-4 w-4" /> : 'الدخول بالوجه أو البصمة'}
+              {busy ? (
+                <SpinnerIcon className="h-4 w-4" />
+              ) : (
+                <>
+                  <BiometricIcon kind={bioKind} className="h-6 w-6" />
+                  الدخول بـ{biometryLabel(bioKind)}
+                </>
+              )}
             </button>
             <p className="my-2 text-center text-[11px] text-slate-400">أو بكلمة المرور</p>
           </>

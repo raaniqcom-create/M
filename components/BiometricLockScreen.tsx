@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { forgetLogin, setBiometricLock, verifyOwner } from '@/lib/biometric';
-import { LockIcon, SpinnerIcon } from './icons';
+import { biometryLabel, forgetLogin, setBiometricLock, verifyOwner } from '@/lib/biometric';
+import { SpinnerIcon } from './icons';
+import { BiometricIcon, useBiometryKind } from './BiometricIcon';
 
 /** شاشةُ القفل — والبابُ الثاني لا يُخرج أحداً.
  *
@@ -26,6 +27,8 @@ export function BiometricLockScreen({
   onUnlocked: () => void;
 }) {
   const router = useRouter();
+  const kind = useBiometryKind();
+  const label = biometryLabel(kind);
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -60,9 +63,12 @@ export function BiometricLockScreen({
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
-      <LockIcon className="h-8 w-8 text-brand" />
-      <h1 className="mt-3 text-base font-bold">{title}</h1>
-      <p className="mt-2 text-sm text-slate-500">افتحها بوجهك أو بصمتك، أو بكلمة المرور.</p>
+      {/* الرمزُ الذي يعرفه: وجهٌ على آيفون، إصبعٌ على أندرويد — كبيراً وواضحاً. */}
+      <span className="grid h-24 w-24 place-items-center rounded-full bg-brand-50 text-brand">
+        <BiometricIcon kind={kind} className="h-14 w-14" />
+      </span>
+      <h1 className="mt-4 text-base font-bold">{title}</h1>
+      <p className="mt-2 text-sm text-slate-500">افتحها بـ{label}، أو بكلمة المرور.</p>
 
       {err && (
         <p className="mt-3 w-full max-w-xs rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{err}</p>
@@ -71,7 +77,8 @@ export function BiometricLockScreen({
       {!askPassword ? (
         <>
           <button type="button" onClick={retry} className="btn-primary mt-5 w-full max-w-xs">
-            افتح بالبصمة أو الوجه
+            <BiometricIcon kind={kind} className="h-5 w-5" />
+            افتح بـ{label}
           </button>
           <button
             type="button"

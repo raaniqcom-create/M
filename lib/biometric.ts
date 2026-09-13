@@ -22,6 +22,32 @@ function isNative(): boolean {
   return !!cap?.isNativePlatform?.();
 }
 
+export type BiometryKind = 'face' | 'finger' | 'both' | 'none';
+
+/** أيُّ بصمةٍ على هذا الهاتف — من الإضافة، لا من المنصّة.
+ *  FACE_ID=2 / FACE_AUTHENTICATION=4 → وجه؛ TOUCH_ID=1 / FINGERPRINT=3 → إصبع؛
+ *  MULTIPLE=6 / IRIS=5 → الاثنان. بناءٌ قديم أو متصفّح → 'none'. */
+export async function biometryKind(): Promise<BiometryKind> {
+  if (!isNative()) return 'none';
+  try {
+    const { NativeBiometric } = await import('@capgo/capacitor-native-biometric');
+    const r = await NativeBiometric.isAvailable();
+    if (!r.isAvailable) return 'none';
+    const t = Number(r.biometryType);
+    if (t === 2 || t === 4) return 'face';
+    if (t === 1 || t === 3) return 'finger';
+    if (t === 5 || t === 6) return 'both';
+    return 'none';
+  } catch {
+    return 'none';
+  }
+}
+
+/** «الوجه» / «البصمة» / «الوجه أو البصمة» — نصٌّ واحد لكلّ الشاشات. */
+export function biometryLabel(kind: BiometryKind): string {
+  return kind === 'face' ? 'الوجه' : kind === 'finger' ? 'البصمة' : 'الوجه أو البصمة';
+}
+
 /** أيملك هذا الجهازُ بصمةً أو وجهاً مسجَّلاً؟ */
 export async function biometricAvailable(): Promise<boolean> {
   if (!isNative()) return false;

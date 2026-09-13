@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { biometricAvailable, hasSavedLogin, saveLogin } from '@/lib/biometric';
+import { biometricAvailable, biometryLabel, hasSavedLogin, saveLogin } from '@/lib/biometric';
 import { SpinnerIcon } from './icons';
+import { BiometricIcon, useBiometryKind } from './BiometricIcon';
 
 /** «فعّل الدخول بالوجه» — بطاقةٌ في أعلى لوحة المالك حتى يفعّلها.
  *
@@ -20,6 +21,8 @@ export function FaceLoginSetup() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const kind = useBiometryKind();
+  const label = biometryLabel(kind);
 
   useEffect(() => {
     let alive = true;
@@ -60,17 +63,24 @@ export function FaceLoginSetup() {
   if (done) {
     return (
       <section className="rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3 text-[12.5px] font-bold text-brand-900">
-        ✅ تمّ — من الآن تدخل لوحتَك بوجهك أو بصمتك، حتى لو خرجتَ من التطبيق.
+        ✅ تمّ — من الآن تدخل لوحتَك بـ{label}، حتى لو خرجتَ من التطبيق.
       </section>
     );
   }
 
   return (
     <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-      <p className="text-[13px] font-extrabold text-amber-900">فعّل الدخول بالوجه — حتى لا تُخرَج من لوحتك</p>
-      <p className="mt-1 text-[11.5px] leading-relaxed text-amber-800">
+      <div className="flex items-center gap-3">
+        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-white text-brand shadow-soft">
+          <BiometricIcon kind={kind} className="h-9 w-9" />
+        </span>
+        <p className="text-[13px] font-extrabold leading-snug text-amber-900">
+          فعّل الدخول بـ{label} — حتى لا تُخرَج من لوحتك
+        </p>
+      </div>
+      <p className="mt-2 text-[11.5px] leading-relaxed text-amber-800">
         بعض المحطات خرجت من التطبيق واحتاجت كلمةَ المرور. أدخلها هنا <b>مرّةً واحدة</b> وتُحفظ في
-        خزانة هاتفك خلف وجهك أو بصمتك — وبعدها تدخل بوجهك دائماً.
+        خزانة هاتفك خلف {label} — وبعدها تدخل بـ{label} دائماً.
       </p>
       <form onSubmit={enable} className="mt-3 flex gap-2">
         <input
