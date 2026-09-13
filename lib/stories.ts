@@ -39,6 +39,19 @@ export interface PlatformStoryRow {
   published_at: string;
 }
 
+/** اسمُ حلقة المنصّة من عنوانها: كلمةٌ لاتينيّة أولى تُؤخذ كما هي («CarPlay»)،
+ *  وإلّا قاعدةُ `shortName` بعد إسقاط علامات الترقيم («الآيفون:» ← «الآيفون»). */
+export function platformShort(title: string): string {
+  // ما قبل أوّل فاصلٍ (— : ،) هو الاسم: «دوري — الفرديّ…» ← «دوري».
+  const head = title.split(/\s*[:—–،]\s*/)[0] ?? title;
+  const words = head
+    .split(/\s+/)
+    .map((w) => w.replace(/^[«"(]+|[.!؟»")]+$/g, ''))
+    .filter(Boolean);
+  if (/^[A-Za-z]/.test(words[0] ?? '')) return words[0];
+  return shortName(words.join(' '));
+}
+
 /** حالةُ المنصّة — أوّلَ الشريط، كحالة صاحب الحساب في إنستغرام.
  *
  *  `at` هي `published_at` **حرفيّاً** كما جاءت من القاعدة: «رُئيت» مساواةُ
@@ -48,8 +61,8 @@ export function platformStory(r: PlatformStoryRow): Story {
   return {
     id: r.id,
     name: 'المحطة التقنية',
-    // حلقتان للمنصّة لا تحملان الاسمَ نفسَه: البارزُ من العنوان («العبوات»، «دوري»).
-    short: shortName(r.title),
+    // حلقاتُ المنصّة لا تحمل الاسمَ نفسَه: البارزُ من العنوان («العبوات»، «دوري»، «CarPlay»).
+    short: platformShort(r.title),
     slug: null,
     city: '',
     products: [],

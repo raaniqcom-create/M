@@ -64,7 +64,8 @@ export function StoryViewer({
     markSeen(story.id, story.at);
     setViews(null);
     let counting = true;
-    recordView(story.id, story.at, fresh).then((n) => counting && setViews(n));
+    // المعاينةُ (id = preview) لا تُحصى ولا تُقرأ — ليست حالةً منشورة.
+    if (story.id !== 'preview') recordView(story.id, story.at, fresh).then((n) => counting && setViews(n));
     setDrawn(false);
     if (story.kind === 'platform') {
       setDrawn(true);

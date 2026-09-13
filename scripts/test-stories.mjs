@@ -3,7 +3,7 @@
 // القاعدةُ قاعدةُ `isOffered`: متوفّرٌ أُكّد خلال ٢٤ ساعة، لم يمرّ موعدُ نفاده،
 // والمحطةُ مفتوحة. والتصفيةُ باهتمامات القارئ: مدنُه ومنتجاتُه، والفارغُ الكلّ.
 import assert from 'node:assert/strict';
-import { shortName, storiesFor as allStories } from '../lib/stories.ts';
+import { platformShort, shortName, storiesFor as allStories } from '../lib/stories.ts';
 
 // قصّةُ المنصّة أوّلَ الشريط دائماً — تُفصل عن قصص المحطات في الفحوص.
 const storiesFor = (stations, choice) => allStories(stations, choice).filter((s) => s.kind !== 'platform');
@@ -122,6 +122,13 @@ ok('خبرُ الإدارة عن محطةٍ غير مسجّلة قصّةٌ حم�
   assert.equal(only([ann({})], { cities: ['الفلوجة'], products: ['kerosene'] }).length, 1);
   assert.equal(only([ann({ station_id: 'x' })], null).length, 0);
   assert.equal(only([ann({ admin_verdict: 'gone' })], null).length, 0);
+});
+
+ok('اسمُ حلقة المنصّة من عنوانها', () => {
+  assert.equal(platformShort('تعبئة العبوات البلاستيكية: أين؟'), 'العبوات');
+  assert.equal(platformShort('دوري — الفرديّ والزوجيّ'), 'دوري');
+  assert.equal(platformShort('CarPlay — المحطة التقنية على شاشة سيارتك'), 'CarPlay');
+  assert.equal(platformShort('الآيفون: حدّث التطبيق — 3 ميغا فقط'), 'الآيفون');
 });
 
 ok('حالاتُ المنصّة من القاعدة أوّلاً ولو بلا محطات — ولا شيءَ بلا صفوف', () => {
