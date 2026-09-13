@@ -48,7 +48,8 @@ export function platformStory(r: PlatformStoryRow): Story {
   return {
     id: r.id,
     name: 'المحطة التقنية',
-    short: 'جديد المحطة',
+    // حلقتان للمنصّة لا تحملان الاسمَ نفسَه: البارزُ من العنوان («العبوات»، «دوري»).
+    short: shortName(r.title),
     slug: null,
     city: '',
     products: [],

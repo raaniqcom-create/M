@@ -158,10 +158,13 @@ export function SubscribersPanel({ onRead }: { onRead?: () => void }) {
                 سبب التسجيل: <b>{r.why}</b>
                 {r.city && ` · ${r.city}`}
               </p>
-              <p className="mt-0.5 text-[10.5px] text-slate-400">
-                انضمّ {ageLabel(r.since)}
-                {r.last_seen && ` · آخر ظهور ${ageLabel(r.last_seen)}`}
-              </p>
+              {(r.since || r.last_seen) && (
+                <p className="mt-0.5 text-[10.5px] text-slate-400">
+                  {r.since && `انضمّ ${ageLabel(r.since)}`}
+                  {r.since && r.last_seen && ' · '}
+                  {r.last_seen && `آخر ظهور ${ageLabel(r.last_seen)}`}
+                </p>
+              )}
               <div className="mt-2 flex gap-2">
                 <button type="button" onClick={() => setOpen(r)} className="btn-ghost flex-1 py-1.5 text-xs">
                   تواصل
