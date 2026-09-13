@@ -14,10 +14,13 @@ import {
 import { useSession } from '@/lib/useSession';
 import { useNativeApp } from '@/lib/useNativeApp';
 import { shareApp } from '@/lib/shareApp';
+import { RATION } from '@/lib/ration';
+import { CANS } from '@/lib/cans';
 import {
   BellRingIcon,
   CalendarIcon,
   CanIcon,
+  CarIcon,
   DownloadIcon,
   FuelIcon,
   InfoIcon,
@@ -182,7 +185,134 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                 اختر مدينتك ونوع وقودك — بلا حساب
               </p>
 
-              <Label>اختياراتي</Label>
+              {/* ── قراراتُ التوزيع: ما استُحدث لأجلها أوّلاً ─────────────────
+                  «القائمةُ الجانبية تحتاج إلى إعادة تنظيم، خاصّةً المميّزات
+                  الجديدة» — صاحبُ المنصّة. الفرديُّ والزوجيّ ومنعُ العبوات قراران
+                  مؤقّتان يسأل عنهما الناسُ الآن، فقسمُهما أوّلُ القائمة، ويختفي
+                  كلٌّ منهما بإطفاء رايته (RATION.active / CANS.active). */}
+              {(RATION.active || CANS.active) && (
+                <>
+                  <Label>قرارات التوزيع</Label>
+                  {RATION.active && (
+                    <Item
+                      href="/dori"
+                      icon={CarIcon}
+                      title="اعرف دورك — الفرديّ والزوجيّ"
+                      note="أدخل رقم سيارتك: دورك، والمحطات التي يصلها البنزين"
+                      accent
+                    />
+                  )}
+                  {CANS.active && (
+                    <Item
+                      href="/abwat"
+                      icon={CanIcon}
+                      title="العبوات البلاستيكية"
+                      note="أين تعبّئ عبوتك بعد قرار المنع — للدرّاجات والمولّدات"
+                      accent
+                    />
+                  )}
+                </>
+              )}
+
+              <Label>المحطات</Label>
+
+              {/* **للإدارة وحدها حتى يُعلَن.**
+                  كان مفتاحاً في التخزين المحلّي يُشغّله من يعرفه — وأيُّ زائرٍ
+                  يفتح أدوات المتصفّح يعرفه. والمالك أراده مخفيّاً عن الجميع،
+                  فصار على الدور نفسِه الذي يحرس لوحة الإدارة.
+                  و`ready` شرط: قراءةُ الدور جولتان على الشبكة، وبدونه يومض
+                  البندُ للجميع ثمّ يختفي. */}
+              {ready && role === 'admin' && (
+                <Item
+                  href="/road"
+                  icon={MapIcon}
+                  title="مساعد الطريق"
+                  note="محطات طريقك بين المدن — وأين لا محطة"
+                  accent
+                />
+              )}
+
+              {/* «غداً» قبل «الآن» في هذا القسم عمداً: من يفتح القائمةَ مساءً
+                  يسأل عن الغد، ومن يسأل عن الآن يراه في الصفحة أمامه بلا
+                  قائمة. ويُعرض دائماً — الجدولُ يمتلئ كلَّ مساء، فليس بنداً
+                  فارغاً دائماً، والصفحةُ تقول «لا جدولَ بعد» بصدق. */}
+              <Item
+                href="/schedule"
+                icon={CalendarIcon}
+                title={boardDay === baghdadDate() ? 'محطات اليوم' : 'محطات غداً'}
+                note="أين يصل الوقود — قبل أن يصل"
+                accent
+              />
+
+              <Row
+                icon={FuelIcon}
+                title="المحطات المتاحة الآن"
+                note="المفتوحة والمتوفر بها وقود"
+                accent
+                onClick={() => {
+                  onAvailableOnly?.();
+                  setOpen(false);
+                }}
+              />
+
+              <Label>حسابي</Label>
+
+              {/* Nothing renders until the session is known — offering "sign in"
+                  to someone already signed in is the fastest way to make a
+                  returning user feel lost. */}
+              {/* قبل «لوحة محطتي»: الرايةُ تُقرأ قبل الدور لأن موظّف الفرع
+                  دورُه `owner` أيضاً — ولو رُتّبا بالعكس لَقُدّم إليه بندُ محطةٍ
+                  لا يملكها. والمديرُ أوّلاً على كلٍّ، فله البندان في لوحته. */}
+              {ready &&
+                (signedIn ? (
+                  role === 'admin' ? (
+                    <Item
+                      href="/admin"
+                      icon={ShieldIcon}
+                      title="لوحة التحكم"
+                      note="المحطات والطلبات والإحصائيات"
+                      accent
+                    />
+                  ) : branch ? (
+                    <Item
+                      href="/branch"
+                      icon={ShieldIcon}
+                      title="لوحة الفرع"
+                      note="حالة التوفر في عموم الأنبار — لحظة بلحظة"
+                      accent
+                    />
+                  ) : (
+                    <Item
+                      href="/owner"
+                      icon={StoreIcon}
+                      title="لوحة محطتي"
+                      note="تحديث التوفر والمنشورات"
+                      accent
+                    />
+                  )
+                ) : (
+                  <>
+                    <Item
+                      href="/login"
+                      icon={UserIcon}
+                      title="الدخول إلى حسابي"
+                      note="لأصحاب المحطات وإدارة المنصة"
+                      accent
+                    />
+                    {/* Still here, still free, still one tap — but under
+                        «حسابي» where an owner looks, instead of at the top
+                        where everyone trips over it. And phrased as a question
+                        so the first word sorts the reader. */}
+                    <Item
+                      href="/register"
+                      icon={PlusIcon}
+                      title="صاحب محطة؟ سجّلها مجاناً"
+                      note="لعرض توفّر الوقود لديك للناس"
+                    />
+                  </>
+                ))}
+
+              <Label>الإعدادات</Label>
 
               <div className="rounded-xl border border-slate-200 p-3">
                 <div className="flex items-center justify-between">
@@ -251,113 +381,6 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                 </button>
               </div>
 
-              <Label>المحطات</Label>
-
-              {/* **للإدارة وحدها حتى يُعلَن.**
-                  كان مفتاحاً في التخزين المحلّي يُشغّله من يعرفه — وأيُّ زائرٍ
-                  يفتح أدوات المتصفّح يعرفه. والمالك أراده مخفيّاً عن الجميع،
-                  فصار على الدور نفسِه الذي يحرس لوحة الإدارة.
-                  و`ready` شرط: قراءةُ الدور جولتان على الشبكة، وبدونه يومض
-                  البندُ للجميع ثمّ يختفي. */}
-              {ready && role === 'admin' && (
-                <Item
-                  href="/road"
-                  icon={MapIcon}
-                  title="مساعد الطريق"
-                  note="محطات طريقك بين المدن — وأين لا محطة"
-                  accent
-                />
-              )}
-
-              {/* «غداً» قبل «الآن» في هذا القسم عمداً: من يفتح القائمةَ مساءً
-                  يسأل عن الغد، ومن يسأل عن الآن يراه في الصفحة أمامه بلا
-                  قائمة. ويُعرض دائماً — الجدولُ يمتلئ كلَّ مساء، فليس بنداً
-                  فارغاً دائماً، والصفحةُ تقول «لا جدولَ بعد» بصدق. */}
-              <Item
-                href="/schedule"
-                icon={CalendarIcon}
-                title={boardDay === baghdadDate() ? 'محطات اليوم' : 'محطات غداً'}
-                note="أين يصل الوقود — قبل أن يصل"
-                accent
-              />
-
-              <Row
-                icon={FuelIcon}
-                title="المحطات المتاحة الآن"
-                note="المفتوحة والمتوفر بها وقود"
-                accent
-                onClick={() => {
-                  onAvailableOnly?.();
-                  setOpen(false);
-                }}
-              />
-
-              {/* لا يهمّ الجميع — فبابُه هنا لا في الرئيسية: «هل نجعلها بالقائمة
-                  الجانبية؟» — صاحبُ المنصّة. اعتمدها للجميع ١٣ أيلول ٢٠٢٦. */}
-              <Item
-                href="/abwat"
-                icon={CanIcon}
-                title="العبوات البلاستيكية"
-                note="أين تعبّئ عبوتك بعد قرار المنع — للدرّاجات والمولّدات"
-                accent
-              />
-
-              <Label>حسابي</Label>
-
-              {/* Nothing renders until the session is known — offering "sign in"
-                  to someone already signed in is the fastest way to make a
-                  returning user feel lost. */}
-              {/* قبل «لوحة محطتي»: الرايةُ تُقرأ قبل الدور لأن موظّف الفرع
-                  دورُه `owner` أيضاً — ولو رُتّبا بالعكس لَقُدّم إليه بندُ محطةٍ
-                  لا يملكها. والمديرُ أوّلاً على كلٍّ، فله البندان في لوحته. */}
-              {ready &&
-                (signedIn ? (
-                  role === 'admin' ? (
-                    <Item
-                      href="/admin"
-                      icon={ShieldIcon}
-                      title="لوحة التحكم"
-                      note="المحطات والطلبات والإحصائيات"
-                      accent
-                    />
-                  ) : branch ? (
-                    <Item
-                      href="/branch"
-                      icon={ShieldIcon}
-                      title="لوحة الفرع"
-                      note="حالة التوفر في عموم الأنبار — لحظة بلحظة"
-                      accent
-                    />
-                  ) : (
-                    <Item
-                      href="/owner"
-                      icon={StoreIcon}
-                      title="لوحة محطتي"
-                      note="تحديث التوفر والمنشورات"
-                      accent
-                    />
-                  )
-                ) : (
-                  <>
-                    <Item
-                      href="/login"
-                      icon={UserIcon}
-                      title="الدخول إلى حسابي"
-                      note="لأصحاب المحطات وإدارة المنصة"
-                      accent
-                    />
-                    {/* Still here, still free, still one tap — but under
-                        «حسابي» where an owner looks, instead of at the top
-                        where everyone trips over it. And phrased as a question
-                        so the first word sorts the reader. */}
-                    <Item
-                      href="/register"
-                      icon={PlusIcon}
-                      title="صاحب محطة؟ سجّلها مجاناً"
-                      note="لعرض توفّر الوقود لديك للناس"
-                    />
-                  </>
-                ))}
 
               <Label>التطبيق</Label>
 
