@@ -97,10 +97,13 @@ export function BottomDock({
   );
 }
 
-function Tab({
+/** زرُّ الشريط — يُستعمل هنا وفي شريط لوحة الإدارة (`DockTab`). `href` يرسمه
+ *  رابطاً (لوحةُ الفرع، شاهد كمواطن) بدل زرٍّ يبدّل تبويباً. */
+export function Tab({
   label,
   children,
   onClick,
+  href,
   active = false,
   badge,
   muted = false,
@@ -108,22 +111,19 @@ function Tab({
 }: {
   label: string;
   children: React.ReactNode;
-  onClick: () => void;
+  onClick?: () => void;
+  href?: string;
   active?: boolean;
   badge?: number;
   muted?: boolean;
   /** الزرّ الأوسط: قرصٌ أخضر مرفوع، لا أيقونةٌ رمادية كأخواتها. */
   hero?: boolean;
 }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`relative flex min-h-[52px] flex-col items-center justify-end gap-1 px-0.5 pb-2 transition-colors ${hero ? 'pt-2' : 'pt-2'} ${
-        hero ? 'text-brand-700' : active ? 'text-brand' : 'text-slate-500'
-      }`}
-    >
+  const cls = `relative flex min-h-[52px] flex-col items-center justify-end gap-1 px-0.5 pb-2 pt-2 transition-colors ${
+    hero ? 'text-brand-700' : active ? 'text-brand' : 'text-slate-500'
+  }`;
+  const inner = (
+    <>
       {active && !hero && (
         <span className="absolute inset-x-[22%] top-0 h-[2.5px] rounded-b-[3px] bg-brand" />
       )}
@@ -149,6 +149,19 @@ function Tab({
       >
         {label}
       </span>
+    </>
+  );
+  if (href) {
+    return (
+      <a href={href} className={cls}>
+        {inner}
+      </a>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} aria-pressed={active} className={cls}>
+      {inner}
     </button>
   );
 }
+export { Tab as DockTab };

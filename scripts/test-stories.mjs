@@ -124,11 +124,14 @@ ok('خبرُ الإدارة عن محطةٍ غير مسجّلة قصّةٌ حم�
   assert.equal(only([ann({ admin_verdict: 'gone' })], null).length, 0);
 });
 
-ok('قصّةُ المنصّة أوّلاً ولو بلا محطات', () => {
-  const s = allStories([], null);
+ok('حالاتُ المنصّة من القاعدة أوّلاً ولو بلا محطات — ولا شيءَ بلا صفوف', () => {
+  const row = { id: 'p1', title: 'ت', lines: ['أ'], image_url: null, href: '/abwat', label: 'x', published_at: ago(1) };
+  const s = allStories([], null, [], [row]);
   assert.equal(s.length, 1);
   assert.equal(s[0].kind, 'platform');
+  assert.equal(s[0].at, row.published_at);
   assert.ok(s[0].news.href);
+  assert.equal(allStories([], null).length, 0);
 });
 
 console.log(`\n✔ ${n} تحقّقاً — القصّةُ اشتقاقٌ من isOffered، والاهتماماتُ ترشّح.`);

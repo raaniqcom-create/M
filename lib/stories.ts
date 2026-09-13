@@ -1,6 +1,5 @@
 import type { AlertChoice } from './alerts.ts';
 import type { OpenAnnouncement } from './announcements.ts';
-import { NEWS } from './news.ts';
 import { isOffered } from './products.ts';
 import type { FuelProduct, StationWithStatus } from '../types/database.ts';
 
@@ -26,21 +25,36 @@ export interface Story {
    *  و`announced`: محطةٌ **غيرُ مسجّلة** أعلنت عنها الإدارةُ بإشعار — حلقتُها
    *  حمراء («أضفها إلى الحالات — غير مسجّلة وتظهر بالأحمر»). */
   kind?: 'station' | 'platform' | 'announced';
-  news?: { title: string; lines: string[]; href: string; label: string };
+  news?: { title: string; lines: string[]; image_url: string | null; href: string | null; label: string | null };
 }
 
-/** حالةُ المنصّة — أوّلَ الشريط دائماً، كحالة صاحب الحساب في إنستغرام. */
-export function platformStory(): Story {
+/** صفُّ `platform_stories` — تكتبه الإدارةُ من «الحالات» وتقرؤه الرئيسيةُ (RLS: النشطُ المنشور). */
+export interface PlatformStoryRow {
+  id: string;
+  title: string;
+  lines: string[];
+  image_url: string | null;
+  href: string | null;
+  label: string | null;
+  published_at: string;
+}
+
+/** حالةُ المنصّة — أوّلَ الشريط، كحالة صاحب الحساب في إنستغرام.
+ *
+ *  `at` هي `published_at` **حرفيّاً** كما جاءت من القاعدة: «رُئيت» مساواةُ
+ *  نصّ، وعدّادُ المشاهدات مفتاحُه هذا النصّ — فإعادةُ النشر (published_at جديدة)
+ *  تعيد الحلقةَ خضراء وتبدأ عدّاداً جديداً. */
+export function platformStory(r: PlatformStoryRow): Story {
   return {
-    id: NEWS.id,
+    id: r.id,
     name: 'المحطة التقنية',
     short: 'جديد المحطة',
     slug: null,
     city: '',
     products: [],
-    at: NEWS.at,
+    at: r.published_at,
     kind: 'platform',
-    news: { title: NEWS.title, lines: NEWS.lines, href: NEWS.href, label: NEWS.label },
+    news: { title: r.title, lines: r.lines, image_url: r.image_url, href: r.href, label: r.label },
   };
 }
 
@@ -63,7 +77,9 @@ export function storiesFor(
   stations: StationWithStatus[],
   choice: AlertChoice | null,
   /** أخبارُ اللوحة الحمراء — ما ليس مسجّلاً ولم تقل الإدارةُ إنّه انتهى. */
-  announced: OpenAnnouncement[] = []
+  announced: OpenAnnouncement[] = [],
+  /** حالاتُ المنصّة من القاعدة — الأحدثُ أوّلاً كما جاءت. */
+  platform: PlatformStoryRow[] = []
 ): Story[] {
   const cities = new Set(choice?.cities ?? []);
   const wanted = new Set<FuelProduct>(choice?.products ?? []);
@@ -112,7 +128,7 @@ export function storiesFor(
     const sb = isSeen(b.id, b.at) ? 1 : 0;
     return sa - sb || b.at.localeCompare(a.at);
   });
-  return [platformStory(), ...out];
+  return [...platform.map(platformStory), ...out];
 }
 
 export const SEEN = 'story-seen:';

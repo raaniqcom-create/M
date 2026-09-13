@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { FuelIcon } from './icons';
 import { StoryViewer } from './StoryViewer';
 import { ageLabel } from '@/lib/hours';
-import { isSeen, storiesFor } from '@/lib/stories';
+import { isSeen, storiesFor, type PlatformStoryRow } from '@/lib/stories';
+import { supabase } from '@/lib/supabase';
 import type { AlertChoice } from '@/lib/alerts';
 import type { OpenAnnouncement } from '@/lib/announcements';
 import type { StationWithStatus } from '@/types/database';
@@ -19,21 +20,32 @@ export function StoryStrip({
   stations,
   choice,
   announced = [],
-  withNews = true,
 }: {
   stations: StationWithStatus[];
   choice: AlertChoice | null;
   /** أخبارُ المحطات غير المسجّلة — حلقاتٌ حمراء بين الخضراء. */
   announced?: OpenAnnouncement[];
-  /** قصّةُ «جديد المحطة» أوّلَ الشريط — تُحجب في المعاينة عن غير الإدارة. */
-  withNews?: boolean;
 }) {
   const [open, setOpen] = useState<number | null>(null);
+  // حالاتُ المنصّة من القاعدة — تكتبها الإدارةُ من «الحالات» بلا بناء.
+  const [platform, setPlatform] = useState<PlatformStoryRow[]>([]);
+  useEffect(() => {
+    let alive = true;
+    supabase
+      .from('platform_stories')
+      .select('id, title, lines, image_url, href, label, published_at')
+      .order('published_at', { ascending: false })
+      .limit(5)
+      .then(({ data }) => alive && data && setPlatform(data as PlatformStoryRow[]));
+    return () => {
+      alive = false;
+    };
+  }, []);
   // «رُئيت» تُقرأ من localStorage — فتُعاد الحسبةُ بعد الإغلاق لتصير الحلقةُ رماديّة.
   const [tick, setTick] = useState(0);
   const stories = useMemo(
-    () => storiesFor(stations, choice, announced).filter((s) => withNews || s.kind !== 'platform'),
-    [stations, choice, announced, withNews, tick] // eslint-disable-line react-hooks/exhaustive-deps
+    () => storiesFor(stations, choice, announced, platform),
+    [stations, choice, announced, platform, tick] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   useEffect(() => {
@@ -68,7 +80,7 @@ export function StoryStrip({
                 <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-white bg-white">
                   {s.kind === 'platform' ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src="/icons/icon-192.png" alt="" width={48} height={48} className={`h-full w-full ${seen ? 'opacity-60 grayscale' : ''}`} />
+                    <img src={s.news?.image_url || '/icons/icon-192.png'} alt="" width={48} height={48} className={`h-full w-full object-cover ${seen ? 'opacity-60 grayscale' : ''}`} />
                   ) : (
                     <FuelIcon className={`h-6 w-6 ${seen ? 'text-slate-400' : red ? 'text-traffic-red' : 'text-brand'}`} />
                   )}

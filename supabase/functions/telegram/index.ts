@@ -3043,8 +3043,18 @@ Deno.serve(async (req) => {
     const who = update.message?.from ?? update.callback_query?.from;
     const where = update.message?.chat?.id ?? update.callback_query?.message?.chat?.id;
     if (who?.id && where) {
+      // والاسمُ والمعرّفُ معه: «المشتركون+» في لوحة الإدارة تعرضهما.
       db.from('telegram_users')
-        .upsert({ telegram_id: who.id, chat_id: where }, { onConflict: 'telegram_id' })
+        .upsert(
+          {
+            telegram_id: who.id,
+            chat_id: where,
+            username: who.username ?? null,
+            first_name: who.first_name ?? null,
+            last_seen: new Date().toISOString(),
+          },
+          { onConflict: 'telegram_id' }
+        )
         .then(() => {})
         .catch(() => {});
     }
@@ -3291,6 +3301,20 @@ Deno.serve(async (req) => {
       }).then((r) => r.json())
         .then((j) => j.ok && call('deleteMessage', { chat_id: chat, message_id: j.result.message_id }))
         .catch(() => {});
+      return new Response('ok');
+    }
+
+    // ردٌّ على رسالةِ الإدارة («📩 …» من broadcast?action=dm) يُحفظ محادثةً
+    // في «المشتركون+» — قبل المسوّدة والبحث كي لا يُقرأ اسمَ محطة.
+    const repliedTo = msg.reply_to_message;
+    if (text && repliedTo?.from?.is_bot && String(repliedTo.text ?? '').startsWith('📩')) {
+      await db.from('subscriber_messages').insert({
+        channel: 'telegram',
+        address: String(chat),
+        sender: 'user',
+        body: text.slice(0, 2000),
+      });
+      await send(chat, '✅ وصلت رسالتك إلى الإدارة.');
       return new Response('ok');
     }
 

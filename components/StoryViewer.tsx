@@ -122,15 +122,21 @@ export function StoryViewer({
       <div className="absolute inset-0">
         {story.kind === 'platform' && story.news ? (
           <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-b from-brand-900 via-brand-700 to-brand px-7 text-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icons/icon-192.png" alt="" width={72} height={72} className="rounded-[18px] shadow-[0_10px_26px_rgba(0,0,0,.35)]" />
+            {/* صورةٌ برابطٍ من الإدارة، أو شعارُ المحطة — «صورة عبر رابط أو شعار المحطة». */}
+            {story.news.image_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={story.news.image_url} alt="" className="max-h-[38vh] w-auto max-w-[84%] rounded-2xl object-contain shadow-[0_10px_26px_rgba(0,0,0,.35)]" />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src="/icons/icon-192.png" alt="" width={72} height={72} className="rounded-[18px] shadow-[0_10px_26px_rgba(0,0,0,.35)]" />
+            )}
             <span className="mt-5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold tracking-wide">
               جديدٌ في المحطة التقنية
             </span>
             <h2 className="mt-3 text-[26px] font-extrabold leading-tight">{story.news.title}</h2>
             <ul className="mt-5 space-y-3 text-[14px] leading-relaxed text-white/90">
-              {story.news.lines.map((l) => (
-                <li key={l}>{l}</li>
+              {story.news.lines.map((l, k) => (
+                <li key={k}>{l}</li>
               ))}
             </ul>
           </div>
@@ -216,12 +222,14 @@ export function StoryViewer({
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 14px)' }}
       >
         {story.kind === 'platform' && story.news ? (
-          <a
-            href={story.news.href}
-            className="flex min-h-[40px] flex-1 items-center justify-center rounded-xl bg-white text-[13px] font-extrabold text-brand-900"
-          >
-            {story.news.label}
-          </a>
+          story.news.href && story.news.label ? (
+            <a
+              href={story.news.href}
+              className="flex min-h-[40px] flex-1 items-center justify-center rounded-xl bg-white text-[13px] font-extrabold text-brand-900"
+            >
+              {story.news.label}
+            </a>
+          ) : null
         ) : (
           <>
             {station && (

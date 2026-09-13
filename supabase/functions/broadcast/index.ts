@@ -55,7 +55,78 @@ Deno.serve(async (req) => {
     // يُنفَّذ من سطر الأوامر، لا من لوحةٍ يفتحها أحد كلَّ يوم.
     const internal = req.headers.get('x-cron-secret') === Deno.env.get('CRON_SECRET');
     if (!internal && !(await isAdmin(req))) return json({ error: 'غير مصرّح' }, 403);
-    const { action, message, city, senderId, test } = await req.json();
+    const { action, message, city, senderId, test, id } = await req.json();
+
+    // ── رسالةٌ واحدة لمشتركٍ واحد — «التواصل داخليّاً» من «المشتركون+» ──
+    //
+    // الصفُّ كتبته الإدارةُ في subscriber_messages (RLS تضمن sender='admin')؛
+    // هنا يُرسَل بقناته ويُختم delivered_at أو error — فاللوحةُ تقول «✓ وصلت»
+    // أو «✗ لم تصل — السبب» عن الرسالة نفسِها لا عن الطلب.
+    if (action === 'dm') {
+      const { data: m } = await db
+        .from('subscriber_messages')
+        .select('id, channel, address, sender, body, delivered_at')
+        .eq('id', String(id ?? ''))
+        .maybeSingle();
+      if (!m || m.sender !== 'admin') return json({ error: 'رسالة غير موجودة' }, 400);
+      if (m.delivered_at) return json({ ok: true, error: null });
+
+      let err: string | null = null;
+      try {
+        if (m.channel === 'telegram') {
+          const r = await fetch(`https://api.telegram.org/bot${Deno.env.get('TELEGRAM_BOT_TOKEN')}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: Number(m.address),
+              // بلا parse_mode: نصُّ الإدارة يُرسل كما كُتب، لا يُهرَّب شيء.
+              text: `📩 رسالة من إدارة المحطة التقنية:\n\n${m.body}\n\nللردّ اضغط «ردّ» على هذه الرسالة.`,
+              disable_web_page_preview: true,
+            }),
+          });
+          if (!r.ok) err = `تيليجرام ${r.status}: ${(await r.text()).slice(0, 120)}`;
+        } else if (m.channel === 'whatsapp') {
+          const r = await fetch(`https://graph.facebook.com/v25.0/${Deno.env.get('WHATSAPP_PHONE_ID')}/messages`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${Deno.env.get('WHATSAPP_TOKEN')}`,
+              'Content-Type': 'application/json; charset=utf-8',
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              to: m.address,
+              type: 'text',
+              text: { body: `📩 رسالة من إدارة المحطة التقنية:\n\n${m.body}`, preview_url: false },
+            }),
+          });
+          if (r.status === 400) err = 'خارج نافذة ٢٤ ساعة — لم يراسل البوت مؤخّراً';
+          else if (!r.ok) err = `واتساب ${r.status}`;
+        } else {
+          if (!OTPIQ_SENDER) err = 'OTPIQ_SENDER_ID غير مضبوط';
+          else {
+            const r = await fetch('https://api.otpiq.com/api/sms', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${OTPIQ_KEY}`, 'Content-Type': 'application/json; charset=utf-8' },
+              body: JSON.stringify({
+                smsType: 'custom',
+                senderId: OTPIQ_SENDER,
+                phoneNumber: `964${m.address}`,
+                customMessage: m.body.slice(0, 300),
+                provider: 'auto',
+              }),
+            });
+            if (!r.ok) err = `رسائل ${r.status}`;
+          }
+        }
+      } catch (e) {
+        err = String(e).slice(0, 120);
+      }
+      await db
+        .from('subscriber_messages')
+        .update(err ? { error: err } : { delivered_at: new Date().toISOString() })
+        .eq('id', m.id);
+      return json({ ok: !err, error: err });
+    }
 
     const { data: subs } = await audience(city);
     const list = subs ?? [];

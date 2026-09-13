@@ -11,6 +11,7 @@ import {
   CheckIcon,
   EyeIcon,
   ImageIcon,
+  InfoIcon,
   ListIcon,
   LogOutIcon,
   MapPinIcon,
@@ -22,6 +23,7 @@ import {
   SpinnerIcon,
   StarIcon,
   StoreIcon,
+  UserIcon,
   WhatsappIcon,
   XIcon,
 } from '@/components/icons';
@@ -45,6 +47,9 @@ import { StationAnnouncePanel } from '@/components/StationAnnouncePanel';
 import { UnregisteredAdmin } from '@/components/UnregisteredAdmin';
 import { PlatformNotice } from '@/components/PlatformNotice';
 import { PendingAnnouncements } from '@/components/PendingAnnouncements';
+import { SubscribersPanel } from '@/components/SubscribersPanel';
+import { StoriesAdmin } from '@/components/StoriesAdmin';
+import { DockTab } from '@/components/BottomDock';
 import { findSimilar } from '@/lib/similar';
 import { announceStation, rebuildSite } from '@/lib/rebuild';
 import { KIND_LABELS, KIND_STYLES } from '@/lib/stationMeta';
@@ -79,6 +84,8 @@ export default function AdminPage() {
     | 'offers'
     | 'reviews'
     | 'schedule'
+    | 'subscribers'
+    | 'stories'
   >('stations');
   const [q, setQ] = useState('');
   /** تصفيةُ المحطات بمدينةٍ واحدة — فارغةٌ = الكلّ. */
@@ -92,6 +99,13 @@ export default function AdminPage() {
   /** ما ردّ به أصحابُ المحطات ولم تقرأه الإدارة — من منظور station_unread */
   const [unread, setUnread] = useState<Map<string, number>>(new Map());
   const totalUnread = [...unread.values()].reduce((a, b) => a + b, 0);
+  /** ردودُ المشتركين (تيليجرام) التي لم تُقرأ — شارةُ «المشتركون+». */
+  const [subUnread, setSubUnread] = useState(0);
+  /** تبديلُ التبويب من الشريط السفليّ — ويصعد إلى الأعلى كـ«‹ الرئيسية». */
+  const go = (t: typeof tab) => {
+    setTab(t);
+    window.scrollTo(0, 0);
+  };
 
   const load = useCallback(async () => {
     const [{ data: st }, { data: ap }, { data: ad }, { data: un }] = await Promise.all([
@@ -108,6 +122,12 @@ export default function AdminPage() {
       // منفصلة تُبنى حين تكفّ القائمةُ عن الاتّساع في شاشة.
       supabase.from('station_unread').select('station_id, unread'),
     ]);
+    supabase
+      .from('subscriber_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('sender', 'user')
+      .is('read_at', null)
+      .then(({ count }) => setSubUnread(count ?? 0));
     setPending(st ?? []);
     setLive(ap ?? []);
     setAds(ad ?? []);
@@ -337,7 +357,7 @@ export default function AdminPage() {
   }
 
   return (
-    <main className="mx-auto max-w-md px-4 pb-16 pt-6">
+    <main className="mx-auto max-w-md px-4 pt-6" style={{ paddingBottom: 'calc(5rem + env(safe-area-inset-bottom))' }}>
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-extrabold text-brand">لوحة الإدارة</h1>
@@ -411,6 +431,8 @@ export default function AdminPage() {
             items={[
               { key: 'requests', label: 'الطلبات', icon: ListIcon, badge: pending.length, tone: pending.length ? 'red' : undefined, onClick: () => setTab('requests') },
               { key: 'messages', label: 'الرسائل', icon: MessageIcon, badge: totalUnread, onClick: () => setTab('messages') },
+              { key: 'subscribers', label: 'المشتركون+', icon: UserIcon, badge: subUnread, tone: subUnread ? 'red' : undefined, onClick: () => setTab('subscribers') },
+              { key: 'stories', label: 'الحالات', icon: InfoIcon, onClick: () => setTab('stories') },
               { key: 'add', label: 'إضافة محطة', icon: PlusIcon, onClick: () => setTab('add') },
               { key: 'announce', label: 'الإشعارات', icon: BellRingIcon, onClick: () => setTab('announce') },
               { key: 'schedule', label: 'جدول الوقود', icon: CalendarIcon, onClick: () => setTab('schedule') },
@@ -743,6 +765,16 @@ export default function AdminPage() {
       )}
 
       {tab === 'offers' && <BroadcastPanel />}
+      {tab === 'subscribers' && (
+        <div className="mt-4">
+          <SubscribersPanel onRead={load} />
+        </div>
+      )}
+      {tab === 'stories' && (
+        <div className="mt-4">
+          <StoriesAdmin />
+        </div>
+      )}
       {tab === 'stations' && <DeletedStations />}
 
       {tab === 'messages' && <AdminThreads />}
@@ -826,6 +858,32 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* أزرارٌ ثابتةٌ سفلية — «الطلبات | جدول الوقود | لوحة الفرع | الإشعارات |
+          شاهد كمواطن» بترتيب صاحب المنصّة؛ شكلُ شريط الرئيسية نفسُه. */}
+      <nav
+        aria-label="أقسام سريعة"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white shadow-[0_-4px_20px_rgba(0,0,0,.07)]"
+      >
+        <div className="mx-auto grid max-w-md grid-cols-5">
+          <DockTab label="الطلبات" active={tab === 'requests'} badge={pending.length} onClick={() => go('requests')}>
+            <ListIcon className="h-5 w-5" />
+          </DockTab>
+          <DockTab label="جدول الوقود" active={tab === 'schedule'} onClick={() => go('schedule')}>
+            <CalendarIcon className="h-5 w-5" />
+          </DockTab>
+          <DockTab label="لوحة الفرع" href="/branch" hero>
+            <MapPinIcon className="h-6 w-6" />
+          </DockTab>
+          <DockTab label="الإشعارات" active={tab === 'announce'} onClick={() => go('announce')}>
+            <BellRingIcon className="h-5 w-5" />
+          </DockTab>
+          <DockTab label="شاهد كمواطن" href="/?view=user">
+            <EyeIcon className="h-5 w-5" />
+          </DockTab>
+        </div>
+        <div style={{ height: 'env(safe-area-inset-bottom)' }} />
+      </nav>
     </main>
   );
 }
