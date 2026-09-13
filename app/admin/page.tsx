@@ -194,13 +194,11 @@ export default function AdminPage() {
     setPending((prev) => prev.filter((s) => s.id !== id));
     // الخطأُ كان يُبتلع: تُزال المحطةُ من القائمة ثمّ تعود بعد الجلب — «لم تتمّ
     // الموافقة!» بلا سبب. فيُقال السببُ، وتبقى في القائمة.
-    // و`select` بعد التحديث: تحديثٌ لا يطال صفّاً (حجبته سياسةٌ) يعود بلا خطأ
-    // وبلا صفوف — فيُقال ذلك بدل الصمت.
-    const { data, error } = await supabase.from('stations').update({ status }).eq('id', id).select('id');
-    if (error || !data?.length) {
-      setNotice(
-        `تعذّر ${status === 'approved' ? 'الاعتماد' : 'الرفض'}: ${error?.message ?? 'لم يُحدَّث أيّ صفّ — أعد تسجيل الدخول وحاول ثانية'}`
-      );
+    // دالّةٌ للإدارة لا تحديثٌ مباشر: التحديثُ كان يخضع لسياساتٍ في القاعدة لا
+    // يراها المستودع فيعود صفرَ صفوفٍ بصمت. والدالّةُ تُخطئ بصوت.
+    const { error } = await supabase.rpc('admin_set_station_status', { p_id: id, p_status: status });
+    if (error) {
+      setNotice(`تعذّر ${status === 'approved' ? 'الاعتماد' : 'الرفض'}: ${error.message}`);
       load();
       return;
     }

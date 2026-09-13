@@ -218,7 +218,13 @@ function Panel() {
   async function setStatus(status: StationStatus) {
     if (!station) return;
     setBusy('status');
-    await supabase.from('stations').update({ status }).eq('id', station.id);
+    // الدالّةُ نفسُها التي تعتمد من قائمة الطلبات — انظر admin_set_station_status.
+    const { error } = await supabase.rpc('admin_set_station_status', { p_id: station.id, p_status: status });
+    if (error) {
+      setPhoneNote(`تعذّر تغيير الحالة: ${error.message}`);
+      setBusy(null);
+      return;
+    }
     // A newly approved station has no page until the site is rebuilt, so the
     // announcement waits for the rebuild rather than racing it to a 404.
     if (status === 'approved') {
