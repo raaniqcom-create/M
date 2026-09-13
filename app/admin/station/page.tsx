@@ -15,6 +15,8 @@ import { WorkingHours } from '@/components/WorkingHours';
 import { ANBAR_CITIES } from '@/lib/cities';
 import { KIND_LABELS, KINDS } from '@/lib/stationMeta';
 import { announceStation, rebuildSite } from '@/lib/rebuild';
+import { callFn } from '@/lib/fn';
+import { normalizePhone } from '@/lib/phone';
 import type { FuelProduct, Station, StationProduct, StationStatus } from '@/types/database';
 
 type Complaint = {
@@ -279,6 +281,29 @@ function Panel() {
     );
   }
 
+  /** كلمةُ سرٍّ جديدة لصاحب المحطة — تُعرض مرّةً واحدة ولا تُحفظ. */
+  const [issued, setIssued] = useState<{ phone: string; password: string } | null>(null);
+  const [pwNote, setPwNote] = useState<string | null>(null);
+
+  async function resetOwnerPassword() {
+    if (!station) return;
+    if (
+      !confirm(
+        `كلمة سرّ جديدة لصاحب «${station.name}» (${station.phone})؟\n\nتُبطل كلمته الحالية فوراً. لا تفعلها إلا بطلبه هو.`
+      )
+    )
+      return;
+    setBusy('pw');
+    setPwNote(null);
+    const r = await callFn<{ phone: string; password: string }>('station-phone', {
+      action: 'password',
+      stationId: station.id,
+    });
+    setBusy(null);
+    if (!r.ok || !r.data) return setPwNote(r.error ?? 'تعذّر إصدار كلمة السرّ');
+    setIssued(r.data);
+  }
+
   async function movePhone() {
     if (!station) return;
     setBusy('phone');
@@ -532,7 +557,8 @@ function Panel() {
         <h2 className="text-sm font-bold">رقم المحطة الأساسي</h2>
         <p className="mt-1 text-xs text-slate-400">
           هذا الرقم يظهر للمستخدمين وهو اسم دخول صاحب المحطة معاً. تغييره ينقل ملكية اللوحة
-          إلى الرقم الجديد.
+          إلى الرقم الجديد. وإن كانت المحطة باسمك ورقمُها رقمُ صاحبها، اكتب الرقم نفسه لتعود
+          إلى حسابه.
         </p>
         <p className="mt-2 text-xs font-bold text-slate-600" dir="ltr">{station.phone}</p>
 
@@ -581,6 +607,71 @@ function Panel() {
             {phoneNote}
           </p>
         )}
+
+        {/* «تعديل كلمة السرّ … بسهولة» — بطلب الإدارة وحدَها؛ لا تدويرَ تلقائيّاً. */}
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <p className="text-xs font-bold text-slate-600">كلمة سرّ صاحب المحطة</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-400">
+            لمن نسي كلمته وطلبها. تُصدر كلمةٌ عشوائية تُعرض هنا مرّةً واحدة ولا تُحفظ، وتُبطل
+            القديمة فوراً — فلا تُصدرها إلا بطلبه. ويستطيع تغييرها بعد الدخول من «كلمة المرور» في لوحته.
+          </p>
+          <button
+            type="button"
+            disabled={busy === 'pw'}
+            onClick={resetOwnerPassword}
+            className="btn-ghost mt-2 w-full"
+          >
+            {busy === 'pw' ? <SpinnerIcon className="mx-auto h-5 w-5" /> : 'كلمة سرّ جديدة لصاحب المحطة'}
+          </button>
+          {pwNote && (
+            <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">{pwNote}</p>
+          )}
+          {issued &&
+            (() => {
+              const msg =
+                `المحطة التقنية — بيانات دخول «${station.name}»\n` +
+                `اسم الدخول: ${issued.phone}\n` +
+                `كلمة المرور: ${issued.password}\n` +
+                `الدخول من: https://muhta.online/login\n` +
+                `غيّرها بعد أوّل دخول من «كلمة المرور» في لوحتك.`;
+              return (
+                <div className="mt-3 rounded-xl border border-brand-100 bg-brand-50 p-4">
+                  <p className="text-xs font-bold text-brand-900">كلمة السرّ الجديدة — تُعرض مرّةً واحدة</p>
+                  <dl className="mt-2 space-y-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-[11px] text-slate-500">اسم الدخول</dt>
+                      <dd dir="ltr" className="font-mono text-sm font-bold tracking-wide text-slate-800">{issued.phone}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-[11px] text-slate-500">كلمة المرور</dt>
+                      <dd dir="ltr" className="font-mono text-sm font-bold tracking-wide text-slate-800">{issued.password}</dd>
+                    </div>
+                  </dl>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void navigator.clipboard.writeText(msg)}
+                      className="btn-ghost px-2 text-xs"
+                    >
+                      نسخ البيانات
+                    </button>
+                    <a
+                      href={`https://wa.me/964${normalizePhone(issued.phone)}?text=${encodeURIComponent(msg)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-primary px-2 text-xs"
+                    >
+                      إرسال عبر واتساب
+                    </a>
+                    <button type="button" onClick={() => setIssued(null)} className="btn-ghost px-2 text-xs">
+                      إخفاء
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[10.5px] text-slate-500">لا تُحفظ هنا. إن ضاعت فاطلب واحدة جديدة.</p>
+                </div>
+              );
+            })()}
+        </div>
       </section>
 
       <section className="card p-5">

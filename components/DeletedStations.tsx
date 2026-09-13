@@ -13,7 +13,7 @@ interface Gone {
   status: string;
   deleted_at: string;
   lost: { followers?: number; devices?: number; reviews?: number; messages?: number } | null;
-  /** حسابُ صاحبها زال بعد الأرشفة، فتعود باسم المدير المسترجِع. */
+  /** لا حسابَ لرقمها ولا لصاحبها القديم، فتعود باسم المدير المسترجِع حتى يسجّل صاحبها. */
   owner_gone?: boolean;
 }
 
@@ -47,8 +47,8 @@ export function DeletedStations() {
     const ask = g.owner_gone
       ? `استرجاع «${g.name}»؟ تعود ببياناتها ومنتجاتها ومعرّفها القديم.
 
-وصاحبُها حُذف حسابُه، فتعود باسمك أنت — ثمّ تُسلَّم إليه بربط رقمه.`
-      : `استرجاع «${g.name}»؟ تعود ببياناتها ومنتجاتها ومعرّفها القديم.`;
+ولا حسابَ لرقمها ${g.phone} بعد، فتعود باسمك حتى يسجّل صاحبها — وحين يُسجّل اكتب رقمه في صفحة المحطة لتعود إليه.`
+      : `استرجاع «${g.name}»؟ تعود ببياناتها ومنتجاتها ومعرّفها القديم — إلى حساب رقمها ${g.phone} مباشرة.`;
     if (!confirm(ask)) return;
     setBusy(g.id);
     const { error } = await supabase.rpc('restore_station', { p_id: g.id });
@@ -59,8 +59,8 @@ export function DeletedStations() {
     }
     setNote(
       g.owner_gone
-        ? `عادت «${g.name}» باسمك — صاحبُها لا حسابَ له. اربط رقمه من «تعديل محطة» ليعود إليها.`
-        : `عادت «${g.name}». حدّث الصفحة لتظهر في القائمة.`
+        ? `عادت «${g.name}» باسمك — لا حسابَ لرقمها بعد. حين يسجّل صاحبها، اكتب رقمه في صفحة المحطة لتعود إليه.`
+        : `عادت «${g.name}» إلى حساب رقمها ${g.phone}؛ يدخل بكلمته المعروفة. حدّث الصفحة لتظهر في القائمة.`
     );
     void load();
   }
@@ -104,7 +104,7 @@ export function DeletedStations() {
                   )}
                   {g.owner_gone && (
                     <p className="mt-0.5 text-[10px] font-bold text-amber-800">
-                      صاحبُها حُذف حسابُه — تعود باسمك
+                      لا حسابَ لرقمها — تعود باسمك
                     </p>
                   )}
                 </div>

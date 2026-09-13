@@ -5,6 +5,11 @@
 // username, since accounts are keyed p<digits>@muhta.app. Changing it in the
 // stations table alone would leave the station reachable on a number that
 // belongs to nobody, still signed in to by the admin. So this moves both.
+//
+// ويعيد أيضاً محطةً باسم الإدارة تحمل رقمَ صاحبها إلى حسابه (الرقمُ نفسُه —
+// كان يُرفض «هذا هو الرقم الحالي» فلا تعود أبداً)، ويُصدر كلمةَ سرٍّ جديدة
+// لصاحب المحطة بطلبٍ صريحٍ من الإدارة (`action: 'password'`) — لا تدويرَ
+// تلقائيّاً في أيّ مسار: قاعدةُ صاحب المنصّة.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { newPassword } from '../_shared/password.ts';
 
@@ -39,7 +44,28 @@ Deno.serve(async (req) => {
   try {
     if (!(await isAdmin(req))) return json({ error: 'غير مصرّح' }, 403);
 
-    const { stationId, phone } = await req.json();
+    const { stationId, phone, action } = await req.json();
+
+    // ── كلمةٌ جديدة لصاحب المحطة — بطلبه، وبيد الإدارة وحدَها ──────────────
+    if (action === 'password') {
+      const { data: st } = await db
+        .from('stations')
+        .select('id, name, phone, owner_id')
+        .eq('id', stationId)
+        .maybeSingle();
+      if (!st) return json({ error: 'المحطة غير موجودة' }, 404);
+      const { data: prof } = await db.from('profiles').select('role').eq('id', st.owner_id).maybeSingle();
+      if (prof?.role === 'admin') {
+        return json({ error: 'المحطة باسمك أنت لا باسم صاحبها — اكتب رقمه في الحقل واضغط «نقل» أوّلاً.' }, 400);
+      }
+      const { data: u } = await db.auth.admin.getUserById(st.owner_id);
+      if (!u?.user) return json({ error: 'لا حسابَ لصاحب المحطة بعد.' }, 404);
+      const fresh = newPassword();
+      const { error: pwErr } = await db.auth.admin.updateUserById(u.user.id, { password: fresh });
+      if (pwErr) return json({ error: 'تعذّر تغيير كلمة المرور' }, 500);
+      return json({ ok: true, phone: st.phone, password: fresh });
+    }
+
     const c = core(phone);
     if (!/^7\d{9}$/.test(c)) return json({ error: 'رقم غير صحيح. اكتبه هكذا: 07901234567' }, 400);
 
@@ -49,7 +75,6 @@ Deno.serve(async (req) => {
       .eq('id', stationId)
       .maybeSingle();
     if (!station) return json({ error: 'المحطة غير موجودة' }, 404);
-    if (core(station.phone) === c) return json({ error: 'هذا هو الرقم الحالي' }, 400);
 
     // Another station already publishing this number would leave drivers with
     // two entries pointing at one forecourt.
@@ -84,6 +109,11 @@ Deno.serve(async (req) => {
       ownerId = list?.users?.find((u) => u.email === email)?.id ?? null;
     }
     if (!ownerId) return json({ error: 'تعذّر تجهيز حساب الرقم الجديد' }, 500);
+    // الرقمُ نفسُه لكنّ المحطةَ باسم غيرِ حسابه (استُرجعت باسم المدير مثلاً):
+    // تُعاد إليه. ولا يُرفض إلا ما لا يغيّر شيئاً.
+    if (core(station.phone) === c && station.owner_id === ownerId) {
+      return json({ error: 'المحطة على هذا الرقم وحسابه أصلاً' }, 400);
+    }
 
     const { error } = await db
       .from('stations')
