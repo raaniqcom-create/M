@@ -77,9 +77,17 @@ export function boardDate(): string {
  *  نداءَ زائد — والحكمُ يقع على ما في اليد. */
 export function resolveBoardDay(schedule: { for_date: string }[]): string {
   const want = boardDate();
-  if (schedule.some((r) => r.for_date === want)) return want;
   const today = baghdadDate();
-  if (today !== want && schedule.some((r) => r.for_date === today)) return today;
+  // ── والأحدثُ يحلّ محلَّ القديم في أيّ ساعة ────────────────────────────
+  //
+  // «نُشر الجدولُ الجديد لكن لم يستبدل الجدولَ القديم من شاشة الدخول!» —
+  // صاحبُ المنصّة، ١٣ أيلول ١٥:٠٠. كان جدولُ الغد ينتظر التاسعة مساءً خلف
+  // جدول اليوم («لا يفاجئ نشرٌ نهاريٌّ أحداً») — وكان ترجيحاً لا قراراً.
+  // والقرار: المنشورُ آخِراً هو الجدول؛ فمتى وُجد جدولُ الغد عُرض، والعنوانُ
+  // يتبعه («محطات غداً»). ولا يُنظر أبعدَ من الغد كي لا يختطف صفٌّ بعيدٌ اللوحة.
+  const tomorrow = baghdadDate(1);
+  if (schedule.some((r) => r.for_date === tomorrow)) return tomorrow;
+  if (schedule.some((r) => r.for_date === today)) return today;
 
   // ── ولا لوحةٌ فارغةٌ ويومٌ قادمٌ مملوء ─────────────────────────────────
   //

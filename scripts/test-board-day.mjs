@@ -21,12 +21,11 @@ const TOMORROW = '2026-09-09';
 
 const boardDate = (hour) => (hour >= BOARD_FLIP_HOUR ? TOMORROW : TODAY);
 
-/** مرآةُ `resolveBoardDay` في lib/board.ts. */
+/** مرآةُ `resolveBoardDay` في lib/board.ts — الأحدثُ يحلّ محلَّ القديم. */
 const resolve = (hour, schedule) => {
-  const want = boardDate(hour);
-  if (schedule.some((r) => r.for_date === want)) return want;
-  if (TODAY !== want && schedule.some((r) => r.for_date === TODAY)) return TODAY;
-  return want;
+  if (schedule.some((r) => r.for_date === TOMORROW)) return TOMORROW;
+  if (schedule.some((r) => r.for_date === TODAY)) return TODAY;
+  return boardDate(hour);
 };
 
 const rows = (day, n) => Array.from({ length: n }, () => ({ for_date: day }));
@@ -36,11 +35,13 @@ const ok = (cond, what) => { assert.ok(cond, what); n++; };
 
 // ── ١ · الحالُ السويّة: لا يتغيّر شيء ────────────────────────────────────
 {
+  // ١٣ أيلول ١٥:٠٠: نُشر جدولُ الغد — «لم يستبدل الجدولَ القديم!». فالأحدثُ
+  // يحلّ محلَّ القديم في أيّ ساعة، والعنوانُ يتبعه.
   const both = [...rows(TODAY, 13), ...rows(TOMORROW, 20)];
-  ok(resolve(14, both) === TODAY, 'الثانيةَ ظهراً وفي اليد اليومان → اليوم');
+  ok(resolve(14, both) === TOMORROW, 'الثانيةَ ظهراً وفي اليد اليومان → الغد (المنشورُ آخِراً)');
   ok(resolve(22, both) === TOMORROW, 'العاشرةَ مساءً وفي اليد اليومان → الغد');
-  ok(resolve(20, both) === TODAY, 'الثامنةَ مساءً — قبل الانقلاب بساعة → اليوم');
-  ok(resolve(21, both) === TOMORROW, 'التاسعةَ تماماً → ينقلب');
+  ok(resolve(20, both) === TOMORROW, 'الثامنةَ مساءً → الغد كذلك');
+  ok(resolve(9, rows(TODAY, 13)) === TODAY, 'وصباحاً وجدولُ اليوم وحدَه → اليوم');
 }
 
 // ── ٢ · الليلةُ التي كشفت العطب ──────────────────────────────────────────
@@ -65,18 +66,11 @@ const ok = (cond, what) => { assert.ok(cond, what); n++; };
   );
   ok(resolve(22, []) === TOMORROW, 'ولا جدولَ أصلاً → يبقى المرجَّح، والصفحةُ تقول «لا جدولَ بعد»');
   ok(resolve(10, []) === TODAY, 'وصباحاً بلا جدول → اليوم');
-  // **والرجوعُ في اتّجاهٍ واحد، عمداً.** يفكّ الانقلابَ ولا يخترع قفزةً
-  // أمامية: صباحاً وجدولُ الغد وحدَه منشور تبقى اللوحةُ على اليوم ولو خلا.
-  //
-  // وهذا قرارٌ قائمٌ في المشروع لا اجتهادٌ هنا — `HOUR_FLOOR` في
-  // `TomorrowScreen`: «جدولُ الغد لا يُعرض قبل الثامنة مساءً كي لا يفاجئ
-  // نشرٌ نهاريٌّ أحداً في وسط يومه». فلو رجع هذا في الاتّجاهين لنقض ذلك
-  // الحارسَ من حيث لا يُنظر إليه.
-  //
-  // وكُتب هذا الفحصُ أوّلاً يتوقّع الغد، فسقط — وكان التوقّعُ هو الخطأ.
+  // كان الرجوعُ في اتّجاهٍ واحد («لا يفاجئ نشرٌ نهاريٌّ أحداً») — ونقضه
+  // صاحبُ المنصّة في ١٣ أيلول: جدولُ الغد المنشورُ ظهراً هو الجدول.
   ok(
-    resolve(10, rows(TOMORROW, 9)) === TODAY,
-    'صباحاً وجدولُ الغد وحدَه منشور → تبقى اللوحةُ على اليوم، ولا تسبق الثامنة مساءً'
+    resolve(10, rows(TOMORROW, 9)) === TOMORROW,
+    'صباحاً وجدولُ الغد وحدَه منشور → الغد، بعنوانه'
   );
   ok(
     resolve(21, rows(TOMORROW, 9)) === TOMORROW,
