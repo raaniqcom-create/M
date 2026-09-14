@@ -144,7 +144,7 @@ export function Tab({
         children
       )}
       <span
-        className={`text-[9px] font-bold leading-tight ${muted ? 'tabular-nums' : ''}`}
+        className={`max-w-full text-[9px] font-bold leading-tight ${muted ? 'tabular-nums whitespace-nowrap' : ''}`}
         dir={muted ? 'rtl' : undefined}
       >
         {label}

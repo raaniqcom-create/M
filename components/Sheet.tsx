@@ -47,7 +47,7 @@ export function Sheet({
         aria-modal="true"
         aria-label={title}
         style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
-        className={`fixed inset-x-0 bottom-0 z-[61] mx-auto max-h-[82%] max-w-md overflow-y-auto rounded-t-2xl bg-white p-4 transition-transform duration-300 ${
+        className={`fixed bottom-0 start-0 end-0 z-[61] mx-auto w-full max-h-[82%] max-w-md overflow-y-auto rounded-t-2xl bg-white p-4 transition-transform duration-300 ${
           open ? 'translate-y-0' : 'translate-y-full'
         }`}
       >

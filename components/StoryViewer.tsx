@@ -122,7 +122,12 @@ export function StoryViewer({
       {/* الصورةُ تملأ الشاشةَ كلَّها، وما عداها طبقاتٌ فوقها */}
       <div className="absolute inset-0">
         {story.kind === 'platform' && story.news ? (
-          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-b from-brand-900 via-brand-700 to-brand px-7 text-center">
+          // تُمرَّر ولا تُقصّ: على هاتفٍ بخطٍّ مكبَّر كان الرأسُ يطبع فوق الفيديو
+          // (صورُ عامل التوصيل، ١٣ أيلول). والحشوُ العلويّ/السفليّ يحجز مكانَ
+          // الطبقتين الثابتتين. `justify-center` لا يعمل مع overflow فيُستعمل
+          // `my-auto` على المحتوى.
+          <div className="flex h-full w-full flex-col items-center overflow-y-auto bg-gradient-to-b from-brand-900 via-brand-700 to-brand px-7 pb-28 pt-24 text-center">
+            <div className="my-auto flex w-full flex-col items-center">
             {/* صورةٌ برابطٍ من الإدارة، أو شعارُ المحطة — «صورة عبر رابط أو شعار المحطة». */}
             {story.news.image_url && isVideo(story.news.image_url) ? (
               // فيديو الحالة (كفيديو CarPlay): بلا صوتٍ ويكرّر — كحالات إنستغرام.
@@ -132,7 +137,7 @@ export function StoryViewer({
                 muted
                 loop
                 playsInline
-                className="max-h-[52vh] w-auto max-w-[84%] rounded-2xl object-contain shadow-[0_10px_26px_rgba(0,0,0,.35)]"
+                className="max-h-[42vh] w-auto max-w-[84%] rounded-2xl object-contain shadow-[0_10px_26px_rgba(0,0,0,.35)]"
               />
             ) : story.news.image_url ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -144,12 +149,13 @@ export function StoryViewer({
             <span className="mt-5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold tracking-wide">
               جديدٌ في المحطة التقنية
             </span>
-            <h2 className="mt-3 text-[26px] font-extrabold leading-tight">{story.news.title}</h2>
-            <ul className="mt-5 space-y-3 text-[14px] leading-relaxed text-white/90">
+            <h2 className="mt-3 text-[22px] font-extrabold leading-tight">{story.news.title}</h2>
+            <ul className="mt-4 space-y-2.5 text-[13px] leading-relaxed text-white/90">
               {story.news.lines.map((l, k) => (
                 <li key={k}>{l}</li>
               ))}
             </ul>
+            </div>
           </div>
         ) : (
           <canvas

@@ -46,7 +46,7 @@ export function PlateTurnStrip() {
       className={`${cls} ${ok ? 'border-brand-100 bg-brand-50 text-brand-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
     >
       <CarIcon className={`h-5 w-5 shrink-0 ${ok ? 'text-brand' : 'text-amber-600'}`} />
-      <span className="min-w-0 flex-1 truncate">
+      <span className="min-w-0 flex-1 leading-snug">
         {ok
           ? `✅ دورُك اليوم (${PARITY_LABEL[dayParity(today)]}) — لوحتُك تنتهي بـ${digit}`
           : `⏳ ليس دورَك اليوم — دورُك ${turn.nextOk === baghdadDate(1) ? 'غداً' : `يوم ${shortDate(turn.nextOk)}`}`}
