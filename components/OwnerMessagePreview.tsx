@@ -31,7 +31,10 @@ interface Preview {
  *  message texts into the admin panel would make them two things that have to
  *  be kept identical by hand — and a panel that shows a message nobody receives
  *  is worse than no panel, because it is believed. */
-export function OwnerMessagePreview({ stationId }: { stationId: string }) {
+export function OwnerMessagePreview({ stationId, phone }: { stationId: string; phone?: string | null }) {
+  // رقمُ واتساب بلا صفرٍ أوّل وبلا 964 — كما في بقيّة الروابط.
+  const wa = (phone ?? '').replace(/\D/g, '').replace(/^(00)?964/, '').replace(/^0+/, '');
+  const phoneDigits = /^7\d{9}$/.test(wa) ? wa : null;
   const [data, setData] = useState<Preview | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
 
@@ -63,12 +66,25 @@ export function OwnerMessagePreview({ stationId }: { stationId: string }) {
           {/* The message can be perfect and still reach nobody. This is the
               first thing to check, so it is the first thing shown. */}
           {data.devices === 0 && (
-            <p className="mt-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-              <b>لا جهاز مربوط بهذه المحطة</b> — فلن يصلها أي إشعار مهما كان نصّه.
-              يظهر لصاحبها الآن في لوحته زرّ «فعّل تنبيهات محطتي»، ويكفي أن يفتح
-              اللوحة ويضغطه. وقبل هذا كان الربط لا يقع إلا من التطبيق المثبَّت،
-              فمن يدير محطته من المتصفح يبقى غير مربوط مهما نشر وحدّث.
-            </p>
+            <div className="mt-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+              <b>لا جهاز مربوط بهذه المحطة</b> — الإشعاراتُ لا تصلها؛ يصلها تذكيرُ الركود
+              وحدَه برسالة نصّية مدفوعة. الحلُّ عند صاحبها: يفتح لوحتَه في التطبيق فتظهر
+              ورقةُ «لا يصلك تنبيه من المنصة» ← يضغط <b>«السماح بالتنبيهات»</b> ويقبل
+              إذنَ الهاتف. وإن كان رفض الإذنَ من قبل: إعدادات الهاتف ← التطبيقات ← المحطة
+              التقنية ← الإشعارات ← سماح، ثمّ يعيد الضغط.
+              {phoneDigits && (
+                <a
+                  href={`https://wa.me/964${phoneDigits}?text=${encodeURIComponent(
+                    'مرحباً — لتصلك تنبيهات المحطة التقنية (تذكير الصباح وتنبيه الركود): افتح تطبيق المحطة التقنية ← لوحة محطتك ← اضغط «السماح بالتنبيهات» واقبل إذن الهاتف. وإن لم تظهر الورقة فالإذن ممنوع: إعدادات الهاتف ← التطبيقات ← المحطة التقنية ← الإشعارات ← سماح.'
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-ghost mt-2 w-full"
+                >
+                  أرسل له الخطوات عبر واتساب
+                </a>
+              )}
+            </div>
           )}
 
           <div className="mt-3 flex flex-wrap gap-2 text-[11px]">

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { getPushSubscription } from '@/lib/push';
+import { currentTarget } from '@/lib/alerts';
 import { BellRingIcon, CheckIcon, SpinnerIcon } from './icons';
 import { Sheet } from './Sheet';
 
@@ -17,39 +17,43 @@ import { Sheet } from './Sheet';
  *  فورقةٌ منبثقةٌ تشرح ما يُفتقد وتنتظر ضغطة — منبثقةٌ لا بطاقةٌ في آخر
  *  الصفحة، لأنّ آخرَ الصفحة لا يُقرأ (طلبُ صاحب المنصّة ١١ أيلول ٢٠٢٦).
  *  و«لاحقاً» يُغلقها لهذه الزيارة، ولا يُلحّ عليه في كلّ رسم. */
+const isNative = () =>
+  !!(globalThis as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.();
+
 export function OwnerDeviceLink({ stationId }: { stationId: string }) {
-  const [state, setState] = useState<'checking' | 'linked' | 'ask' | 'working' | 'failed'>(
+  const [state, setState] = useState<'checking' | 'linked' | 'ask' | 'working' | 'failed' | 'denied'>(
     'checking'
   );
   const [dismissed, setDismissed] = useState(false);
 
+  /** يطلب الإذنَ بالمسار الصحيح للمنصّة (أصليٌّ في التطبيق، متصفّحيٌّ في الويب)
+   *  ثمّ ينسب الرمزَ إلى المحطة — ويُدرجه إن لم يكن مُدرَجاً بعد. */
   const link = useCallback(async () => {
-    const sub = await getPushSubscription();
-    if (!sub) return false;
-    const keys = (sub.toJSON() as { keys?: { p256dh?: string; auth?: string } }).keys;
+    const t = await currentTarget();
+    if (t === 'denied') return 'denied' as const;
+    if (t === 'unsupported' || t === 'pending') return 'failed' as const;
     const { error } = await supabase.rpc('claim_owner_device', {
-      p_token: sub.endpoint,
+      p_token: t.address,
       p_station_id: stationId,
-      p_platform: 'web',
-      p_keys: keys ?? null,
+      p_platform: t.channel,
+      p_keys: t.keys ?? null,
     });
-    return !error;
+    return error ? ('failed' as const) : ('linked' as const);
   }, [stationId]);
 
   useEffect(() => {
-    // داخل التطبيق المثبَّت الربط واقعٌ في الصفحة نفسها بالرمز الأصلي.
+    // في التطبيق: رمزٌ محفوظٌ يعني أنّ الصفحةَ ربطته بنفسها. ولا رمزَ = لم يُمنح
+    // الإذن — فالورقةُ تُعرض ويُطلب بالمسار الأصليّ عند الضغط.
     if (localStorage.getItem('device-token')) return setState('linked');
+    if (isNative()) return setState('ask');
     if (typeof Notification === 'undefined') return setState('failed');
     if (Notification.permission !== 'granted') return setState('ask');
-    link().then((ok) => setState(ok ? 'linked' : 'failed'));
+    link().then(setState);
   }, [link]);
 
   async function enable() {
     setState('working');
-    const granted =
-      Notification.permission === 'granted' || (await Notification.requestPermission()) === 'granted';
-    if (!granted) return setState('ask');
-    setState((await link()) ? 'linked' : 'failed');
+    setState(await link());
   }
 
   // الصامت هو الصحيح: مربوطٌ فلا داعي لورقة، أو لمّا يُعرف بعدُ فلا يُخوَّف.
@@ -65,10 +69,18 @@ export function OwnerDeviceLink({ stationId }: { stationId: string }) {
         فلا يصلك تذكير الصباح ولا تنبيه أن اليوم مضى بلا تحديث. اسمح بالتنبيهات مرّةً
         واحدة، ولا نطلب منك شيئاً بعدها.
       </p>
+      {state === 'denied' && (
+        <p className="mt-2 rounded-lg bg-red-50 p-2.5 text-xs leading-relaxed text-red-700">
+          {isNative()
+            ? 'الإشعاراتُ ممنوعةٌ لهذا التطبيق في إعدادات هاتفك. افتح الإعدادات ← التطبيقات ← المحطة التقنية ← الإشعارات، واسمح بها — ثمّ عد واضغط الزرّ.'
+            : 'رفضتَ الإذن سابقاً في هذا المتصفح. اسمح بالإشعارات من إعدادات الموقع (رمز القفل بجانب العنوان) ثمّ أعد المحاولة، أو افتح اللوحة من التطبيق.'}
+        </p>
+      )}
       {state === 'failed' && (
         <p className="mt-2 rounded-lg bg-red-50 p-2.5 text-xs leading-relaxed text-red-700">
-          تعذّر الربط في هذا المتصفح. إن كنت في وضع التصفّح الخفي أو رفضت الإذن
-          سابقاً فأعد فتح اللوحة من نافذة عادية، أو افتحها من التطبيق المثبَّت.
+          {isNative()
+            ? 'لم يصل رمزُ الجهاز بعد. تأكّد من الإنترنت وأعد المحاولة بعد لحظات.'
+            : 'تعذّر الربط في هذا المتصفح. إن كنت في وضع التصفّح الخفي فأعد فتح اللوحة من نافذة عادية، أو افتحها من التطبيق المثبَّت.'}
         </p>
       )}
       <button

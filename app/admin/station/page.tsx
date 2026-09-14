@@ -471,7 +471,7 @@ function Panel() {
         />
       </div>
 
-      <OwnerMessagePreview stationId={station.id} />
+      <OwnerMessagePreview stationId={station.id} phone={station.phone} />
 
       {/* Full station editing, for the admin only.
        *

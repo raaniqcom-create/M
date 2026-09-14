@@ -85,7 +85,12 @@ function isNative(): boolean {
 /** The phone shells register with APNs/FCM and stash the token; the web asks
  *  the browser for a push endpoint. Both end up as one `address` the server
  *  can post to without caring which it is. */
-async function currentTarget(): Promise<Target | 'denied' | 'unsupported' | 'pending'> {
+/** يُصدَّر لربط جهاز صاحب المحطة: المسارُ نفسُه الذي يشترك به المواطن —
+ *  في التطبيق يطلب الإذنَ الأصليّ ويسجّل وينتظر الرمز، وفي المتصفّح يطلب
+ *  اشتراكَ الدفع. (كان OwnerDeviceLink يطلب إذنَ **المتصفّح** داخل التطبيق،
+ *  فيردّ WebView «مرفوض» فوراً ولا يُربط أحد — صاحبُ التل الأخضر أمام عين
+ *  صاحب المنصّة، ١٤ أيلول.) */
+export async function currentTarget(): Promise<Target | 'denied' | 'unsupported' | 'pending'> {
   const cap = (
     window as unknown as {
       Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string };

@@ -92,9 +92,14 @@ export default function OwnerPage() {
       // happened: 114 devices, none linked.
       const deviceToken = localStorage.getItem('device-token');
       if (deviceToken) {
+        // بالمنصّة لا بلا: بلا p_platform تُحدَّث صفٌّ قائم فقط، ورمزٌ سجّله
+        // الهاتف ولم يصل إدراجُه (انقطاعٌ لحظةَ الإقلاع) لا يُربط أبداً.
+        const cap = (globalThis as { Capacitor?: { getPlatform?: () => string } }).Capacitor;
         await supabase.rpc('claim_owner_device', {
           p_token: deviceToken,
           p_station_id: st.id,
+          p_platform: cap?.getPlatform?.() === 'ios' ? 'ios' : 'android',
+          p_keys: null,
         });
       }
       const { data: pr } = await supabase
