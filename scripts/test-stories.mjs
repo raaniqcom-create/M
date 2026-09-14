@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { platformShort, shortName, storiesFor as allStories } from '../lib/stories.ts';
 
-// قصّةُ المنصّة أوّلَ الشريط دائماً — تُفصل عن قصص المحطات في الفحوص.
+// حالاتُ المنصّة تُفصل عن قصص المحطات في الفحوص — الترتيبُ بالزمن للجميع.
 const storiesFor = (stations, choice) => allStories(stations, choice).filter((s) => s.kind !== 'platform');
 
 const H = 3600e3;
@@ -131,7 +131,13 @@ ok('اسمُ حلقة المنصّة من عنوانها', () => {
   assert.equal(platformShort('الآيفون: حدّث التطبيق — 3 ميغا فقط'), 'الآيفون');
 });
 
-ok('حالاتُ المنصّة من القاعدة أوّلاً ولو بلا محطات — ولا شيءَ بلا صفوف', () => {
+ok('الأحدثُ أوّلاً — للمنصّة والمحطات سواء', () => {
+  const p = { id: 'p1', title: 'ت', lines: ['أ'], image_url: null, href: '/x', label: 'x', published_at: ago(3) };
+  const s = allStories([station('fresh', 'الرمادي', [row('kerosene', { updated_at: ago(1) })])], null, [], [p]);
+  assert.deepEqual(s.map((x) => x.id), ['fresh', 'p1']);
+});
+
+ok('حالاتُ المنصّة من القاعدة ولو بلا محطات — ولا شيءَ بلا صفوف', () => {
   const row = { id: 'p1', title: 'ت', lines: ['أ'], image_url: null, href: '/abwat', label: 'x', published_at: ago(1) };
   const s = allStories([], null, [], [row]);
   assert.equal(s.length, 1);
