@@ -732,14 +732,12 @@ export default function OwnerPage() {
             />
 
             <section className="card p-5">
-              <h3 id="products-panel" className="scroll-mt-24 text-sm font-bold">
-                توفر المنتجات
-                {audience && audience.watchers > 0 && (
-                  <span className="ms-2 text-[11px] font-bold text-brand-700">
-                    عند الضغط على «احفظ الحالة» يصل إشعارٌ لـ{num(audience.watchers)} شخصاً مشتركاً من هذه المدينة
-                  </span>
-                )}
-              </h3>
+              <h3 id="products-panel" className="scroll-mt-24 text-sm font-bold">توفر المنتجات</h3>
+              {audience && audience.watchers > 0 && (
+                <p className="mt-1 rounded-lg bg-brand-50 px-2.5 py-1.5 text-[11.5px] font-bold leading-relaxed text-brand-700">
+                  عند الضغط على «احفظ الحالة» يصل إشعارٌ لـ{num(audience.watchers)} شخصاً مشتركاً من هذه المدينة.
+                </p>
+              )}
               <p className="mt-1 text-xs text-slate-400">
                 اضبط كلَّ منتج، ثمّ اضغط الزرَّ الأخضر في الأسفل مرّةً واحدة.
               </p>
