@@ -22,6 +22,8 @@ import { PRODUCT_LABELS, PRODUCT_ORDER, expectedText, isExpectedLate, isOffered,
 import { plural } from '@/lib/freshness';
 import { CITY_NAMES } from '@/lib/cities';
 import { StationCard } from '@/components/StationCard';
+import { SuspendedList } from '@/components/SuspendedList';
+import { isSuspended } from '@/lib/silence';
 import { PromoStrip } from '@/components/PromoStrip';
 import { AlertsPrompt } from '@/components/AlertsPrompt';
 import { useAlertChoice, useFollowedStations } from '@/lib/alerts';
@@ -599,13 +601,19 @@ export default function HomePage() {
     const now: StationWithStatus[] = [];
     const expected: StationWithStatus[] = [];
     const rest: StationWithStatus[] = [];
+    // ٧٢ ساعةً بلا نشر: قسمٌ رماديٌّ ظاهرٌ دائماً لا مطويّ — فالإيقافُ لا يُخفى
+    // بل يُرى، وهو أداةُ الحرص (lib/silence.ts). والمتابَعةُ تبقى بطاقةً في الأعلى.
+    const suspended: StationWithStatus[] = [];
     let stocked = 0;
     for (const s of visible) {
       const t = listTier(s, filters.product);
       if (t === 'now') stocked++;
-      (t === 'now' || isFollowed(s.id) ? now : t === 'expected' ? expected : rest).push(s);
+      if (t === 'now' || isFollowed(s.id)) now.push(s);
+      else if (t === 'expected') expected.push(s);
+      else if (isSuspended(s)) suspended.push(s);
+      else rest.push(s);
     }
-    return { now, expected, rest, stocked };
+    return { now, expected, rest, suspended, stocked };
   }, [visible, filters.product, isFollowed]);
 
   /** والعدُّ يُفصل عن العرض: يعدّ ما يُؤخذ الآن وحدَه — كلوحة المنتجات فوقه. */
@@ -918,6 +926,9 @@ export default function HomePage() {
                   </ul>
                 </section>
               )}
+
+              {/* موقوفةٌ بسبب عدم النشر — ظاهرةٌ لا مطويّة، وتُعدّ مشاهدتُها. */}
+              <SuspendedList stations={tiers!.suspended} />
 
               {/* الباقي مطويٌّ لا محذوف: زرٌّ يعدّه ويفتحه. */}
               {tiers!.rest.length > 0 && (

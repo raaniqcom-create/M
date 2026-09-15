@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabase';
 import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_LABELS, expectedText, isExpectedLate, isOffered, isStaleOffer, productTrafficLevel } from '@/lib/products';
 import { hoursLabel, isFresh, isOpenNow, PERIOD_LABELS, runsOutLabel } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
+import { SUSPENDED_LABEL, isSuspended, silentFor } from '@/lib/silence';
+import { recordSuspendedSeen } from '@/lib/silenceViews';
 import type { Station, StationProduct } from '@/types/database';
 
 /** The two things on a station page that go stale the moment the page is built.
@@ -89,9 +91,18 @@ export function StationLive({
     null
   );
   const lastUpdate = now === null ? null : agoLabel(newest);
+  const suspended = now !== null && isSuspended({ is_demo: station.is_demo, products: rows });
+  useEffect(() => {
+    if (suspended) void recordSuspendedSeen([station.id]);
+  }, [suspended, station.id]);
 
   return (
     <>
+      {suspended && (
+        <p className="mt-4 rounded-xl border border-traffic-red bg-red-50 px-3 py-2 text-[12.5px] font-extrabold text-traffic-red" role="status">
+          {SUSPENDED_LABEL} <span className="font-bold text-red-400">· {silentFor({ products: rows })}</span>
+        </p>
+      )}
       <h2 className="mt-5 text-sm font-bold">المنتجات</h2>
       <ul className="mt-2 divide-y divide-slate-100">
         {PRODUCT_ORDER.map((product) => {

@@ -1,6 +1,7 @@
 import { PRODUCT_LABELS, PRODUCT_ORDER, TRAFFIC_COLORS, TRAFFIC_LABELS, activeTrafficLevel, expectedText, isExpectedLate, isListed, isOffered, isStaleOffer, productTrafficLevel, trafficSource } from '@/lib/products';
 import { formatTime, isFresh, isOpenNow, openingLine, PERIOD_LABELS, runsOutLabel, statusNote } from '@/lib/hours';
 import { agoLabel } from '@/lib/freshness';
+import { SUSPENDED_LABEL, isSuspended, silentFor } from '@/lib/silence';
 import type { StationWithStatus } from '@/types/database';
 import { RouteButton } from './RouteButton';
 import { OutOfCityCall } from './OutOfCityCall';
@@ -74,9 +75,27 @@ export function StationCard({
   // هل ما يُعرض كلّه خبرٌ فات عمره؟ يُقال مرّةً في عنوان الصفّ لا على كل شارة.
   const isStale = newestIsStale(newest);
   const shown = PRODUCT_ORDER.filter((product) => isListed(byProduct.get(product)));
+  // ٧٢ ساعةً بلا نشر: البطاقةُ كلُّها رماديّة وسطرٌ أحمر — أداةُ حرصٍ لصاحبها.
+  const suspended = isSuspended(station);
 
   return (
-    <article className={`card p-3 ${tinted ? 'border-brand-100 bg-brand-50/60' : ''}`}>
+    <article
+      className={`card p-3 ${
+        suspended
+          ? 'border-slate-200 bg-slate-100'
+          : tinted
+            ? 'border-brand-100 bg-brand-50/60'
+            : ''
+      }`}
+      data-suspended={suspended ? '' : undefined}
+    >
+      {suspended && (
+        // الشارةُ الحمراء خارج الجزء المرمَّد: filter على الأب يبتلع أبناءه كلَّهم.
+        <p className="mb-2 rounded-lg bg-white px-2 py-1 text-[11.5px] font-extrabold text-traffic-red">
+          {SUSPENDED_LABEL} <span className="font-bold text-red-400">· {silentFor(station)}</span>
+        </p>
+      )}
+      <div className={suspended ? 'grayscale opacity-60' : undefined}>
       {/* صفّان للقراءة، ثم صفٌّ واحد للفعل.
         *
         *  كانت الأفعال الثلاثة عموداً على اليسار: أزرارٌ مربّعة بلا أسماء،
@@ -256,6 +275,7 @@ export function StationCard({
           .map((p) => PRODUCT_LABELS[p])
           .join('، ') || 'لا شيء'}
       </p>
+      </div>
     </article>
   );
 }

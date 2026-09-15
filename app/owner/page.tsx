@@ -39,6 +39,8 @@ import { OwnerComplaints } from '@/components/OwnerComplaints';
 import { OwnerLocation } from '@/components/OwnerLocation';
 import { BiometricLockToggle } from '@/components/BiometricLockToggle';
 import { FaceLoginSetup } from '@/components/FaceLoginSetup';
+import { SuspendedNotice } from '@/components/SuspendedNotice';
+import { isSuspended } from '@/lib/silence';
 import { biometricLockEnabled, forgetLogin, verifyOwner } from '@/lib/biometric';
 import { BiometricLockScreen } from '@/components/BiometricLockScreen';
 import type { FuelProduct, Station, StationProduct, TrafficLevel } from '@/types/database';
@@ -671,6 +673,10 @@ export default function OwnerPage() {
           *  أن يراه قبل أن يعمل. */}
         {station?.status === 'approved' && view === 'home' && (
           <div className="space-y-4">
+            {/* موقوفةٌ بسبب عدم النشر: قبل كلّ شيء — «عندما يدخل يُطلب منه تحديث المنتجات». */}
+            {isSuspended({ is_demo: station.is_demo, products }) && (
+              <SuspendedNotice station={{ id: station.id, is_demo: station.is_demo, products }} />
+            )}
             {/* «أرسل لهم طلبَ التفعيل ببصمة الوجه» — البطاقةُ أوّلُ ما يُرى حتى يفعّل. */}
             <FaceLoginSetup />
             {station.temp_closed && (
@@ -692,7 +698,7 @@ export default function OwnerPage() {
             />
 
             <section className="card p-5">
-              <h3 className="text-sm font-bold">توفر المنتجات</h3>
+              <h3 id="products-panel" className="scroll-mt-24 text-sm font-bold">توفر المنتجات</h3>
               <p className="mt-1 text-xs text-slate-400">
                 اضبط كلَّ منتج، ثمّ اضغط الزرَّ الأخضر في الأسفل مرّةً واحدة.
               </p>

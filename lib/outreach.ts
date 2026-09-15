@@ -13,6 +13,8 @@ export interface OutreachRow {
   telegram: number;
   last_update: string | null;
   watchers: number;
+  /** كم شخصاً رآها «موقوفةً بسبب عدم النشر» في فترة الإيقاف الجارية. */
+  seen_suspended: number;
 }
 
 export const STALE_DAYS = 2;
@@ -34,6 +36,7 @@ const who = (r: OutreachRow) => {
 const named = (name: string) => (/^محط[ةه]/.test(name.trim()) ? name.trim() : `محطة ${name.trim()}`);
 const days = (n: number) => plural(n, 'يوم واحد', 'يومين', 'أيام', 'يوماً');
 const folks = (n: number) => plural(n, 'مشترك واحد', 'مشتركان', 'مشتركين', 'مشترك');
+const people = (n: number) => plural(n, 'شخصٌ واحد', 'شخصان', 'أشخاص', 'شخصاً');
 
 /** رسالةُ «اربط جهازك» — بصيغة صاحب المنصّة: الاسمُ، المحطةُ، المشتركون
  *  الذين يفقدهم، الأيّامُ بلا ربط، والطريقةُ خطوةً خطوة. */
@@ -57,7 +60,11 @@ export function staleMessage(r: OutreachRow): string {
   const since = d >= 999 ? 'ولم تُحدَّث قطّ' : `ولم تُحدَّث منذ ${days(d)}`;
   return (
     `السلام عليكم ${who(r)}،\n` +
-    `«${named(r.name)}» مربوطةٌ بجهازك ${since} — و${folks(r.watchers)} في ${r.city} لا يرون محطتك في «المتاح الآن».\n\n` +
+    `«${named(r.name)}» مربوطةٌ بجهازك ${since} — و${folks(r.watchers)} في ${r.city} لا يرون محطتك في «المتاح الآن».` +
+    (r.seen_suspended > 0
+      ? ` وتظهر لهم الآن رماديّةً مكتوبٌ عليها «تم الإيقاف بسبب عدم النشر»، ورآها هكذا ${people(r.seen_suspended)}.`
+      : '') +
+    `\n\n` +
     `افتح تطبيق المحطة التقنية ← لوحة محطتك ← اضبط المنتجات ← اضغط الزر الأخضر. ` +
     `ضغطة واحدة تعيد محطتك أمامهم فوراً ويصلهم إشعاراً بها.\n— إدارة المحطة التقنية`
   );
@@ -67,7 +74,8 @@ export function staleMessage(r: OutreachRow): string {
 export function stalePush(r: OutreachRow): string {
   const d = daysSince(r.last_update);
   const since = d >= 999 ? 'لم تُحدَّث قطّ' : `لم تُحدَّث منذ ${days(d)}`;
-  return `${who(r)}: «${named(r.name)}» ${since}، و${folks(r.watchers)} في ${r.city} لا يرونها في المتاح الآن. اضبط المنتجات واضغط الزر الأخضر — ضغطة تعيدها أمامهم فوراً.`;
+  const seen = r.seen_suspended > 0 ? ` ورآها ${people(r.seen_suspended)} موقوفةً بسبب عدم النشر.` : '';
+  return `${who(r)}: «${named(r.name)}» ${since}، و${folks(r.watchers)} في ${r.city} لا يرونها في المتاح الآن.${seen} اضبط المنتجات واضغط الزر الأخضر — ضغطة تعيدها أمامهم فوراً.`;
 }
 
 export const waLink = (phone: string, text: string): string | null => {

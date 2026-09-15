@@ -220,6 +220,9 @@ function Group({
                   {isLinked(r)
                     ? ` · آخر تحديث منذ ${daysSince(r.last_update) >= 999 ? '—' : plural(daysSince(r.last_update), 'يوم', 'يومين', 'أيام', 'يوماً')}`
                     : ` · بلا جهاز منذ ${plural(daysSince(r.created_at), 'يوم', 'يومين', 'أيام', 'يوماً')}`}
+                  {r.seen_suspended > 0 && (
+                    <span className="ms-1 font-bold text-traffic-red">· رآها موقوفةً {r.seen_suspended}</span>
+                  )}
                   {sent[r.id] && <span className="ms-1 font-bold text-brand-700">· أُرسل {sent[r.id]}</span>}
                 </p>
               </button>
