@@ -19,6 +19,8 @@ export interface NoticeVars {
   distAt: string;
   /** نصٌّ حرٌّ يُضاف — سببُ الاعتذار مثلاً */
   note: string;
+  /** المحطةُ التي يُظنّ أنّها توزّع اليوم: «محطة تعبئة وقود الرمادي الجديدة» */
+  station: string;
 }
 
 export interface NoticeTemplate {
@@ -35,11 +37,43 @@ export interface NoticeTemplate {
   suggest: string | null;
   /** ما يُشرح تحت الزرّ */
   hint: string;
+  /** `city`: يصل مدينةَ المحطة وحدَها (عبر alerts_for) لا كلَّ جهاز — ويُرسل
+   *  فوراً بلا حاجز الخمس والأربعين دقيقة، فمن وصله إشعارُ محطةٍ قبل قليل
+   *  هو بعينه الواقفُ في طابورها الآن. */
+  scope?: 'city';
+  /** أقصى طولٍ للمتن: خبرُ المدينة يُقصّ عند ١٧٨ حرفاً في الإشعار. */
+  maxBody?: number;
+}
+
+/** اسمُ يوم الغد بتقويم بغداد: «الأربعاء». */
+export function tomorrowName(): string {
+  return new Date(Date.now() + 86_400_000).toLocaleDateString('ar-IQ', {
+    timeZone: 'Asia/Baghdad',
+    weekday: 'long',
+  });
 }
 
 const or = (v: string, fallback: string) => (v.trim() ? v.trim() : fallback);
 
 export const NOTICE_TEMPLATES: NoticeTemplate[] = [
+  {
+    // «أريد شيئاً أستطيع أن أرسل به إشعاراً لمن يقف في محطةٍ يعتقد أنّها
+    // ستوزّع اليوم والحقيقة أنّها ستوزّع غداً» — صاحبُ المنصّة، ١٥ أيلول.
+    // سطرٌ واحد: خبرُ المدينة يُضغط إلى سطرٍ في الإشعار (notify-favorites).
+    key: 'tomorrow',
+    name: 'التوزيع غداً لا اليوم',
+    fields: ['station', 'city', 'note'],
+    hours: 14,
+    suggest: null,
+    scope: 'city',
+    maxBody: 178,
+    hint: 'لمن يقف في محطةٍ يظنّها توزّع اليوم وهي في جدول الغد. يصل مدينةَ المحطة وحدَها، الآن، بلا حاجز التكرار.',
+    title: (v) => (v.station.trim() ? `${v.station.trim()}: التوزيع غداً لا اليوم` : 'التوزيع غداً لا اليوم'),
+    body: (v) =>
+      `لا توزيع اليوم في ${or(v.station, 'هذه المحطة')}. التوزيع غداً ${tomorrowName()} حسب جدول التوزيع، ` +
+      `فلا داعي للتجمّع والانتظار الآن. ويصلكم إشعار عند بدء التوزيع.` +
+      (v.note.trim() ? ` ${v.note.trim()}` : ''),
+  },
   {
     key: 'cut_dist',
     name: 'قطع الإنترنت + توزيع',

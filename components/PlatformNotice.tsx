@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabase';
 import { callFn } from '@/lib/fn';
 import { randomId } from '@/lib/uid';
 import { NOTICE_TEMPLATES, type NoticeVars } from '@/lib/noticeTemplates';
+import { CITY_NAMES } from '@/lib/cities';
+import { baghdadDate, loadSchedule } from '@/lib/scheduleData';
 import { SpinnerIcon } from './icons';
 
 /** تنبيهٌ عامٌّ من المنصّة إلى كلِّ الأجهزة — يُكتب من قالب، ويُجدوَل.
@@ -21,8 +23,10 @@ import { SpinnerIcon } from './icons';
  *  وشاشةُ «ما ينتظر الإرسال» تحته هي بابُ التراجع: ما جُدول يُلغى ما دام لم
  *  يُحجَز بعد. */
 export function PlatformNotice() {
-  const [tplKey, setTplKey] = useState('cut_dist');
-  const [vars, setVars] = useState<NoticeVars>({ cutAt: '', city: '', distAt: '', note: '' });
+  const [tplKey, setTplKey] = useState('tomorrow');
+  const [vars, setVars] = useState<NoticeVars>({ cutAt: '', city: '', distAt: '', note: '', station: '' });
+  /** محطاتُ جدول الغد — أزرارٌ تملأ الاسمَ والمدينة بضغطة. */
+  const [tomorrowRows, setTomorrowRows] = useState<{ name: string; city: string }[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   /** حرّرَ المديرُ النصَّ بيده، فلا يُعاد كتابتُه من تحته */
@@ -40,6 +44,32 @@ export function PlatformNotice() {
   const keyRef = useRef<string | null>(null);
 
   const tpl = NOTICE_TEMPLATES.find((t) => t.key === tplKey) ?? NOTICE_TEMPLATES[0];
+  const cityScoped = tpl.scope === 'city';
+  const cityOk = (CITY_NAMES as readonly string[]).includes(vars.city.trim());
+
+  useEffect(() => {
+    if (!cityScoped) return;
+    let alive = true;
+    loadSchedule()
+      .then((rows) => {
+        if (!alive) return;
+        const day = baghdadDate(1);
+        const seen = new Set<string>();
+        const out: { name: string; city: string }[] = [];
+        for (const r of rows) {
+          if (r.for_date !== day || !r.city) continue;
+          const k = `${r.station_name}|${r.city}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          out.push({ name: r.station_name, city: r.city });
+        }
+        setTomorrowRows(out);
+      })
+      .catch(() => setTomorrowRows([]));
+    return () => {
+      alive = false;
+    };
+  }, [cityScoped]);
 
   /** أقربُ وقوعٍ لهذه الساعة: اليومَ إن لم تمضِ، وإلّا غداً. */
   const nextAt = useCallback((hm: string) => {
@@ -69,6 +99,33 @@ export function PlatformNotice() {
     }
   }
 
+  /** خبرُ المدينة يُرسل فوراً عبر announce بلا حاجز التكرار، ثمّ يُحفظ صفُّه
+   *  مختوماً «أُرسل» ليظهر في الأخبار ولا تعيده المِكنسة. */
+  async function sendCity(): Promise<string | null> {
+    const r = await callFn<{ audience: { ios: number; android: number; web: number } }>('announce', {
+      title: title.trim(),
+      body: body.trim(),
+      cities: [vars.city.trim()],
+      minGap: 0,
+      url: '/schedule',
+    });
+    if (!r.ok) return r.error ?? 'تعذّر الإرسال';
+    const now = new Date();
+    const { error } = await supabase.from('announcements').insert({
+      title: title.trim().slice(0, 64),
+      body: body.trim(),
+      source: 'إدارة المحطة التقنية',
+      cities: [vars.city.trim()],
+      product: null,
+      station_name: null,
+      send_at: now.toISOString(),
+      sent_at: now.toISOString(),
+      expires_at: new Date(now.getTime() + hours * 3600_000).toISOString(),
+      active: true,
+    });
+    return error ? `أُرسل الإشعار، وتعذّر حفظُه في الأخبار: ${error.message}` : null;
+  }
+
   // أوّلُ تعبئة، ثمّ كلَّما تغيّر حقلٌ — ما لم يُحرَّر النصُّ بيد
   useEffect(() => {
     if (edited) return;
@@ -82,7 +139,11 @@ export function PlatformNotice() {
 
   const sendAt = when === 'now' ? new Date() : new Date(at);
   const timeBad = when === 'later' && (!at || Number.isNaN(sendAt.getTime()));
-  const ready = title.trim().length >= 3 && body.trim().length >= 10 && !timeBad;
+  const ready =
+    title.trim().length >= 3 &&
+    body.trim().length >= 10 &&
+    !timeBad &&
+    (!cityScoped || (cityOk && vars.station.trim().length >= 2));
 
   async function preview() {
     setErr(null);
@@ -90,7 +151,9 @@ export function PlatformNotice() {
     setBusy(true);
     const r = await callFn<{ audience: { ios: number; android: number; web: number } }>(
       'announce',
-      { title: title.trim(), body: body.trim(), dryRun: true }
+      cityScoped
+        ? { title: title.trim(), body: body.trim(), cities: [vars.city.trim()], minGap: 0, dryRun: true }
+        : { title: title.trim(), body: body.trim(), dryRun: true }
     );
     setBusy(false);
     if (!r.ok || !r.data) return setErr(r.error ?? 'تعذّر حساب عدد الأجهزة');
@@ -101,6 +164,14 @@ export function PlatformNotice() {
   async function schedule() {
     setErr(null);
     setBusy(true);
+    if (cityScoped) {
+      const fail = await sendCity();
+      setBusy(false);
+      if (fail) return setErr(fail);
+      setReach(null);
+      setEdited(false);
+      return setNote(`أُرسل الآن إلى ${vars.city.trim()}. وتجده في «الأخبار» ${hours} ساعات.`);
+    }
     // `client_key` عمودُه uuid لا نصّ. و`randomId` تنتهي في آخر ملاذٍ إلى
     // `id-…` وهو ليس uuid — فيردّ Postgres 22P02 ولا يُحفظ الخبر. فيُفحَص
     // الشكل: إمّا مفتاحٌ صحيح، وإمّا null بلا حراسةٍ من التكرار — والمراجعةُ
@@ -169,7 +240,7 @@ export function PlatformNotice() {
     <section className="card p-5">
       <h2 className="text-sm font-bold">تنبيه عامّ لكل المستخدمين</h2>
       <p className="mt-1 text-xs leading-relaxed text-slate-500">
-        يصل كل جهاز — لا مدينةً واحدة ولا متابعي محطة. اختر قالباً، واضبط موعده.
+        يصل كل جهاز — إلا «التوزيع غداً لا اليوم» فيصل مدينةَ المحطة وحدَها. اختر قالباً، واضبط موعده.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -189,10 +260,62 @@ export function PlatformNotice() {
       </div>
       <p className="mt-1.5 text-[10.5px] leading-relaxed text-slate-400">{tpl.hint}</p>
 
+      {cityScoped && tomorrowRows.length > 0 && (
+        <div className="mt-3">
+          <p className="label">من جدول الغد — اضغط المحطة</p>
+          <div className="flex flex-wrap gap-1.5">
+            {tomorrowRows.map((r) => {
+              const on = vars.station === r.name && vars.city === r.city;
+              return (
+                <button
+                  key={`${r.name}|${r.city}`}
+                  type="button"
+                  onClick={() => {
+                    setVars((v) => ({ ...v, station: r.name, city: r.city }));
+                    setEdited(false);
+                    setReach(null);
+                  }}
+                  aria-pressed={on}
+                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold ${
+                    on ? 'bg-brand-50 text-brand-900 ring-2 ring-brand' : 'bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  {r.name} <span className="font-normal text-slate-400">· {r.city}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {tpl.fields.length > 0 && (
         <div className="mt-3 space-y-3">
+          {tpl.fields.includes('station') && field('station', 'المحطة', 'محطة تعبئة وقود الرمادي الجديدة')}
           {tpl.fields.includes('cutAt') && field('cutAt', 'ساعة القطع', '6:00 صباحاً')}
-          {tpl.fields.includes('city') && field('city', 'مدينة التوزيع', 'الرمادي')}
+          {tpl.fields.includes('city') && cityScoped && (
+            <div>
+              <label htmlFor="nv-city" className="label">
+                مدينة المحطة — يصل مشتركيها وحدَهم
+              </label>
+              <select
+                id="nv-city"
+                value={cityOk ? vars.city.trim() : ''}
+                onChange={(e) => {
+                  setVars((v) => ({ ...v, city: e.target.value }));
+                  setReach(null);
+                }}
+                className="field"
+              >
+                <option value="">اختر المدينة</option>
+                {CITY_NAMES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {tpl.fields.includes('city') && !cityScoped && field('city', 'مدينة التوزيع', 'الرمادي')}
           {tpl.fields.includes('distAt') && field('distAt', 'ساعة التوزيع', '6:30')}
           {tpl.fields.includes('note') && field('note', 'نصّ إضافي', 'اكتب السبب أو أيّ نصّ')}
         </div>
@@ -223,7 +346,7 @@ export function PlatformNotice() {
           id="pn-body"
           rows={4}
           value={body}
-          maxLength={500}
+          maxLength={tpl.maxBody ?? 500}
           onChange={(e) => {
             setBody(e.target.value);
             setEdited(true);
@@ -231,9 +354,10 @@ export function PlatformNotice() {
           }}
           className="field py-2"
         />
-        <p className="mt-1 text-[10.5px] text-slate-400">{body.length}/500</p>
+        <p className="mt-1 text-[10.5px] text-slate-400">{body.length}/{tpl.maxBody ?? 500}</p>
       </div>
 
+      {!cityScoped && (
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button
           type="button"
@@ -259,8 +383,9 @@ export function PlatformNotice() {
           في موعد
         </button>
       </div>
+      )}
 
-      {when === 'later' && (
+      {when === 'later' && !cityScoped && (
         <div className="mt-2">
           <label htmlFor="pn-at" className="label">
             موعد الإرسال
@@ -320,8 +445,12 @@ export function PlatformNotice() {
         <div className="mt-4 rounded-xl bg-amber-50 p-3">
           <p className="text-xs font-bold leading-relaxed text-amber-900">
             يصل <b>{reach}</b> جهازاً
-            {when === 'now' ? ' الآن' : ` في ${sendAt.toLocaleString('ar-IQ')}`}. وإشعارٌ خرج لا
-            يُستردّ — لكنّ ما لم يخرج بعدُ يُلغى من القائمة أدناه.
+            {cityScoped
+              ? ` في ${vars.city.trim()} الآن — مشتركو المدينة، ومن وصله إشعارٌ قبل قليل أيضاً`
+              : when === 'now'
+                ? ' الآن'
+                : ` في ${sendAt.toLocaleString('ar-IQ')}`}
+            . وإشعارٌ خرج لا يُستردّ{cityScoped ? '' : ' — لكنّ ما لم يخرج بعدُ يُلغى من القائمة أدناه'}.
           </p>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <button type="button" disabled={busy} onClick={schedule} className="btn-primary">
