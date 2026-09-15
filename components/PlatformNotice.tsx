@@ -56,9 +56,11 @@ export function PlatformNotice() {
   /** حرّرَ المديرُ النصَّ بيده، فلا يُعاد كتابتُه من تحته */
   const [edited, setEdited] = useState(false);
 
-  const [when, setWhen] = useState<'now' | 'later'>('later');
+  // القالبُ الأوّل بلا موعدٍ مقترح يبدأ على «الآن» — وإلّا بقي «في موعد» بلا
+  // موعدٍ فتعطّل زرُّ المراجعة وهو يبدو معطوباً (١٥ أيلول).
+  const [when, setWhen] = useState<'now' | 'later'>(NOTICE_TEMPLATES[0].suggest ? 'later' : 'now');
   const [at, setAt] = useState('');
-  const [hours, setHours] = useState(6);
+  const [hours, setHours] = useState(NOTICE_TEMPLATES[0].hours);
 
   const [reach, setReach] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -199,7 +201,8 @@ export function PlatformNotice() {
   }, [at, tpl.suggest, nextAt]);
 
   const sendAt = when === 'now' ? new Date() : new Date(at);
-  const timeBad = when === 'later' && (!at || Number.isNaN(sendAt.getTime()));
+  // خبرُ المدينة يُرسل الآن دائماً، فلا موعدَ يُفحص.
+  const timeBad = !cityScoped && when === 'later' && (!at || Number.isNaN(sendAt.getTime()));
   const ready =
     title.trim().length >= 3 &&
     body.trim().length >= 10 &&
