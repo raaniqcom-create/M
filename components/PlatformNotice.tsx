@@ -7,7 +7,20 @@ import { randomId } from '@/lib/uid';
 import { NOTICE_TEMPLATES, type NoticeVars } from '@/lib/noticeTemplates';
 import { CITY_NAMES } from '@/lib/cities';
 import { baghdadDate, loadSchedule } from '@/lib/scheduleData';
+import { OFFICIAL_STATIONS } from '@/lib/officialStations';
+import { normalizeName } from '@/lib/nearbyFuel';
+import { PRODUCT_LABELS, PRODUCT_ORDER } from '@/lib/products';
+import type { FuelProduct } from '@/types/database';
 import { SpinnerIcon } from './icons';
+
+/** محطةٌ في قائمة الاختيار: من جدول الغد، أو رسميّةٌ، أو مسجّلةٌ في المنصّة. */
+interface Pick {
+  name: string;
+  city: string;
+  /** وقودُها في جدول الغد إن كانت فيه */
+  product: FuelProduct | null;
+  from: 'schedule' | 'official' | 'platform';
+}
 
 /** تنبيهٌ عامٌّ من المنصّة إلى كلِّ الأجهزة — يُكتب من قالب، ويُجدوَل.
  *
@@ -24,9 +37,20 @@ import { SpinnerIcon } from './icons';
  *  يُحجَز بعد. */
 export function PlatformNotice() {
   const [tplKey, setTplKey] = useState('tomorrow');
-  const [vars, setVars] = useState<NoticeVars>({ cutAt: '', city: '', distAt: '', note: '', station: '' });
-  /** محطاتُ جدول الغد — أزرارٌ تملأ الاسمَ والمدينة بضغطة. */
-  const [tomorrowRows, setTomorrowRows] = useState<{ name: string; city: string }[]>([]);
+  const [vars, setVars] = useState<NoticeVars>({
+    cutAt: '',
+    city: '',
+    distAt: '',
+    note: '',
+    station: '',
+    product: '',
+  });
+  /** نوعُ الوقود — يُرشَّح به الجمهورُ ويُذكر في النصّ. */
+  const [product, setProduct] = useState<FuelProduct | ''>('');
+  /** محطاتُ المدينة المختارة: جدولُ الغد أوّلاً، ثمّ الرسميّة، ثمّ المسجّلة. */
+  const [picks, setPicks] = useState<Pick[]>([]);
+  /** «اسمٌ آخر» — يكتبه بيده. */
+  const [otherName, setOtherName] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   /** حرّرَ المديرُ النصَّ بيده، فلا يُعاد كتابتُه من تحته */
@@ -47,29 +71,60 @@ export function PlatformNotice() {
   const cityScoped = tpl.scope === 'city';
   const cityOk = (CITY_NAMES as readonly string[]).includes(vars.city.trim());
 
+  const city = vars.city.trim();
   useEffect(() => {
-    if (!cityScoped) return;
+    if (!cityScoped || !cityOk) return setPicks([]);
     let alive = true;
-    loadSchedule()
-      .then((rows) => {
-        if (!alive) return;
-        const day = baghdadDate(1);
-        const seen = new Set<string>();
-        const out: { name: string; city: string }[] = [];
-        for (const r of rows) {
-          if (r.for_date !== day || !r.city) continue;
-          const k = `${r.station_name}|${r.city}`;
-          if (seen.has(k)) continue;
-          seen.add(k);
-          out.push({ name: r.station_name, city: r.city });
-        }
-        setTomorrowRows(out);
-      })
-      .catch(() => setTomorrowRows([]));
+    (async () => {
+      const seen = new Set<string>();
+      const out: Pick[] = [];
+      const add = (p: Pick) => {
+        const k = normalizeName(p.name);
+        if (!k || seen.has(k)) return;
+        seen.add(k);
+        out.push(p);
+      };
+      // ١ · جدولُ الغد — وهو الغرضُ كلُّه: محطةٌ تُظنّ اليومَ وهي غداً.
+      const day = baghdadDate(1);
+      const rows = await loadSchedule().catch(() => []);
+      for (const r of rows) {
+        if (r.for_date === day && r.city === city)
+          add({ name: r.station_name, city, product: r.product, from: 'schedule' });
+      }
+      // ٢ · الرسميّةُ في المدينة.
+      for (const s of OFFICIAL_STATIONS) {
+        if (s.city === city) add({ name: s.name, city, product: null, from: 'official' });
+      }
+      // ٣ · المسجّلةُ في المنصّة.
+      const { data } = await supabase
+        .from('stations_public')
+        .select('name, city')
+        .eq('status', 'approved')
+        .eq('city', city)
+        .order('name');
+      for (const s of data ?? []) add({ name: s.name, city, product: null, from: 'platform' });
+      if (alive) setPicks(out);
+    })();
     return () => {
       alive = false;
     };
-  }, [cityScoped]);
+  }, [cityScoped, cityOk, city]);
+
+  /** اختيارُ محطةٍ من القائمة يملأ الاسمَ، ووقودَها إن كان في جدول الغد. */
+  function pickStation(name: string) {
+    if (name === '__other') {
+      setOtherName(true);
+      setVars((v) => ({ ...v, station: '' }));
+      return;
+    }
+    setOtherName(false);
+    const p = picks.find((x) => x.name === name);
+    const pr = p?.product ?? product;
+    setProduct(pr);
+    setVars((v) => ({ ...v, station: name, product: pr ? PRODUCT_LABELS[pr] : '' }));
+    setEdited(false);
+    setReach(null);
+  }
 
   /** أقربُ وقوعٍ لهذه الساعة: اليومَ إن لم تمضِ، وإلّا غداً. */
   const nextAt = useCallback((hm: string) => {
@@ -106,6 +161,7 @@ export function PlatformNotice() {
       title: title.trim(),
       body: body.trim(),
       cities: [vars.city.trim()],
+      products: product ? [product] : [],
       minGap: 0,
       url: '/schedule',
     });
@@ -116,7 +172,7 @@ export function PlatformNotice() {
       body: body.trim(),
       source: 'إدارة المحطة التقنية',
       cities: [vars.city.trim()],
-      product: null,
+      product: product || null,
       station_name: null,
       send_at: now.toISOString(),
       sent_at: now.toISOString(),
@@ -152,7 +208,14 @@ export function PlatformNotice() {
     const r = await callFn<{ audience: { ios: number; android: number; web: number } }>(
       'announce',
       cityScoped
-        ? { title: title.trim(), body: body.trim(), cities: [vars.city.trim()], minGap: 0, dryRun: true }
+        ? {
+            title: title.trim(),
+            body: body.trim(),
+            cities: [vars.city.trim()],
+            products: product ? [product] : [],
+            minGap: 0,
+            dryRun: true,
+          }
         : { title: title.trim(), body: body.trim(), dryRun: true }
     );
     setBusy(false);
@@ -260,67 +323,127 @@ export function PlatformNotice() {
       </div>
       <p className="mt-1.5 text-[10.5px] leading-relaxed text-slate-400">{tpl.hint}</p>
 
-      {cityScoped && tomorrowRows.length > 0 && (
-        <div className="mt-3">
-          <p className="label">من جدول الغد — اضغط المحطة</p>
-          <div className="flex flex-wrap gap-1.5">
-            {tomorrowRows.map((r) => {
-              const on = vars.station === r.name && vars.city === r.city;
-              return (
-                <button
-                  key={`${r.name}|${r.city}`}
-                  type="button"
-                  onClick={() => {
-                    setVars((v) => ({ ...v, station: r.name, city: r.city }));
-                    setEdited(false);
-                    setReach(null);
-                  }}
-                  aria-pressed={on}
-                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-bold ${
-                    on ? 'bg-brand-50 text-brand-900 ring-2 ring-brand' : 'bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  {r.name} <span className="font-normal text-slate-400">· {r.city}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {tpl.fields.length > 0 && (
+      {cityScoped && (
         <div className="mt-3 space-y-3">
-          {tpl.fields.includes('station') && field('station', 'المحطة', 'محطة تعبئة وقود الرمادي الجديدة')}
-          {tpl.fields.includes('cutAt') && field('cutAt', 'ساعة القطع', '6:00 صباحاً')}
-          {tpl.fields.includes('city') && cityScoped && (
+          {/* ١ · المدينة */}
+          <div>
+            <label htmlFor="nv-city" className="label">
+              ١ · المدينة — يصل مشتركيها وحدَهم
+            </label>
+            <select
+              id="nv-city"
+              value={cityOk ? city : ''}
+              onChange={(e) => {
+                setVars((v) => ({ ...v, city: e.target.value, station: '' }));
+                setOtherName(false);
+                setReach(null);
+              }}
+              className="field"
+            >
+              <option value="">اختر المدينة</option>
+              {CITY_NAMES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* ٢ · المحطة */}
+          {cityOk && (
             <div>
-              <label htmlFor="nv-city" className="label">
-                مدينة المحطة — يصل مشتركيها وحدَهم
+              <label htmlFor="nv-station" className="label">
+                ٢ · المحطة
               </label>
               <select
-                id="nv-city"
-                value={cityOk ? vars.city.trim() : ''}
+                id="nv-station"
+                value={otherName ? '__other' : vars.station}
+                onChange={(e) => pickStation(e.target.value)}
+                className="field"
+              >
+                <option value="">اختر المحطة</option>
+                {picks.some((p) => p.from === 'schedule') && (
+                  <optgroup label="في جدول الغد">
+                    {picks
+                      .filter((p) => p.from === 'schedule')
+                      .map((p) => (
+                        <option key={p.name} value={p.name}>
+                          {p.name}
+                          {p.product ? ` · ${PRODUCT_LABELS[p.product]}` : ''}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+                {picks.some((p) => p.from !== 'schedule') && (
+                  <optgroup label="محطات المدينة">
+                    {picks
+                      .filter((p) => p.from !== 'schedule')
+                      .map((p) => (
+                        <option key={p.name} value={p.name}>
+                          {p.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+                <option value="__other">اسم آخر…</option>
+              </select>
+              {otherName && (
+                <input
+                  id="nv-station-other"
+                  value={vars.station}
+                  placeholder="اكتب اسم المحطة"
+                  onChange={(e) => {
+                    setVars((v) => ({ ...v, station: e.target.value }));
+                    setReach(null);
+                  }}
+                  className="field mt-2"
+                />
+              )}
+            </div>
+          )}
+
+          {/* ٣ · الوقود */}
+          {cityOk && vars.station.trim().length >= 2 && (
+            <div>
+              <label htmlFor="nv-product" className="label">
+                ٣ · نوع الوقود — يصل من اختاره في تنبيهاته
+              </label>
+              <select
+                id="nv-product"
+                value={product}
                 onChange={(e) => {
-                  setVars((v) => ({ ...v, city: e.target.value }));
+                  const pr = e.target.value as FuelProduct | '';
+                  setProduct(pr);
+                  setVars((v) => ({ ...v, product: pr ? PRODUCT_LABELS[pr] : '' }));
                   setReach(null);
                 }}
                 className="field"
               >
-                <option value="">اختر المدينة</option>
-                {CITY_NAMES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                <option value="">كلُّ الوقود</option>
+                {PRODUCT_ORDER.map((pr) => (
+                  <option key={pr} value={pr}>
+                    {PRODUCT_LABELS[pr]}
                   </option>
                 ))}
               </select>
             </div>
           )}
-          {tpl.fields.includes('city') && !cityScoped && field('city', 'مدينة التوزيع', 'الرمادي')}
+          {cityOk && vars.station.trim().length >= 2 && field('note', 'نصّ إضافي (اختياري)', 'مثلاً: الوقود يصل صباحاً')}
+        </div>
+      )}
+
+      {!cityScoped && tpl.fields.length > 0 && (
+        <div className="mt-3 space-y-3">
+          {tpl.fields.includes('cutAt') && field('cutAt', 'ساعة القطع', '6:00 صباحاً')}
+          {tpl.fields.includes('city') && field('city', 'مدينة التوزيع', 'الرمادي')}
           {tpl.fields.includes('distAt') && field('distAt', 'ساعة التوزيع', '6:30')}
           {tpl.fields.includes('note') && field('note', 'نصّ إضافي', 'اكتب السبب أو أيّ نصّ')}
         </div>
       )}
 
+      {(!cityScoped || (cityOk && vars.station.trim().length >= 2)) && (
+      <>
+      <p className={cityScoped ? 'label mt-4' : 'hidden'}>٤ · النصّ — عدّله كما تشاء</p>
       <div className="mt-3">
         <label htmlFor="pn-title" className="label">
           العنوان
@@ -439,7 +562,7 @@ export function PlatformNotice() {
           className="btn-primary mt-4 w-full disabled:opacity-60"
         >
           {busy && <SpinnerIcon className="h-4 w-4" />}
-          مراجعة قبل الجدولة
+          {cityScoped ? '٥ · مراجعة: كم شخصاً يصله؟' : 'مراجعة قبل الجدولة'}
         </button>
       ) : (
         <div className="mt-4 rounded-xl bg-amber-50 p-3">
@@ -455,13 +578,16 @@ export function PlatformNotice() {
           <div className="mt-2 grid grid-cols-2 gap-2">
             <button type="button" disabled={busy} onClick={schedule} className="btn-primary">
               {busy && <SpinnerIcon className="h-4 w-4" />}
-              تأكيد
+              {cityScoped ? 'نشر الآن' : 'تأكيد'}
             </button>
             <button type="button" onClick={() => setReach(null)} className="btn-ghost">
               رجوع
             </button>
           </div>
         </div>
+      )}
+
+      </>
       )}
 
       {note && (

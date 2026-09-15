@@ -21,6 +21,8 @@ export interface NoticeVars {
   note: string;
   /** المحطةُ التي يُظنّ أنّها توزّع اليوم: «محطة تعبئة وقود الرمادي الجديدة» */
   station: string;
+  /** اسمُ الوقود كما يُقرأ: «بانزين عادي» — فارغٌ يعني كلَّ الوقود */
+  product: string;
 }
 
 export interface NoticeTemplate {
@@ -62,15 +64,16 @@ export const NOTICE_TEMPLATES: NoticeTemplate[] = [
     // سطرٌ واحد: خبرُ المدينة يُضغط إلى سطرٍ في الإشعار (notify-favorites).
     key: 'tomorrow',
     name: 'التوزيع غداً لا اليوم',
-    fields: ['station', 'city', 'note'],
-    hours: 14,
+    fields: ['city', 'station', 'product', 'note'],
+    hours: 12,
     suggest: null,
     scope: 'city',
     maxBody: 178,
     hint: 'لمن يقف في محطةٍ يظنّها توزّع اليوم وهي في جدول الغد. يصل مدينةَ المحطة وحدَها، الآن، بلا حاجز التكرار.',
     title: (v) => (v.station.trim() ? `${v.station.trim()}: التوزيع غداً لا اليوم` : 'التوزيع غداً لا اليوم'),
     body: (v) =>
-      `لا توزيع اليوم في ${or(v.station, 'هذه المحطة')}. التوزيع غداً ${tomorrowName()} حسب جدول التوزيع، ` +
+      `لا توزيع ${v.product.trim() ? v.product.trim() + ' ' : ''}اليوم في ${or(v.station, 'هذه المحطة')}. ` +
+      `التوزيع غداً ${tomorrowName()} حسب جدول التوزيع، ` +
       `فلا داعي للتجمّع والانتظار الآن. ويصلكم إشعار عند بدء التوزيع.` +
       (v.note.trim() ? ` ${v.note.trim()}` : ''),
   },
