@@ -30,6 +30,8 @@ const who = (r: OutreachRow) => {
   const n = (r.contact_name ?? '').trim();
   return n && !/محط[ةه]/.test(n) ? `سيد ${n}` : 'سيدي صاحب المحطة';
 };
+/** «محطة» لا تُكرَّر: الاسمُ يبدأ بها غالباً. */
+const named = (name: string) => (/^محط[ةه]/.test(name.trim()) ? name.trim() : `محطة ${name.trim()}`);
 const days = (n: number) => plural(n, 'يوم واحد', 'يومين', 'أيام', 'يوماً');
 const folks = (n: number) => plural(n, 'مشترك واحد', 'مشتركان', 'مشتركين', 'مشترك');
 
@@ -39,7 +41,7 @@ export function linkMessage(r: OutreachRow): string {
   const d = daysSince(r.created_at);
   return (
     `السلام عليكم ${who(r)}،\n` +
-    `أنت من إدارة «${r.name}» في ${r.city} — و${folks(r.watchers)} في ${r.city} ينتظرون خبر محطتك على هواتفهم. ` +
+    `أنت من إدارة «${named(r.name)}» في ${r.city} — و${folks(r.watchers)} في ${r.city} ينتظرون خبر محطتك على هواتفهم. ` +
     `ومنذ ${days(d)} محطتك غير مربوطة بجهازك، فلا يصلك تذكيرٌ ولا يصلهم ما تُعلنه.\n\n` +
     `الطريقة — دقيقة واحدة:\n` +
     `1. افتح تطبيق المحطة التقنية وادخل لوحة محطتك.\n` +
@@ -55,7 +57,7 @@ export function staleMessage(r: OutreachRow): string {
   const since = d >= 999 ? 'ولم تُحدَّث قطّ' : `ولم تُحدَّث منذ ${days(d)}`;
   return (
     `السلام عليكم ${who(r)}،\n` +
-    `محطة «${r.name}» مربوطةٌ بجهازك ${since} — و${folks(r.watchers)} في ${r.city} لا يرون محطتك في «المتاح الآن».\n\n` +
+    `«${named(r.name)}» مربوطةٌ بجهازك ${since} — و${folks(r.watchers)} في ${r.city} لا يرون محطتك في «المتاح الآن».\n\n` +
     `افتح تطبيق المحطة التقنية ← لوحة محطتك ← اضبط المنتجات ← اضغط الزر الأخضر. ` +
     `ضغطة واحدة تعيد محطتك أمامهم فوراً ويصلهم إشعاراً بها.\n— إدارة المحطة التقنية`
   );
@@ -65,7 +67,7 @@ export function staleMessage(r: OutreachRow): string {
 export function stalePush(r: OutreachRow): string {
   const d = daysSince(r.last_update);
   const since = d >= 999 ? 'لم تُحدَّث قطّ' : `لم تُحدَّث منذ ${days(d)}`;
-  return `${who(r)}: محطة «${r.name}» ${since}، و${folks(r.watchers)} في ${r.city} لا يرونها في المتاح الآن. اضبط المنتجات واضغط الزر الأخضر — ضغطة تعيدها أمامهم فوراً.`;
+  return `${who(r)}: «${named(r.name)}» ${since}، و${folks(r.watchers)} في ${r.city} لا يرونها في المتاح الآن. اضبط المنتجات واضغط الزر الأخضر — ضغطة تعيدها أمامهم فوراً.`;
 }
 
 export const waLink = (phone: string, text: string): string | null => {
