@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { drawAvailabilityPoster, POSTER_SITE } from './AvailabilityPoster';
 import { RouteButton } from './RouteButton';
-import { EyeIcon, XIcon } from './icons';
+import { EyeIcon, XIcon, FuelIcon } from './icons';
 import { ageLabel } from '@/lib/hours';
 import { isSeen, isVideo, markSeen, type Story } from '@/lib/stories';
 import { supabase } from '@/lib/supabase';
@@ -67,7 +67,7 @@ export function StoryViewer({
     // المعاينةُ (id = preview) لا تُحصى ولا تُقرأ — ليست حالةً منشورة.
     if (story.id !== 'preview') recordView(story.id, story.at, fresh).then((n) => counting && setViews(n));
     setDrawn(false);
-    if (story.kind === 'platform') {
+    if (story.kind === 'platform' || story.kind === 'tomorrow') {
       setDrawn(true);
       return () => {
         counting = false;
@@ -121,12 +121,18 @@ export function StoryViewer({
     >
       {/* الصورةُ تملأ الشاشةَ كلَّها، وما عداها طبقاتٌ فوقها */}
       <div className="absolute inset-0">
-        {story.kind === 'platform' && story.news ? (
+        {(story.kind === 'platform' || story.kind === 'tomorrow') && story.news ? (
           // تُمرَّر ولا تُقصّ: على هاتفٍ بخطٍّ مكبَّر كان الرأسُ يطبع فوق الفيديو
           // (صورُ عامل التوصيل، ١٣ أيلول). والحشوُ العلويّ/السفليّ يحجز مكانَ
           // الطبقتين الثابتتين. `justify-center` لا يعمل مع overflow فيُستعمل
-          // `my-auto` على المحتوى.
-          <div className="flex h-full w-full flex-col items-center overflow-y-auto bg-gradient-to-b from-brand-900 via-brand-700 to-brand px-7 pb-28 pt-24 text-center">
+          // `my-auto` على المحتوى. و«التوزيع غداً» صفراءُ كحلقتها.
+          <div
+            className={`flex h-full w-full flex-col items-center overflow-y-auto px-7 pb-28 pt-24 text-center ${
+              story.kind === 'tomorrow'
+                ? 'bg-gradient-to-b from-amber-700 via-amber-500 to-amber-400'
+                : 'bg-gradient-to-b from-brand-900 via-brand-700 to-brand'
+            }`}
+          >
             <div className="my-auto flex w-full flex-col items-center">
             {/* صورةٌ برابطٍ من الإدارة، أو شعارُ المحطة — «صورة عبر رابط أو شعار المحطة». */}
             {story.news.image_url && isVideo(story.news.image_url) ? (
@@ -142,12 +148,17 @@ export function StoryViewer({
             ) : story.news.image_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={story.news.image_url} alt="" className="max-h-[38vh] w-auto max-w-[84%] rounded-2xl object-contain shadow-[0_10px_26px_rgba(0,0,0,.35)]" />
+            ) : story.kind === 'tomorrow' ? (
+              // خبرُ غياب: مضخّةٌ كبيرة على الأصفر، لا شعارُ المنصّة.
+              <span className="flex h-[88px] w-[88px] items-center justify-center rounded-full bg-white/20 shadow-[0_10px_26px_rgba(0,0,0,.25)]">
+                <FuelIcon className="h-11 w-11 text-white" />
+              </span>
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img src="/icons/icon-192.png" alt="" width={72} height={72} className="rounded-[18px] shadow-[0_10px_26px_rgba(0,0,0,.35)]" />
             )}
             <span className="mt-5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-extrabold tracking-wide">
-              جديدٌ في المحطة التقنية
+              {story.kind === 'tomorrow' ? `${story.name} · ${story.city}` : 'جديدٌ في المحطة التقنية'}
             </span>
             <h2 className="mt-3 text-[22px] font-extrabold leading-tight">{story.news.title}</h2>
             <ul className="mt-4 space-y-2.5 text-[13px] leading-relaxed text-white/90">
@@ -210,11 +221,16 @@ export function StoryViewer({
             {story.kind === 'announced' && (
               <span className="rounded-full bg-traffic-red px-1.5 py-px text-[10px] font-extrabold text-white">غير مسجّلة</span>
             )}
+            {story.kind === 'tomorrow' && (
+              <span className="rounded-full bg-white px-1.5 py-px text-[10px] font-extrabold text-amber-800">غداً لا اليوم</span>
+            )}
             {story.kind === 'platform'
               ? `جديد المحطة · ${ageLabel(story.at)}`
               : story.kind === 'announced'
                 ? `${story.city} · أُعلن ${ageLabel(story.at)}`
-                : `${story.city} · أُكّد ${ageLabel(story.at)}`}
+                : story.kind === 'tomorrow'
+                  ? `${story.city} · نُبّه ${ageLabel(story.at)}`
+                  : `${story.city} · أُكّد ${ageLabel(story.at)}`}
             {views !== null && (
               <span className="flex items-center gap-0.5" aria-label={`${views} مشاهدة`}>
                 · <EyeIcon className="h-3.5 w-3.5" /> {views}
@@ -238,11 +254,13 @@ export function StoryViewer({
         className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/60 to-transparent px-4 pt-10"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 14px)' }}
       >
-        {story.kind === 'platform' && story.news ? (
+        {(story.kind === 'platform' || story.kind === 'tomorrow') && story.news ? (
           story.news.href && story.news.label ? (
             <a
               href={story.news.href}
-              className="flex min-h-[40px] flex-1 items-center justify-center rounded-xl bg-white text-[13px] font-extrabold text-brand-900"
+              className={`flex min-h-[40px] flex-1 items-center justify-center rounded-xl bg-white text-[13px] font-extrabold ${
+                story.kind === 'tomorrow' ? 'text-amber-800' : 'text-brand-900'
+              }`}
             >
               {story.news.label}
             </a>

@@ -173,7 +173,12 @@ export function PlatformNotice() {
       source: 'إدارة المحطة التقنية',
       cities: [vars.city.trim()],
       product: product || null,
+      // لا station_name: اللوحةُ الحمراء تقرؤه خبرَ توفّر. الاسمُ في subject
+      // والنوعُ في kind — فتقرؤه الحالاتُ حلقةً صفراء (20260915b).
       station_name: null,
+      kind: 'tomorrow',
+      subject: vars.station.trim(),
+      origin_city: vars.city.trim(),
       send_at: now.toISOString(),
       sent_at: now.toISOString(),
       expires_at: new Date(now.getTime() + hours * 3600_000).toISOString(),

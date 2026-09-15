@@ -24,8 +24,20 @@ export interface Story {
   /** قصّةُ المنصّة نفسِها: «جديدُ المحطة التقنية» — تُعرض نصّاً لا صورةً.
    *  و`announced`: محطةٌ **غيرُ مسجّلة** أعلنت عنها الإدارةُ بإشعار — حلقتُها
    *  حمراء («أضفها إلى الحالات — غير مسجّلة وتظهر بالأحمر»). */
-  kind?: 'station' | 'platform' | 'announced';
+  kind?: 'station' | 'platform' | 'announced' | 'tomorrow';
   news?: { title: string; lines: string[]; image_url: string | null; href: string | null; label: string | null };
+}
+
+/** تنبيهُ «التوزيع غداً لا اليوم» كما تقرؤه الحالات (announcements.kind = tomorrow). */
+export interface TomorrowNoticeRow {
+  id: string;
+  title: string;
+  body: string;
+  subject: string | null;
+  origin_city: string | null;
+  cities: string[] | null;
+  product: FuelProduct | null;
+  sent_at: string;
 }
 
 /** صفُّ `platform_stories` — تكتبه الإدارةُ من «الحالات» وتقرؤه الرئيسيةُ (RLS: النشطُ المنشور). */
@@ -93,11 +105,34 @@ export function storiesFor(
   /** أخبارُ اللوحة الحمراء — ما ليس مسجّلاً ولم تقل الإدارةُ إنّه انتهى. */
   announced: OpenAnnouncement[] = [],
   /** حالاتُ المنصّة من القاعدة — الأحدثُ أوّلاً كما جاءت. */
-  platform: PlatformStoryRow[] = []
+  platform: PlatformStoryRow[] = [],
+  /** تنبيهاتُ «التوزيع غداً لا اليوم» — حلقةٌ صفراء لمدينة المحطة. */
+  tomorrow: TomorrowNoticeRow[] = []
 ): Story[] {
   const cities = new Set(choice?.cities ?? []);
   const wanted = new Set<FuelProduct>(choice?.products ?? []);
   const out: Story[] = [];
+  for (const t of tomorrow) {
+    // بجمهور الإشعار نفسِه: مدينةُ المحطة، ووقودُها إن سُمّي.
+    const inCity =
+      !cities.size ||
+      (t.origin_city !== null && cities.has(t.origin_city)) ||
+      !!t.cities?.some((c) => cities.has(c));
+    if (!inCity) continue;
+    if (wanted.size && t.product && !wanted.has(t.product)) continue;
+    const name = (t.subject ?? '').trim() || t.title.split(':')[0];
+    out.push({
+      id: `tmr:${t.id}`,
+      name,
+      short: shortName(name),
+      slug: null,
+      city: t.origin_city ?? t.cities?.[0] ?? '',
+      products: t.product ? [t.product] : [],
+      at: t.sent_at,
+      kind: 'tomorrow',
+      news: { title: 'التوزيع غداً لا اليوم', lines: [t.body], image_url: null, href: '/schedule', label: 'جدول الغد' },
+    });
+  }
   for (const a of announced) {
     // المسجّلةُ لها قصّتُها من منتجاتها؛ وما حكمت الإدارةُ بنفاده سقط.
     if (a.station_id || a.admin_verdict === 'gone') continue;
