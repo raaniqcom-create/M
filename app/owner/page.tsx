@@ -169,7 +169,9 @@ export default function OwnerPage() {
         return;
       }
       setUserId(user.id);
-      setMyPhone(displayPhone(user.email?.replace(/^p|@.*$/g, '') ?? ''));
+      // اسمُ الدخول: رقمٌ (p7XXXXXXXXX@) يُعرض بصفره، أو اسمُ موظّفٍ كما هو.
+      const local = user.email?.replace(/@.*$/, '') ?? '';
+      setMyPhone(/^p7\d{9}$/.test(local) ? displayPhone(local.slice(1)) : local);
       // ── القفلُ بالبصمة أو الوجه — في التطبيق، وحيث فُعّل ─────────────
       //
       // الجلسةُ محفوظةٌ في مخزن التطبيق فلا كلمةَ مرور، والبصمةُ هي البابُ
@@ -621,7 +623,7 @@ export default function OwnerPage() {
             <p className="truncate text-[11px] font-bold text-slate-400">
               {station.name} · {station.city}
               {userId && station.owner_id !== userId && myPhone && (
-                <span className="text-slate-500"> · تدخل برقم {myPhone}</span>
+                <span className="text-slate-500"> · تدخل بحساب {myPhone}</span>
               )}
             </p>
           )}
@@ -730,7 +732,14 @@ export default function OwnerPage() {
             />
 
             <section className="card p-5">
-              <h3 id="products-panel" className="scroll-mt-24 text-sm font-bold">توفر المنتجات</h3>
+              <h3 id="products-panel" className="scroll-mt-24 text-sm font-bold">
+                توفر المنتجات
+                {audience && audience.watchers > 0 && (
+                  <span className="ms-2 text-[11px] font-bold text-brand-700">
+                    عند الضغط على «احفظ الحالة» يصل إشعارٌ لـ{num(audience.watchers)} شخصاً مشتركاً من هذه المدينة
+                  </span>
+                )}
+              </h3>
               <p className="mt-1 text-xs text-slate-400">
                 اضبط كلَّ منتج، ثمّ اضغط الزرَّ الأخضر في الأسفل مرّةً واحدة.
               </p>
@@ -1076,23 +1085,23 @@ export default function OwnerPage() {
                     فتعدّلهما من البطاقة أعلاه.
                   </p>
                 </section>
-                {/* أرقامُ الورديات وسجلُّ التحديثات حسب الرقم. */}
-                <StationManagers
-                  stationId={station.id}
-                  ownerId={station.owner_id}
-                  stationPhone={station.phone}
-                  isOwner={!!userId && station.owner_id === userId}
-                  onChat={() => setView('chat')}
-                />
               </>
             )}
 
             {view === 'account' && (
               <>
+                {/* موظّفو المحطة وسجلُّ التحديثات حسب الحساب — في «حساب المحطة». */}
+                <StationManagers
+                  stationId={station.id}
+                  stationName={station.name}
+                  ownerId={station.owner_id}
+                  stationPhone={station.phone}
+                  isOwner={!!userId && station.owner_id === userId}
+                />
                 <BiometricLockToggle />
                 <ChangePassword />
                 <OwnerReminders stationId={station.id} />
-                <DeleteAccount phone={myPhone || station.phone} />
+                <DeleteAccount phone={myPhone || station.phone} stationId={station.id} />
               </>
             )}
           </div>

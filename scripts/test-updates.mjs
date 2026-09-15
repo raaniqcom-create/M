@@ -3,12 +3,12 @@
 import assert from 'node:assert/strict';
 import { actorName, describeChange } from '../lib/updates.ts';
 
-const managers = [{ user_id: 'm1', phone: '07811111111', label: 'الوردية الليلية', active: true },
-                  { user_id: 'm2', phone: '07822222222', label: null, active: false }];
+const managers = [{ user_id: 'm1', phone: '07811111111', username: null, label: 'الوردية الليلية', active: true },
+                  { user_id: 'm2', phone: null, username: 'ahmed_pm', label: null, active: false }];
 assert.equal(actorName(null, 'o', '07900000000', managers), 'النظام');
 assert.equal(actorName('o', 'o', '07900000000', managers), 'الأساسي 07900000000');
 assert.equal(actorName('m1', 'o', '07900000000', managers), 'الوردية الليلية 07811111111');
-assert.equal(actorName('m2', 'o', '07900000000', managers), 'رقم إضافي 07822222222');
+assert.equal(actorName('m2', 'o', '07900000000', managers), 'موظّف ahmed_pm');
 assert.equal(actorName('x', 'o', '07900000000', managers), 'الإدارة');
 
 assert.equal(describeChange('gasoline_regular', { is_available: true }), 'بانزين عادي → متوفّر');

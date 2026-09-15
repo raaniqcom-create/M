@@ -3,82 +3,79 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
-// Apple 5.1.1(v): an account created in the app has to be deletable in the app.
-// Deliberately awkward — typing the word is the only thing standing between a
-// mis-tap and a station disappearing from every driver's screen.
-const CONFIRM = 'حذف';
+/** طلبُ حذف الحساب — لا زرُّ حذفٍ مباشر.
+ *
+ *  «حذفُ الحساب لا تجعله خياراً متاحاً وإنّما تقديمَ طلب حذف حساب، ويشرح السببَ
+ *  على ألّا يقلّ عن ٩٠ حرفاً» — صاحبُ المنصّة، ١٦ أيلول. الطلبُ رسالةٌ في
+ *  محادثة المحطة مع الإدارة (station_messages)، والإدارةُ تنفّذه بيدها.
+ *
+ *  وكان زرُّ حذفٍ فوريّ لبند آبل 5.1.1(v): الطلبُ يُنفَّذ خلال أيّام، وهو ما
+ *  تقبله المراجعةُ ما دام الحذفُ يقع. */
+const MIN = 90;
 
-export function DeleteAccount({ phone }: { phone: string }) {
+export function DeleteAccount({ phone, stationId }: { phone: string; stationId: string }) {
   const [open, setOpen] = useState(false);
-  const [typed, setTyped] = useState('');
+  const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
 
-  async function remove() {
+  const left = MIN - reason.trim().length;
+
+  async function send() {
     setBusy(true);
     setError('');
-    try {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (!token) throw new Error('انتهت الجلسة، سجّل الدخول من جديد');
-
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/delete-account`,
-        { method: 'POST', headers: { Authorization: `Bearer ${token}` } }
-      );
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? 'تعذّر الحذف');
-
-      await supabase.auth.signOut();
-      window.location.href = '/';
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setBusy(false);
-    }
+    const { error: e } = await supabase.from('station_messages').insert({
+      station_id: stationId,
+      sender: 'owner',
+      body: `طلب حذف الحساب (${phone}).\nالسبب: ${reason.trim()}`,
+    });
+    setBusy(false);
+    if (e) return setError('تعذّر إرسال الطلب. أعد المحاولة.');
+    setSent(true);
   }
 
   return (
     <section className="card border-red-100 p-5">
-      <h3 className="text-sm font-bold text-red-600">حذف الحساب</h3>
+      <h3 className="text-sm font-bold text-red-600">طلب حذف الحساب</h3>
       <p className="mt-2 text-xs leading-relaxed text-slate-500">
-        يحذف حسابك ({phone}) ومحطتك وكل بياناتها نهائياً من المنصة. لا يمكن التراجع.
+        يُرسل الطلب إلى إدارة المنصّة وتنفّذه بعد مراجعته، ويُحذف حسابك ({phone}) وما يخصّه. لا يمكن التراجع بعد التنفيذ.
       </p>
 
-      {!open ? (
+      {sent ? (
+        <p className="mt-4 rounded-lg bg-brand-50 px-3 py-2 text-xs font-bold text-brand-700">
+          أُرسل الطلب إلى الإدارة. ستصلك إجابتها في «الرسائل».
+        </p>
+      ) : !open ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
           className="mt-4 w-full rounded-xl border border-red-200 px-3 py-2.5 text-sm font-bold text-red-600 active:bg-red-50"
         >
-          حذف حسابي ومحطتي
+          تقديم طلب حذف الحساب
         </button>
       ) : (
         <div className="mt-4 space-y-3">
           <label className="block text-xs font-bold text-slate-600">
-            اكتب «{CONFIRM}» للتأكيد
-            <input
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              className="input mt-1 w-full text-base"
-              autoComplete="off"
+            سبب الحذف — ٩٠ حرفاً على الأقلّ
+            <textarea
+              value={reason}
+              rows={4}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="اشرح السبب بوضوح: لماذا تريد حذف الحساب، وهل أغلقت المحطة أو انتقلت إدارتها…"
+              className="field mt-1 py-2"
             />
           </label>
-          {error && <p className="text-xs font-bold text-red-600">{error}</p>}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={typed.trim() !== CONFIRM || busy}
-              onClick={remove}
-              className="flex-1 rounded-xl bg-red-600 px-3 py-2.5 text-sm font-bold text-white disabled:opacity-40"
-            >
-              {busy ? 'جارٍ الحذف…' : 'تأكيد الحذف النهائي'}
+          <p className={`text-[11px] ${left > 0 ? 'text-slate-400' : 'text-brand-700'}`}>
+            {left > 0 ? `بقي ${left} حرفاً` : 'الطول كافٍ'}
+          </p>
+          {error && <p className="text-xs font-bold text-traffic-red">{error}</p>}
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" disabled={busy || left > 0} onClick={send} className="btn-primary disabled:opacity-60">
+              إرسال الطلب
             </button>
-            <button
-              type="button"
-              onClick={() => { setOpen(false); setTyped(''); setError(''); }}
-              className="btn-ghost flex-1"
-            >
-              تراجع
+            <button type="button" onClick={() => setOpen(false)} className="btn-ghost">
+              رجوع
             </button>
           </div>
         </div>

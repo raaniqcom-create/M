@@ -13,10 +13,15 @@ export interface UpdateRow {
 
 export interface ManagerRow {
   user_id: string;
-  phone: string;
+  phone: string | null;
+  username: string | null;
   label: string | null;
   active: boolean;
 }
+
+/** ما يُعرض ويُدخل به: الرقمُ أو اسمُ الدخول. */
+export const loginOf = (m: { phone: string | null; username: string | null }): string =>
+  m.phone ?? m.username ?? '';
 
 /** من فعل: الأساسيُّ برقم المحطة، الورديةُ بوصفها ورقمها، الإدارةُ، أو النظامُ (كرون). */
 export function actorName(
@@ -28,7 +33,7 @@ export function actorName(
   if (!actor) return 'النظام';
   if (ownerId && actor === ownerId) return `الأساسي ${stationPhone}`;
   const m = managers.find((x) => x.user_id === actor);
-  if (m) return `${m.label ?? 'رقم إضافي'} ${m.phone}`;
+  if (m) return `${m.label ?? 'موظّف'} ${loginOf(m)}`;
   return 'الإدارة';
 }
 

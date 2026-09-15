@@ -12,7 +12,7 @@
 // تلقائيّاً في أيّ مسار: قاعدةُ صاحب المنصّة.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { newPassword } from '../_shared/password.ts';
-import { userForPhone } from '../_shared/owner.ts';
+import { emailFor, userForPhone } from '../_shared/owner.ts';
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -31,83 +31,103 @@ function core(raw: string): string {
   return (d.startsWith('964') ? d.slice(3) : d).replace(/^0+/, '');
 }
 
-/** معرّفُ الإدارة إن كان الطالبُ إدارةً — وإلّا null. */
-async function adminId(req: Request): Promise<string | null> {
+/** من يطلب: معرّفُه، وهل هو إدارة. */
+async function caller(req: Request): Promise<{ id: string; admin: boolean } | null> {
   const jwt = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
   if (!jwt) return null;
   const { data } = await db.auth.getUser(jwt);
   if (!data.user) return null;
   const { data: p } = await db.from('profiles').select('role').eq('id', data.user.id).maybeSingle();
-  return p?.role === 'admin' ? data.user.id : null;
+  return { id: data.user.id, admin: p?.role === 'admin' };
+}
+
+/** اسمُ دخولٍ لاتينيٌّ ٤–٢٠ حرفاً، لا يلتبس بحسابات الهواتف p7XXXXXXXXX. */
+const USERNAME = /^[a-z][a-z0-9_.]{3,19}$/;
+
+/** «07901234567» أو «ahmed_night» → {phone|username, email}. */
+function loginOf(raw: string): { phone: string | null; username: string | null; email: string } | null {
+  const v = String(raw ?? '').trim();
+  if (/^[0-9+\s()-]+$/.test(v)) {
+    const c = core(v);
+    return /^7\d{9}$/.test(c) ? { phone: `0${c}`, username: null, email: emailFor(c) } : null;
+  }
+  const u = v.toLowerCase();
+  return USERNAME.test(u) && !/^p\d+$/.test(u) ? { phone: null, username: u, email: `${u}@muhta.app` } : null;
 }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   try {
-    const admin = await adminId(req);
-    if (!admin) return json({ error: 'غير مصرّح' }, 403);
+    const who = await caller(req);
+    if (!who) return json({ error: 'غير مصرّح' }, 403);
 
-    const { stationId, phone, action, label } = await req.json();
+    const { stationId, phone, action, label, login } = await req.json();
 
-    // ── رقمٌ إضافيٌّ لوردية: حسابٌ بكلمته، صفٌّ في station_managers ─────────
+    // ── موظّفٌ للمحطة: حسابٌ باسمٍ أو رقم، صفٌّ في station_managers ─────────
     //
-    // «أكثرُ من رقمٍ لإدارة المحطة لأنّ يوجد أكثرُ من أوقات دوام». الإضافةُ
-    // بيد الإدارة وحدَها: إنشاءُ الحساب يحتاج مفتاحَ الخدمة، ومالكٌ يضيف
-    // رقمَ غيره ثمّ يطلب كلمتَه بابُ استيلاء.
-    if (action === 'add_manager') {
-      const c = core(phone);
-      if (!/^7\d{9}$/.test(c)) return json({ error: 'رقم غير صحيح. اكتبه هكذا: 07901234567' }, 400);
-      const { data: st } = await db.from('stations').select('id, name, phone').eq('id', stationId).maybeSingle();
+    // «إضافةُ موظّفين … من الحساب الأساسيّ». صاحبُ المحطة يضيف حساباتٍ
+    // **جديدةً** فقط: حسابٌ قائمٌ لا يُضاف ولا تُبدَّل كلمتُه من هنا — وإلّا
+    // صار رقمُ جارِه بابَ استيلاء. والإدارةُ تضيف القائمَ بلا محطةٍ بكلمةٍ جديدة.
+    if (action === 'add_staff') {
+      const { data: st } = await db.from('stations').select('id, name, phone, owner_id').eq('id', stationId).maybeSingle();
       if (!st) return json({ error: 'المحطة غير موجودة' }, 404);
-      if (core(st.phone) === c) return json({ error: 'هذا هو رقم المحطة الأساسي' }, 400);
+      if (!who.admin && st.owner_id !== who.id) return json({ error: 'غير مصرّح' }, 403);
 
-      const u = await userForPhone(db, c);
-      if (!u) return json({ error: 'تعذّر تجهيز حساب الرقم' }, 500);
+      const l = loginOf(login ?? phone);
+      if (!l) return json({ error: 'اسمُ الدخول: حروفٌ إنجليزيّة وأرقام (٤ فأكثر)، أو رقمُ هاتف 07XXXXXXXXX' }, 400);
+      if (l.phone && core(st.phone) === core(l.phone)) return json({ error: 'هذا هو رقم المحطة الأساسي' }, 400);
 
-      // بالهويّة لا بالرقم: صاحبُ محطةٍ أخرى أو حسابُ إدارة لا يصير وردية.
-      const { data: owns } = await db.from('stations').select('name').eq('owner_id', u.id).limit(1).maybeSingle();
-      if (owns) return json({ error: `الرقم صاحبُ محطةٍ أخرى «${owns.name}»` }, 409);
-      const { data: prof } = await db.from('profiles').select('role').eq('id', u.id).maybeSingle();
-      if (prof?.role === 'admin') return json({ error: 'هذا حسابُ إدارة' }, 400);
-
-      // حسابٌ سابقٌ بلا محطة (سجّل ولم يُكمل): كلمةٌ جديدةٌ تُصدر بيد الإدارة
-      // وتُعرض لها — فلا يبقى الرقمُ بكلمةٍ يعرفها غريبٌ سجّله من قبل.
-      let password = u.password;
-      if (password === null) {
+      let password: string = newPassword();
+      const { data: created } = await db.auth.admin.createUser({ email: l.email, password, email_confirm: true });
+      let userId = created?.user?.id ?? null;
+      if (!userId) {
+        if (!who.admin) return json({ error: 'هذا الاسم أو الرقم له حسابٌ من قبل. اختر اسماً آخر، أو اطلب من الإدارة إضافته.' }, 409);
+        // الإدارة: حسابٌ قائمٌ بلا محطة يُضاف بكلمةٍ جديدة.
+        const u = l.phone ? await userForPhone(db, core(l.phone)) : null;
+        if (!u) {
+          const { data: list } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
+          userId = list?.users?.find((x) => x.email === l.email)?.id ?? null;
+        } else userId = u.id;
+        if (!userId) return json({ error: 'تعذّر تجهيز الحساب' }, 500);
+        const { data: owns } = await db.from('stations').select('name').eq('owner_id', userId).limit(1).maybeSingle();
+        if (owns) return json({ error: `الحسابُ صاحبُ محطةٍ أخرى «${owns.name}»` }, 409);
+        const { data: prof } = await db.from('profiles').select('role').eq('id', userId).maybeSingle();
+        if (prof?.role === 'admin') return json({ error: 'هذا حسابُ إدارة' }, 400);
         password = newPassword();
-        const { error: pwErr } = await db.auth.admin.updateUserById(u.id, { password });
-        if (pwErr) return json({ error: 'تعذّر تجهيز حساب الرقم' }, 500);
+        const { error: pwErr } = await db.auth.admin.updateUserById(userId, { password });
+        if (pwErr) return json({ error: 'تعذّر تجهيز الحساب' }, 500);
       }
 
       const { error: insErr } = await db.from('station_managers').insert({
-        user_id: u.id,
+        user_id: userId,
         station_id: stationId,
-        phone: `0${c}`,
+        phone: l.phone,
+        username: l.username,
         label: typeof label === 'string' && label.trim() ? label.trim().slice(0, 20) : null,
-        added_by: admin,
+        added_by: who.id,
       });
       if (insErr) {
-        if (insErr.code === '23505') return json({ error: 'الرقم مسؤولٌ عن محطةٍ أخرى أصلاً' }, 409);
-        return json({ error: 'تعذّر حفظ الرقم' }, 500);
+        if (insErr.code === '23505') return json({ error: 'هذا الحسابُ موظّفٌ في محطةٍ أخرى أصلاً' }, 409);
+        return json({ error: 'تعذّر حفظ الحساب' }, 500);
       }
-      return json({ ok: true, phone: `0${c}`, label: label ?? null, password });
+      return json({ ok: true, login: l.phone ?? l.username, phone: l.phone, username: l.username, label: label ?? null, password });
     }
 
+    if (!who.admin) return json({ error: 'غير مصرّح' }, 403);
+
     // ── كلمةٌ جديدة لصاحب المحطة — بطلبه، وبيد الإدارة وحدَها ──────────────
-    // ومع `phone`: لرقمٍ إضافيٍّ من أرقام هذه المحطة.
-    if (action === 'password' && phone) {
-      const c = core(phone);
-      const { data: m } = await db
-        .from('station_managers')
-        .select('user_id, phone')
-        .eq('station_id', stationId)
-        .eq('phone', `0${c}`)
-        .maybeSingle();
-      if (!m) return json({ error: 'الرقم ليس من أرقام هذه المحطة' }, 404);
+    // ومع `login`/`phone`: لموظّفٍ من موظّفي هذه المحطة.
+    if (action === 'password' && (login || phone)) {
+      const l = loginOf(login ?? phone);
+      if (!l) return json({ error: 'اسمُ دخولٍ غير صحيح' }, 400);
+      let q = db.from('station_managers').select('user_id, phone, username').eq('station_id', stationId);
+      q = l.phone ? q.eq('phone', l.phone) : q.eq('username', l.username);
+      const { data: m } = await q.maybeSingle();
+      if (!m) return json({ error: 'ليس من موظّفي هذه المحطة' }, 404);
       const fresh = newPassword();
       const { error: pwErr } = await db.auth.admin.updateUserById(m.user_id, { password: fresh });
       if (pwErr) return json({ error: 'تعذّر تغيير كلمة المرور' }, 500);
-      return json({ ok: true, phone: m.phone, password: fresh });
+      return json({ ok: true, login: m.phone ?? m.username, phone: m.phone, password: fresh });
     }
     if (action === 'password') {
       const { data: st } = await db

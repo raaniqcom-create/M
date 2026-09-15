@@ -59,7 +59,7 @@ export function OwnerHomeIcons({
           tone: tempClosed ? 'red' : undefined,
           onClick: onTempClose,
         },
-        { key: 'account', label: 'حسابي', icon: UserIcon, onClick: () => onOpen('account') },
+        { key: 'account', label: 'حساب المحطة', icon: UserIcon, onClick: () => onOpen('account') },
         { key: 'citizen', label: 'شاهد كمواطن', icon: EyeIcon, href: '/?view=user' },
       ]}
     />
