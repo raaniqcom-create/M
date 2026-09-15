@@ -49,6 +49,7 @@ import { PlatformNotice } from '@/components/PlatformNotice';
 import { PendingAnnouncements } from '@/components/PendingAnnouncements';
 import { SubscribersPanel } from '@/components/SubscribersPanel';
 import { StoriesAdmin } from '@/components/StoriesAdmin';
+import { OwnerOutreach } from '@/components/OwnerOutreach';
 import { DockTab } from '@/components/BottomDock';
 import { findSimilar } from '@/lib/similar';
 import { announceStation, rebuildSite } from '@/lib/rebuild';
@@ -80,6 +81,7 @@ export default function AdminPage() {
     | 'announce'
     | 'system'
     | 'stats'
+    | 'outreach'
     | 'ads'
     | 'offers'
     | 'reviews'
@@ -442,6 +444,7 @@ export default function AdminPage() {
               { key: 'messages', label: 'الرسائل', icon: MessageIcon, badge: totalUnread, onClick: () => setTab('messages') },
               { key: 'subscribers', label: 'المشتركون+', icon: UserIcon, badge: subUnread, tone: subUnread ? 'red' : undefined, onClick: () => setTab('subscribers') },
               { key: 'stories', label: 'الحالات', icon: InfoIcon, onClick: () => setTab('stories') },
+              { key: 'outreach', label: 'متابعة المحطات', icon: PhoneIcon, onClick: () => setTab('outreach') },
               { key: 'add', label: 'إضافة محطة', icon: PlusIcon, onClick: () => setTab('add') },
               { key: 'announce', label: 'الإشعارات', icon: BellRingIcon, onClick: () => setTab('announce') },
               { key: 'schedule', label: 'جدول الوقود', icon: CalendarIcon, onClick: () => setTab('schedule') },
@@ -777,6 +780,11 @@ export default function AdminPage() {
       {tab === 'subscribers' && (
         <div className="mt-4">
           <SubscribersPanel onRead={load} />
+        </div>
+      )}
+      {tab === 'outreach' && (
+        <div className="mt-4">
+          <OwnerOutreach />
         </div>
       )}
       {tab === 'stories' && (
