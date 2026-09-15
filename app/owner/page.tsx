@@ -657,6 +657,10 @@ export default function OwnerPage() {
             <p className="mt-2 text-sm text-slate-500">
               للاستفسار عن سبب الرفض يرجى التواصل مع إدارة المنصة.
             </p>
+            {/* أكثرُ المرفوضين جاؤوا للإشعارات لا للتسجيل — بابُهم هنا. */}
+            <a href="/alerts" className="btn-primary mt-4">
+              أريد إشعاراً عند توفّر الوقود — بلا حساب
+            </a>
           </div>
         )}
 

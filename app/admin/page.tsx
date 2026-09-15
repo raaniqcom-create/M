@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { metresToKnownFuel, SUSPICIOUS_M } from '@/lib/nearbyFuel';
+import { metresToKnownFuel, normalizeName, SUSPICIOUS_M } from '@/lib/nearbyFuel';
 import {
   BellRingIcon,
   CalendarIcon,
@@ -31,7 +31,7 @@ import { IconGrid } from '@/components/IconGrid';
 import { BiometricLockToggle } from '@/components/BiometricLockToggle';
 import { biometricLockEnabled, verifyOwner } from '@/lib/biometric';
 import { BiometricLockScreen } from '@/components/BiometricLockScreen';
-import { whatsappLink, whatsappVerifyLocation, whatsappVerifyRole } from '@/lib/phone';
+import { whatsappFollowInstead, whatsappLink, whatsappVerifyLocation, whatsappVerifyRole } from '@/lib/phone';
 import { ScheduleAdmin } from '@/components/ScheduleAdmin';
 import { AdminStationForm } from '@/components/AdminStationForm';
 import { BroadcastPanel } from '@/components/BroadcastPanel';
@@ -647,6 +647,48 @@ export default function AdminPage() {
               <p className="mt-0.5 text-sm text-slate-500">
                 {s.city} — {s.address}
               </p>
+              {/* التاريخُ، والطلباتُ الأخرى بالاسم نفسه («الرحاب» ×5) — يُقرأ قبل أيّ زرّ. */}
+              <p className="mt-0.5 text-[11px] text-slate-400">
+                {new Date(s.created_at).toLocaleString('ar-IQ')}
+                {(() => {
+                  const dupes = pending.filter((o) => o.id !== s.id && normalizeName(o.name) === normalizeName(s.name)).length;
+                  return dupes > 0 ? <b className="text-amber-800"> · ⚠ {dupes} طلبات أخرى بالاسم نفسه</b> : null;
+                })()}
+              </p>
+              {findSimilar(s, live).map((m) => (
+                <div key={m.id} className="mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
+                  <p className="text-xs font-extrabold text-amber-900">
+                    {normalizeName(m.name) === normalizeName(s.name)
+                      ? `⚠ الاسم يطابق محطةً معتمدة: ${m.name}`
+                      : `يشبه محطة قائمة: ${m.name}`}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-amber-800">
+                    {m.city} — {m.address} · <span dir="ltr">{m.phone}</span>
+                  </p>
+                  {/* رابطٌ لا زرّ: واتساب يُفتح من إيماءة المستخدم نفسِها، والرفضُ يمضي معه. */}
+                  <a
+                    href={whatsappFollowInstead(s.phone, s.contact_name, m.name, `https://muhta.online/station/${m.id}`)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => decide(s.id, 'rejected')}
+                    className="mt-2 flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border-2 border-traffic-red bg-white px-3 text-xs font-extrabold text-traffic-red"
+                  >
+                    <WhatsappIcon className="h-4 w-4" />
+                    رفض + واتساب: هذه المحطة موجودة، تابعها من هنا
+                  </a>
+                  <p className="mt-1 text-[10.5px] text-amber-700">يُرفض الطلب فوراً وتُفتح المحادثة والنصُّ جاهز.</p>
+                  <button
+                    type="button"
+                    onClick={() => takeover(m.id, s)}
+                    className="btn-ghost mt-2 w-full text-xs"
+                  >
+                    نقل «{m.name}» إلى هذا الشخص وحذف الطلب
+                  </button>
+                  <p className="mt-1 text-[11px] leading-relaxed text-amber-700">
+                    تبقى المحطة ومنتجاتها ورابطها المنشور كما هي، ويتغيّر مالكها ورقمها فقط.
+                  </p>
+                </div>
+              ))}
               <a
                 href={whatsappLink(s.phone, s.contact_name)}
                 target="_blank"
@@ -728,30 +770,6 @@ export default function AdminPage() {
                   </div>
                 );
               })()}
-
-              {/* Advisory only. Two stations in one city really can share a
-                  word in their name, so the match is surfaced for a human who
-                  has spoken to the applicant — never acted on automatically. */}
-              {findSimilar(s, live).map((m) => (
-                <div key={m.id} className="mt-2 rounded-xl bg-amber-50 p-3">
-                  <p className="text-xs font-bold text-amber-900">
-                    يشبه محطة قائمة: {m.name}
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-amber-800">
-                    {m.city} — {m.address} · <span dir="ltr">{m.phone}</span>
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => takeover(m.id, s)}
-                    className="btn-ghost mt-2 w-full text-xs"
-                  >
-                    نقل «{m.name}» إلى هذا الشخص وحذف الطلب
-                  </button>
-                  <p className="mt-1 text-[11px] leading-relaxed text-amber-700">
-                    تبقى المحطة ومنتجاتها ورابطها المنشور كما هي، ويتغيّر مالكها ورقمها فقط.
-                  </p>
-                </div>
-              ))}
 
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <button

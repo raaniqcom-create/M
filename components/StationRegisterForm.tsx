@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { PRODUCT_ORDER } from '@/lib/products';
 import { ANBAR_CITIES } from '@/lib/cities';
-import { isValidIraqiMobile, phoneToEmail, displayPhone } from '@/lib/phone';
+import { isValidIraqiMobile, phoneToEmail, displayPhone, whatsappClaimStation } from '@/lib/phone';
 import { metresBetween, normalizeName, searchKnownFuel } from '@/lib/nearbyFuel';
 import { findSimilar } from '@/lib/similar';
 import type { Station } from '@/types/database';
 import { CheckIcon, EyeIcon, EyeOffIcon, SpinnerIcon } from './icons';
 import { LocationField } from './LocationField';
+import { FollowStation } from './FollowStation';
 
 /** تسجيلُ محطة — على أربع خطوات.
  *
@@ -66,6 +67,7 @@ export function StationRegisterForm() {
 
   const hits = useMemo(() => (fromKnown ? [] : searchKnownFuel(name)), [name, fromKnown]);
 
+
   /** محطاتُ المنصّة المعتمدة — لنقول عن كل اقتراحٍ أهو مسجَّلٌ عندنا أصلاً.
    *
    *  **وهذا أهمُّ ما في الاقتراح، لا حاشيةٌ فيه.** الاقتراحاتُ من خرائطَ
@@ -89,6 +91,19 @@ export function StationRegisterForm() {
       live = false;
     };
   }, []);
+
+  /** ── الاسمُ اسمُ محطةٍ معتمدة: لا نموذجَ بل «تابعها» ──────────────────
+   *
+   *  «أشخاصٌ يسجّلون محطاتهم بقصد متابعة محطة — متعبٌ حرفيّاً» (صاحبُ المنصّة،
+   *  ١٥ أيلول): «الرحاب» سُجّلت خمسَ مرّاتٍ بخمسة أرقام. فمتى طابق الاسمُ
+   *  (بعد التطبيع) محطةً في المنصّة تُطوى الخطواتُ ويُعرض زرُّ المتابعة مكانها
+   *  — وصاحبُها الحقيقيّ له بابُ الاستلام عبر الإدارة. مطابقةٌ تامّةٌ لا
+   *  «تشابهُ كلمة»: محطتان حقيقيّتان قد تتشاركان كلمة. */
+  const taken = useMemo(() => {
+    const k = normalizeName(name);
+    return k.length < 2 ? null : (platform.find((s) => normalizeName(s.name) === k) ?? null);
+  }, [name, platform]);
+  const blocked = step === 0 && !!taken;
 
   /** المطابقةُ بالموقع أوّلاً — والاسمُ احتياطاً.
    *
@@ -155,7 +170,7 @@ export function StationRegisterForm() {
 
   const canNext =
     step === 0
-      ? name.trim().length > 1
+      ? name.trim().length > 1 && !taken
       : step === 1
         ? address.trim().length > 2
         : step === 2
@@ -354,8 +369,33 @@ export function StationRegisterForm() {
             </p>
           </div>
 
+          {blocked && taken && (
+            <div className="rounded-xl border-2 border-brand bg-brand-50 p-3">
+              <p className="text-[13px] font-extrabold text-brand-900">
+                هذه المحطة موجودة في المنصّة: {taken.name} — {taken.city}
+              </p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-slate-600">
+                هل تريد أن يصلك خبرها؟ اضغط الزرَّ ويصلك إشعارٌ فور توفّر الوقود فيها — بلا حساب وبلا رقم.
+              </p>
+              <div className="mt-3">
+                <FollowStation stationId={taken.id} city={taken.city} />
+              </div>
+              <a
+                href={whatsappClaimStation(taken.name, taken.city)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 block min-h-[44px] pt-3 text-center text-xs font-bold text-slate-500 underline"
+              >
+                أنا صاحبها فعلاً وأريد استلامها
+              </a>
+              <p className="text-center text-[10.5px] text-slate-400">
+                تُفتح محادثةُ واتساب مع الإدارة والرسالةُ جاهزة — أرسلها من رقم المحطة.
+              </p>
+            </div>
+          )}
+
           {/* **التعرّفُ أسهل من التذكّر.** */}
-          {hits.length > 0 && (
+          {!blocked && hits.length > 0 && (
             <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-2.5">
               <p className="px-1 pb-1.5 text-[11px] font-bold text-brand-700">
                 هل تقصد هذه المحطة؟ اختَرها ليُملأ اسمُها وموقعُها تلقائياً.
@@ -368,9 +408,11 @@ export function StationRegisterForm() {
                      تسجيلٍ ثانٍ لمحطةٍ واحدة. */
                   if (mine) {
                     return (
-                      <a
+                      <button
                         key={`${h.station.la},${h.station.lo}`}
-                        href={`/station/${mine.id}`}
+                        type="button"
+                        // الاسمُ المعتمدُ يُكتب في الحقل فتظهر بطاقةُ «تابعها» هنا — بلا مغادرة.
+                        onClick={() => setName(mine.name)}
                         className="flex w-full items-center justify-between gap-2 rounded-lg border border-brand-200 bg-white px-3 py-2 text-right active:bg-brand-50"
                       >
                         <span className="min-w-0">
@@ -386,9 +428,9 @@ export function StationRegisterForm() {
                           </span>
                         </span>
                         <span className="shrink-0 text-[10.5px] font-bold text-brand-700 underline">
-                          افتحها وتابعها
+                          تابعها من هنا
                         </span>
-                      </a>
+                      </button>
                     );
                   }
                   return (
@@ -664,7 +706,7 @@ export function StationRegisterForm() {
       {/* **التوأم يُقال حيث يُكتشف، لا حيث سُئل عنه.**
           الفحص يحتاج الاسمَ والمدينةَ معاً، والمدينةُ تُختار في الخطوة الثانية —
           فلوحةٌ داخل الأولى وحدها تظهر بعد أن يُغادَر المكانُ الذي تُرى فيه. */}
-      {twin && (
+      {twin && !taken && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
           <p className="text-xs font-extrabold text-amber-900">
             «{twin.name}» مسجّلة بالفعل في {twin.city}.
@@ -680,6 +722,7 @@ export function StationRegisterForm() {
       )}
 
       {/* ─────────────── التنقّل ─────────────── */}
+      {!blocked && (
       <div className="flex gap-2">
         {step > 0 && (
           <button
@@ -706,6 +749,7 @@ export function StationRegisterForm() {
           </button>
         )}
       </div>
+      )}
 
       {step === 3 && (
         <p className="text-center text-xs text-slate-400">

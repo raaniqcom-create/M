@@ -50,6 +50,37 @@ export function whatsappLink(phone: string, name?: string | null): string {
  *
  *  فالسؤالُ يُطرح مرّةً واحدة بخيارين لا بشرحٍ طويل: من يقرأ رسالةً على
  *  هاتفه يجيب على سؤالٍ ولا يقرأ لائحة. */
+/** رقمُ إدارة المنصّة على واتساب — كما في صفحة «من نحن». */
+export const ADMIN_WA = '9647844446633';
+
+/** الزائرُ يدّعي محطةً مسجّلة: يفتح محادثةً مع الإدارة والرسالةُ جاهزة. */
+export function whatsappClaimStation(station: string, city: string): string {
+  const text =
+    `السلام عليكم ورحمة الله\n\n` +
+    `أنا صاحب محطة «${station}» — ${city}، وهي مسجّلة في «المحطة التقنية» بحسابٍ ليس لي. ` +
+    `أريد استلامها ليكون تحديثُ توفّر الوقود من رقمي هذا.\n\n(أرسلتُ هذه الرسالة من رقم المحطة.)`;
+  return `https://wa.me/${ADMIN_WA}?text=${encodeURIComponent(text)}`;
+}
+
+/** الإدارةُ تردّ على طلبٍ لمحطةٍ موجودة: «تابعها من هنا» — ورابطُ صفحتها. */
+export function whatsappFollowInstead(
+  phone: string,
+  name: string | null | undefined,
+  station: string,
+  link: string
+): string {
+  const n = normalizePhone(phone);
+  if (!n) return '';
+  const who = (name ?? '').trim();
+  const text =
+    `السلام عليكم ورحمة الله${who ? '، ' + who : ''}\n\n` +
+    `نحن إدارة «المحطة التقنية». وصلَنا طلبُك لتسجيل «${station}»، وهذه المحطة مسجّلةٌ عندنا بالفعل، ` +
+    `وصاحبُها هو من يُحدّث توفّر الوقود فيها.\n\n` +
+    `*فلا تحتاج حساباً لتصلك أخبارها.* افتح صفحتها واضغط «تابع هذه المحطة»، يصلك إشعارٌ فور توفّر الوقود — مجّاناً وبلا تسجيل:\n${link}\n\n` +
+    `وإن كنت أنت صاحبَ المحطة فعلاً فأجبنا هنا بكلمة «صاحبها» لننقلها إلى رقمك.\n\nشكراً لك.`;
+  return `https://wa.me/964${n}?text=${encodeURIComponent(text)}`;
+}
+
 export function whatsappVerifyRole(
   phone: string,
   name?: string | null,
