@@ -70,7 +70,19 @@ Deno.serve(async (req) => {
           .eq('status', 'approved');
         // والباب يبقى مغلقاً على من سواهما: ستّة ملّاك لا يُغرقون CI، وحاملُ
         // المفتاح المنشور وحده لا يزال بلا مدخل.
-        if (!count) return json({ error: 'غير مصرّح' }, 403);
+        if (!count) {
+          // أو ورديةٌ فعّالة لمحطةٍ معتمدة.
+          const { data: m } = await db
+            .from('station_managers')
+            .select('station_id')
+            .eq('user_id', auth.user.id)
+            .eq('active', true)
+            .maybeSingle();
+          const { data: st } = m
+            ? await db.from('stations').select('status').eq('id', m.station_id).maybeSingle()
+            : { data: null };
+          if (st?.status !== 'approved') return json({ error: 'غير مصرّح' }, 403);
+        }
       }
     }
 

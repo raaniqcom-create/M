@@ -9,6 +9,7 @@ import { StationPoster } from '@/components/StationPoster';
 import { AvailabilityPoster } from '@/components/AvailabilityPoster';
 import { SpinnerIcon } from '@/components/icons';
 import { OwnerMessagePreview } from '@/components/OwnerMessagePreview';
+import { AdminStationManagers } from '@/components/AdminStationManagers';
 import { StationChat } from '@/components/StationChat';
 import { LocationField } from '@/components/LocationField';
 import { WorkingHours } from '@/components/WorkingHours';
@@ -679,6 +680,13 @@ function Panel() {
             })()}
         </div>
       </section>
+
+      <AdminStationManagers
+        stationId={station.id}
+        stationName={station.name}
+        ownerId={station.owner_id}
+        stationPhone={station.phone}
+      />
 
       <section className="card p-5">
         <h2 className="text-sm font-bold">توفر الوقود</h2>

@@ -22,6 +22,8 @@ import {
 } from '@/lib/products';
 import { ShareButton } from '@/components/ShareButton';
 import { StationLinkCard } from '@/components/StationLinkCard';
+import { StationManagers } from '@/components/StationManagers';
+import { displayPhone } from '@/lib/phone';
 import { StationPoster } from '@/components/StationPoster';
 import { AvailabilityPoster } from '@/components/AvailabilityPoster';
 import { ProductControl, type ProductState } from '@/components/ProductControl';
@@ -50,6 +52,10 @@ const LEVELS: TrafficLevel[] = ['green', 'yellow', 'red'];
 export default function OwnerPage() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
+  /** رقمُ الدخول لهذا الحساب — للوردية غيرُ رقم المحطة. */
+  const [myPhone, setMyPhone] = useState('');
+  /** حسابُ وردية أوقفه صاحبُ المحطة: لا محطةَ تُعرض، وبطاقةٌ تشرح. */
+  const [managerOff, setManagerOff] = useState(false);
   const [netErr, setNetErr] = useState<string | null>(null);
   const [station, setStation] = useState<Station | null>(null);
   const [products, setProducts] = useState<StationProduct[]>([]);
@@ -78,15 +84,26 @@ export default function OwnerPage() {
   const load = useCallback(async (uid: string) => {
     // maybeSingle() errors outright when an owner holds more than one station,
     // which would render as "no station at all" — take the earliest instead
-    const { data: st } = await supabase
-      .from('stations')
-      .select('*')
-      .eq('owner_id', uid)
-      .order('created_at')
-      .limit(1)
-      .maybeSingle();
+    // ما يملكه أو يديره (station_managers الفعّالة) — my_station() في القاعدة.
+    const mine = await supabase.rpc('my_station').maybeSingle();
+    let st = (mine.data as Station | null) ?? null;
+    if (mine.error) {
+      // الدالّةُ لم تصل بعد (ترحيلٌ متأخّر): الاستعلامُ القديم — المالكُ لا يُحبَس.
+      const { data: old } = await supabase
+        .from('stations')
+        .select('*')
+        .eq('owner_id', uid)
+        .order('created_at')
+        .limit(1)
+        .maybeSingle();
+      st = (old as Station | null) ?? null;
+    }
 
-    setStation(st ?? null);
+    setStation(st);
+    if (!st) {
+      const { data: m } = await supabase.from('station_managers').select('active').eq('user_id', uid).maybeSingle();
+      setManagerOff(m?.active === false);
+    }
     if (st) {
       // Claim this phone for this station, the way the admin panel claims its
       // own. Without it device_tokens.station_id stays null and every owner
@@ -152,6 +169,7 @@ export default function OwnerPage() {
         return;
       }
       setUserId(user.id);
+      setMyPhone(displayPhone(user.email?.replace(/^p|@.*$/g, '') ?? ''));
       // ── القفلُ بالبصمة أو الوجه — في التطبيق، وحيث فُعّل ─────────────
       //
       // الجلسةُ محفوظةٌ في مخزن التطبيق فلا كلمةَ مرور، والبصمةُ هي البابُ
@@ -602,6 +620,9 @@ export default function OwnerPage() {
           {station && (
             <p className="truncate text-[11px] font-bold text-slate-400">
               {station.name} · {station.city}
+              {userId && station.owner_id !== userId && myPhone && (
+                <span className="text-slate-500"> · تدخل برقم {myPhone}</span>
+              )}
             </p>
           )}
         </div>
@@ -631,7 +652,18 @@ export default function OwnerPage() {
       )}
 
       <div className="mt-4">
-        {!station && (
+        {!station && managerOff && (
+          <div className="card p-6 text-center">
+            <h2 className="text-base font-bold text-traffic-red">رقمك متوقّف عن إدارة المحطة حالياً</h2>
+            <p className="mt-2 text-sm text-slate-500">
+              أوقفه صاحب المحطة أو الإدارة. حين يُعاد تشغيله تعود اللوحة من تلقاء نفسها.
+            </p>
+            <button type="button" onClick={signOut} className="btn-ghost mt-4 w-full">
+              تسجيل الخروج
+            </button>
+          </div>
+        )}
+        {!station && !managerOff && (
           <div className="card p-6 text-center">
             <h2 className="text-base font-bold">لا توجد محطة مرتبطة بحسابك</h2>
             <p className="mt-2 text-sm text-slate-500">
@@ -976,7 +1008,7 @@ export default function OwnerPage() {
                   <dl className="mt-3 space-y-2 text-sm">
                     <div className="flex justify-between gap-3">
                       <dt className="text-slate-500">اسم المستخدم</dt>
-                      <dd className="font-bold" dir="ltr">{station.phone}</dd>
+                      <dd className="font-bold" dir="ltr">{myPhone || station.phone}</dd>
                     </div>
                     <div className="flex justify-between gap-3">
                       <dt className="text-slate-500">هاتف المحطة</dt>
@@ -1044,6 +1076,14 @@ export default function OwnerPage() {
                     فتعدّلهما من البطاقة أعلاه.
                   </p>
                 </section>
+                {/* أرقامُ الورديات وسجلُّ التحديثات حسب الرقم. */}
+                <StationManagers
+                  stationId={station.id}
+                  ownerId={station.owner_id}
+                  stationPhone={station.phone}
+                  isOwner={!!userId && station.owner_id === userId}
+                  onChat={() => setView('chat')}
+                />
               </>
             )}
 
@@ -1052,7 +1092,7 @@ export default function OwnerPage() {
                 <BiometricLockToggle />
                 <ChangePassword />
                 <OwnerReminders stationId={station.id} />
-                <DeleteAccount phone={station.phone} />
+                <DeleteAccount phone={myPhone || station.phone} />
               </>
             )}
           </div>

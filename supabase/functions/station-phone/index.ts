@@ -12,6 +12,7 @@
 // تلقائيّاً في أيّ مسار: قاعدةُ صاحب المنصّة.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { newPassword } from '../_shared/password.ts';
+import { userForPhone } from '../_shared/owner.ts';
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -30,23 +31,84 @@ function core(raw: string): string {
   return (d.startsWith('964') ? d.slice(3) : d).replace(/^0+/, '');
 }
 
-async function isAdmin(req: Request): Promise<boolean> {
+/** معرّفُ الإدارة إن كان الطالبُ إدارةً — وإلّا null. */
+async function adminId(req: Request): Promise<string | null> {
   const jwt = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-  if (!jwt) return false;
+  if (!jwt) return null;
   const { data } = await db.auth.getUser(jwt);
-  if (!data.user) return false;
+  if (!data.user) return null;
   const { data: p } = await db.from('profiles').select('role').eq('id', data.user.id).maybeSingle();
-  return p?.role === 'admin';
+  return p?.role === 'admin' ? data.user.id : null;
 }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   try {
-    if (!(await isAdmin(req))) return json({ error: 'غير مصرّح' }, 403);
+    const admin = await adminId(req);
+    if (!admin) return json({ error: 'غير مصرّح' }, 403);
 
-    const { stationId, phone, action } = await req.json();
+    const { stationId, phone, action, label } = await req.json();
+
+    // ── رقمٌ إضافيٌّ لوردية: حسابٌ بكلمته، صفٌّ في station_managers ─────────
+    //
+    // «أكثرُ من رقمٍ لإدارة المحطة لأنّ يوجد أكثرُ من أوقات دوام». الإضافةُ
+    // بيد الإدارة وحدَها: إنشاءُ الحساب يحتاج مفتاحَ الخدمة، ومالكٌ يضيف
+    // رقمَ غيره ثمّ يطلب كلمتَه بابُ استيلاء.
+    if (action === 'add_manager') {
+      const c = core(phone);
+      if (!/^7\d{9}$/.test(c)) return json({ error: 'رقم غير صحيح. اكتبه هكذا: 07901234567' }, 400);
+      const { data: st } = await db.from('stations').select('id, name, phone').eq('id', stationId).maybeSingle();
+      if (!st) return json({ error: 'المحطة غير موجودة' }, 404);
+      if (core(st.phone) === c) return json({ error: 'هذا هو رقم المحطة الأساسي' }, 400);
+
+      const u = await userForPhone(db, c);
+      if (!u) return json({ error: 'تعذّر تجهيز حساب الرقم' }, 500);
+
+      // بالهويّة لا بالرقم: صاحبُ محطةٍ أخرى أو حسابُ إدارة لا يصير وردية.
+      const { data: owns } = await db.from('stations').select('name').eq('owner_id', u.id).limit(1).maybeSingle();
+      if (owns) return json({ error: `الرقم صاحبُ محطةٍ أخرى «${owns.name}»` }, 409);
+      const { data: prof } = await db.from('profiles').select('role').eq('id', u.id).maybeSingle();
+      if (prof?.role === 'admin') return json({ error: 'هذا حسابُ إدارة' }, 400);
+
+      // حسابٌ سابقٌ بلا محطة (سجّل ولم يُكمل): كلمةٌ جديدةٌ تُصدر بيد الإدارة
+      // وتُعرض لها — فلا يبقى الرقمُ بكلمةٍ يعرفها غريبٌ سجّله من قبل.
+      let password = u.password;
+      if (password === null) {
+        password = newPassword();
+        const { error: pwErr } = await db.auth.admin.updateUserById(u.id, { password });
+        if (pwErr) return json({ error: 'تعذّر تجهيز حساب الرقم' }, 500);
+      }
+
+      const { error: insErr } = await db.from('station_managers').insert({
+        user_id: u.id,
+        station_id: stationId,
+        phone: `0${c}`,
+        label: typeof label === 'string' && label.trim() ? label.trim().slice(0, 20) : null,
+        added_by: admin,
+      });
+      if (insErr) {
+        if (insErr.code === '23505') return json({ error: 'الرقم مسؤولٌ عن محطةٍ أخرى أصلاً' }, 409);
+        return json({ error: 'تعذّر حفظ الرقم' }, 500);
+      }
+      return json({ ok: true, phone: `0${c}`, label: label ?? null, password });
+    }
 
     // ── كلمةٌ جديدة لصاحب المحطة — بطلبه، وبيد الإدارة وحدَها ──────────────
+    // ومع `phone`: لرقمٍ إضافيٍّ من أرقام هذه المحطة.
+    if (action === 'password' && phone) {
+      const c = core(phone);
+      const { data: m } = await db
+        .from('station_managers')
+        .select('user_id, phone')
+        .eq('station_id', stationId)
+        .eq('phone', `0${c}`)
+        .maybeSingle();
+      if (!m) return json({ error: 'الرقم ليس من أرقام هذه المحطة' }, 404);
+      const fresh = newPassword();
+      const { error: pwErr } = await db.auth.admin.updateUserById(m.user_id, { password: fresh });
+      if (pwErr) return json({ error: 'تعذّر تغيير كلمة المرور' }, 500);
+      return json({ ok: true, phone: m.phone, password: fresh });
+    }
     if (action === 'password') {
       const { data: st } = await db
         .from('stations')
@@ -122,7 +184,10 @@ Deno.serve(async (req) => {
     if (error) return json({ error: 'تعذّر تحديث المحطة' }, 500);
 
     // the old owner's Telegram link now points at a station they no longer own
-    await db.from('telegram_links').delete().eq('station_id', stationId);
+    // — رابطُ الرقم الأساسيّ المغادر وحدَه؛ أرقامُ الورديات تبقى.
+    await db.from('telegram_links').delete().eq('station_id', stationId).eq('phone', core(station.phone));
+    // ورديةٌ رُفعت إلى الأساسيّ لا تبقى صفَّ وردية.
+    await db.from('station_managers').delete().eq('user_id', ownerId);
 
     return json({ ok: true, phone: `0${c}`, password: issued });
   } catch (err) {

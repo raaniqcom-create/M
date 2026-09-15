@@ -550,12 +550,14 @@ async function callerMayAnnounce(req: Request, stationId: string): Promise<boole
   const { data, error } = await db.auth.getUser(jwt);
   if (error || !data.user) return false;
 
-  const [{ data: profile }, { data: station }] = await Promise.all([
+  const [{ data: profile }, { data: station }, { data: manages }] = await Promise.all([
     db.from('profiles').select('role').eq('id', data.user.id).maybeSingle(),
     db.from('stations').select('owner_id').eq('id', stationId).maybeSingle(),
+    // أرقامُ الورديات (station_managers) — المسندُ نفسُه الذي تحكم به السياسات.
+    db.rpc('manages_station', { p_station: stationId, p_user: data.user.id }),
   ]);
 
-  return profile?.role === 'admin' || station?.owner_id === data.user.id;
+  return profile?.role === 'admin' || station?.owner_id === data.user.id || manages === true;
 }
 
 Deno.serve(async (req) => {
