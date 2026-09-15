@@ -732,12 +732,17 @@ export default function OwnerPage() {
             />
 
             <section className="card p-5">
-              <h3 id="products-panel" className="scroll-mt-24 text-sm font-bold">توفر المنتجات</h3>
-              {audience && audience.watchers > 0 && (
-                <p className="mt-1 rounded-lg bg-brand-50 px-2.5 py-1.5 text-[11.5px] font-bold leading-relaxed text-brand-700">
-                  عند الضغط على «احفظ الحالة» يصل إشعارٌ لـ{num(audience.watchers)} شخصاً مشتركاً من هذه المدينة.
-                </p>
-              )}
+              {/* «لوحة التوفر» بخلفيةٍ خضراء وكتابةٍ بيضاء، وبجانبها بالأخضر من يصله
+                  الإشعار — والرقمُ بالأحمر (صاحبُ المنصّة، ١٦ أيلول). */}
+              <h3 id="products-panel" className="flex scroll-mt-24 flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="rounded-lg bg-brand px-2.5 py-1 text-[12.5px] font-extrabold text-white">لوحة التوفر</span>
+                {audience && audience.watchers > 0 && (
+                  <span className="text-[11px] font-bold leading-relaxed text-brand-700">
+                    عند الضغط على «احفظ الحالة» يصل إشعارٌ لـ
+                    <b className="text-[12.5px] text-traffic-red">{num(audience.watchers)}</b> شخصاً مشتركاً
+                  </span>
+                )}
+              </h3>
               <p className="mt-1 text-xs text-slate-400">
                 اضبط كلَّ منتج، ثمّ اضغط الزرَّ الأخضر في الأسفل مرّةً واحدة.
               </p>
