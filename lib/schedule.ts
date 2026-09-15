@@ -1,6 +1,7 @@
 import { PRODUCT_LABELS } from './products.ts';
 import { metresBetween, normalizeName, searchKnownFuel } from './nearbyFuel.ts';
 import { CITY_NAMES } from './cities.ts';
+import { CITY_WORDS, officialFor } from './officialStations.ts';
 import type { FuelProduct } from '../types/database.ts';
 
 /** جدولُ الغد — قراءةُ منشورٍ يصل كما هو، ومطابقةُ أسمائه.
@@ -347,6 +348,30 @@ export function matchLine(
 ): ScheduleLine {
   // المرادفُ يُبدّل السطرَ كلَّه: للبحث في المسح وللربط بالاسم معاً.
   const text = ALIASES.get(normalizeName(raw)) ?? raw;
+  const line = matchLoose(raw, text, platform, product);
+
+  // ── والاسمُ الرسميُّ والمكانُ الرسميُّ يغلبان ──────────────────────────
+  //
+  // «طليحة الحكومية الرمادي وكاز»: الكتابُ يكتب المدينةَ خطأً والمسحُ يضعها
+  // في كبيسة، وهي على الكيلو ١٦٠ في الرطبة. فمتى عُرفت المحطةُ الحكوميّةُ من
+  // اسمها أو عنوانها (`officialStations.ts`) كُتب اسمُها الرسميُّ ومدينتُها
+  // الرسميّة. والربطُ بمحطة المنصّة يبقى كما حُسب، واسمُ المنصّة يبقى لما
+  // رُبط — فصفحتُها باسمها الذي يعرفه صاحبُها.
+  const official = officialFor(text);
+  if (!official) return line;
+  return {
+    ...line,
+    name: line.stationId ? line.name : official.name,
+    city: official.city,
+  };
+}
+
+function matchLoose(
+  raw: string,
+  text: string,
+  platform: PlatformStation[],
+  product: FuelProduct
+): ScheduleLine {
   const [top] = searchKnownFuel(text, 1);
   // **دون الحدّ لا مرشَّح.**
   //
@@ -394,6 +419,12 @@ export function matchLine(
       const nw = normalizeName(s.name).split(' ').filter(Boolean);
       if (!nw.length) return false;
       if (nw.length === 1 && nw[0].length < 5) return false;
+      // واسمٌ من كلمةٍ هي اسمُ مدينة — «محطة الخالدية» — لا يُربط بكلّ سطرٍ
+      // ذُكرت فيه مدينتُه: «تاج الجزيرة الخالدية» و«الكوثر الخالدية» رُبطتا
+      // به هكذا (جدول ١٥ أيلول). يُربط فقط إن لم يبقَ في السطر سوى مدن.
+      if (nw.length === 1 && CITY_WORDS.has(nw[0])) {
+        for (const w of lineWords) if (w !== nw[0] && !CITY_WORDS.has(w)) return false;
+      }
       if (!nw.every((w) => lineWords.has(w))) return false;
       return !(lineCity && s.city && lineCity !== s.city);
     });

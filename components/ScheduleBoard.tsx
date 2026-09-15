@@ -5,6 +5,7 @@ import { PRODUCT_LABELS } from '@/lib/products';
 import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
 import { baghdadDate, type BoardGroup, type BoardRow } from '@/lib/scheduleData';
+import { officialFor } from '@/lib/officialStations';
 
 /** جدولُ الوقود — الخبرُ الوحيد الذي يُقال قبل وقوعه.
  *
@@ -43,6 +44,9 @@ const STATE = {
 function Row({ r }: { r: BoardRow }) {
   const s = STATE[r.state];
   const dim = r.state === 'out';
+  // العنوانُ الرسميُّ بين قوسين — «محطة تعبئة وقود طليحة الحكومية (الكيلو ١٦٠)»
+  // — كما أملاه صاحبُ المنصّة؛ ولمحطةٍ ليست في القائمة لا قوسان.
+  const address = officialFor(r.name)?.address ?? null;
 
   const name = r.stationId ? (
     <a
@@ -63,6 +67,9 @@ function Row({ r }: { r: BoardRow }) {
     <tr className="border-t border-slate-100 align-top">
       <td className="py-2.5 pl-2 text-[12.5px] leading-snug">
         {name}
+        {address && (
+          <span className={`text-[11px] ${dim ? 'text-slate-300' : 'text-slate-500'}`}> ({address})</span>
+        )}
         {r.state === 'expected' && whenLabel(r.period, r.time) && (
           <span className="mr-1.5 text-[10.5px] text-amber-700">
             {' '}
