@@ -577,12 +577,18 @@ export function readManualLine(raw: string): ManualLine | null {
     if (!city) {
       const c = cityInText(head);
       if (c) {
-        const drop = new Set(normalizeName(c).split(' ').filter(Boolean));
-        const kept = head.split(/\s+/).filter((w) => !drop.has(normalizeName(w)));
-        // ويبقى اسمٌ حقيقيّ: «محطة الخالدية» اسمُها اسمُ ناحيتها فلا يُفرَّغ.
-        if (normalizeName(kept.join(' ')).length >= 2 && kept.length < head.split(/\s+/).length) {
-          city = c;
-          head = kept.join(' ');
+        // في الذيل وحدَه، ومرّةً واحدة: «الرمادي الجديدة الحكومية (الأمن) الرمادي»
+        // تفقد الأخيرةَ لا الأولى — فالأولى من الاسم. ويبقى اسمٌ حقيقيّ:
+        // «محطة الخالدية» اسمُها اسمُ ناحيتها فلا يُفرَّغ.
+        const words = head.split(/\s+/);
+        const cw = normalizeName(c).split(' ').filter(Boolean);
+        const tail = words.slice(-cw.length).map((w) => normalizeName(w)).join(' ');
+        if (words.length > cw.length && tail === cw.join(' ')) {
+          const kept = words.slice(0, -cw.length);
+          if (normalizeName(kept.join(' ')).length >= 2) {
+            city = c;
+            head = kept.join(' ');
+          }
         }
       }
     }

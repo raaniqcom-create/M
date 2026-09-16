@@ -30,6 +30,7 @@ import {
   type ScheduleLine,
 } from './schedule.ts';
 import { normalizeName } from './nearbyFuel.ts';
+import { officialFor } from './officialStations.ts';
 import type { FuelProduct } from '../types/database.ts';
 
 /** أرقامٌ عربيّةٌ مشرقيّة ← لاتينيّة. ولا محوّلَ في المستودع: `lib/num.ts`
@@ -313,7 +314,9 @@ export function readOfficialTable(text: string, platform: PlatformStation[]): Of
 
     for (const product of wanted) {
       const m = matchLine(name, platform, product);
-      lines.push({ ...m, city: city ?? m.city });
+      // المدينةُ الرسميّة (officialStations.ts) تسبق عمودَ الكتاب: كتبها الكتابُ
+      // «طليحة» تحت الرمادي وهي على الكيلو ١٦٠ في الرطبة.
+      lines.push({ ...m, city: officialFor(name) ? m.city : (city ?? m.city) });
     }
   }
 

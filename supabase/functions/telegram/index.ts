@@ -5,12 +5,14 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 // المحلِّلُ والمطابقُ يُستوردان من `lib/` ولا يُنسخان: نسخةٌ ثانيةٌ من قائمة
 // المسح أو من تطبيع الأسماء تعني أن البوت والموقع يفهمان الاسمَ نفسَه فهمين.
 // وهي ملفّاتٌ خالصةٌ بلا شبكةٍ ولا React، تُرفع مع هذه الدالّة عند كلّ نشر.
+import { officialFor } from '../../../lib/officialStations.ts';
 import { CITY_NAMES } from '../../../lib/cities.ts';
 import { looksLikeOfficialTable, readOfficialTable } from '../../../lib/officialTable.ts';
 // وقاعدةُ يوم اللوحة تُستورد ولا تُعاد كتابتُها: شاشةُ التحكّم يجب أن تُدير
 // اليومَ الذي تعرضه الصفحةُ نفسُه — انظر `boardDay` أدناه.
 import { resolveBoardDay } from '../../../lib/board.ts';
 import {
+  MATCH_FLOOR,
   looksLikeSchedule,
   matchLine,
   readManualLine,
@@ -2387,8 +2389,16 @@ async function proposeManual(chat: number, userId: number, text: string) {
     const one = readManualLine(row);
     if (!one) continue;
     const m = matchLine(one.name, platform, one.product ?? 'gasoline_regular');
-    // ما كتبه صاحبُ المنصّة أولى ممّا استنتجه المطابق: هو سمع الخبرَ بأذنه.
-    lines.push({ ...m, city: one.city ?? m.city, name: m.stationId ? m.name : one.name });
+    // الاسمُ من النظام متى عُرف (المنصّةُ، أو الرسميُّ، أو مساعدُ الطريق فوق
+    // الحدّ) — «عند وضع الجدول الجديد أريد النتيجةَ مثلَ الموجود في الجدول
+    // الحاليّ» (١٦ أيلول). وما لم يُعرف يبقى كما كتبه صاحبُ المنصّة.
+    // والمدينةُ الرسميّة تسبق ما كُتب: طليحة في الرطبة وإن كُتبت تحت الرمادي.
+    const known = !!m.stationId || m.score >= MATCH_FLOOR || !!officialFor(one.name);
+    lines.push({
+      ...m,
+      city: officialFor(one.name) ? m.city : (one.city ?? m.city),
+      name: known ? m.name : one.name,
+    });
   }
 
   if (!lines.length) {
@@ -2430,7 +2440,8 @@ async function correctSchedule(chat: number, userId: number, d: Draft, raw: stri
     // لا يصلها وقود، والمعاينةُ تقول «مسجّلة» فيُصدَّق.
     const old = sched.lines[i];
     const m = matchLine(v, await platformStations(), old.product);
-    sched.lines[i] = { ...m, name: m.stationId ? m.name : v, city: m.city ?? old.city, key: old.key };
+    const known = !!m.stationId || m.score >= MATCH_FLOOR || !!officialFor(v);
+    sched.lines[i] = { ...m, name: known ? m.name : v, city: m.city ?? old.city, key: old.key };
   } else {
     sched.lines[i].city = v;
   }
