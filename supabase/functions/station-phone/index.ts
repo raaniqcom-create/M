@@ -68,6 +68,59 @@ Deno.serve(async (req) => {
     // «إضافةُ موظّفين … من الحساب الأساسيّ». صاحبُ المحطة يضيف حساباتٍ
     // **جديدةً** فقط: حسابٌ قائمٌ لا يُضاف ولا تُبدَّل كلمتُه من هنا — وإلّا
     // صار رقمُ جارِه بابَ استيلاء. والإدارةُ تضيف القائمَ بلا محطةٍ بكلمةٍ جديدة.
+    // ── موظّفٌ لمغسلة (غسيل): الفرعُ يعود قبل فروع المحطة ولا يمسّها ────────
+    //
+    // نسخةُ add_staff بـcar_washes/wash_managers وحدِّ الباقة (staff_limit).
+    // صاحبُ المغسلة يضيف حساباتٍ جديدةً فقط؛ والإدارةُ تضيف القائمَ بكلمةٍ جديدة.
+    if (action === 'add_wash_staff') {
+      const washId = stationId; // الحقلُ نفسُه من المتصفّح
+      const { data: w } = await db.from('car_washes').select('id, name, phone, owner_id, plan').eq('id', washId).maybeSingle();
+      if (!w) return json({ error: 'المغسلة غير موجودة' }, 404);
+      if (!who.admin && w.owner_id !== who.id) return json({ error: 'غير مصرّح' }, 403);
+      const { data: plan } = await db.from('wash_plans').select('features').eq('code', w.plan).maybeSingle();
+      const limit = Number((plan?.features as { staff_limit?: number } | null)?.staff_limit ?? 0);
+      const { count } = await db.from('wash_managers').select('user_id', { count: 'exact', head: true }).eq('wash_id', washId);
+      if (!who.admin && (count ?? 0) >= limit) {
+        return json({ error: limit ? `باقتك تسمح بـ${limit} من الموظّفين — رقِّ اشتراكك لإضافة المزيد` : 'الموظّفون ميزةُ الباقة الاحترافيّة فما فوق' }, 403);
+      }
+
+      const l = loginOf(login ?? phone);
+      if (!l) return json({ error: 'اسمُ الدخول: حروفٌ إنجليزيّة وأرقام (٤ فأكثر)، أو رقمُ هاتف 07XXXXXXXXX' }, 400);
+      if (l.phone && core(w.phone) === core(l.phone)) return json({ error: 'هذا هو رقم المغسلة الأساسي' }, 400);
+
+      let password: string = newPassword();
+      const { data: created } = await db.auth.admin.createUser({ email: l.email, password, email_confirm: true });
+      let userId = created?.user?.id ?? null;
+      if (!userId) {
+        if (!who.admin) return json({ error: 'هذا الاسم أو الرقم له حسابٌ من قبل. اختر اسماً آخر، أو اطلب من الإدارة إضافته.' }, 409);
+        const u = l.phone ? await userForPhone(db, core(l.phone)) : null;
+        if (!u) {
+          const { data: list } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
+          userId = list?.users?.find((x) => x.email === l.email)?.id ?? null;
+        } else userId = u.id;
+        if (!userId) return json({ error: 'تعذّر تجهيز الحساب' }, 500);
+        const { data: prof } = await db.from('profiles').select('role').eq('id', userId).maybeSingle();
+        if (prof?.role === 'admin') return json({ error: 'هذا حسابُ إدارة' }, 400);
+        password = newPassword();
+        const { error: pwErr } = await db.auth.admin.updateUserById(userId, { password });
+        if (pwErr) return json({ error: 'تعذّر تجهيز الحساب' }, 500);
+      }
+
+      const { error: insErr } = await db.from('wash_managers').insert({
+        user_id: userId,
+        wash_id: washId,
+        phone: l.phone,
+        username: l.username,
+        label: typeof label === 'string' && label.trim() ? label.trim().slice(0, 20) : null,
+        added_by: who.id,
+      });
+      if (insErr) {
+        if (insErr.code === '23505') return json({ error: 'هذا الحسابُ موظّفٌ في مغسلةٍ أخرى أصلاً' }, 409);
+        return json({ error: 'تعذّر حفظ الحساب' }, 500);
+      }
+      return json({ ok: true, login: l.phone ?? l.username, phone: l.phone, username: l.username, label: label ?? null, password });
+    }
+
     if (action === 'add_staff') {
       const { data: st } = await db.from('stations').select('id, name, phone, owner_id').eq('id', stationId).maybeSingle();
       if (!st) return json({ error: 'المحطة غير موجودة' }, 404);

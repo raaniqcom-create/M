@@ -35,6 +35,7 @@ import { TimeSelect } from './TimeSelect';
 import { WashPhotoUpload } from './WashPhotoUpload';
 import { WashDeviceLink } from './WashDeviceLink';
 import { WashDashboard } from './WashDashboard';
+import { WashStaff } from './WashStaff';
 import {
   CalendarIcon,
   CarIcon,
@@ -45,6 +46,7 @@ import {
   PlusIcon,
   AlertTriangleIcon,
   ChartIcon,
+  UserIcon,
   SpinnerIcon,
   StarIcon,
   StoreIcon,
@@ -53,7 +55,7 @@ import {
 } from './icons';
 
 type Tab = 'today' | 'tomorrow' | 'past';
-type SheetKind = 'services' | 'offers' | 'hours' | 'photo' | 'pause' | 'walkin' | 'reviews' | 'stats' | null;
+type SheetKind = 'services' | 'offers' | 'hours' | 'photo' | 'pause' | 'walkin' | 'reviews' | 'stats' | 'staff' | null;
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'today', label: 'اليوم' },
@@ -160,6 +162,8 @@ export function WashOwnerScreen() {
   const viewId = useSearchParams().get('id');
   const [asAdmin, setAsAdmin] = useState(false);
   const [views, setViews] = useState<{ views: number; calls: number; routes: number } | null>(null);
+  /** مالكٌ (أو إدارة) لا موظّف — الأوراقُ الحسّاسة تُخفى عن الموظّف. */
+  const [owns, setOwns] = useState(true);
   const [wash, setWash] = useState<CarWash | null | undefined>(undefined);
   const [upcoming, setUpcoming] = useState<WashBooking[]>([]);
   const [past, setPast] = useState<WashBooking[]>([]);
@@ -217,8 +221,12 @@ export function WashOwnerScreen() {
       setWash(w);
       if (w) {
         await Promise.all([loadBookings(w.id), loadLists(w.id)]);
-        const { data: v } = await supabase.rpc('wash_views_for', { p_wash: w.id });
+        const [{ data: v }, { data: o }] = await Promise.all([
+          supabase.rpc('wash_views_for', { p_wash: w.id }),
+          supabase.rpc('owns_wash', { p_wash: w.id }),
+        ]);
         if (alive && v) setViews(v as { views: number; calls: number; routes: number });
+        if (alive) setOwns(o !== false);
       }
     })();
     return () => {
@@ -302,34 +310,43 @@ export function WashOwnerScreen() {
   const note = banner(wash, today);
 
   const grid: IconGridItem[] = [
-    { key: 'services', label: 'الخدمات', icon: CarIcon, onClick: () => setSheet('services') },
-    { key: 'offers', label: 'العروض', icon: StarIcon, onClick: () => setSheet('offers') },
-    { key: 'hours', label: 'الدوام والمسارب', icon: CalendarIcon, onClick: () => setSheet('hours') },
-    { key: 'photo', label: 'الصورة', icon: ImageIcon, onClick: () => setSheet('photo') },
+    ...(owns
+      ? ([
+          { key: 'services', label: 'الخدمات', icon: CarIcon, onClick: () => setSheet('services') },
+          { key: 'offers', label: 'العروض', icon: StarIcon, onClick: () => setSheet('offers') },
+          { key: 'hours', label: 'الدوام والمسارب', icon: CalendarIcon, onClick: () => setSheet('hours') },
+          { key: 'photo', label: 'الصورة', icon: ImageIcon, onClick: () => setSheet('photo') },
+          { key: 'staff', label: 'الموظّفون', icon: UserIcon, onClick: () => setSheet('staff') },
+        ] as IconGridItem[])
+      : []),
     { key: 'walkin', label: 'سيارة الآن', icon: PlusIcon, onClick: () => setSheet('walkin') },
     { key: 'reviews', label: 'التقييمات', icon: StarIcon, onClick: () => setSheet('reviews') },
     { key: 'stats', label: 'الإحصائيّات', icon: ChartIcon, onClick: () => setSheet('stats') },
-    {
-      key: 'pause',
-      label: paused ? 'الحجوزات متوقّفة' : 'إيقاف الحجوزات',
-      icon: AlertTriangleIcon,
-      tone: paused ? 'red' : undefined,
-      onClick: () => setSheet('pause'),
-    },
-    {
-      key: 'closed',
-      label: wash.temp_closed ? 'مغلقة مؤقّتاً' : 'إغلاق مؤقّت',
-      icon: XIcon,
-      tone: wash.temp_closed ? 'red' : undefined,
-      onClick: () => void patchWash({ temp_closed: !wash.temp_closed }),
-    },
-    {
-      key: 'phone',
-      label: wash.phone_hidden ? 'رقمي مخفيّ' : 'إخفاء رقمي',
-      icon: EyeOffIcon,
-      active: wash.phone_hidden,
-      onClick: () => void patchWash({ phone_hidden: !wash.phone_hidden }),
-    },
+    ...(owns
+      ? ([
+          {
+            key: 'pause',
+            label: paused ? 'الحجوزات متوقّفة' : 'إيقاف الحجوزات',
+            icon: AlertTriangleIcon,
+            tone: paused ? 'red' : undefined,
+            onClick: () => setSheet('pause'),
+          },
+          {
+            key: 'closed',
+            label: wash.temp_closed ? 'مغلقة مؤقّتاً' : 'إغلاق مؤقّت',
+            icon: XIcon,
+            tone: wash.temp_closed ? 'red' : undefined,
+            onClick: () => void patchWash({ temp_closed: !wash.temp_closed }),
+          },
+          {
+            key: 'phone',
+            label: wash.phone_hidden ? 'رقمي مخفيّ' : 'إخفاء رقمي',
+            icon: EyeOffIcon,
+            active: wash.phone_hidden,
+            onClick: () => void patchWash({ phone_hidden: !wash.phone_hidden }),
+          },
+        ] as IconGridItem[])
+      : []),
     { key: 'page', label: 'صفحة مغسلتك', icon: StoreIcon, href: `/wash/detail/?id=${wash.id}` },
   ];
 
@@ -514,6 +531,11 @@ export function WashOwnerScreen() {
             <HoursEditor wash={wash} onSave={patchWash} />
             <ClosuresEditor washId={wash.id} />
           </>
+        )}
+      </Sheet>
+      <Sheet open={sheet === 'staff'} onClose={() => setSheet(null)} title="موظّفو المغسلة" hint="حساباتٌ تؤكّد الحجوزاتِ وتُتمّها معك.">
+        {sheet === 'staff' && (
+          <WashStaff washId={wash.id} washName={wash.name} washPhone={wash.phone} isOwner={owns} staffLimit={Math.max(0, Number(planOf(cfg, wash.plan)?.features.staff_limit ?? 0))} />
         )}
       </Sheet>
       <Sheet open={sheet === 'stats'} onClose={() => setSheet(null)} title="الإحصائيّات" hint="حجوزاتك وإيرادك وزبائنك — بحسب الفترة.">
