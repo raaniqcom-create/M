@@ -268,6 +268,10 @@ export function WashAdmin() {
                     حجوزات
                   </button>
                 </div>
+                {/* الدخولُ على لوحة المغسلة بصفة الإدارة — لمتابعة الوضع كما يراه صاحبُها. */}
+                <a href={`/wash/owner/?id=${w.id}`} className="mt-1.5 flex min-h-[40px] items-center justify-center rounded-lg border border-slate-200 text-[11px] font-bold text-slate-700">
+                  🛡 لوحة المغسلة (بصفة الإدارة)
+                </a>
                 {open === w.id && (
                   <div className="mt-2 rounded-xl bg-slate-50 p-2 text-[11px]">
                     {!list ? (

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { forgetLogin } from '@/lib/biometric';
 import { normalizePhone } from '@/lib/phone';
@@ -78,6 +79,9 @@ function banner(w: CarWash, today: string): { cls: string; text: string } {
 /** لوحةُ صاحب المغسلة: الاشتراك، والحجوزات، وما يُضبط في أوراقٍ من أسفل. */
 export function WashOwnerScreen() {
   const [auth, setAuth] = useState<'checking' | 'none' | 'ok'>('checking');
+  /** ‎?id= — الإدارةُ تدخل لوحةَ أيّ مغسلة (التجريبيّةُ أوّلاً) لمتابعة الوضع بصفتها. */
+  const viewId = useSearchParams().get('id');
+  const [asAdmin, setAsAdmin] = useState(false);
   const [wash, setWash] = useState<CarWash | null | undefined>(undefined);
   const [upcoming, setUpcoming] = useState<WashBooking[]>([]);
   const [past, setPast] = useState<WashBooking[]>([]);
@@ -117,16 +121,28 @@ export function WashOwnerScreen() {
       if (!alive) return;
       if (!data.session) return setAuth('none');
       setAuth('ok');
-      const { data: mine } = await supabase.rpc('my_wash').maybeSingle();
+      let w: CarWash | null = null;
+      if (viewId) {
+        // سياسةُ الإدارة على car_washes تقرأ كلَّ الصفوف؛ غيرُها لا يرى إلّا مغسلتَه فيعود null.
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.session.user.id).maybeSingle();
+        if (profile?.role === 'admin') {
+          const { data: row } = await supabase.from('car_washes').select('*').eq('id', viewId).maybeSingle();
+          w = (row as CarWash | null) ?? null;
+          if (alive) setAsAdmin(!!w);
+        }
+      }
+      if (!w) {
+        const { data: mine } = await supabase.rpc('my_wash').maybeSingle();
+        w = (mine as CarWash | null) ?? null;
+      }
       if (!alive) return;
-      const w = (mine as CarWash | null) ?? null;
       setWash(w);
       if (w) await Promise.all([loadBookings(w.id), loadLists(w.id)]);
     })();
     return () => {
       alive = false;
     };
-  }, [loadBookings, loadLists]);
+  }, [loadBookings, loadLists, viewId]);
 
   async function refresh() {
     if (!wash) return;
@@ -239,6 +255,13 @@ export function WashOwnerScreen() {
           <LogOutIcon />
         </button>
       </header>
+
+      {asAdmin && (
+        <p className="mt-3 rounded-xl bg-slate-800 px-3 py-2 text-[12px] font-bold text-white">
+          🛡 تعرض هذه اللوحةَ بصفة الإدارة — كلُّ ما تفعله هنا يقع على مغسلة «{wash.name}».{' '}
+          <a href="/admin/" className="underline">العودة إلى الإدارة</a>
+        </p>
+      )}
 
       <p className={`mt-4 rounded-xl border p-3 text-[12.5px] font-bold leading-relaxed ${note.cls}`}>{note.text}</p>
 
