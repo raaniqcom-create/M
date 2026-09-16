@@ -23,6 +23,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { looksLikeSchedule } from '../../../lib/schedule.ts';
 import { sendScheduleAlert } from '../_shared/alert.ts';
+import { queueMorningSeries, tellAdmin } from '../_shared/series.ts';
 
 const db = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -182,10 +183,12 @@ Deno.serve(async (req) => {
       .eq('for_date', day)
       .is('alerted_at', null);
 
+    let net: { due: number; cities: string[]; products: string[]; sent: number; why: string } | null = null;
     if (due?.length) {
       const cities = [...new Set(due.map((r) => r.city).filter(Boolean))] as string[];
       const products = [...new Set(due.map((r) => r.product))] as string[];
       const { sent, why } = await sendScheduleAlert(cities, products, due.length, 'اليوم', dry);
+      net = { due: due.length, cities, products, sent, why };
 
       // **الختمُ عند النجاح وحدَه.** ولو خُتم عند الفشل لَسكتت الشبكةُ عن جدولٍ
       // لم يصل أحداً، وهو نقيضُ ما بُنيت له.
@@ -199,15 +202,34 @@ Deno.serve(async (req) => {
 
       // وتُخبر الإدارةَ بما جرى — إخبارٌ لا اعتماد: فشلُ الرسالة لا يمسّ
       // الإشعارَ الذي خرج سلفاً.
-      if (dry) return json({ ok: true, dryRun: { day, due: due.length, cities, products, sent, why } });
+      if (!dry) {
+        await tellBot(
+          sent
+            ? `📣 شبكةُ الصباح: يخرج إشعارُ جدول ${day} إلى ${sent} مشتركاً في ${cities.join(' · ')}.`
+            : `⚠️ شبكةُ الصباح: لم يخرج إشعارُ جدول ${day} — ${why}`
+        ).catch(() => {});
+      }
+    }
 
-      await tellBot(
-        sent
-          ? `📣 شبكةُ الصباح: يخرج إشعارُ جدول ${day} إلى ${sent} مشتركاً في ${cities.join(' · ')}.`
-          : `⚠️ شبكةُ الصباح: لم يخرج إشعارُ جدول ${day} — ${why}`
-      ).catch(() => {});
+    // ── سلسلةُ الصباح ──────────────────────────────────────────────────
+    //
+    // إشعارٌ لكلّ مدينةٍ ووقودٍ باسم محطّتها (lib/morningSeries.ts)، بفاصل
+    // دقيقتين من السابعة. صفوفٌ في `announcements` تكنسها notify-favorites.
+    //
+    // **وبعد الشبكة بستٍّ وأربعين دقيقة إن خرجت.** alerts_for تختم الجميعَ
+    // عند الإشعار العامّ ولو بلا حاجز، وصفوفُ السلسلة بالحاجز الافتراضيّ
+    // (٤٥ دقيقة) — فسلسلةٌ تبدأ بعده مباشرةً تصل لا أحداً وتُختم «مُرسَلة».
+    // وفي الليلة المعتادة (الإشعارُ خرج مساءً) تبدأ السابعةَ تماماً.
+    //
+    // والمرورُ كلَّ عشر دقائق في الساعة السابعة لا يُكرّر: المفاتيحُ ثابتة،
+    // فالمرّةُ الثانية تُدرج صفراً وتصمت.
+    const startAt = new Date(Date.now() + (net?.sent ? 46 : 0) * 60_000);
+    const series = await queueMorningSeries(db, day, startAt, { dry });
+    if (series.queued && !dry) await tellAdmin(series.text).catch(() => {});
 
-      return json({ ok: true, morningAlert: { day, due: due.length, sent, why } });
+    if (dry) return json({ ok: true, dryRun: { day, net, series: { ...series, text: undefined } } });
+    if (net || series.queued) {
+      return json({ ok: true, morningAlert: net, series: { queued: series.queued, skipped: series.skipped, why: series.why } });
     }
   }
 

@@ -24,6 +24,8 @@ import {
 /** سطرُ الجدول في المسوّدة — ومعه مفتاحُه الثابت. */
 type ScheduleLine = RawLine & { key?: string };
 import { countWord, sendScheduleAlert } from '../_shared/alert.ts';
+import { queueMorningSeries } from '../_shared/series.ts';
+import { SERIES_HOUR, baghdadClock } from '../../../lib/morningSeries.ts';
 import { newPassword } from '../_shared/password.ts';
 import {
   MARK,
@@ -2883,6 +2885,22 @@ async function publishDraft(
   // للأربعين أيضاً — وإلّا صار الزرُّ يفعل ما لا يقوله.
   const owners = await alertStationOwners();
 
+  // ── وسلسلةُ الصباح إن نُشر جدولُ اليوم بعد السابعة ──────────────────────
+  //
+  // الجدولُ يُنشر ليلاً عادةً، فالسلسلةُ تبنيها شبكةُ الصباح في السابعة من
+  // بياناتٍ طازجة. أمّا جدولُ اليوم المنشورُ ضحًى فسلسلتُه الآن — بعد الإشعار
+  // العامّ بستٍّ وأربعين دقيقة إن خرج، لأنّ alerts_for تختم الجميعَ عنده.
+  // و`refresh`: استبدالٌ بعد ما بُنيت السلسلةُ يعيد بناءَ ما لم يُرسل منها.
+  let series = '';
+  if (for_date === baghdadDay() && baghdadHour() >= SERIES_HOUR) {
+    const s = await queueMorningSeries(db, for_date, new Date(Date.now() + (sent ? 46 : 0) * 60_000), { refresh: true });
+    series = s.queued
+      ? `${NL}🌅 سلسلةُ الصباح: ${s.queued} إشعاراً في ${s.cities} مدينة، تبدأ ${baghdadClock(s.startAt!)}. /سلسلة للقائمة.`
+      : s.why
+        ? `${NL}🌅 سلسلةُ الصباح: ${esc(s.why)}`
+        : '';
+  }
+
   return {
     ok: true,
     text:
@@ -2890,7 +2908,8 @@ async function publishDraft(
       (sent
         ? `📣 يخرج الإشعارُ إلى ${sent} مشتركاً.`
         : `⚠️ ولم يخرج الإشعار: ${esc(why)}${NL}أعِده بأمر /اشعار.`) +
-      owners,
+      owners +
+      series,
   };
 }
 
@@ -3404,6 +3423,22 @@ Deno.serve(async (req) => {
       }
       if (!text.startsWith('/') && looksLikeSchedule(text)) {
         await proposeSchedule(chat, from, text);
+        return new Response('ok');
+      }
+
+      // سلسلةُ الصباح: `/سلسلة` بروفةٌ لأحدث جدولٍ منشور (كما ستُبنى الآن)،
+      // و`/سلسلة الآن` بناءٌ فوريٌّ لجدول اليوم — للتجربة والاسترداد.
+      if (text === '/سلسلة' || text === '/series' || text === '/سلسلة الآن' || text === '/series now') {
+        const now = text.endsWith('الآن') || text.endsWith('now');
+        const { data: latest } = await db
+          .from('fuel_schedule')
+          .select('for_date')
+          .gte('for_date', baghdadDay())
+          .order('for_date', { ascending: now ? true : false })
+          .limit(1);
+        const day = now ? baghdadDay() : (latest?.[0]?.for_date ?? baghdadDay());
+        const s = await queueMorningSeries(db, day, new Date(), now ? { refresh: true } : { dry: true });
+        await send(chat, s.text);
         return new Response('ok');
       }
 

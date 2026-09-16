@@ -42,6 +42,8 @@ export default function NewsPage() {
           // كما في الشريط: المدير يرى ما لم يُرسل بحكم سياسته، والجدول يجب أن
           // يسري عليه أيضاً وإلا رأى الخبر قبل الناس وحسبه منشوراً
           .not('sent_at', 'is', null)
+          // وسلسلةُ الصباح (kind=schedule) أربعون صفّاً في اليوم — ليست خبراً يُقرأ هنا.
+          .or('kind.is.null,kind.neq.schedule')
           .order('created_at', { ascending: false })
           .limit(10);
         if (error) throw error;

@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
     .lte('send_at', new Date().toISOString())
     .is('sent_at', null)
     .eq('active', true)
-    .select('id, title, body, cities, product, linked_station_id');
+    .select('id, title, body, cities, product, linked_station_id, url');
 
   // A discarded error here is the worst possible failure: `due` comes back
   // null, the loop runs zero times, and the function reports success. The
@@ -139,7 +139,8 @@ Deno.serve(async (req) => {
           // والوجهةُ تفي بما يقوله النصّ: صفحةُ المحطة إن كانت مسجّلة،
           // وإلّا الصفحةُ الرئيسة — وفيها اللوحةُ الحمراء مصفّاةً بمدن
           // القارئ، أي الأسماءُ والمواقع. و/news نصٌّ خام بلا موقع.
-          url: a.linked_station_id ? `/station/${a.linked_station_id}` : '/',
+          // وسلسلةُ الصباح تحمل وجهتَها معها (صفحةُ «مكان» لغير المسجّلة).
+          url: (a.url as string | null) ?? (a.linked_station_id ? `/station/${a.linked_station_id}` : '/'),
         }),
       });
       ok = res.ok;
