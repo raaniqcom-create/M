@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { PRODUCT_LABELS } from '@/lib/products';
+import { byProduct } from '@/lib/board';
 import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
 import { readChoice } from '@/lib/alerts';
 import { PlateTurnBadge } from './PlateTurnBadge';
-import { officialFor } from '@/lib/officialStations';
-import { routeFor, wazeUrl } from '@/lib/scheduleRoute';
-import { MapPinIcon } from './icons';
+import { placeHref, shortAddress } from '@/lib/scheduleRoute';
 import { withDeadline } from '@/lib/fn';
 import { isDown, readStatus } from '@/lib/status';
 import {
@@ -285,60 +284,59 @@ export function TomorrowScreen() {
                 </span>
               </h2>
 
-              <table className="mt-1.5 w-full text-right">
-                <tbody>
-                  {g.rows.map((r) => (
-                    <tr key={r.key} className="border-t border-white/10 align-top">
-                      {/* الاسمُ كاملاً ولو نزل سطرين — لا قصَّ بثلاث نقاط. */}
-                      <td
-                        className={`py-1.5 pl-2 text-[12px] font-bold leading-snug ${
-                          r.state === 'out' ? 'text-white/45 line-through' : ''
-                        }`}
-                      >
-                        {r.name}
-                        {r.source === 'station' && (
-                          <span className="mr-1 inline-block rounded-full bg-white/20 px-1.5 align-middle text-[9px] font-bold">
-                            المنصّة {MARK[r.state]}
-                          </span>
-                        )}
-                        {r.state === 'expected' && whenLabel(r.period, r.time) && (
-                          <span className="mr-1.5 text-[10px] text-white/60">
-                            {' '}
-                            · {whenLabel(r.period, r.time)}
-                          </span>
-                        )}
-                        {/* العنوانُ في الصورة التي تُنشر، و«الطريق لها» لمن يفتح التطبيق:
-                            «التعليقاتُ بالكامل على عناوين المحطات» (١٦ أيلول). */}
-                        {(() => {
-                          const address = officialFor(r.name)?.address ?? null;
-                          const route = r.state === 'out' ? null : routeFor(r);
-                          if (!address && !route) return null;
-                          return (
-                            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] font-normal text-white/70">
-                              {address && <span>{address}</span>}
-                              {route && (
-                                <a
-                                  href={wazeUrl(route.lat, route.lng)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  aria-label={`الطريق إلى ${r.name}`}
-                                  className="inline-flex min-h-[24px] items-center gap-0.5 font-bold text-white underline underline-offset-2"
-                                >
-                                  <MapPinIcon className="h-3 w-3" />
-                                  الطريق لها
-                                </a>
-                              )}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td className="w-[4.6rem] py-1.5 text-left text-[10.5px] font-bold text-white/75">
-                        {PRODUCT_LABELS[r.product]}
-                      </td>
+              {/* «الرمادي | بانزين محسن» ثمّ الاسمُ (العنوانُ المختصر) | المنصّة | العنوان الكامل
+                  — اقتراحُ صاحب المنصّة (١٦ أيلول). العنوانُ في الصورة التي تُنشر،
+                  والصفحةُ الكاملة لمن يفتح التطبيق. */}
+              {byProduct(g.rows).map(({ product, rows }) => (
+                <table key={product} className="mt-1.5 w-full text-right">
+                  <thead>
+                    <tr>
+                      <th colSpan={3} className="rounded-md bg-white/15 px-2 py-1 text-right text-[11px] font-extrabold">
+                        {g.city ?? 'منطقةٌ لم تُذكر'} <span className="text-white/50">|</span> {PRODUCT_LABELS[product]}
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => {
+                      const address = shortAddress(r);
+                      return (
+                        <tr key={r.key} className="border-t border-white/10 align-top">
+                          {/* الاسمُ كاملاً ولو نزل سطرين — لا قصَّ بثلاث نقاط. */}
+                          <td
+                            className={`py-1.5 pl-2 text-[12px] font-bold leading-snug ${
+                              r.state === 'out' ? 'text-white/45 line-through' : ''
+                            }`}
+                          >
+                            {r.name}
+                            {address && <span className="text-[10.5px] font-normal text-white/70"> ({address})</span>}
+                            {r.state === 'expected' && whenLabel(r.period, r.time) && (
+                              <span className="mr-1.5 text-[10px] text-white/60">
+                                {' '}
+                                · {whenLabel(r.period, r.time)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-1.5 pl-1 text-left align-middle">
+                            {r.source === 'station' && (
+                              <span className="inline-block rounded-full bg-white/20 px-1.5 text-[9px] font-bold">
+                                المنصّة {MARK[r.state]}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-1.5 text-left align-middle">
+                            <a
+                              href={placeHref(r)}
+                              className="inline-flex min-h-[28px] items-center whitespace-nowrap rounded-md bg-white/15 px-1.5 text-[9.5px] font-extrabold text-white"
+                            >
+                              العنوان الكامل
+                            </a>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ))}
             </section>
           ))}
 

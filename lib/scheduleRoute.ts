@@ -1,5 +1,5 @@
 import { normalizeName, searchKnownFuel } from './nearbyFuel.ts';
-import { CITY_WORDS } from './officialStations.ts';
+import { CITY_WORDS, officialFor } from './officialStations.ts';
 import { CITY_NAMES } from './cities.ts';
 
 /** «الطريق لها» لصفّ الجدول — إحداثيّاتٌ من النظام لا تخمين.
@@ -36,6 +36,21 @@ export function roadCoords(name: string, _city: string | null): { lat: number; l
     .sort((a, b) => b.score - a.score)[0];
   if (!top || top.score < 70) return null;
   return { lat: top.station.la, lng: top.station.lo };
+}
+
+/** العنوانُ المختصرُ بين القوسين: عنوانُ المنصّة إن كانت مسجّلة، وإلّا الرسميّ. */
+export function shortAddress(row: { name: string; address?: string | null }): string | null {
+  const own = (row.address ?? '').trim();
+  if (own) return own;
+  return officialFor(row.name)?.address ?? null;
+}
+
+/** صفحةُ التفاصيل داخل المنصّة: صفحةُ المحطة المسجّلة، أو صفحةُ «مكان» لغيرها. */
+export function placeHref(row: { name: string; city: string | null; stationId: string | null }): string {
+  if (row.stationId) return `/station/${row.stationId}`;
+  const q = new URLSearchParams({ n: row.name });
+  if (row.city) q.set('c', row.city);
+  return `/place/?${q.toString()}`;
 }
 
 /** إحداثيّاتُ صفٍّ في لوحة الجدول. */

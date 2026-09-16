@@ -1,4 +1,4 @@
-import { isOffered } from './products.ts';
+import { PRODUCT_ORDER, isOffered } from './products.ts';
 import { hasRunOut } from './hours.ts';
 import { normalizeName } from './nearbyFuel.ts';
 import type { ExpectedPeriod } from './hours.ts';
@@ -118,6 +118,8 @@ export interface BoardRow {
   /** إحداثيّاتُ محطة المنصّة — لرابط «الطريق لها»؛ صفُّ القناة يأخذها من مساعد الطريق. */
   lat?: number | null;
   lng?: number | null;
+  /** عنوانُ محطة المنصّة كما كتبه صاحبها؛ صفُّ القناة يأخذه من القائمة الرسميّة. */
+  address?: string | null;
   /** `expected` وُعد به · `arrived` معروضٌ الآن · `out` نفد بعد أن وصل. */
   state: 'expected' | 'arrived' | 'out';
   /** الصباح/العصر/المساء — من لوحة المحطة وحدها. */
@@ -208,6 +210,7 @@ export function buildBoard(
         city: st.city,
         lat: st.lat,
         lng: st.lng,
+        address: st.address,
         product: p.product,
         stationId: st.id,
         source: 'station',
@@ -263,6 +266,7 @@ export function buildBoard(
         city: st.city,
         lat: st.lat,
         lng: st.lng,
+        address: st.address,
         product: live.product,
         stationId: st.id,
         source: 'station',
@@ -368,6 +372,17 @@ const STATE_RANK = { arrived: 0, expected: 1, out: 2 } as const;
  *  والمنتجُ عمودٌ فيه. وقرارُ صاحب المنصّة: جدولٌ لكلّ منطقةٍ ولو بمحطةٍ واحدة.
  *
  *  و`prefer` مناطقُ القارئ: تُرفع ولا يُحجب غيرُها. */
+/** داخل المجموعة: جدولٌ لكلّ منتج — «الرمادي | بانزين محسن» ثمّ محطاته.
+ *  اقتراحُ صاحب المنصّة (١٦ أيلول): المنتجُ عنوانٌ لا عمود. */
+export function byProduct(rows: BoardRow[]): { product: FuelProduct; rows: BoardRow[] }[] {
+  const out: { product: FuelProduct; rows: BoardRow[] }[] = [];
+  for (const product of PRODUCT_ORDER) {
+    const rs = rows.filter((r) => r.product === product);
+    if (rs.length) out.push({ product, rows: rs });
+  }
+  return out;
+}
+
 export function groupBoard(rows: BoardRow[], prefer: string[] = []): BoardGroup[] {
   const mine = new Set(prefer);
   const map = new Map<string, BoardGroup>();

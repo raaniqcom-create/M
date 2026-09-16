@@ -4,10 +4,8 @@ import { PlateTurnBadge } from './PlateTurnBadge';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
-import { baghdadDate, type BoardGroup, type BoardRow } from '@/lib/scheduleData';
-import { officialFor } from '@/lib/officialStations';
-import { routeFor, wazeUrl } from '@/lib/scheduleRoute';
-import { MapPinIcon } from './icons';
+import { baghdadDate, byProduct, type BoardGroup, type BoardRow } from '@/lib/scheduleData';
+import { placeHref, shortAddress } from '@/lib/scheduleRoute';
 
 /** جدولُ الوقود — الخبرُ الوحيد الذي يُقال قبل وقوعه.
  *
@@ -43,34 +41,28 @@ const STATE = {
   out: { text: 'نفد', cls: 'bg-slate-100 text-slate-500' },
 } as const;
 
+/** صفٌّ: الاسمُ (العنوانُ المختصر) | المنصّة والحالة | «العنوان الكامل».
+ *
+ *  اقتراحُ صاحب المنصّة (١٦ أيلول): «محطة التل الاخضر (الجزيرة - البوذياب) |
+ *  المنصة | العنوان الكامل» — والضغطُ يفتح صفحةً داخل المنصّة فيها الاسمُ
+ *  والعنوانُ والهاتفُ والطريقُ ومنتجاتُ اليوم. لا زرَّ طريقٍ في الصفّ: كان
+ *  يبدو عشوائيّاً بجانب العنوان. */
 function Row({ r }: { r: BoardRow }) {
   const s = STATE[r.state];
   const dim = r.state === 'out';
-  // العنوانُ الرسميُّ بين قوسين — «محطة تعبئة وقود طليحة الحكومية (الكيلو ١٦٠)»
-  // — كما أملاه صاحبُ المنصّة؛ ولمحطةٍ ليست في القائمة لا قوسان.
-  const address = officialFor(r.name)?.address ?? null;
-  // «الطريق لها»: إحداثيّاتُ المنصّة أو مساعدِ الطريق — ولا رابطَ بلا إحداثيّات.
-  const route = dim ? null : routeFor(r);
-
-  const name = r.stationId ? (
-    <a
-      href={`/station/${r.stationId}`}
-      className={`font-bold underline-offset-2 hover:underline ${
-        dim ? 'text-slate-400 line-through' : 'text-brand-900'
-      }`}
-    >
-      {r.name}
-    </a>
-  ) : (
-    <span className={`font-bold ${dim ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-      {r.name}
-    </span>
-  );
+  const address = shortAddress(r);
 
   return (
     <tr className="border-t border-slate-100 align-top">
       <td className="py-2.5 pl-2 text-[12.5px] leading-snug">
-        {name}
+        <a
+          href={placeHref(r)}
+          className={`font-bold underline-offset-2 hover:underline ${
+            dim ? 'text-slate-400 line-through' : 'text-brand-900'
+          }`}
+        >
+          {r.name}
+        </a>
         {address && (
           <span className={`text-[11px] ${dim ? 'text-slate-300' : 'text-slate-500'}`}> ({address})</span>
         )}
@@ -80,33 +72,20 @@ function Row({ r }: { r: BoardRow }) {
             · {whenLabel(r.period, r.time)}
           </span>
         )}
-        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10.5px]">
-          {r.source === 'station' ? (
-            <span className="text-brand-700">من لوحة المحطة{r.alsoInChannel ? ' وجدول التوزيع' : ''}</span>
-          ) : (
-            <span className="text-slate-400">من جدول التوزيع</span>
-          )}
-          {route && (
-            <a
-              href={wazeUrl(route.lat, route.lng)}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`الطريق إلى ${r.name}`}
-              className="inline-flex min-h-[28px] items-center gap-0.5 rounded-lg px-1 font-bold text-brand-700 active:bg-brand-50"
-            >
-              <MapPinIcon className="h-3.5 w-3.5" />
-              الطريق لها
-            </a>
-          )}
-        </span>
       </td>
-      <td className="w-[5.6rem] py-2.5 pl-2 text-[11.5px] font-bold text-brand-700">
-        {PRODUCT_LABELS[r.product]}
+      <td className="py-2.5 pl-1.5 text-left">
+        {r.source === 'station' && (
+          <span className="mb-0.5 inline-block rounded-full bg-brand-50 px-1.5 py-px text-[9.5px] font-extrabold text-brand-700">المنصّة</span>
+        )}
+        <span className={`block w-fit rounded-full px-2 py-0.5 text-[10px] font-bold ${s.cls}`}>{s.text}</span>
       </td>
-      <td className="w-[4.8rem] py-2.5 text-left">
-        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${s.cls}`}>
-          {s.text}
-        </span>
+      <td className="py-2.5 text-left">
+        <a
+          href={placeHref(r)}
+          className="inline-flex min-h-[32px] items-center whitespace-nowrap rounded-lg border border-brand-100 px-1.5 text-[10px] font-extrabold text-brand-700 active:bg-brand-50"
+        >
+          العنوان الكامل
+        </a>
       </td>
     </tr>
   );
@@ -186,20 +165,23 @@ export function ScheduleBoard({
             {g.products.map((p) => PRODUCT_LABELS[p]).join(' · ')}
           </p>
 
-          <table className="mt-2 w-full min-w-[17rem] text-right">
-            <thead>
-              <tr className="text-[10.5px] text-slate-400">
-                <th className="pb-1 pl-2 font-bold">المحطة</th>
-                <th className="pb-1 pl-2 font-bold">المنتج</th>
-                <th className="pb-1 text-left font-bold">الحالة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {g.rows.map((r) => (
-                <Row key={r.key} r={r} />
-              ))}
-            </tbody>
-          </table>
+          {/* «الرمادي | بانزين محسن» ثمّ محطاتُه — المنتجُ عنوانٌ لا عمود. */}
+          {byProduct(g.rows).map(({ product, rows }) => (
+            <table key={product} className="mt-2 w-full min-w-[17rem] text-right">
+              <thead>
+                <tr>
+                  <th colSpan={3} className="rounded-lg bg-brand-50 px-2 py-1.5 text-right text-[11.5px] font-extrabold text-brand-900">
+                    {g.city ?? 'منطقةٌ لم تُذكر'} <span className="text-brand-400">|</span> {PRODUCT_LABELS[product]}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <Row key={r.key} r={r} />
+                ))}
+              </tbody>
+            </table>
+          ))}
         </section>
       ))}
 

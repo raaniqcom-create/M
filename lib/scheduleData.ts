@@ -112,7 +112,7 @@ async function fetchBoardStations(
   if (filters.length) {
     const { data, error } = await supabase
       .from('stations_public')
-      .select('id, name, city, is_24h, opens_at, closes_at, temp_closed')
+      .select('id, name, city, address, lat, lng, is_24h, opens_at, closes_at, temp_closed')
       .or(filters.join(','))
       .eq('status', 'approved')
       .eq('is_demo', false);
@@ -134,7 +134,7 @@ async function fetchBoardStations(
   if (missing.length) {
     const { data, error } = await supabase
       .from('stations_public')
-      .select('id, name, city, is_24h, opens_at, closes_at, temp_closed')
+      .select('id, name, city, address, lat, lng, is_24h, opens_at, closes_at, temp_closed')
       .in('id', missing)
       .eq('status', 'approved')
       .eq('is_demo', false);
