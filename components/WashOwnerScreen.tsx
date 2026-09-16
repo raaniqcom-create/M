@@ -25,11 +25,12 @@ import {
   type WashOffer,
   type WashService,
 } from '@/lib/wash';
-import { useWashConfig } from '@/lib/washConfig';
+import { pokeWashTick, useWashConfig } from '@/lib/washConfig';
 import { IconGrid, type IconGridItem } from './IconGrid';
 import { Sheet } from './Sheet';
 import { TimeSelect } from './TimeSelect';
 import { WashPhotoUpload } from './WashPhotoUpload';
+import { WashDeviceLink } from './WashDeviceLink';
 import {
   CalendarIcon,
   CarIcon,
@@ -244,7 +245,8 @@ export function WashOwnerScreen() {
     setActing(id);
     setErr(null);
     const { error } = await supabase.rpc('set_wash_booking_status', { p_id: id, p_status: status });
-    if (error) setErr('تعذّر تحديث الحجز. حاول مجدداً.');
+    if (error) setErr(error.message.startsWith('لا يمكن') ? error.message : 'تعذّر تحديث الحجز. حاول مجدداً.');
+    else pokeWashTick();
     await loadBookings(wash.id);
     setActing(null);
   }
@@ -325,6 +327,7 @@ export function WashOwnerScreen() {
         </button>
       </header>
 
+      {!asAdmin && <WashDeviceLink linked={!!wash.owner_device} />}
       {asAdmin && (
         <p className="mt-3 rounded-xl bg-slate-800 px-3 py-2 text-[12px] font-bold text-white">
           🛡 تعرض هذه اللوحةَ بصفة الإدارة — كلُّ ما تفعله هنا يقع على مغسلة «{wash.name}».{' '}

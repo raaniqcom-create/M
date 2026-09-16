@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { pokeWashTick } from '@/lib/washConfig';
 import { displayPhone } from '@/lib/phone';
 import { BOOKING_LABELS, iqd, whatsappBooking, type BookingStatus } from '@/lib/wash';
 import { RouteButton } from './RouteButton';
@@ -86,6 +87,7 @@ export function WashBookingScreen() {
       setBusy(false);
       return setErr(error?.message ?? 'تعذّر الإلغاء.');
     }
+    pokeWashTick();
     window.location.reload();
   }
 

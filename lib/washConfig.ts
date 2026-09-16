@@ -26,6 +26,20 @@ export function loadWashConfig(): Promise<WashConfig> {
   return inflight;
 }
 
+/** نكزةُ wash-tick بعد حجزٍ أو تغييرِ حالة: يُفرَّغ صندوقُ الإشعارات الآن لا بعد عشر دقائق.
+ *  بلا جسمٍ وبلا انتظار — الفشلُ صامتٌ لأنّ الكرونَ يلحق به. */
+export function pokeWashTick(): void {
+  try {
+    void fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/wash-tick`, {
+      method: 'POST',
+      keepalive: true,
+      headers: { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! },
+    }).catch(() => {});
+  } catch {
+    /* لا شبكة */
+  }
+}
+
 export function useWashConfig(): WashConfig | null {
   const [cfg, setCfg] = useState<WashConfig | null>(cached);
   useEffect(() => {

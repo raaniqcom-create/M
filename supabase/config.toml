@@ -89,3 +89,8 @@ verify_jwt = false
 # رصدُ القنوات — يُنادى بمِفتاح cron لا بجلسة، فلا JWT
 [functions.poll-channel]
 verify_jwt = false
+
+# دقّةُ المغاسل: الكرونُ كلَّ عشر دقائق بـx-cron-secret، والنكزةُ من المتصفّح بمفتاح anon
+# (تفريغٌ فقط، بلا جسمٍ يُقرأ). الحارسُ داخل الدالّة.
+[functions.wash-tick]
+verify_jwt = false

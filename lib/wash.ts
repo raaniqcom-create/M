@@ -123,6 +123,8 @@ export interface CarWash extends Omit<WashPublic, 'phone' | 'has_offer'> {
   whatsapp: string | null;
   phone2: string | null;
   confirm_mode: 'manual' | 'auto';
+  owner_device?: string | null;
+  owner_platform?: 'ios' | 'android' | 'web' | null;
 }
 
 export interface WashService {

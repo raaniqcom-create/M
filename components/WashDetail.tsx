@@ -24,7 +24,7 @@ import {
   type WashPublic,
   type WashService,
 } from '@/lib/wash';
-import { useWashConfig } from '@/lib/washConfig';
+import { pokeWashTick, useWashConfig } from '@/lib/washConfig';
 import { Sheet } from './Sheet';
 import { RouteButton } from './RouteButton';
 import { CarIcon, CalendarIcon, PhoneIcon, SpinnerIcon, StarIcon } from './icons';
@@ -171,6 +171,7 @@ export function WashDetail() {
     }
     const b = data as Booked;
     setClientKey('');
+    pokeWashTick();
     rememberBooking({ code: b.code, phone, wash_id: wash.id, wash: b.wash, starts_at: b.starts_at });
     window.location.href = bookingHref(b.code, phone);
   }
