@@ -11,7 +11,7 @@ import { WashHeader } from './WashHeader';
 import { WashCard } from './WashCard';
 import { WashAdsSlider, adHref } from './WashAdsSlider';
 import { EMPTY_FILTERS, WashFilterSheet, WASH_KINDS, chipCls, kindMatches, sheetFilterCount, type WashFilters } from './WashFilterSheet';
-import { SearchIcon, SlidersIcon, SpinnerIcon } from './icons';
+import { SearchIcon, SlidersIcon, SpinnerIcon, WashIcon } from './icons';
 
 type Svc = { id: string; wash_id: string; name: string; price: number; sort: number };
 type Offer = Pick<WashOffer, 'id' | 'wash_id' | 'title' | 'description' | 'ends_at' | 'starts_at' | 'service_id' | 'offer_price' | 'discount_pct'>;
@@ -144,12 +144,21 @@ export function WashDirectory() {
     <main className="mx-auto max-w-md px-4 pb-24">
       <WashHeader />
 
-      <label className="relative mt-5 block">
-        <SearchIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} className="field pr-9" placeholder="ابحث باسم المحطة أو المنطقة" aria-label="بحث" />
-      </label>
+      {/* بحثٌ عائمٌ يتراكب على أسفل الرأس الغامر — نمطُ تطبيقات الحجز */}
+      <div className="relative z-10 -mt-9">
+        <label className="relative block rounded-2xl bg-white p-1 shadow-lift ring-1 ring-slate-200/70">
+          <SearchIcon className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-brand-500" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="min-h-[52px] w-full rounded-xl border-0 bg-transparent pl-3 pr-11 font-medium text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:outline-none focus:ring-0"
+            placeholder="ابحث باسم المغسلة أو المنطقة"
+            aria-label="بحث"
+          />
+        </label>
+      </div>
 
-      <div className="no-scrollbar mt-3 flex items-center gap-2 overflow-x-auto">
+      <div className="no-scrollbar mt-4 flex items-center gap-2 overflow-x-auto">
         <button type="button" aria-haspopup="dialog" aria-expanded={sheet} onClick={() => setSheet(true)} className={`${chipCls(sheetN > 0)} flex shrink-0 items-center gap-1`}>
           <SlidersIcon className="h-3.5 w-3.5" />
           كل المحطات
@@ -178,8 +187,8 @@ export function WashDirectory() {
 
       <WashAdsSlider ads={banners} />
 
-      <div className="mt-6 flex items-center justify-between">
-        <h2 className="text-lg font-extrabold text-slate-800">{here ? 'محطات قريبة منك' : 'المحطات'}</h2>
+      <div className="mt-7 flex items-center justify-between">
+        <h2 className="text-[19px] font-black tracking-tight text-slate-900">{here ? 'مغاسل قريبة منك' : 'المغاسل'}</h2>
         {shown.length > FIRST && (
           <button type="button" onClick={() => setShowAll((v) => !v)} className="min-h-[44px] px-2 text-[12px] font-bold text-brand-700">
             {showAll ? 'عرض أقل' : 'عرض الكل'}
@@ -218,8 +227,8 @@ export function WashDirectory() {
       )}
 
       {(liveOffers.length > 0 || adOffers.length > 0) && (
-        <section className="mt-8">
-          <h2 className="text-lg font-extrabold text-slate-800">عروض اليوم</h2>
+        <section className="mt-9">
+          <h2 className="text-[19px] font-black tracking-tight text-slate-900">عروض اليوم</h2>
           <ul className="mt-3 space-y-3">
             {liveOffers.map((o) => {
               const base = baseOf(o);
@@ -274,15 +283,24 @@ export function WashDirectory() {
         </section>
       )}
 
-      <section className="card mt-8 p-5 text-center">
-        <h2 className="text-lg font-extrabold text-slate-800">لديك محطة غسيل؟</h2>
-        <p className="mt-1 text-sm text-slate-600">انضم إلى المحطة التقنية واستقبل الحجوزات إلكترونياً.</p>
-        <a href="/wash/register/" className="btn-primary mt-4">
-          سجل محطتك
-        </a>
-        <p className="mt-3 text-[12px] text-slate-500">اشتراك شهري – إدارة حجوزات – عروض – صفحة خاصة لمحطتك</p>
+      <section className="relative mt-9 overflow-hidden rounded-[26px] bg-[linear-gradient(140deg,#0c3a21,#14532d_45%,#15803d)] p-6 text-center text-white shadow-lift">
+        <div aria-hidden className="pointer-events-none absolute -right-12 -top-14 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+        <div className="relative">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white/15 ring-1 ring-white/25">
+            <WashIcon className="h-7 w-7 text-white" />
+          </span>
+          <h2 className="mt-3 text-[20px] font-black">لديك مغسلة سيارات؟</h2>
+          <p className="mx-auto mt-1.5 max-w-[300px] text-[13.5px] font-medium text-brand-100">انضم إلى المحطة التقنية واستقبل حجوزاتك إلكترونياً.</p>
+          <a
+            href="/wash/register/"
+            className="mt-4 inline-flex min-h-[50px] w-full max-w-[300px] items-center justify-center rounded-2xl bg-white text-[15px] font-extrabold text-brand-800 shadow-sm transition active:scale-[0.98]"
+          >
+            سجّل مغسلتك
+          </a>
+          <p className="mt-3 text-[12px] font-medium text-brand-100/80">اشتراك شهري · إدارة حجوزات · عروض · صفحة خاصة لمغسلتك</p>
+        </div>
       </section>
-      <a href="/login/" className="mt-4 block text-center text-[11.5px] text-slate-400 underline">
+      <a href="/login/" className="mt-5 block text-center text-[12px] font-medium text-slate-400 underline underline-offset-2">
         صاحب مغسلة؟ الدخول إلى لوحتك
       </a>
     </main>
