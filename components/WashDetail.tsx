@@ -15,6 +15,8 @@ import {
   dayLabel,
   iqd,
   loyaltyLine,
+  offerApplies,
+  offerPrice,
   ratingLine,
   readMyBookings,
   rememberBooking,
@@ -71,6 +73,7 @@ export function WashDetail() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [vehicle, setVehicle] = useState<VehicleType | ''>('');
+  const [useOffer, setUseOffer] = useState(true);
   /** مفتاحُ التكرار: يثبت من فتح الورقة حتى نجاح الحجز — فإعادةُ المحاولة تُرجع الحجزَ نفسَه. */
   const [clientKey, setClientKey] = useState('');
   /** أقربُ موعدٍ حرٍّ اليوم — يُقرأ مرّةً عند فتح الصفحة. */
@@ -103,7 +106,7 @@ export function WashDetail() {
       const today = bgdDate();
       setWash((w.data as WashPublic | null) ?? null);
       setServices((s.data ?? []) as WashService[]);
-      setOffers(((o.data ?? []) as WashOffer[]).filter((x) => !x.ends_at || x.ends_at.slice(0, 10) >= today));
+      setOffers(((o.data ?? []) as WashOffer[]).filter((x) => (!x.ends_at || x.ends_at.slice(0, 10) >= today) && (!x.starts_at || x.starts_at.slice(0, 10) <= today)));
     });
     return () => {
       alive = false;
@@ -171,6 +174,7 @@ export function WashDetail() {
       p_car: me.car.trim() || null,
       p_device: knownAddress() ?? localStorage.getItem('device-token') ?? null,
       p_vehicle: vehicle || null,
+      p_offer: useOffer && activeOffer ? activeOffer.id : null,
       p_client_key: clientKey || null,
     });
     if (error) {
@@ -207,6 +211,9 @@ export function WashDetail() {
   }
 
   const days = bookingDays(subscriber, Date.now(), cfg ? { guest: cfg.horizon_guest, subscriber: cfg.horizon_sub } : undefined);
+  const chosenService = services.find((s) => s.id === service);
+  const activeOffer = chosenService ? offers.find((o) => offerApplies(o, chosenService.id, day) && (o.offer_price != null || o.discount_pct != null)) : undefined;
+  const basePrice = chosenService ? servicePrice(chosenService, vehicle || null) : 0;
   const line = stamps ? loyaltyLine(stamps.stamps, stamps.target, stamps.free) : null;
   const canBook = !wash.temp_closed && !wash.paused && services.length > 0;
 
@@ -265,6 +272,7 @@ export function WashDetail() {
               {offers.map((o) => (
                 <li key={o.id} className="rounded-full bg-amber-50 px-2.5 py-1 text-[11.5px] font-bold text-amber-800">
                   {o.title}
+                  {o.discount_pct != null ? ` · خصم ${o.discount_pct}٪` : o.offer_price != null ? ` · ${iqd(o.offer_price)}` : ''}
                 </li>
               ))}
             </ul>
@@ -403,6 +411,19 @@ export function WashDetail() {
               ))}
             </div>
           </>
+        )}
+
+        {activeOffer && (
+          <label className="mt-4 flex cursor-pointer items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[12px]">
+            <input type="checkbox" checked={useOffer} onChange={(e) => setUseOffer(e.target.checked)} className="mt-0.5 h-4 w-4 accent-brand" />
+            <span>
+              <span className="font-extrabold text-amber-900">{activeOffer.title}</span>
+              <span className="block text-amber-800">
+                {iqd(offerPrice(basePrice, activeOffer))} بدل {iqd(basePrice)}
+                {activeOffer.description ? ` — ${activeOffer.description}` : ''}
+              </span>
+            </span>
+          </label>
         )}
 
         <p className="label mt-4">اليوم</p>

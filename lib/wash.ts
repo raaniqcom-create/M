@@ -185,6 +185,30 @@ export interface WashOffer {
   title: string;
   ends_at: string | null;
   active: boolean;
+  description?: string | null;
+  starts_at?: string | null;
+  service_id?: string | null;
+  offer_price?: number | null;
+  discount_pct?: number | null;
+  max_redemptions?: number | null;
+  per_user_limit?: number | null;
+}
+
+/** سعرُ الخدمة بعد العرض — مرآةُ book_wash للمعاينة قبل الحجز. */
+export function offerPrice(base: number, o: Pick<WashOffer, 'offer_price' | 'discount_pct'> | null | undefined): number {
+  if (!o) return base;
+  if (o.offer_price != null) return o.offer_price;
+  if (o.discount_pct != null) return Math.round((base * (100 - o.discount_pct)) / 100);
+  return base;
+}
+
+/** أيسري العرضُ على هذه الخدمة في هذا اليوم؟ */
+export function offerApplies(o: WashOffer, serviceId: string, day: string): boolean {
+  if (!o.active) return false;
+  if (o.service_id && o.service_id !== serviceId) return false;
+  if (o.starts_at && o.starts_at > day) return false;
+  if (o.ends_at && o.ends_at < day) return false;
+  return true;
 }
 
 export type BookingStatus =

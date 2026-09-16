@@ -1,7 +1,7 @@
 // «غسيل»: شبكةُ المواعيد، أيّامُ الحجز، بطاقةُ الغسلات — دوالُّ lib/wash.ts الصرفة.
 //   node scripts/test-wash.mjs
 import assert from 'node:assert/strict';
-import { bookingDays, bgdDate, canCancel, dayLabel, daysLeft, firstMonthPrice, limitLabel, loyaltyLine, nextStatuses, planName, ratingLine, servicePrice, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
+import { bookingDays, bgdDate, canCancel, dayLabel, daysLeft, firstMonthPrice, limitLabel, loyaltyLine, nextStatuses, offerApplies, offerPrice, planName, ratingLine, servicePrice, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
 
 let n = 0;
 const ok = (label, fn) => { fn(); n++; console.log(`  ✓ ${label}`); };
@@ -95,5 +95,17 @@ ok('سطرُ التقييم بالعربيّة، ولا شيءَ بلا تقيي
   assert.equal(ratingLine(4.5, 12), '★ ٤٫٥ · 12 تقييماً');
   assert.equal(ratingLine(5, 1), '★ ٥ · تقييم واحد');
   assert.equal(ratingLine(null, 0), null);
+});
+ok('سعرُ العرض: سعرٌ خاصّ أو نسبةٌ أو لا شيء، ويسري بخدمته ومدّته', () => {
+  assert.equal(offerPrice(10000, { offer_price: 8000, discount_pct: null }), 8000);
+  assert.equal(offerPrice(10000, { offer_price: null, discount_pct: 15 }), 8500);
+  assert.equal(offerPrice(10000, { offer_price: null, discount_pct: null }), 10000);
+  assert.equal(offerPrice(10000, null), 10000);
+  const o = { id: 'o', wash_id: 'w', title: 't', active: true, ends_at: '2026-09-20', starts_at: '2026-09-17', service_id: 's1', offer_price: 1, discount_pct: null };
+  assert.equal(offerApplies(o, 's1', '2026-09-18'), true);
+  assert.equal(offerApplies(o, 's2', '2026-09-18'), false, 'خدمةٌ أخرى');
+  assert.equal(offerApplies(o, 's1', '2026-09-21'), false, 'بعد النهاية');
+  assert.equal(offerApplies({ ...o, active: false }, 's1', '2026-09-18'), false);
+  assert.equal(offerApplies({ ...o, service_id: null, starts_at: null, ends_at: null }, 'any', '2026-01-01'), true);
 });
 console.log(`\n${n} فحصاً مرّت.`);

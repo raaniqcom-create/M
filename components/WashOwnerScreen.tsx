@@ -470,7 +470,15 @@ export function WashOwnerScreen() {
         <ServicesEditor washId={wash.id} rows={services} onChange={() => loadLists(wash.id)} />
       </Sheet>
       <Sheet open={sheet === 'offers'} onClose={() => setSheet(null)} title="العروض" hint="سطرٌ قصير يظهر على صفحتك.">
-        <OffersEditor washId={wash.id} rows={offers} onChange={() => loadLists(wash.id)} />
+        {sheet === 'offers' && (
+          <OffersEditor
+            washId={wash.id}
+            rows={offers}
+            services={services.filter((s) => s.active)}
+            enabled={asAdmin || !!(planOf(cfg, wash.plan)?.features.offers_enabled)}
+            onChange={() => loadLists(wash.id)}
+          />
+        )}
       </Sheet>
       <Sheet open={sheet === 'hours'} onClose={() => setSheet(null)} title="الدوام والمسارب">
         {sheet === 'hours' && (
@@ -651,9 +659,15 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
 }
 
 /* ── العروض ──────────────────────────────────────────────────────────────── */
-function OffersEditor({ washId, rows, onChange }: { washId: string; rows: WashOffer[]; onChange: () => void }) {
+function OffersEditor({ washId, rows, services, enabled, onChange }: { washId: string; rows: WashOffer[]; services: WashService[]; enabled: boolean; onChange: () => void }) {
   const [title, setTitle] = useState('');
   const [endsAt, setEndsAt] = useState('');
+  const [startsAt, setStartsAt] = useState('');
+  const [serviceId, setServiceId] = useState('');
+  const [kind, setKind] = useState<'none' | 'price' | 'pct'>('none');
+  const [amount, setAmount] = useState('');
+  const [maxUses, setMaxUses] = useState('');
+  const [perUser, setPerUser] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -661,13 +675,32 @@ function OffersEditor({ washId, rows, onChange }: { washId: string; rows: WashOf
     e.preventDefault();
     const t = title.trim();
     if (t.length < 3 || t.length > 80) return setErr('اكتب عنوان العرض — حتى ٨٠ حرفاً.');
+    const n = Number(amount);
+    if (kind !== 'none' && (!Number.isFinite(n) || n <= 0 || (kind === 'pct' && n > 90))) return setErr(kind === 'pct' ? 'نسبةُ الخصم من ١ إلى ٩٠.' : 'اكتب السعر الخاصّ.');
     setBusy(true);
     setErr(null);
-    const { error } = await supabase.from('wash_offers').insert({ wash_id: washId, title: t, ends_at: endsAt || null, active: true });
+    const { error } = await supabase.from('wash_offers').insert({
+      wash_id: washId,
+      title: t,
+      starts_at: startsAt || null,
+      ends_at: endsAt || null,
+      service_id: serviceId || null,
+      offer_price: kind === 'price' ? n : null,
+      discount_pct: kind === 'pct' ? n : null,
+      max_redemptions: maxUses ? Number(maxUses) : null,
+      per_user_limit: perUser ? Number(perUser) : null,
+      active: true,
+    });
     setBusy(false);
-    if (error) return setErr('تعذّر الحفظ. حاول مجدداً.');
+    if (error) return setErr(error.message.includes('الباقة') ? error.message : 'تعذّر الحفظ. حاول مجدداً.');
     setTitle('');
     setEndsAt('');
+    setStartsAt('');
+    setServiceId('');
+    setKind('none');
+    setAmount('');
+    setMaxUses('');
+    setPerUser('');
     onChange();
   }
 
@@ -694,7 +727,12 @@ function OffersEditor({ washId, rows, onChange }: { washId: string; rows: WashOf
                 <input type="checkbox" checked={o.active} onChange={() => toggle(o)} className="h-4 w-4 shrink-0 accent-[#16a34a]" aria-label="فعّال" />
                 <span className="min-w-0">
                   <span className="block truncate font-bold">{o.title}</span>
-                  {o.ends_at && <span>حتى {dayLabel(o.ends_at)}</span>}
+                  <span className="text-slate-500">
+                    {o.discount_pct != null ? `خصم ${o.discount_pct}٪` : o.offer_price != null ? iqd(o.offer_price) : 'إعلان'}
+                    {o.service_id ? ` · ${services.find((s) => s.id === o.service_id)?.name ?? 'خدمة'}` : ''}
+                    {o.ends_at ? ` · حتى ${dayLabel(o.ends_at)}` : ''}
+                    {o.max_redemptions ? ` · ${o.max_redemptions} مستفيداً` : ''}
+                  </span>
                 </span>
               </label>
               <button type="button" onClick={() => remove(o)} className="font-bold text-traffic-red underline">
@@ -705,14 +743,45 @@ function OffersEditor({ washId, rows, onChange }: { washId: string; rows: WashOf
         </ul>
       )}
 
-      <form onSubmit={add} className="space-y-3 rounded-xl bg-brand-50/60 p-3">
+      {!enabled && (
+        <p className="rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-800">
+          العروضُ ميزةُ الباقة الاحترافيّة فما فوق — تواصل مع الإدارة لترقية اشتراكك.
+        </p>
+      )}
+      <form onSubmit={add} className={`space-y-3 rounded-xl bg-brand-50/60 p-3 ${enabled ? '' : 'pointer-events-none opacity-50'}`}>
         <p className="text-xs font-extrabold text-brand-800">عرض جديد</p>
         <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} className="field" placeholder="غسلة كاملة بـ٨٬٠٠٠ حتى الجمعة" aria-label="عنوان العرض" />
-        <div>
-          <label htmlFor="offer-ends" className="label">
-            ينتهي في <span className="text-slate-400">(اختياريّ)</span>
+        <div className="grid grid-cols-2 gap-2">
+          <select value={kind} onChange={(e) => setKind(e.target.value as 'none' | 'price' | 'pct')} className="field" aria-label="نوع العرض">
+            <option value="none">إعلانٌ فقط</option>
+            <option value="price">سعرٌ خاصّ</option>
+            <option value="pct">خصم ٪</option>
+          </select>
+          <input type="number" inputMode="numeric" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} disabled={kind === 'none'} className="field" placeholder={kind === 'pct' ? 'النسبة' : 'السعر'} aria-label="القيمة" dir="ltr" />
+        </div>
+        <select value={serviceId} onChange={(e) => setServiceId(e.target.value)} className="field" aria-label="الخدمة">
+          <option value="">كلّ الخدمات</option>
+          {services.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-[11px] text-slate-600">
+            يبدأ
+            <input type="date" min={bgdDate(0)} value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="field mt-0.5 py-1.5 text-sm" dir="ltr" />
           </label>
-          <input id="offer-ends" type="date" min={bgdDate(0)} value={endsAt} onChange={(e) => setEndsAt(e.target.value)} className="field" dir="ltr" />
+          <label className="text-[11px] text-slate-600">
+            ينتهي
+            <input id="offer-ends" type="date" min={bgdDate(0)} value={endsAt} onChange={(e) => setEndsAt(e.target.value)} className="field mt-0.5 py-1.5 text-sm" dir="ltr" />
+          </label>
+          <label className="text-[11px] text-slate-600">
+            عددُ المستفيدين
+            <input type="number" inputMode="numeric" min={1} value={maxUses} onChange={(e) => setMaxUses(e.target.value)} className="field mt-0.5 py-1.5 text-sm" placeholder="بلا حدّ" dir="ltr" />
+          </label>
+          <label className="text-[11px] text-slate-600">
+            مرّاتٌ للزبون الواحد
+            <input type="number" inputMode="numeric" min={1} value={perUser} onChange={(e) => setPerUser(e.target.value)} className="field mt-0.5 py-1.5 text-sm" placeholder="بلا حدّ" dir="ltr" />
+          </label>
         </div>
         {err && <p role="alert" className="text-xs text-traffic-red">{err}</p>}
         <button type="submit" disabled={busy} className="btn-primary w-full">
