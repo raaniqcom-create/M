@@ -5,7 +5,9 @@ import { supabase } from '@/lib/supabase';
 import { hoursLabel } from '@/lib/hours';
 import { num } from '@/lib/num';
 import { displayPhone, normalizePhone, whatsappLink } from '@/lib/phone';
-import { BOOKING_LABELS, PLAN_LABELS, WASH, bgdDate, iqd, type CarWash, type WashBooking } from '@/lib/wash';
+import { BOOKING_LABELS, bgdDate, firstMonthPrice, iqd, planName, type CarWash, type WashBooking, type WashConfig, type WashPayment } from '@/lib/wash';
+import { useWashConfig } from '@/lib/washConfig';
+import { WashPlansAdmin } from './WashPlansAdmin';
 import { CheckIcon, EyeIcon, PhoneIcon, SpinnerIcon, WhatsappIcon, XIcon } from './icons';
 
 /** ما تردّه wash_admin_stats: منشورةٌ الآن، معلّقة، تنتهي خلال أسبوع، منتهية؛ وحجوزاتُ اليوم والشهر. */
@@ -30,10 +32,94 @@ const ORDER: Record<CarWash['status'], number> = { approved: 0, suspended: 1, re
 
 const DAY = 86_400_000;
 
-/** واتساب صاحب المغسلة الجديدة — رسالةُ الاشتراك جاهزة. */
-function waSignup(w: CarWash): string {
-  const text = `السلام عليكم، وصل طلب تسجيل مغسلة ${w.name} في المحطة التقنية. الاشتراك ${iqd(WASH.monthlyIqd)} شهريّاً — بعد التحويل نفعّل الصفحة مباشرة.`;
+/** واتساب صاحب المغسلة الجديدة — رسالةُ الاشتراك بسعر باقته وعرضِ الإطلاق إن كان. */
+function waSignup(w: CarWash, cfg: WashConfig | null): string {
+  const plan = cfg?.plans.find((p) => p.code === w.plan);
+  const price = plan ? firstMonthPrice(plan, cfg?.promo_first_month ?? 0, false) : null;
+  const line = plan && price !== null
+    ? `الاشتراك (${plan.name}) ${iqd(price)} لأوّل شهر${price !== plan.price_iqd ? ` ثمّ ${iqd(plan.price_iqd)} شهريّاً` : ' شهريّاً'}`
+    : 'الاشتراك الشهريّ';
+  const text = `السلام عليكم، وصل طلب تسجيل مغسلة ${w.name} في المحطة التقنية. ${line} — بعد التحويل نفعّل الصفحة مباشرة.`;
   return `https://wa.me/964${normalizePhone(w.phone)}?text=${encodeURIComponent(text)}`;
+}
+
+/** ورقةُ «تسجيل دفعة»: الباقةُ والمبلغُ والأيّام — تُفعّل المغسلةَ وتمدّ الاشتراكَ (admin_wash_payment). */
+function PaymentForm({
+  wash,
+  cfg,
+  paidBefore,
+  onDone,
+  onCancel,
+}: {
+  wash: CarWash;
+  cfg: WashConfig | null;
+  paidBefore: boolean;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const plans = cfg?.plans ?? [];
+  const [plan, setPlan] = useState(plans.some((p) => p.code === wash.plan) ? wash.plan : (plans[0]?.code ?? 'basic'));
+  const chosen = plans.find((p) => p.code === plan);
+  const suggested = chosen ? firstMonthPrice(chosen, cfg?.promo_first_month ?? 0, paidBefore) : 0;
+  const [amount, setAmount] = useState<number | null>(null);
+  const [days, setDays] = useState(30);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const value = amount ?? suggested;
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    const { error } = await supabase.rpc('admin_wash_payment', { p_wash: wash.id, p_plan: plan, p_amount: value, p_days: days, p_note: note.trim() || null });
+    setBusy(false);
+    if (error) return setErr(error.message);
+    onDone();
+  }
+
+  return (
+    <div className="mt-2 rounded-xl bg-brand-50 p-3">
+      <p className="text-xs font-bold text-brand-800">تسجيل دفعة — تُفعّل الصفحة وتمدّ الاشتراك</p>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="col-span-2">
+          <label htmlFor={`plan-${wash.id}`} className="label text-[11px]">الباقة</label>
+          <select id={`plan-${wash.id}`} value={plan} onChange={(e) => { setPlan(e.target.value); setAmount(null); }} className="field py-2 text-sm">
+            {plans.map((p) => (
+              <option key={p.code} value={p.code}>
+                {p.name} — {iqd(p.price_iqd)}
+              </option>
+            ))}
+            {!plans.some((p) => p.code === 'free') && <option value="free">مجّانيّة</option>}
+          </select>
+        </div>
+        <div>
+          <label htmlFor={`amt-${wash.id}`} className="label text-[11px]">المبلغ المستلَم (دينار)</label>
+          <input id={`amt-${wash.id}`} type="number" inputMode="numeric" min={0} step={1000} value={value} onChange={(e) => setAmount(Math.max(0, Number(e.target.value) || 0))} className="field py-2 text-sm" dir="ltr" />
+          {chosen && suggested !== chosen.price_iqd && <p className="mt-0.5 text-[10.5px] text-brand-700">عرض الإطلاق لأوّل شهر</p>}
+        </div>
+        <div>
+          <label htmlFor={`days-${wash.id}`} className="label text-[11px]">الأيّام</label>
+          <select id={`days-${wash.id}`} value={days} onChange={(e) => setDays(Number(e.target.value))} className="field py-2 text-sm">
+            {[30, 90, 180, 365].map((d) => (
+              <option key={d} value={d}>{d} يوماً</option>
+            ))}
+          </select>
+        </div>
+        <div className="col-span-2">
+          <label htmlFor={`note-${wash.id}`} className="label text-[11px]">ملاحظة (اختياريّة)</label>
+          <input id={`note-${wash.id}`} value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} className="field py-2 text-sm" placeholder="تحويل زين كاش، رقم الوصل…" />
+        </div>
+      </div>
+      {err && <p role="alert" className="mt-2 text-[11px] text-traffic-red">{err}</p>}
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button type="button" disabled={busy} onClick={save} className="btn-primary text-xs">
+          {busy ? <SpinnerIcon className="h-4 w-4" /> : <CheckIcon className="h-4 w-4" />}
+          تفعيل حتى {new Date(`${bgdDate(days, Math.max(Date.now(), wash.paid_until ? Date.parse(wash.paid_until) : 0))}T12:00:00`).toLocaleDateString('ar-IQ', { day: 'numeric', month: 'numeric' })}
+        </button>
+        <button type="button" onClick={onCancel} className="btn-ghost text-xs">تراجع</button>
+      </div>
+    </div>
+  );
 }
 
 const fmtDay = (d: string) =>
@@ -63,16 +149,34 @@ export function WashAdmin() {
   /** المغسلةُ المفتوحةُ حجوزاتُها، وما جُلب منها. */
   const [open, setOpen] = useState<string | null>(null);
   const [bookings, setBookings] = useState<Record<string, Booking[]>>({});
+  /** المغسلةُ المفتوحةُ لها ورقةُ الدفع، وسجلُّ الدفعات المجلوب. */
+  const [paying, setPaying] = useState<string | null>(null);
+  const [payments, setPayments] = useState<Record<string, WashPayment[]>>({});
+  const [showPlans, setShowPlans] = useState(false);
+  const cfg = useWashConfig();
 
   const load = useCallback(async () => {
-    const [s, w] = await Promise.all([
+    const [s, w, p] = await Promise.all([
       supabase.rpc('wash_admin_stats'),
-      supabase.from('car_washes').select('*').order('created_at', { ascending: false }),
+      supabase.from('car_washes').select('*').order('created_at', { ascending: false }).range(0, 499),
+      supabase.from('wash_payments').select('id, wash_id, plan, amount_iqd, days, note, created_at').order('created_at', { ascending: false }).range(0, 999),
     ]);
     if (s.error || w.error) setNote((s.error ?? w.error)!.message);
     setStats((s.data as Stats | null) ?? null);
     setRows((w.data as CarWash[] | null) ?? []);
+    const byWash: Record<string, WashPayment[]> = {};
+    for (const row of (p.data ?? []) as WashPayment[]) (byWash[row.wash_id] ??= []).push(row);
+    setPayments(byWash);
   }, []);
+
+  /** التجربةُ المجّانيّة: دفعةٌ بصفر دينار لعدد أيّام التجربة على باقة المغسلة. */
+  async function trial(w: CarWash) {
+    setBusy(w.id);
+    const { error } = await supabase.rpc('admin_wash_payment', { p_wash: w.id, p_plan: w.plan, p_amount: 0, p_days: cfg?.trial_days ?? 7, p_note: 'تجربة مجّانيّة' });
+    setBusy(null);
+    if (error) return setNote(error.message);
+    void load();
+  }
 
   useEffect(() => {
     void load();
@@ -178,7 +282,7 @@ export function WashAdmin() {
                   <PhoneIcon className="h-4 w-4" />
                   <span dir="ltr">{displayPhone(w.phone)}</span>
                 </a>
-                <a href={waSignup(w)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-[40px] items-center gap-1.5 text-brand">
+                <a href={waSignup(w, cfg)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-[40px] items-center gap-1.5 text-brand">
                   <WhatsappIcon className="h-4 w-4" />
                   واتساب الاشتراك
                 </a>
@@ -187,17 +291,27 @@ export function WashAdmin() {
                   معاينة
                 </a>
               </div>
-              <p className="text-[10.5px] text-slate-400">المعاينةُ تفتح بعد الاعتماد فقط.</p>
+              <p className="text-[10.5px] text-slate-400">
+                المعاينةُ تفتح بعد الاعتماد فقط · طلب الباقة: <b>{planName(cfg, w.plan)}</b>{w.owner_name ? ` · ${w.owner_name}` : ''}
+              </p>
 
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <button type="button" disabled={busy === w.id} onClick={() => set(w, 'approved', 'monthly', bgdDate(30))} className="btn-primary text-xs">
-                  <CheckIcon className="h-4 w-4" />
-                  اعتماد + شهر
-                </button>
-                <button type="button" disabled={busy === w.id} onClick={() => set(w, 'approved', 'free', bgdDate(365))} className="btn-ghost text-xs">
-                  اعتماد مجّاناً
-                </button>
-              </div>
+              {paying === w.id ? (
+                <PaymentForm wash={w} cfg={cfg} paidBefore={!!payments[w.id]?.length} onDone={() => { setPaying(null); void load(); }} onCancel={() => setPaying(null)} />
+              ) : (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button type="button" disabled={busy === w.id} onClick={() => setPaying(w.id)} className="btn-primary text-xs">
+                    <CheckIcon className="h-4 w-4" />
+                    تسجيل دفعة وتفعيل
+                  </button>
+                  {cfg && cfg.trial_days > 0 ? (
+                    <button type="button" disabled={busy === w.id} onClick={() => trial(w)} className="btn-ghost text-xs">
+                      تجربة {cfg.trial_days} أيّام
+                    </button>
+                  ) : (
+                    <span />
+                  )}
+                </div>
+              )}
               {rejecting === w.id ? (
                 <div className="mt-2">
                   <label htmlFor={`why-${w.id}`} className="label text-xs">سبب الرفض</label>
@@ -235,7 +349,7 @@ export function WashAdmin() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-bold text-slate-800">{w.name}</p>
                     <p className="truncate text-[11px] text-slate-500">
-                      {w.city} · {PLAN_LABELS[w.plan]}
+                      {w.city} · {planName(cfg, w.plan)}
                     </p>
                   </div>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS[w.status].cls}`}>
@@ -251,9 +365,18 @@ export function WashAdmin() {
                   <WhatsappIcon className="h-4 w-4" />
                   <span dir="ltr">{displayPhone(w.phone)}</span>
                 </a>
+                {paying === w.id && (
+                  <PaymentForm wash={w} cfg={cfg} paidBefore={!!payments[w.id]?.length} onDone={() => { setPaying(null); void load(); }} onCancel={() => setPaying(null)} />
+                )}
+                {!!payments[w.id]?.length && (
+                  <p className="mt-1 text-[10.5px] text-slate-400">
+                    آخر دفعة: {iqd(payments[w.id][0].amount_iqd)} · {payments[w.id][0].days} يوماً · {fmtDay(payments[w.id][0].created_at.slice(0, 10))}
+                    {payments[w.id].length > 1 ? ` · (${payments[w.id].length} دفعات)` : ''}
+                  </p>
+                )}
                 <div className="mt-1.5 grid grid-cols-3 gap-1">
-                  <button type="button" disabled={busy === w.id} onClick={() => set(w, 'approved', null, bgdDate(30, Math.max(Date.now(), w.paid_until ? Date.parse(w.paid_until) : 0)))} className="min-h-[40px] rounded-lg bg-brand-50 text-[11px] font-bold text-brand-800 disabled:opacity-50">
-                    تمديد شهر
+                  <button type="button" disabled={busy === w.id} onClick={() => setPaying(paying === w.id ? null : w.id)} className="min-h-[40px] rounded-lg bg-brand-50 text-[11px] font-bold text-brand-800 disabled:opacity-50">
+                    تسجيل دفعة
                   </button>
                   {w.status === 'approved' ? (
                     <button type="button" disabled={busy === w.id} onClick={() => set(w, 'suspended', null, null)} className="min-h-[40px] rounded-lg bg-red-50 text-[11px] font-bold text-traffic-red disabled:opacity-50">
@@ -297,6 +420,18 @@ export function WashAdmin() {
             );
           })}
         </ul>
+      </section>
+
+      <section className="card p-5">
+        <button type="button" onClick={() => setShowPlans((v) => !v)} aria-expanded={showPlans} className="flex w-full items-center justify-between text-sm font-bold">
+          الباقات والإعدادات
+          <span className="text-[11px] font-semibold text-brand">{showPlans ? 'إخفاء' : 'فتح'}</span>
+        </button>
+        {showPlans && (
+          <div className="mt-3">
+            <WashPlansAdmin />
+          </div>
+        )}
       </section>
     </div>
   );

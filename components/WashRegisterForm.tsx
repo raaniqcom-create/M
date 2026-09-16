@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { ANBAR_CITIES } from '@/lib/cities';
 import { displayPhone, isValidIraqiMobile, phoneToEmail } from '@/lib/phone';
-import { WASH, iqd, type CarWash } from '@/lib/wash';
+import { iqd, limitLabel, type CarWash } from '@/lib/wash';
+import { useWashConfig } from '@/lib/washConfig';
 import { TimeSelect } from './TimeSelect';
 import { CheckIcon, EyeIcon, EyeOffIcon, SpinnerIcon } from './icons';
 
@@ -20,8 +21,9 @@ const MapPicker = dynamic(() => import('./MapPicker'), {
   ),
 });
 
-type Step = 0 | 1 | 2 | 3 | 4;
-const STEPS = ['الاسم', 'المدينة والعنوان', 'الموقع', 'الدوام', 'بياناتك'];
+type Step = 0 | 1 | 2 | 3 | 4 | 5;
+const STEPS = ['الاسم', 'المدينة والعنوان', 'الموقع', 'الدوام', 'الباقة', 'بياناتك'];
+const LAST: Step = 5;
 const SLOTS = [15, 30, 45, 60];
 const LOYALTY = [0, 4, 5, 6, 8, 10];
 const DEFAULT_SERVICES = [
@@ -45,6 +47,12 @@ export function WashRegisterForm() {
   const [bays, setBays] = useState(2);
   const [slotMinutes, setSlotMinutes] = useState(30);
   const [loyalty, setLoyalty] = useState(5);
+
+  const cfg = useWashConfig();
+  const [plan, setPlan] = useState<string>('');
+  const chosenPlan = cfg?.plans.find((p) => p.code === (plan || cfg.plans[0]?.code));
+  const [ownerName, setOwnerName] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -81,13 +89,16 @@ export function WashRegisterForm() {
         ? address.trim().length >= 5
         : step === 2
           ? !!coords
-          : true;
+          : step === 4
+            ? !!chosenPlan
+            : true;
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!isValidIraqiMobile(phone)) return setError('رقم الهاتف غير صحيح. اكتبه هكذا: 07XXXXXXXXX');
     if (password.length < 6) return setError('كلمة المرور 6 أحرف على الأقل.');
     if (!coords) return setError('ارجع إلى خطوة الموقع وحدّد موقع المغسلة.');
+    if (whatsapp && !isValidIraqiMobile(whatsapp)) return setError('رقم واتساب غير صحيح.');
 
     setBusy(true);
     setError(null);
@@ -129,6 +140,9 @@ export function WashRegisterForm() {
         bays,
         slot_minutes: slotMinutes,
         loyalty_target: loyalty,
+        plan: chosenPlan?.code ?? 'basic',
+        owner_name: ownerName.trim() || null,
+        whatsapp: whatsapp ? displayPhone(whatsapp) : null,
       })
       .select()
       .single();
@@ -168,7 +182,7 @@ export function WashRegisterForm() {
       onSubmit={submit}
       // «إدخال» على حقلٍ في خطوةٍ بلا زرِّ إرسال = خطوةٌ إلى الأمام
       onKeyDown={(e) => {
-        if (e.key !== 'Enter' || step === 4) return;
+        if (e.key !== 'Enter' || step === LAST) return;
         if ((e.target as HTMLElement).tagName !== 'INPUT') return;
         e.preventDefault();
         if (canNext) go(1);
@@ -304,7 +318,55 @@ export function WashRegisterForm() {
       )}
 
       {step === 4 && (
+        <div className="space-y-3">
+          {!cfg ? (
+            <div className="flex justify-center py-6">
+              <SpinnerIcon className="h-5 w-5 text-brand" />
+            </div>
+          ) : (
+            <>
+              {cfg.promo_first_month > 0 && (
+                <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                  عرض الإطلاق: أوّل شهر {iqd(cfg.promo_first_month)} لأيّ باقة.
+                </p>
+              )}
+              {cfg.plans.map((p) => {
+                const on = (plan || cfg.plans[0]?.code) === p.code;
+                const f = p.features;
+                return (
+                  <label key={p.code} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${on ? 'border-brand bg-brand-50' : 'border-slate-200'}`}>
+                    <input type="radio" name="wash-plan" checked={on} onChange={() => setPlan(p.code)} className="mt-1 h-4 w-4 accent-brand" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-extrabold text-slate-800">{p.name}</span>
+                        <span className="text-sm font-extrabold text-brand-700">{iqd(p.price_iqd)} / شهر</span>
+                      </span>
+                      <span className="mt-1 block text-[11px] leading-relaxed text-slate-500">
+                        {limitLabel(f.booking_monthly_limit, 'حجز شهريّاً')} · {limitLabel(f.gallery_limit, 'صور')}
+                        {f.offers_enabled ? ' · العروض' : ''}
+                        {f.staff_limit ? ` · ${f.staff_limit} موظّفين` : ''}
+                        {f.featured ? ' · ظهور مميّز' : ''}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+              <p className="text-[11px] text-slate-400">يُفعَّل الاشتراك بعد التواصل معك واستلام المبلغ. الحجزُ مجّانيّ لزبائنك.</p>
+            </>
+          )}
+        </div>
+      )}
+
+      {step === 5 && (
         <div className="space-y-4">
+          <div>
+            <label htmlFor="wash-owner" className="label">اسم صاحب المغسلة</label>
+            <input id="wash-owner" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} maxLength={60} className="field" placeholder="أبو أحمد" />
+          </div>
+          <div>
+            <label htmlFor="wash-wa" className="label">رقم واتساب (إن اختلف)</label>
+            <input id="wash-wa" type="tel" inputMode="numeric" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} className="field" placeholder="07XXXXXXXXX" dir="ltr" />
+          </div>
           <div>
             <label htmlFor="wash-phone" className="label">
               رقم الهاتف <span className="text-traffic-red">*</span>
@@ -358,7 +420,8 @@ export function WashRegisterForm() {
               className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
             />
             <span className="text-xs leading-relaxed text-slate-600">
-              أوافق على الاشتراك الشهريّ {iqd(WASH.monthlyIqd)} بعد الاعتماد.
+              أوافق على اشتراك باقة «{chosenPlan?.name ?? '—'}» {chosenPlan ? iqd(chosenPlan.price_iqd) : ''} شهريّاً بعد الاعتماد
+              {cfg && cfg.promo_first_month > 0 ? ` (أوّل شهر ${iqd(cfg.promo_first_month)})` : ''}.
             </span>
           </label>
         </div>
@@ -385,7 +448,7 @@ export function WashRegisterForm() {
             رجوع
           </button>
         )}
-        {step < 4 ? (
+        {step < LAST ? (
           <button type="button" onClick={() => canNext && go(1)} disabled={!canNext} className="btn-primary flex-[2]">
             التالي
           </button>

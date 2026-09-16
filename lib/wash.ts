@@ -7,11 +7,85 @@ import { plural } from './freshness.ts';
  *  `AdminOnly` كما بدأ «مساعد الطريق». */
 export const WASH = {
   active: false,
-  /** الاشتراكُ الشهريُّ لصاحب المغسلة — يُعرض في صفحة التسجيل. */
-  monthlyIqd: 25_000,
-  /** أيّامُ الحجز المسبق: للمشترك، ولغيره. */
+  /** أيّامُ الحجز المسبق الافتراضيّة — الفعليّةُ من wash_config (الإدارة تضبطها). */
   horizonDays: { subscriber: 3, guest: 1 },
 } as const;
+
+/** أنواعُ الخدمة: المغاسلُ الآن، وغيرُها حين يتّسع القسمُ إلى «خدمات السيارات». */
+export const KIND_LABELS: Record<string, string> = { car_wash: 'مغسلة سيارات' };
+
+/** مزايا الباقة كما في wash_plans.features — الأصفارُ تعني «بلا حدّ». */
+export interface WashFeatures {
+  booking_monthly_limit?: number;
+  gallery_limit?: number;
+  staff_limit?: number;
+  offers_enabled?: boolean;
+  featured?: boolean;
+  analytics?: boolean;
+  sms_monthly_limit?: number;
+}
+
+export interface WashPlan {
+  code: string;
+  name: string;
+  price_iqd: number;
+  features: WashFeatures;
+  sort?: number;
+  public?: boolean;
+  active?: boolean;
+}
+
+/** ما تردّه wash_config(): الباقاتُ العامّة وحدودُ الحجز. */
+export interface WashConfig {
+  plans: WashPlan[];
+  promo_first_month: number;
+  trial_days: number;
+  grace_days: number;
+  cancel_free_min: number;
+  horizon_guest: number;
+  horizon_sub: number;
+}
+
+export const EMPTY_WASH_CONFIG: WashConfig = {
+  plans: [],
+  promo_first_month: 0,
+  trial_days: 0,
+  grace_days: 3,
+  cancel_free_min: 30,
+  horizon_guest: WASH.horizonDays.guest,
+  horizon_sub: WASH.horizonDays.subscriber,
+};
+
+export interface WashPayment {
+  id: string;
+  wash_id: string;
+  plan: string;
+  amount_iqd: number;
+  days: number;
+  note: string | null;
+  created_at: string;
+}
+
+export const planOf = (cfg: Pick<WashConfig, 'plans'> | null, code: string): WashPlan | undefined =>
+  cfg?.plans.find((p) => p.code === code);
+
+export const planName = (cfg: Pick<WashConfig, 'plans'> | null, code: string): string =>
+  planOf(cfg, code)?.name ?? (code === 'free' ? 'مجّانيّة' : code);
+
+/** سعرُ أوّل شهرٍ: عرضُ الإطلاق إن كان ولم تُسجَّل دفعةٌ قبلَه، وإلّا سعرُ الباقة. */
+export function firstMonthPrice(plan: WashPlan, promo: number, paidBefore: boolean): number {
+  return !paidBefore && promo > 0 && promo < plan.price_iqd ? promo : plan.price_iqd;
+}
+
+/** أيّامُ الاشتراك المتبقّية (سالبةٌ بعد الانتهاء)، أو null بلا اشتراك. */
+export function daysLeft(paidUntil: string | null, now = Date.now()): number | null {
+  if (!paidUntil) return null;
+  return Math.round((Date.parse(paidUntil) - Date.parse(bgdDate(0, now))) / 86_400_000);
+}
+
+/** «٦٠ حجزاً شهريّاً» / «بلا حدّ». */
+export const limitLabel = (n: number | undefined, unit: string): string =>
+  n && n > 0 ? `${n.toLocaleString('ar-IQ')} ${unit}` : 'بلا حدّ';
 
 /** صفُّ `washes_public` كما يقرؤه المواطن. */
 export interface WashPublic {
@@ -39,10 +113,16 @@ export interface CarWash extends Omit<WashPublic, 'phone' | 'has_offer'> {
   phone: string;
   phone_hidden: boolean;
   status: 'pending' | 'approved' | 'rejected' | 'suspended';
-  plan: 'monthly' | 'quarterly' | 'free';
+  /** رمزُ الباقة في wash_plans (basic/pro/premium/free…). */
+  plan: string;
   paid_until: string | null;
   admin_note: string | null;
   created_at: string;
+  kind: string;
+  owner_name: string | null;
+  whatsapp: string | null;
+  phone2: string | null;
+  confirm_mode: 'manual' | 'auto';
 }
 
 export interface WashService {
@@ -89,12 +169,6 @@ export const BOOKING_LABELS: Record<BookingStatus, string> = {
   cancelled: 'مُلغى',
 };
 
-export const PLAN_LABELS: Record<CarWash['plan'], string> = {
-  monthly: 'شهريّ',
-  quarterly: 'ربع سنويّ',
-  free: 'مجّانيّ',
-};
-
 /** «٢٥٬٠٠٠ دينار». */
 export const iqd = (n: number): string => `${n.toLocaleString('ar-IQ')} دينار`;
 
@@ -103,10 +177,14 @@ export function bgdDate(plusDays = 0, now = Date.now()): string {
   return new Date(now + plusDays * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Baghdad' });
 }
 
-/** أيّامُ الحجز المتاحة: اليومَ والغدَ لكلّ أحد، وحتى ثلاثة أيّامٍ للمشترك. */
-export function bookingDays(subscriber: boolean, now = Date.now()): { day: string; locked: boolean }[] {
-  const max = WASH.horizonDays.subscriber;
-  const open = subscriber ? WASH.horizonDays.subscriber : WASH.horizonDays.guest;
+/** أيّامُ الحجز المتاحة: اليومَ والغدَ لكلّ أحد، وحتى ثلاثة أيّامٍ للمشترك — والأرقامُ من الإدارة. */
+export function bookingDays(
+  subscriber: boolean,
+  now = Date.now(),
+  horizon: { guest: number; subscriber: number } = WASH.horizonDays
+): { day: string; locked: boolean }[] {
+  const max = Math.max(horizon.subscriber, horizon.guest);
+  const open = subscriber ? horizon.subscriber : horizon.guest;
   return Array.from({ length: max + 1 }, (_, i) => ({ day: bgdDate(i, now), locked: i > open }));
 }
 

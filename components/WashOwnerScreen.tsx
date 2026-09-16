@@ -4,19 +4,24 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { forgetLogin } from '@/lib/biometric';
-import { normalizePhone } from '@/lib/phone';
+import { ADMIN_WA, normalizePhone } from '@/lib/phone';
 import {
   BOOKING_LABELS,
   bgdDate,
   dayLabel,
+  daysLeft,
   iqd,
+  limitLabel,
+  planOf,
   slotLabel,
   type BookingStatus,
   type CarWash,
   type WashBooking,
+  type WashConfig,
   type WashOffer,
   type WashService,
 } from '@/lib/wash';
+import { useWashConfig } from '@/lib/washConfig';
 import { IconGrid, type IconGridItem } from './IconGrid';
 import { Sheet } from './Sheet';
 import { TimeSelect } from './TimeSelect';
@@ -76,8 +81,55 @@ function banner(w: CarWash, today: string): { cls: string; text: string } {
   return { cls: 'border-red-200 bg-red-50 text-traffic-red', text: 'انتهى الاشتراك — مغسلتك مخفيّة عن الزبائن حتى التجديد' };
 }
 
+/** بطاقةُ الاشتراك (§44): الباقةُ وسعرُها وانتهاؤها والمتبقّي وحدودُها وزرُّ التجديد. */
+function SubscriptionCard({ wash, cfg }: { wash: CarWash; cfg: WashConfig | null }) {
+  const plan = planOf(cfg, wash.plan);
+  const left = daysLeft(wash.paid_until);
+  const grace = cfg?.grace_days ?? 3;
+  const f = plan?.features ?? {};
+  const until = wash.paid_until
+    ? new Date(`${wash.paid_until}T12:00:00`).toLocaleDateString('ar-IQ', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
+  const renew = `https://wa.me/${ADMIN_WA}?text=${encodeURIComponent(
+    `السلام عليكم، أريد تجديد اشتراك مغسلة «${wash.name}» (${plan?.name ?? wash.plan}) في المحطة التقنية.`
+  )}`;
+  const tone =
+    left === null || left < -grace ? 'border-red-200 bg-red-50' : left < 0 ? 'border-amber-300 bg-amber-50' : left <= 7 ? 'border-amber-200 bg-amber-50/60' : 'border-brand-200 bg-brand-50';
+  return (
+    <section className={`mt-3 rounded-xl border p-3 ${tone}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-extrabold text-slate-800">باقة {plan?.name ?? wash.plan}</p>
+        {plan && <p className="text-[12px] font-bold text-slate-600">{iqd(plan.price_iqd)} / شهر</p>}
+      </div>
+      <p className="mt-1 text-[12px] text-slate-600">
+        {left === null
+          ? 'لم يُفعَّل الاشتراك بعد.'
+          : left >= 0
+            ? `فعّال حتى ${until} — بقي ${left} يوماً`
+            : left >= -grace
+              ? `انتهى في ${until} — فترة سماح ${grace} أيام، صفحتك لا تزال ظاهرة`
+              : `انتهى في ${until} — مغسلتك مخفيّة عن الزبائن حتى التجديد`}
+      </p>
+      {plan && (
+        <p className="mt-1 text-[11px] text-slate-500">
+          {limitLabel(f.booking_monthly_limit, 'حجز شهريّاً')} · {limitLabel(f.gallery_limit, 'صور')} · {limitLabel(f.staff_limit, 'موظّفين')}
+          {f.offers_enabled ? ' · العروض' : ''}
+          {f.featured ? ' · ظهور مميّز' : ''}
+        </p>
+      )}
+      {(left === null || left <= 7) && (
+        <a href={renew} target="_blank" rel="noopener noreferrer" className="btn-primary mt-2 w-full text-xs">
+          <WhatsappIcon className="h-4 w-4" />
+          {left === null ? 'تفعيل الاشتراك عبر واتساب' : 'تجديد الاشتراك عبر واتساب'}
+        </a>
+      )}
+    </section>
+  );
+}
+
 /** لوحةُ صاحب المغسلة: الاشتراك، والحجوزات، وما يُضبط في أوراقٍ من أسفل. */
 export function WashOwnerScreen() {
+  const cfg = useWashConfig();
   const [auth, setAuth] = useState<'checking' | 'none' | 'ok'>('checking');
   /** ‎?id= — الإدارةُ تدخل لوحةَ أيّ مغسلة (التجريبيّةُ أوّلاً) لمتابعة الوضع بصفتها. */
   const viewId = useSearchParams().get('id');
@@ -263,7 +315,11 @@ export function WashOwnerScreen() {
         </p>
       )}
 
-      <p className={`mt-4 rounded-xl border p-3 text-[12.5px] font-bold leading-relaxed ${note.cls}`}>{note.text}</p>
+      {wash.status === 'approved' ? (
+        <SubscriptionCard wash={wash} cfg={cfg} />
+      ) : (
+        <p className={`mt-4 rounded-xl border p-3 text-[12.5px] font-bold leading-relaxed ${note.cls}`}>{note.text}</p>
+      )}
 
       {err && (
         <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-traffic-red">

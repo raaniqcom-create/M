@@ -1,7 +1,7 @@
 // «غسيل»: شبكةُ المواعيد، أيّامُ الحجز، بطاقةُ الغسلات — دوالُّ lib/wash.ts الصرفة.
 //   node scripts/test-wash.mjs
 import assert from 'node:assert/strict';
-import { bookingDays, bgdDate, dayLabel, loyaltyLine, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
+import { bookingDays, bgdDate, dayLabel, daysLeft, firstMonthPrice, limitLabel, loyaltyLine, planName, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
 
 let n = 0;
 const ok = (label, fn) => { fn(); n++; console.log(`  ✓ ${label}`); };
@@ -47,5 +47,29 @@ ok('الموعدُ يُقرأ بالعربيّة', () => {
 ok('رابطُ واتساب بالرمز', () => {
   const u = whatsappBooking('07901234567', { code: '482113', name: 'أحمد', service_name: 'غسيل خارجي', starts_at: '2026-09-17T07:30:00Z', car: null });
   assert.ok(u.startsWith('https://wa.me/9647901234567?text=') && u.includes(encodeURIComponent('482113')));
+});
+ok('أيّامُ الحجز تتبع حدودَ الإدارة لا الثوابت', () => {
+  const d = bookingDays(false, Date.now(), { guest: 2, subscriber: 5 });
+  assert.equal(d.length, 6);
+  assert.deepEqual(d.map((x) => x.locked), [false, false, false, true, true, true]);
+});
+ok('سعرُ أوّل شهر: عرضُ الإطلاق لمن لم يدفع قبلُ، وإلّا سعرُ الباقة', () => {
+  const plan = { code: 'basic', name: 'الأساسيّة', price_iqd: 40000, features: {} };
+  assert.equal(firstMonthPrice(plan, 20000, false), 20000);
+  assert.equal(firstMonthPrice(plan, 20000, true), 40000);
+  assert.equal(firstMonthPrice(plan, 0, false), 40000);
+  assert.equal(firstMonthPrice(plan, 50000, false), 40000, 'عرضٌ أغلى من الباقة يُهمَل');
+});
+ok('الأيّامُ المتبقّية وأسماءُ الباقات والحدود', () => {
+  const now = Date.parse('2026-09-16T12:00:00+03:00');
+  assert.equal(daysLeft('2026-09-26', now), 10);
+  assert.equal(daysLeft('2026-09-14', now), -2);
+  assert.equal(daysLeft(null, now), null);
+  const cfg = { plans: [{ code: 'pro', name: 'الاحترافيّة', price_iqd: 60000, features: {} }] };
+  assert.equal(planName(cfg, 'pro'), 'الاحترافيّة');
+  assert.equal(planName(cfg, 'free'), 'مجّانيّة');
+  assert.equal(planName(null, 'x'), 'x');
+  assert.equal(limitLabel(0, 'حجز'), 'بلا حدّ');
+  assert.equal(limitLabel(60, 'حجز شهريّاً'), '٦٠ حجز شهريّاً');
 });
 console.log(`\n${n} فحصاً مرّت.`);

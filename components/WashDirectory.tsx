@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { CITY_NAMES } from '@/lib/cities';
 import { isOpenNow, openingLine } from '@/lib/hours';
-import { WASH, iqd, type WashPublic } from '@/lib/wash';
+import { type WashPublic } from '@/lib/wash';
 import { RouteButton } from './RouteButton';
 import { CarIcon, FuelIcon, SpinnerIcon } from './icons';
 
@@ -146,7 +146,7 @@ export function WashDirectory() {
       )}
 
       <a href="/wash/register/" className="mt-8 block text-center text-[11.5px] text-slate-400 underline">
-        صاحب مغسلة؟ سجّلها بـ{iqd(WASH.monthlyIqd)} شهريّاً
+        صاحب مغسلة؟ سجّلها باشتراكٍ شهريّ
       </a>
     </main>
   );
