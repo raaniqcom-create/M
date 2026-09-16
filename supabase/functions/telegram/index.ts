@@ -2384,8 +2384,17 @@ async function proposeSchedule(chat: number, userId: number, text: string) {
 async function proposeManual(chat: number, userId: number, text: string) {
   const platform = await platformStations();
   const lines: ScheduleLine[] = [];
+  // «التاريخ: 2026-09-17» في أوّل سطر — يكتبه وكيلُ الاستخراج (docs/ai) — يضبط
+  // اليومَ ولا يُقرأ محطة.
+  let forDate: string | null = null;
 
   for (const row of text.split(/\r?\n/)) {
+    const dm = row.match(/^\s*التاريخ\s*[:：]\s*(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (dm) {
+      forDate = `${dm[1]}-${dm[2].padStart(2, '0')}-${dm[3].padStart(2, '0')}`;
+      continue;
+    }
+    if (/^\s*التاريخ\s*[:：]/.test(row)) continue;
     const one = readManualLine(row);
     if (!one) continue;
     const m = matchLine(one.name, platform, one.product ?? 'gasoline_regular');
@@ -2409,7 +2418,8 @@ async function proposeManual(chat: number, userId: number, text: string) {
   const d = {
     product: lines[0].product as string,
     lines: keyed(lines),
-    for_date: baghdadDay(),
+    for_date: forDate ?? baghdadDay(),
+    ...(forDate ? { dayConfirmed: true } : {}),
   };
   await saveDraft(userId, chat, 'sched', { sched: d });
   await showSchedule(chat, d);
