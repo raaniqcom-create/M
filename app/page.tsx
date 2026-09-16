@@ -717,6 +717,11 @@ export default function HomePage() {
                   <ShieldIcon className="h-4 w-4" />
                   العودة إلى لوحة الفرع
                 </>
+              ) : role === 'wash' ? (
+                <>
+                  <StoreIcon className="h-4 w-4" />
+                  العودة إلى لوحة مغسلتي
+                </>
               ) : (
                 <>
                   <StoreIcon className="h-4 w-4" />

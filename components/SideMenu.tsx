@@ -16,6 +16,7 @@ import { useNativeApp } from '@/lib/useNativeApp';
 import { shareApp } from '@/lib/shareApp';
 import { RATION } from '@/lib/ration';
 import { CANS } from '@/lib/cans';
+import { WASH } from '@/lib/wash';
 import {
   BellRingIcon,
   CalendarIcon,
@@ -232,6 +233,17 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                 />
               )}
 
+              {/* «غسيل»: للإدارة قبل الإعلان، وللجميع حين تُرفع WASH.active. */}
+              {(WASH.active || (ready && role === 'admin')) && (
+                <Item
+                  href="/wash"
+                  icon={CarIcon}
+                  title="مغاسل السيارات"
+                  note="دليل المغاسل وحجز موعد"
+                  accent
+                />
+              )}
+
               {/* «غداً» قبل «الآن» في هذا القسم عمداً: من يفتح القائمةَ مساءً
                   يسأل عن الغد، ومن يسأل عن الآن يراه في الصفحة أمامه بلا
                   قائمة. ويُعرض دائماً — الجدولُ يمتلئ كلَّ مساء، فليس بنداً
@@ -279,6 +291,14 @@ export function SideMenu({ onAvailableOnly }: { onAvailableOnly?: () => void }) 
                       icon={ShieldIcon}
                       title="لوحة الفرع"
                       note="حالة التوفر في عموم الأنبار — لحظة بلحظة"
+                      accent
+                    />
+                  ) : role === 'wash' ? (
+                    <Item
+                      href="/wash/owner"
+                      icon={CarIcon}
+                      title="لوحة مغسلتي"
+                      note="الحجوزات والخدمات والاشتراك"
                       accent
                     />
                   ) : (

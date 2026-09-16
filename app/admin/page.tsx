@@ -7,6 +7,7 @@ import { metresToKnownFuel, normalizeName, SUSPICIOUS_M } from '@/lib/nearbyFuel
 import {
   BellRingIcon,
   CalendarIcon,
+  CarIcon,
   ChartIcon,
   CheckIcon,
   EyeIcon,
@@ -49,6 +50,7 @@ import { PlatformNotice } from '@/components/PlatformNotice';
 import { PendingAnnouncements } from '@/components/PendingAnnouncements';
 import { SubscribersPanel } from '@/components/SubscribersPanel';
 import { StoriesAdmin } from '@/components/StoriesAdmin';
+import { WashAdmin } from '@/components/WashAdmin';
 import { OwnerOutreach } from '@/components/OwnerOutreach';
 import { DockTab } from '@/components/BottomDock';
 import { findSimilar } from '@/lib/similar';
@@ -88,6 +90,7 @@ export default function AdminPage() {
     | 'schedule'
     | 'subscribers'
     | 'stories'
+    | 'wash'
   >('stations');
   const [q, setQ] = useState('');
   /** تصفيةُ المحطات بمدينةٍ واحدة — فارغةٌ = الكلّ. */
@@ -444,6 +447,7 @@ export default function AdminPage() {
               { key: 'messages', label: 'الرسائل', icon: MessageIcon, badge: totalUnread, onClick: () => setTab('messages') },
               { key: 'subscribers', label: 'المشتركون+', icon: UserIcon, badge: subUnread, tone: subUnread ? 'red' : undefined, onClick: () => setTab('subscribers') },
               { key: 'stories', label: 'الحالات', icon: InfoIcon, onClick: () => setTab('stories') },
+              { key: 'wash', label: 'المغاسل', icon: CarIcon, onClick: () => setTab('wash') },
               { key: 'outreach', label: 'متابعة المحطات', icon: PhoneIcon, onClick: () => setTab('outreach') },
               { key: 'add', label: 'إضافة محطة', icon: PlusIcon, onClick: () => setTab('add') },
               { key: 'announce', label: 'الإشعارات', icon: BellRingIcon, onClick: () => setTab('announce') },
@@ -808,6 +812,11 @@ export default function AdminPage() {
       {tab === 'stories' && (
         <div className="mt-4">
           <StoriesAdmin />
+        </div>
+      )}
+      {tab === 'wash' && (
+        <div className="mt-4">
+          <WashAdmin />
         </div>
       )}
       {tab === 'stations' && <DeletedStations />}

@@ -5,7 +5,8 @@ import { supabase } from '@/lib/supabase';
 
 export type Session = {
   signedIn: boolean;
-  role: 'admin' | 'owner' | null;
+  /** `wash`: دورُه في القاعدة `owner` لكنّ my_wash() تجد له مغسلة — فلوحتُه /wash/owner. */
+  role: 'admin' | 'owner' | 'wash' | null;
   /** موظّفُ فرع توزيع المنتجات النفطية. راية مستقلّة عن `role` لأن دورَه في
    *  القاعدة `owner` — ولو تُرك بلا تمييزٍ هنا لَقادته كلُّ وجهةٍ في التطبيق
    *  إلى /owner، فيستقبل موظّفاً حكوميّاً بـ«أكمل تسجيل محطتك». */
@@ -41,9 +42,10 @@ export function useSession(): Session {
         return setSession({ signedIn: false, role: null, branch: false, ready: true });
       // معاً لا تباعاً: جولتان متتاليتان على بيانات الهاتف العراقية تُضاعفان
       // زمنَ ومضة «لم يسجّل أحد» التي وُضع `ready` أصلاً لمنعها.
-      const [{ data: profile, error }, { data: branch }] = await Promise.all([
+      const [{ data: profile, error }, { data: branch }, { data: wash }] = await Promise.all([
         supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
         supabase.rpc('is_branch_viewer'),
+        supabase.rpc('my_wash').maybeSingle(),
       ]);
 
       // A failed read is not an owner. signedIn is now decided from storage
@@ -58,7 +60,8 @@ export function useSession(): Session {
       if (alive) {
         setSession({
           signedIn: true,
-          role: profile?.role === 'admin' ? 'admin' : 'owner',
+          // ponytail: لا فحصَ my_station هنا — من له محطةٌ ومغسلةٌ معاً يُوجَّه إلى المغسلة
+          role: profile?.role === 'admin' ? 'admin' : wash ? 'wash' : 'owner',
           branch: branch === true,
           ready: true,
         });
@@ -92,5 +95,5 @@ export function useSession(): Session {
  *  panel they work in, not the list they already know; ?view=user is the
  *  explicit way out, so the redirect never traps them. */
 export function homeFor(role: Session['role'], branch = false): string | null {
-  return role === 'admin' ? '/admin' : branch ? '/branch' : role === 'owner' ? '/owner' : null;
+  return role === 'admin' ? '/admin' : branch ? '/branch' : role === 'owner' ? '/owner' : role === 'wash' ? '/wash/owner' : null;
 }

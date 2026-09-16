@@ -34,15 +34,17 @@ export default function LoginPage() {
     void saveLogin(email, pw);
     // ودورُ موظّف الفرع في القاعدة `owner`، فلولا هذا السؤال لاستُقبل بلوحة
     // محطةٍ لا يملكها ودُعي إلى «إكمال تسجيل محطتك».
-    const [{ data: profile }, { data: branch }] = await Promise.all([
+    // وصاحبُ المغسلة دورُه `owner` كذلك — my_wash() تفرزه إلى لوحته.
+    const [{ data: profile }, { data: branch }, { data: wash }] = await Promise.all([
       supabase.from('profiles').select('role').eq('id', uid).maybeSingle(),
       supabase.rpc('is_branch_viewer'),
+      supabase.rpc('my_wash').maybeSingle(),
     ]);
     setBusy(false);
     // replace, not push: the back button should not return to a login form the
     // person has already passed
     router.replace(
-      profile?.role === 'admin' ? '/admin' : branch === true ? '/branch' : '/owner',
+      profile?.role === 'admin' ? '/admin' : branch === true ? '/branch' : wash ? '/wash/owner' : '/owner',
     );
   }
 
