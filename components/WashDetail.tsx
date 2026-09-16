@@ -200,7 +200,7 @@ export function WashDetail() {
 
   const days = bookingDays(subscriber, Date.now(), cfg ? { guest: cfg.horizon_guest, subscriber: cfg.horizon_sub } : undefined);
   const line = stamps ? loyaltyLine(stamps.stamps, stamps.target, stamps.free) : null;
-  const canBook = !wash.temp_closed && services.length > 0;
+  const canBook = !wash.temp_closed && !wash.paused && services.length > 0;
 
   return (
     <main className="mx-auto max-w-md px-4 pb-24 pt-4">

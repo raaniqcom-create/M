@@ -116,6 +116,11 @@ export function WashDirectory() {
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-2">
                       <h2 className="text-base font-extrabold leading-snug text-slate-800">{w.name}</h2>
+                      {w.paused && (
+                        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-600">
+                          متوقّفة عن الحجز
+                        </span>
+                      )}
                       {w.has_offer && (
                         <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-bold text-amber-800">
                           عرض

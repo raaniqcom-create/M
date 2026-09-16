@@ -1,4 +1,4 @@
-import { formatTime, timeToMinutes } from './hours.ts';
+import { formatTime, isOpenNow, timeToMinutes } from './hours.ts';
 import { plural } from './freshness.ts';
 
 /** «غسيل» — دليلُ مغاسل السيارات وحجزُ المواعيد. قسمٌ منفصلٌ عن الوقود تماماً.
@@ -105,6 +105,25 @@ export interface WashPublic {
   loyalty_target: number;
   phone: string | null;
   has_offer: boolean;
+  /** لا تستقبل حجوزاتٍ الآن (bookings_paused_until في المستقبل). */
+  paused?: boolean;
+}
+
+export interface WashClosure {
+  id: string;
+  wash_id: string;
+  starts_at: string;
+  ends_at: string;
+  reason: string | null;
+}
+
+/** حالةُ المغسلة كما تُقرأ على البطاقة: مغلقةٌ مؤقّتاً تغلب الإيقاف، والإيقافُ يغلب الدوام. */
+export function washStatus(
+  w: { temp_closed: boolean; paused?: boolean; is_24h: boolean; opens_at: string; closes_at: string }
+): 'temp_closed' | 'paused' | 'open' | 'closed' {
+  if (w.temp_closed) return 'temp_closed';
+  if (w.paused) return 'paused';
+  return isOpenNow(w) ? 'open' : 'closed';
 }
 
 /** صفُّ `car_washes` كما يراه صاحبُها والإدارة. */
@@ -125,6 +144,7 @@ export interface CarWash extends Omit<WashPublic, 'phone' | 'has_offer'> {
   confirm_mode: 'manual' | 'auto';
   owner_device?: string | null;
   owner_platform?: 'ios' | 'android' | 'web' | null;
+  bookings_paused_until?: string | null;
 }
 
 export interface WashService {

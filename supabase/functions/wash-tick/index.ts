@@ -122,6 +122,7 @@ function compose(ev: Ev, b: Booking | null, w: Wash): { title: string; body: str
   const bookingUrl = b ? `/wash/booking/?code=${encodeURIComponent(b.code)}&p=${encodeURIComponent(b.phone)}` : '/wash/';
   switch (ev.kind) {
     case 'new':
+      if (ev.payload?.walk_in) return null;
       return b && { title: `حجزٌ جديد — ${w.name}`, body: `${b.name}${b.car ? ` · ${b.car}` : ''} · ${b.service_name} · ${when(b.starts_at)}${ev.payload?.status === 'confirmed' ? ' (مؤكَّدٌ تلقائيّاً)' : ' — بانتظار تأكيدك'}`, url: '/wash/owner/' };
     case 'cancelled':
       return b && { title: `ألغى الزبون حجزه — ${w.name}`, body: `${b.name} · ${b.service_name} · ${when(b.starts_at)}${ev.payload?.late ? ' (إلغاءٌ متأخّر)' : ''}`, url: '/wash/owner/' };

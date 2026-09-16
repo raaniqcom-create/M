@@ -21,6 +21,7 @@ import {
   type BookingStatus,
   type CarWash,
   type WashBooking,
+  type WashClosure,
   type WashConfig,
   type WashOffer,
   type WashService,
@@ -38,6 +39,8 @@ import {
   ImageIcon,
   LogOutIcon,
   PhoneIcon,
+  PlusIcon,
+  AlertTriangleIcon,
   SpinnerIcon,
   StarIcon,
   StoreIcon,
@@ -46,7 +49,7 @@ import {
 } from './icons';
 
 type Tab = 'today' | 'tomorrow' | 'past';
-type SheetKind = 'services' | 'offers' | 'hours' | 'photo' | null;
+type SheetKind = 'services' | 'offers' | 'hours' | 'photo' | 'pause' | 'walkin' | null;
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'today', label: 'اليوم' },
@@ -284,6 +287,7 @@ export function WashOwnerScreen() {
     );
   }
 
+  const paused = !!wash.bookings_paused_until && Date.parse(wash.bookings_paused_until) > Date.now();
   const rows = tab === 'past' ? past : upcoming.filter((b) => bookingDay(b) === bgdDate(tab === 'today' ? 0 : 1));
   const pendingCount = upcoming.filter((b) => b.status === 'pending').length;
   const note = banner(wash, today);
@@ -293,6 +297,14 @@ export function WashOwnerScreen() {
     { key: 'offers', label: 'العروض', icon: StarIcon, onClick: () => setSheet('offers') },
     { key: 'hours', label: 'الدوام والمسارب', icon: CalendarIcon, onClick: () => setSheet('hours') },
     { key: 'photo', label: 'الصورة', icon: ImageIcon, onClick: () => setSheet('photo') },
+    { key: 'walkin', label: 'سيارة الآن', icon: PlusIcon, onClick: () => setSheet('walkin') },
+    {
+      key: 'pause',
+      label: paused ? 'الحجوزات متوقّفة' : 'إيقاف الحجوزات',
+      icon: AlertTriangleIcon,
+      tone: paused ? 'red' : undefined,
+      onClick: () => setSheet('pause'),
+    },
     {
       key: 'closed',
       label: wash.temp_closed ? 'مغلقة مؤقّتاً' : 'إغلاق مؤقّت',
@@ -459,7 +471,20 @@ export function WashOwnerScreen() {
         <OffersEditor washId={wash.id} rows={offers} onChange={() => loadLists(wash.id)} />
       </Sheet>
       <Sheet open={sheet === 'hours'} onClose={() => setSheet(null)} title="الدوام والمسارب">
-        {sheet === 'hours' && <HoursEditor wash={wash} onSave={patchWash} />}
+        {sheet === 'hours' && (
+          <>
+            <HoursEditor wash={wash} onSave={patchWash} />
+            <ClosuresEditor washId={wash.id} />
+          </>
+        )}
+      </Sheet>
+      <Sheet open={sheet === 'pause'} onClose={() => setSheet(null)} title="إيقاف استقبال الحجوزات" hint="الصفحةُ تبقى ظاهرة، والحجزُ يتوقّف حتى الموعد الذي تختاره.">
+        <PauseSheet wash={wash} paused={paused} onSave={async (p) => { const ok = await patchWash(p); if (ok) setSheet(null); }} />
+      </Sheet>
+      <Sheet open={sheet === 'walkin'} onClose={() => setSheet(null)} title="سيارة دخلت الآن" hint="تُسجَّل كحجزٍ واصل فيُحجز مسربُها ولا يُعرض للناس.">
+        {sheet === 'walkin' && (
+          <WalkInSheet wash={wash} services={services.filter((s) => s.active)} onDone={() => { setSheet(null); void loadBookings(wash.id); }} />
+        )}
       </Sheet>
       <Sheet open={sheet === 'photo'} onClose={() => setSheet(null)} title="الصورة" hint="تظهر في القائمة وصفحة مغسلتك.">
         <WashPhotoUpload washId={wash.id} imageUrl={wash.image_url} onChange={(url) => setWash({ ...wash, image_url: url })} />
@@ -775,3 +800,186 @@ function HoursEditor({ wash, onSave }: { wash: CarWash; onSave: (p: Partial<CarW
     </div>
   );
 }
+
+/* ── إيقافُ الحجوزات ─────────────────────────────────────────────────────── */
+function PauseSheet({ wash, paused, onSave }: { wash: CarWash; paused: boolean; onSave: (p: Partial<CarWash>) => Promise<void> }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const until = wash.bookings_paused_until
+    ? new Date(wash.bookings_paused_until).toLocaleString('ar-IQ', { timeZone: 'Asia/Baghdad', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'numeric' })
+    : null;
+  const endOfDay = () => new Date(`${bgdDate()}T23:59:59+03:00`).toISOString();
+  const options: { label: string; at: () => string | null }[] = [
+    { label: '٣٠ دقيقة', at: () => new Date(Date.now() + 30 * 60_000).toISOString() },
+    { label: 'ساعة', at: () => new Date(Date.now() + 60 * 60_000).toISOString() },
+    { label: 'حتى نهاية اليوم', at: endOfDay },
+    { label: 'حتى أعيد التشغيل', at: () => new Date(Date.now() + 365 * 86_400_000).toISOString() },
+  ];
+  async function pick(label: string, at: string | null) {
+    setBusy(label);
+    await onSave({ bookings_paused_until: at });
+    setBusy(null);
+  }
+  return (
+    <div className="space-y-2">
+      {paused && (
+        <p className="rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-800">
+          الحجوزات متوقّفة حتى {until}.
+        </p>
+      )}
+      {options.map((o) => (
+        <button key={o.label} type="button" disabled={!!busy} onClick={() => pick(o.label, o.at())} className="btn-ghost w-full">
+          {busy === o.label ? <SpinnerIcon className="h-4 w-4" /> : o.label}
+        </button>
+      ))}
+      {paused && (
+        <button type="button" disabled={!!busy} onClick={() => pick('resume', null)} className="btn-primary w-full">
+          استئناف الحجوزات الآن
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── الإغلاقُ الاستثنائيّ ────────────────────────────────────────────────── */
+function ClosuresEditor({ washId }: { washId: string }) {
+  const [rows, setRows] = useState<WashClosure[]>([]);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [reason, setReason] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    const { data } = await supabase.from('wash_closures').select('*').eq('wash_id', washId).gte('ends_at', new Date().toISOString()).order('starts_at').limit(20);
+    setRows((data as WashClosure[] | null) ?? []);
+  }, [washId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function add() {
+    setErr(null);
+    if (!from || !to) return setErr('حدّد البداية والنهاية.');
+    const s = new Date(`${from}:00+03:00`).toISOString();
+    const e = new Date(`${to}:00+03:00`).toISOString();
+    if (e <= s) return setErr('النهاية قبل البداية.');
+    setBusy(true);
+    const { error } = await supabase.from('wash_closures').insert({ wash_id: washId, starts_at: s, ends_at: e, reason: reason.trim() || null });
+    setBusy(false);
+    if (error) return setErr('تعذّر الحفظ.');
+    setFrom('');
+    setTo('');
+    setReason('');
+    void load();
+  }
+  async function remove(id: string) {
+    await supabase.from('wash_closures').delete().eq('id', id);
+    void load();
+  }
+  const fmt = (iso: string) => new Date(iso).toLocaleString('ar-IQ', { timeZone: 'Asia/Baghdad', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <div className="mt-6 border-t border-slate-100 pt-4">
+      <p className="text-sm font-bold">إغلاق استثنائيّ</p>
+      <p className="text-[11px] text-slate-400">عيد، صيانة، انقطاع — لا مواعيدَ خلاله ولا يمسّ دوامك.</p>
+      {rows.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {rows.map((c) => (
+            <li key={c.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs">
+              <span className="min-w-0 flex-1">
+                <span className="block font-bold" dir="ltr">{fmt(c.starts_at)} → {fmt(c.ends_at)}</span>
+                {c.reason && <span className="text-slate-500">{c.reason}</span>}
+              </span>
+              <button type="button" onClick={() => remove(c.id)} className="font-bold text-traffic-red underline">حذف</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="text-[11px] text-slate-600">
+          من
+          <input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} className="field mt-0.5 py-1.5 text-sm" dir="ltr" />
+        </label>
+        <label className="text-[11px] text-slate-600">
+          إلى
+          <input type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} className="field mt-0.5 py-1.5 text-sm" dir="ltr" />
+        </label>
+      </div>
+      <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={60} className="field mt-2" placeholder="السبب (اختياريّ)" aria-label="السبب" />
+      {err && <p role="alert" className="mt-1 text-xs text-traffic-red">{err}</p>}
+      <button type="button" disabled={busy} onClick={add} className="btn-ghost mt-2 w-full">
+        {busy ? <SpinnerIcon className="h-4 w-4" /> : 'إضافة إغلاق'}
+      </button>
+    </div>
+  );
+}
+
+/* ── سيّارةٌ دخلت الآن ────────────────────────────────────────────────────── */
+function WalkInSheet({ wash, services, onDone }: { wash: CarWash; services: WashService[]; onDone: () => void }) {
+  const nowBgd = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Baghdad', hour: '2-digit', minute: '2-digit' });
+  const [service, setService] = useState(services[0]?.id ?? '');
+  const [time, setTime] = useState(nowBgd);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [car, setCar] = useState('');
+  const [vehicle, setVehicle] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save() {
+    setErr(null);
+    if (!service) return setErr('اختر الخدمة.');
+    if (name.trim().length < 2) return setErr('اكتب اسم الزبون.');
+    setBusy(true);
+    const { error } = await supabase.rpc('add_walk_in', {
+      p_wash: wash.id,
+      p_service: service,
+      p_day: bgdDate(),
+      p_slot: time,
+      p_name: name.trim(),
+      p_phone: phone.trim() || null,
+      p_car: car.trim() || null,
+      p_vehicle: vehicle || null,
+    });
+    setBusy(false);
+    if (error) return setErr(error.message);
+    onDone();
+  }
+
+  return (
+    <div className="space-y-3">
+      <select value={service} onChange={(e) => setService(e.target.value)} className="field" aria-label="الخدمة">
+        {services.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name} — {iqd(s.price)}
+          </option>
+        ))}
+      </select>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-[11px] text-slate-600">
+          وقت الدخول
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field mt-0.5" dir="ltr" />
+        </label>
+        <label className="text-[11px] text-slate-600">
+          نوع السيارة
+          <select value={vehicle} onChange={(e) => setVehicle(e.target.value)} className="field mt-0.5">
+            <option value="">—</option>
+            {VEHICLE_TYPES.map((v) => (
+              <option key={v} value={v}>{VEHICLE_LABELS[v]}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <input value={name} onChange={(e) => setName(e.target.value)} className="field" placeholder="اسم الزبون" aria-label="اسم الزبون" />
+      <div className="grid grid-cols-2 gap-2">
+        <input type="tel" inputMode="numeric" value={phone} onChange={(e) => setPhone(e.target.value)} className="field" placeholder="الهاتف (اختياريّ)" aria-label="الهاتف" dir="ltr" />
+        <input value={car} onChange={(e) => setCar(e.target.value)} className="field" placeholder="السيارة" aria-label="السيارة" />
+      </div>
+      {err && <p role="alert" className="text-xs text-traffic-red">{err}</p>}
+      <button type="button" disabled={busy} onClick={save} className="btn-primary w-full">
+        {busy ? <SpinnerIcon className="h-4 w-4" /> : 'تسجيل الدخول للغسل'}
+      </button>
+    </div>
+  );
+}
+
