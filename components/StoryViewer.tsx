@@ -52,6 +52,8 @@ export function StoryViewer({
 }) {
   const [i, setI] = useState(start);
   const [paused, setPaused] = useState(false);
+  /** بدايةُ الضغطة: زمنُها وموضعُها — لتمييز النقرة من الضغط المطوَّل. */
+  const pressRef = useRef<{ at: number; x: number } | null>(null);
   const [drawn, setDrawn] = useState(false);
   const [views, setViews] = useState<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -195,15 +197,37 @@ export function StoryViewer({
           />
         )}
       </div>
-      {/* مناطقُ النقر: يمينٌ للسابقة، وسطٌ للإيقاف، يسارٌ للتالية */}
-      <button type="button" aria-label="السابقة" onClick={prev} className="absolute inset-y-0 right-0 w-1/3" />
-      <button
-        type="button"
-        aria-label={paused ? 'متابعة' : 'إيقاف'}
-        onClick={() => setPaused((p) => !p)}
-        className="absolute inset-y-0 left-1/3 w-1/3"
+      {/* طبقةُ اللمس: ضغطٌ مطوَّل يوقف، ورفعُه يتابع — ونقرةٌ قصيرة تنقل: يمينٌ
+          للسابقة ويسارٌ للتالية (١٦ أيلول). وبلا إطار تركيز: كان `:focus-visible`
+          الأخضرُ يرسم خطّاً عموديّاً على حافّة زرّ الثلث. */}
+      <div
+        role="presentation"
+        className="absolute inset-0 touch-none select-none outline-none"
+        onContextMenu={(e) => e.preventDefault()}
+        onPointerDown={(e) => {
+          pressRef.current = { at: Date.now(), x: e.clientX };
+          setPaused(true);
+        }}
+        onPointerUp={(e) => {
+          const press = pressRef.current;
+          pressRef.current = null;
+          setPaused(false);
+          if (!press || Date.now() - press.at > 300 || Math.abs(e.clientX - press.x) > 12) return;
+          const third = e.clientX / window.innerWidth;
+          if (third < 1 / 3) next();
+          else if (third > 2 / 3) prev();
+        }}
+        onPointerCancel={() => {
+          pressRef.current = null;
+          setPaused(false);
+        }}
+        onPointerLeave={() => {
+          if (pressRef.current) {
+            pressRef.current = null;
+            setPaused(false);
+          }
+        }}
       />
-      <button type="button" aria-label="التالية" onClick={next} className="absolute inset-y-0 left-0 w-1/3" />
 
       {/* الطبقةُ العليا: شرائطُ التقدّم والاسم — على تدرّجٍ داكنٍ لتُقرأ */}
       <div
