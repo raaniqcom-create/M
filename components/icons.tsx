@@ -340,3 +340,95 @@ export const CanIcon = ({ className = 'h-5 w-5' }: IconProps) => (
     <path d="M15 3h3l2 2" />
   </svg>
 );
+
+/** سيّارةٌ تحت قطراتِ ماء — بديلُ الصورة في بطاقات المغاسل. */
+export const WashIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="M5 17H3.5a1 1 0 0 1-1-1v-2.5c0-.5.2-1 .5-1.3L5 10h12l2 2.2c.3.3.5.8.5 1.3V16a1 1 0 0 1-1 1H17" />
+    <circle cx="7.5" cy="17" r="1.8" />
+    <circle cx="16.5" cy="17" r="1.8" />
+    <path d="M9.3 17h5.4" />
+    <path d="M7 10l1.2-3h7.6L17 10" />
+    <path d="M6 2.5c-.6.9-1 1.6-1 2.2a1 1 0 0 0 2 0c0-.6-.4-1.3-1-2.2z" />
+    <path d="M12 1.8c-.6.9-1 1.6-1 2.2a1 1 0 0 0 2 0c0-.6-.4-1.3-1-2.2z" />
+    <path d="M18 2.5c-.6.9-1 1.6-1 2.2a1 1 0 0 0 2 0c0-.6-.4-1.3-1-2.2z" />
+  </svg>
+);
+
+/** قلبٌ — المفضّلة؛ `filled` حين تكون مختارة. */
+export const HeartIcon = ({ className = 'h-5 w-5', filled = false }: IconProps & { filled?: boolean }) => (
+  <svg className={className} {...base} fill={filled ? 'currentColor' : 'none'}>
+    <path d="M19 14c1.5-1.5 3-3.3 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3.4 1-4.5 2.5C10.9 4 9.3 3 7.5 3A5.5 5.5 0 0 0 2 8.5c0 2.2 1.5 4 3 5.5l7 7z" />
+  </svg>
+);
+
+export const ClockIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </svg>
+);
+
+export const ChevronLeftIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="m15 6-6 6 6 6" />
+  </svg>
+);
+
+export const TagIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="M12.6 2.6 21 11a2 2 0 0 1 0 2.8l-7.2 7.2a2 2 0 0 1-2.8 0L2.6 12.6A2 2 0 0 1 2 11.2V4a2 2 0 0 1 2-2h7.2c.5 0 1 .2 1.4.6z" />
+    <circle cx="7.5" cy="7.5" r="1.5" />
+  </svg>
+);
+
+export const NavigationIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="m3 11 19-9-9 19-2-8z" />
+  </svg>
+);
+
+/* أنواعُ السيارات أيقوناتٍ لا أسماءً — التسمياتُ تختلف بين الناس (صالون/سيدان…). */
+export const SedanIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="M3 13l2-5c.3-.8 1-1.3 1.9-1.3h10.2c.9 0 1.6.5 1.9 1.3l2 5" />
+    <path d="M2.5 13h19a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H21" />
+    <path d="M3 18H2.5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1" />
+    <path d="M6 18h12" />
+    <path d="M6.5 7.5 5 13m12.5-5.5L19 13" />
+    <circle cx="7" cy="18" r="1.8" /><circle cx="17" cy="18" r="1.8" />
+  </svg>
+);
+export const SuvIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="M3 8h13l3.2 3.5c.5.1 1 .3 1.4.6.5.4.9 1 .9 1.7V16a1 1 0 0 1-1 1h-1" />
+    <path d="M4 17H3a1 1 0 0 1-1-1v-6a2 2 0 0 1 2-2" />
+    <path d="M6 17h12" />
+    <path d="M9 8V5.5h5.5L17 8" /><path d="M9 8V5.5H6.5A2.5 2.5 0 0 0 4 8" />
+    <path d="M9 5.5V8" />
+    <circle cx="7" cy="17" r="1.8" /><circle cx="17" cy="17" r="1.8" />
+  </svg>
+);
+export const PickupIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="M2 15V9a1 1 0 0 1 1-1h9v7" />
+    <path d="M12 10h4l3 3h1.5a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H20" />
+    <path d="M4 16H3a1 1 0 0 1-1-1" /><path d="M6 16h9" />
+    <circle cx="7" cy="16" r="1.8" /><circle cx="17" cy="16" r="1.8" />
+  </svg>
+);
+export const VanIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="M2 16V8a2 2 0 0 1 2-2h9.5c.6 0 1.2.3 1.6.8L20 13v3a1 1 0 0 1-1 1h-1" />
+    <path d="M4 17H3a1 1 0 0 1-1-1" /><path d="M6 17h9" />
+    <path d="M13 6.5V13h6" /><path d="M8 6.5V13" />
+    <circle cx="7" cy="17" r="1.8" /><circle cx="17" cy="17" r="1.8" />
+  </svg>
+);
+export const VehicleIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="M5 17H3.5a1 1 0 0 1-1-1v-3l1.6-4c.3-.7 1-1.2 1.8-1.2h10.2c.8 0 1.5.5 1.8 1.2l1.6 4v3a1 1 0 0 1-1 1H19" />
+    <path d="M7 17h10" />
+    <circle cx="7.5" cy="17" r="1.8" /><circle cx="16.5" cy="17" r="1.8" />
+  </svg>
+);

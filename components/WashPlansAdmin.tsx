@@ -7,13 +7,13 @@ import { SpinnerIcon } from './icons';
 
 /** مفاتيحُ app_config ببادئة wash_ كما تراها الإدارة — قيمُها أرقامٌ أو true/false. */
 const KEYS: { key: string; label: string; hint: string; bool?: boolean }[] = [
-  { key: 'wash_promo_first_month', label: 'عرض الإطلاق — أوّل شهر (دينار)', hint: '٠ يوقف العرض' },
-  { key: 'wash_trial_days', label: 'أيّام التجربة المجّانيّة', hint: '٠ يوقف التجربة' },
+  { key: 'wash_promo_first_month', label: 'عرض الإطلاق — أوّل شهر (دينار)', hint: '0 يوقف العرض' },
+  { key: 'wash_trial_days', label: 'أيّام التجربة المجّانيّة', hint: '0 يوقف التجربة' },
   { key: 'wash_grace_days', label: 'فترة السماح بعد الانتهاء (أيّام)', hint: 'الصفحة والحجز يبقيان خلالها' },
   { key: 'wash_cancel_free_min', label: 'إلغاء مجّانيّ قبل الموعد بـ(دقيقة)', hint: 'بعدها يُحسب إلغاءً متأخّراً' },
   { key: 'wash_no_show_block', label: 'غيابات تحدّ الحجز', hint: 'بعدها الحجز لليوم فقط' },
   { key: 'wash_no_show_window_days', label: 'نافذة عدّ الغيابات (أيّام)', hint: '' },
-  { key: 'wash_horizon_guest', label: 'أيّام الحجز المسبق لغير المشترك', hint: '١ = اليوم والغد' },
+  { key: 'wash_horizon_guest', label: 'أيّام الحجز المسبق لغير المشترك', hint: '1 = اليوم والغد' },
   { key: 'wash_horizon_sub', label: 'أيّام الحجز المسبق للمشترك', hint: '' },
   { key: 'wash_max_active_guest', label: 'حجوز نشطة لغير المشترك', hint: '' },
   { key: 'wash_max_active_sub', label: 'حجوز نشطة للمشترك', hint: '' },
@@ -27,7 +27,7 @@ const KEYS: { key: string; label: string; hint: string; bool?: boolean }[] = [
 ];
 
 const NUM_FEATURES: { key: keyof WashFeatures; label: string }[] = [
-  { key: 'booking_monthly_limit', label: 'حجوز شهريّاً (٠ = بلا حدّ)' },
+  { key: 'booking_monthly_limit', label: 'حجوز شهريّاً (0 = بلا حدّ)' },
   { key: 'gallery_limit', label: 'صور المعرض' },
   { key: 'staff_limit', label: 'الموظّفون' },
   { key: 'sms_monthly_limit', label: 'SMS شهريّاً' },

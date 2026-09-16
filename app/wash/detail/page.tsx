@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { WashGate } from '@/components/WashGate';
 import { WashDetail } from '@/components/WashDetail';
 
-export const metadata: Metadata = { title: 'حجز موعد غسيل | المحطة التقنية' };
+export const metadata: Metadata = { title: 'صفحة المغسلة | المحطة التقنية' };
 
 /** ‎/wash/detail/?id=… — التصديرُ ساكن، فالمعرّفُ يُقرأ في المتصفّح داخل Suspense
  *  (نمطُ app/place). */

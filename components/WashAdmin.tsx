@@ -5,10 +5,11 @@ import { supabase } from '@/lib/supabase';
 import { hoursLabel } from '@/lib/hours';
 import { num } from '@/lib/num';
 import { displayPhone, normalizePhone, whatsappLink } from '@/lib/phone';
-import { BOOKING_LABELS, bgdDate, firstMonthPrice, iqd, planName, type CarWash, type WashBooking, type WashConfig, type WashPayment } from '@/lib/wash';
+import { BOOKING_LABELS, at12, bgdDate, dateLine, firstMonthPrice, iqd, planName, type CarWash, type WashBooking, type WashConfig, type WashPayment } from '@/lib/wash';
 import { useWashConfig } from '@/lib/washConfig';
+import { WashAdsAdmin } from './WashAdsAdmin';
 import { WashPlansAdmin } from './WashPlansAdmin';
-import { CheckIcon, EyeIcon, PhoneIcon, SpinnerIcon, WhatsappIcon, XIcon } from './icons';
+import { CheckIcon, EyeIcon, PhoneIcon, ShieldIcon, SpinnerIcon, WhatsappIcon, XIcon } from './icons';
 
 /** ما تردّه wash_admin_stats: منشورةٌ الآن، معلّقة، تنتهي خلال أسبوع، منتهية؛ وحجوزاتُ اليوم والشهر. */
 interface Stats {
@@ -103,7 +104,7 @@ function PaymentForm({
           </select>
         </div>
         <div>
-          <label htmlFor={`amt-${wash.id}`} className="label text-[11px]">المبلغ المستلَم (دينار)</label>
+          <label htmlFor={`amt-${wash.id}`} className="label text-[11px]">المبلغ المستلَم (د.ع)</label>
           <input id={`amt-${wash.id}`} type="number" inputMode="numeric" min={0} step={1000} value={value} onChange={(e) => setAmount(Math.max(0, Number(e.target.value) || 0))} className="field py-2 text-sm" dir="ltr" />
           {chosen && suggested !== chosen.price_iqd && <p className="mt-0.5 text-[10.5px] text-brand-700">عرض الإطلاق لأوّل شهر</p>}
         </div>
@@ -124,7 +125,7 @@ function PaymentForm({
       <div className="mt-2 grid grid-cols-2 gap-2">
         <button type="button" disabled={busy} onClick={save} className="btn-primary text-xs">
           {busy ? <SpinnerIcon className="h-4 w-4" /> : <CheckIcon className="h-4 w-4" />}
-          تفعيل حتى {new Date(`${bgdDate(days, Math.max(Date.now(), wash.paid_until ? Date.parse(wash.paid_until) : 0))}T12:00:00`).toLocaleDateString('ar-IQ', { day: 'numeric', month: 'numeric' })}
+          تفعيل حتى {dateLine(bgdDate(days, Math.max(Date.now(), wash.paid_until ? Date.parse(wash.paid_until) : 0)), { day: 'numeric', month: 'numeric' })}
         </button>
         <button type="button" onClick={onCancel} className="btn-ghost text-xs">تراجع</button>
       </div>
@@ -132,13 +133,13 @@ function PaymentForm({
   );
 }
 
-const fmtDay = (d: string) =>
-  new Date(`${d}T12:00:00`).toLocaleDateString('ar-IQ', { day: 'numeric', month: 'long', year: 'numeric' });
+/** «19 أيلول 2026» — بأرقامٍ إنجليزيّة كالقسم كلِّه. */
+const fmtDay = (d: string) => dateLine(d, { day: 'numeric', month: 'long', year: 'numeric' });
 
-const fmtAt = (iso: string) =>
-  new Date(iso).toLocaleString('ar-IQ', { timeZone: 'Asia/Baghdad', weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+/** «الخميس 18/9 4:00 PM» بتوقيت بغداد. */
+const fmtAt = (iso: string) => `${dateLine(iso, { weekday: 'short', day: 'numeric', month: 'numeric' })} ${at12(iso)}`;
 
-/** «ينتهي خلال ٣ أيام» / «منتهٍ» — أو لا شيء حين الوقتُ بعيد. */
+/** «ينتهي خلال 3 أيام» / «منتهٍ» — أو لا شيء حين الوقتُ بعيد. */
 function paidBadge(paid: string | null): { text: string; cls: string } | null {
   if (!paid) return null;
   const days = Math.round((Date.parse(paid) - Date.parse(bgdDate())) / DAY);
@@ -163,6 +164,7 @@ export function WashAdmin() {
   const [paying, setPaying] = useState<string | null>(null);
   const [payments, setPayments] = useState<Record<string, WashPayment[]>>({});
   const [showPlans, setShowPlans] = useState(false);
+  const [showAds, setShowAds] = useState(false);
   const cfg = useWashConfig();
 
   const load = useCallback(async () => {
@@ -215,6 +217,18 @@ export function WashAdmin() {
     setReason('');
   }
 
+  /** إيقافُ الحجوزات من الإدارة: سنةٌ إلى الأمام (= «حتى أعيد التشغيل» عند المالك)، أو null للاستئناف. */
+  async function togglePause(w: CarWash, paused: boolean) {
+    setBusy(w.id);
+    const { error } = await supabase
+      .from('car_washes')
+      .update({ bookings_paused_until: paused ? null : new Date(Date.now() + 365 * DAY).toISOString() })
+      .eq('id', w.id);
+    setBusy(null);
+    if (error) return setNote(error.message);
+    void load();
+  }
+
   async function toggleBookings(id: string) {
     if (open === id) return setOpen(null);
     setOpen(id);
@@ -263,8 +277,8 @@ export function WashAdmin() {
             { label: 'منتهية', value: stats?.expired, warn: !!stats?.expired },
             { label: 'حجوزات اليوم', value: stats?.today },
             { label: 'حجوزات الشهر', value: stats?.month },
-            { label: 'اشتراكات شهريّة (دينار)', value: stats?.mrr, tone: 'brand' },
-            { label: 'مقبوض ٣٠ يوماً', value: stats?.paid_30d },
+            { label: 'اشتراكات شهريّة (د.ع)', value: stats?.mrr, tone: 'brand' },
+            { label: 'مقبوض 30 يوماً', value: stats?.paid_30d },
             { label: 'تقييمات الأسبوع', value: stats?.reviews_7d },
           ].map((s) => (
             <div key={s.label} className={`rounded-xl py-2.5 text-center ${s.tone ? 'bg-brand-50' : 'bg-slate-50'}`}>
@@ -284,7 +298,7 @@ export function WashAdmin() {
             <section className={`card p-4 ${sick ? 'border border-traffic-red bg-red-50' : ''}`}>
               <h2 className="text-sm font-bold">صحّة القسم</h2>
               <p className={`mt-1 text-[12px] ${sick ? 'text-traffic-red' : 'text-slate-600'}`}>
-                آخر دقّة {stats.tick_age_min == null ? 'لم تعمل بعد' : `قبل ${stats.tick_age_min} دقيقة`} · بانتظار الإرسال {num(stats.outbox_unsent)} · أعطال ٢٤ س {num(stats.outbox_failed_24h)}
+                آخر دقّة {stats.tick_age_min == null ? 'لم تعمل بعد' : `قبل ${stats.tick_age_min} دقيقة`} · بانتظار الإرسال {num(stats.outbox_unsent)} · أعطال 24 س {num(stats.outbox_failed_24h)}
                 {' '}· بلا جهاز {num(stats.no_device_24h)} · فات موعدُه {num(stats.expired_24h)} · معلّقٌ أكثر من ساعة {num(stats.pending_stale)}
               </p>
             </section>
@@ -371,6 +385,7 @@ export function WashAdmin() {
           {rest.map((w) => {
             const badge = paidBadge(w.paid_until);
             const list = bookings[w.id];
+            const paused = !!w.bookings_paused_until && Date.parse(w.bookings_paused_until) > Date.now();
             return (
               <li key={w.id} className="border-b border-slate-100 py-3 last:border-0">
                 <div className="flex items-center gap-2">
@@ -398,7 +413,7 @@ export function WashAdmin() {
                 )}
                 {!!payments[w.id]?.length && (
                   <p className="mt-1 text-[10.5px] text-slate-400">
-                    آخر دفعة: {iqd(payments[w.id][0].amount_iqd)} · {payments[w.id][0].days} يوماً · {fmtDay(payments[w.id][0].created_at.slice(0, 10))}
+                    آخر دفعة: {iqd(payments[w.id][0].amount_iqd)} · {payments[w.id][0].days} يوماً · {fmtDay(payments[w.id][0].created_at)}
                     {payments[w.id].length > 1 ? ` · (${payments[w.id].length} دفعات)` : ''}
                   </p>
                 )}
@@ -419,9 +434,39 @@ export function WashAdmin() {
                     حجوزات
                   </button>
                 </div>
+                <div className="mt-1.5 grid grid-cols-2 gap-1">
+                  <button
+                    type="button"
+                    disabled={busy === w.id}
+                    onClick={() => togglePause(w, paused)}
+                    className={`min-h-[40px] rounded-lg text-[11px] font-bold disabled:opacity-50 ${paused ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-700'}`}
+                  >
+                    {paused ? 'استئناف الحجوزات' : 'إيقاف الحجوزات'}
+                  </button>
+                  {/* التمييزُ (featured) من الباقة — فالتبديلُ السريع هو تبديلُ الباقة نفسِها. */}
+                  <select
+                    value={w.plan}
+                    disabled={busy === w.id}
+                    onChange={(e) => {
+                      // تفاؤليّاً كي لا يرتدّ الاختيار حتى يعود load()؛ وهو يصحّحه عند الخطأ.
+                      const plan = e.target.value;
+                      setRows((rs) => rs && rs.map((x) => (x.id === w.id ? { ...x, plan } : x)));
+                      void set(w, w.status, plan, null);
+                    }}
+                    aria-label="الباقة"
+                    className="field min-h-[40px] py-1 text-[11px] font-bold"
+                  >
+                    {(cfg?.plans ?? []).map((p) => (
+                      <option key={p.code} value={p.code}>{p.name}</option>
+                    ))}
+                    {!cfg?.plans.some((p) => p.code === 'free') && <option value="free">مجّانيّة</option>}
+                    {cfg && !cfg.plans.some((p) => p.code === w.plan) && w.plan !== 'free' && <option value={w.plan}>{w.plan}</option>}
+                  </select>
+                </div>
                 {/* الدخولُ على لوحة المغسلة بصفة الإدارة — لمتابعة الوضع كما يراه صاحبُها. */}
-                <a href={`/wash/owner/?id=${w.id}`} className="mt-1.5 flex min-h-[40px] items-center justify-center rounded-lg border border-slate-200 text-[11px] font-bold text-slate-700">
-                  🛡 لوحة المغسلة (بصفة الإدارة)
+                <a href={`/wash/owner/?id=${w.id}`} className="mt-1.5 flex min-h-[40px] items-center justify-center gap-1.5 rounded-lg border border-slate-200 text-[11px] font-bold text-slate-700">
+                  <ShieldIcon className="h-4 w-4 shrink-0" />
+                  لوحة المغسلة (بصفة الإدارة)
                 </a>
                 {open === w.id && (
                   <div className="mt-2 rounded-xl bg-slate-50 p-2 text-[11px]">
@@ -435,7 +480,7 @@ export function WashAdmin() {
                           <li key={b.id} className="flex flex-wrap items-center gap-x-2 border-b border-slate-200 pb-1.5 last:border-0 last:pb-0">
                             <span className="font-bold text-slate-700">{fmtAt(b.starts_at)}</span>
                             <span>{b.name}</span>
-                            <span dir="ltr" className="text-slate-500">{displayPhone(b.phone)}</span>
+                            {b.phone && <span dir="ltr" className="text-slate-500">{displayPhone(b.phone)}</span>}
                             <span className="text-slate-500">{b.service_name}</span>
                             <span className="ms-auto font-semibold text-slate-600">{BOOKING_LABELS[b.status]}</span>
                           </li>
@@ -448,6 +493,18 @@ export function WashAdmin() {
             );
           })}
         </ul>
+      </section>
+
+      <section className="card p-5">
+        <button type="button" onClick={() => setShowAds((v) => !v)} aria-expanded={showAds} className="flex w-full items-center justify-between text-sm font-bold">
+          الإعلانات
+          <span className="text-[11px] font-semibold text-brand">{showAds ? 'إخفاء' : 'فتح'}</span>
+        </button>
+        {showAds && (
+          <div className="mt-3">
+            <WashAdsAdmin washes={rows} />
+          </div>
+        )}
       </section>
 
       <section className="card p-5">

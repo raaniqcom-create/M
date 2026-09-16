@@ -1,4 +1,4 @@
-import { formatTime, isOpenNow, timeToMinutes } from './hours.ts';
+import { baghdadMinutesNow, isOpenNow, timeToMinutes } from './hours.ts';
 import { plural } from './freshness.ts';
 
 /** «غسيل» — دليلُ مغاسل السيارات وحجزُ المواعيد. قسمٌ منفصلٌ عن الوقود تماماً.
@@ -56,6 +56,30 @@ export const EMPTY_WASH_CONFIG: WashConfig = {
   horizon_sub: WASH.horizonDays.subscriber,
 };
 
+/** يضمن أنّ رأسَ المصادقة لُصق بعميل PostgREST قبل أوّل كتابةٍ بعد التسجيل/الدخول.
+ *
+ *  supabase-js يحدّث Authorization على عميل REST من خلال onAuthStateChange، وهو
+ *  يُطلَق على macrotask بعد أن تعود signUp/signInWithPassword. فأوّلُ insert يليها
+ *  مباشرةً قد يخرج بمفتاح anon (auth.uid()=null) فيرفضه RLS بـ42501 — ويبقى
+ *  حسابٌ بلا مغسلة. الانتظارُ حتى تصل جلسةٌ بـtoken يُثبّت الرأسَ أوّلاً.
+ *
+ *  (يُمرَّر عميلُ supabase حجّةً كي لا تستورد lib/wash.ts الصرفةُ العميلَ.) */
+export async function awaitAuthReady(
+  client: { auth: { getSession: () => Promise<{ data: { session: { access_token?: string } | null } }> } },
+  tries = 20
+): Promise<boolean> {
+  for (let i = 0; i < tries; i++) {
+    const { data } = await client.auth.getSession();
+    if (data.session?.access_token) {
+      // نبضةٌ إضافيّة كي يلتقط مستمعُ onAuthStateChange الجلسةَ ويضبط الرأس.
+      await new Promise((r) => setTimeout(r, 0));
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 60));
+  }
+  return false;
+}
+
 export interface WashPayment {
   id: string;
   wash_id: string;
@@ -83,9 +107,9 @@ export function daysLeft(paidUntil: string | null, now = Date.now()): number | n
   return Math.round((Date.parse(paidUntil) - Date.parse(bgdDate(0, now))) / 86_400_000);
 }
 
-/** «٦٠ حجزاً شهريّاً» / «بلا حدّ». */
+/** «60 حجز شهريّاً» / «بلا حدّ» — الأرقامُ إنجليزيّة في القسم كلِّه. */
 export const limitLabel = (n: number | undefined, unit: string): string =>
-  n && n > 0 ? `${n.toLocaleString('ar-IQ')} ${unit}` : 'بلا حدّ';
+  n && n > 0 ? `${n.toLocaleString('en-US')} ${unit}` : 'بلا حدّ';
 
 /** صفُّ `washes_public` كما يقرؤه المواطن. */
 export interface WashPublic {
@@ -113,12 +137,40 @@ export interface WashPublic {
   photos?: string[];
   from_price?: number | null;
   featured?: boolean;
+  /** المنطقةُ داخل المدينة («شارع 60») — تُعرض «الرمادي – شارع 60». */
+  area?: string | null;
+  /** لها إعلانُ «محطة مموَّلة» نشطٌ الآن (wash_ads kind=station) — تتصدّر ووسمُها «إعلان». */
+  sponsored?: boolean;
+  /** أقربُ موعدٍ حرٍّ اليوم «HH:MM» من wash_next_slot_all() — undefined قبل الجلب، null بلا موعد. */
+  next_slot?: string | null;
+  distanceKm?: number | null;
 }
 
-/** ترتيبُ الدليل: المميّزةُ أوّلاً (بشارة)، ثمّ الأقربُ إن عُرف الموقع، ثمّ الأعلى تقييماً، ثمّ الاسم. */
-export function rankWashes<T extends { featured?: boolean; rating_avg?: number | null; rating_n?: number; name: string; distanceKm?: number | null }>(rows: T[]): T[] {
+/** إعلانٌ من لوحة الإدارة (wash_ads_public): بانر في الرئيسية، أو محطةٌ مموَّلة تتصدّر، أو عرضٌ مموَّل في «عروض اليوم». */
+export interface WashAd {
+  id: string;
+  kind: 'banner' | 'station' | 'offer';
+  title: string;
+  description: string | null;
+  image_url: string | null;
+  url: string | null;
+  wash_id: string | null;
+  offer_id: string | null;
+  city: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  priority: number;
+  /** مموَّلٌ = يظهر عليه وسمُ «إعلان» الصغير. */
+  sponsored: boolean;
+  active?: boolean;
+  created_at?: string;
+}
+
+/** ترتيبُ الدليل: الممَوَّلةُ (إعلان) ثمّ المميّزةُ (بشارة)، ثمّ الأقربُ إن عُرف الموقع، ثمّ الأعلى تقييماً، ثمّ الاسم. */
+export function rankWashes<T extends { featured?: boolean; sponsored?: boolean; rating_avg?: number | null; rating_n?: number; name: string; distanceKm?: number | null }>(rows: T[]): T[] {
   return [...rows].sort(
     (a, b) =>
+      Number(!!b.sponsored) - Number(!!a.sponsored) ||
       Number(!!b.featured) - Number(!!a.featured) ||
       (a.distanceKm != null && b.distanceKm != null ? a.distanceKm - b.distanceKm : 0) ||
       (Number(b.rating_avg ?? 0) * Math.min(b.rating_n ?? 0, 10)) - (Number(a.rating_avg ?? 0) * Math.min(a.rating_n ?? 0, 10)) ||
@@ -154,10 +206,56 @@ export interface WashReview {
   created_at: string;
 }
 
-/** «★ ٤٫٥ · ١٢ تقييماً» أو null بلا تقييمات. */
+/** «★ 4.8 · 127 تقييم» أو null بلا تقييمات. */
 export function ratingLine(avg: number | null | undefined, n: number | undefined): string | null {
+  const p = ratingParts(avg, n);
+  return p ? `★ ${p.avg} · ${p.count}` : null;
+}
+
+/** التقييمُ مفصولاً للبطاقة: «4.8» و«127 تقييم». */
+export function ratingParts(avg: number | null | undefined, n: number | undefined): { avg: string; count: string } | null {
   if (!n || avg == null) return null;
-  return `★ ${Number(avg).toLocaleString('ar-IQ', { maximumFractionDigits: 1 })} · ${plural(n, 'تقييم واحد', 'تقييمان', 'تقييمات', 'تقييماً')}`;
+  return { avg: Number(avg).toFixed(1), count: `${n.toLocaleString('en-US')} ${n === 1 ? 'تقييم' : n === 2 ? 'تقييمان' : n <= 10 ? 'تقييمات' : 'تقييم'}` };
+}
+
+/** «1.8 km» / «12 km» — بعدُ المغسلة عن القارئ. */
+export function distanceLabel(km: number | null | undefined): string | null {
+  if (km == null || !Number.isFinite(km)) return null;
+  return ltr(`${km < 10 ? (Math.round(km * 10) / 10).toFixed(1) : String(Math.round(km))} km`);
+}
+
+/** «25%». */
+export const pct = (n: number): string => `${n.toLocaleString('en-US')}%`;
+
+/** «متبقّي 3 أيام» / «ينتهي اليوم» / null بلا نهاية. */
+export function offerLeft(endsAt: string | null | undefined, now = Date.now()): string | null {
+  if (!endsAt) return null;
+  const d = Math.round((Date.parse(`${endsAt.slice(0, 10)}T12:00:00+03:00`) - Date.parse(`${bgdDate(0, now)}T12:00:00+03:00`)) / 86_400_000);
+  if (d < 0) return 'انتهى';
+  if (d === 0) return 'ينتهي اليوم';
+  return `متبقّي ${plural(d, 'يوم واحد', 'يومان', 'أيام', 'يوماً')}`;
+}
+
+/* ── المفضّلة — على هذا الجهاز فقط (لا حسابَ للمواطن) ────────────────────── */
+const FAVS = 'wash-favs';
+export function readFavs(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(FAVS) ?? '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+/** يقلب المفضّلةَ ويعيد الحالةَ الجديدة. */
+export function toggleFav(id: string): boolean {
+  const all = readFavs();
+  const on = !all.includes(id);
+  try {
+    localStorage.setItem(FAVS, JSON.stringify(on ? [id, ...all].slice(0, 100) : all.filter((x) => x !== id)));
+  } catch {
+    /* تصفّحٌ خاصّ */
+  }
+  return on;
 }
 
 export interface WashClosure {
@@ -175,6 +273,70 @@ export function washStatus(
   if (w.temp_closed) return 'temp_closed';
   if (w.paused) return 'paused';
   return isOpenNow(w) ? 'open' : 'closed';
+}
+
+/** الشارةُ الكاملة (§ الحالات الستّ): مفتوحة / مغلقة / مزدحمة / متاحة / الحجوزات متوقّفة / ممتلئة اليوم.
+ *  `nextSlot` من wash_next_slot_all(): null = لا موعدَ حرّاً اليوم، undefined = لم يُجلب بعد. */
+export type WashBadge = 'open' | 'available' | 'busy' | 'full' | 'paused' | 'closed' | 'temp_closed';
+export function washBadge(
+  w: { temp_closed: boolean; paused?: boolean; is_24h: boolean; opens_at: string; closes_at: string },
+  nextSlot: string | null | undefined,
+  now = Date.now()
+): WashBadge {
+  const s = washStatus(w);
+  if (s !== 'open') return s;
+  if (nextSlot === undefined) return 'open';
+  if (nextSlot === null) return 'full';
+  const wait = timeToMinutes(nextSlot) - baghdadMinutesNow();
+  if (wait <= 45) return 'available';
+  if (wait >= 120) return 'busy';
+  void now;
+  return 'open';
+}
+export const BADGE_LABELS: Record<WashBadge, string> = {
+  open: 'مفتوحة الآن',
+  available: 'متاحة',
+  busy: 'مزدحمة',
+  full: 'ممتلئة اليوم',
+  paused: 'الحجوزات متوقّفة',
+  closed: 'مغلقة',
+  temp_closed: 'مغلقة مؤقّتاً',
+};
+/** ألوانُ الشارة — هويّةُ المنصّة: أخضرُ للمفتوح، كهرمانيٌّ للتحذير، رماديٌّ للمغلق. */
+export const BADGE_TONE: Record<WashBadge, string> = {
+  open: 'bg-brand-50 text-brand-700',
+  available: 'bg-brand-50 text-brand-700',
+  busy: 'bg-amber-50 text-amber-800',
+  full: 'bg-amber-50 text-amber-800',
+  paused: 'bg-slate-100 text-slate-600',
+  closed: 'bg-slate-100 text-slate-500',
+  temp_closed: 'bg-red-50 text-red-700',
+};
+
+/** «تغلق الساعة 11:00 PM» / «تفتح الساعة 8:00 AM» / «24 ساعة». */
+export function hoursLine(w: { is_24h: boolean; opens_at: string; closes_at: string; temp_closed?: boolean }): string {
+  if (w.is_24h) return 'مفتوحة 24 ساعة';
+  return isOpenNow(w) ? `تغلق الساعة ${time12(w.closes_at)}` : `تفتح الساعة ${time12(w.opens_at)}`;
+}
+
+/** نصٌّ لاتينيٌّ معزولٌ اتّجاهيّاً: «9:00 AM» داخل فقرةٍ عربيّة كان يُرسَم «AM 9:00» لأنّ الأرقامَ
+ *  ضعيفةُ الاتّجاه — LRI…PDI تجعله جزيرةً تُقرأ من اليسار أينما وُضع، بلا dir على كلّ عنصر. */
+export const ltr = (s: string): string => `⁦${s}⁩`;
+
+/** «HH:MM[:SS]» → «3:30 PM» — الأرقامُ إنجليزيّة (طلبُ صاحب المنصّة). */
+export function time12(t: string): string {
+  const m = timeToMinutes(t);
+  const h = Math.floor(m / 60) % 24;
+  return ltr(`${h % 12 === 0 ? 12 : h % 12}:${String(m % 60).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`);
+}
+/** timestamptz → «4:00 PM» بتوقيت بغداد. */
+export function at12(iso: string): string {
+  return time12(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Baghdad', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso)));
+}
+/** «السبت 19 سبتمبر» بأرقامٍ إنجليزيّة — من يومٍ «YYYY-MM-DD» أو timestamptz. */
+export function dateLine(v: string, opts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' }): string {
+  const d = v.length === 10 ? new Date(`${v}T12:00:00+03:00`) : new Date(v);
+  return d.toLocaleDateString('ar-IQ-u-nu-latn', { timeZone: 'Asia/Baghdad', ...opts });
 }
 
 /** صفُّ `car_washes` كما يراه صاحبُها والإدارة. */
@@ -287,7 +449,7 @@ export const ACTION_LABELS: Partial<Record<BookingStatus, string>> = {
 
 export const VEHICLE_TYPES = ['sedan', 'suv', 'pickup', 'van', 'other'] as const;
 export type VehicleType = (typeof VEHICLE_TYPES)[number];
-export const VEHICLE_LABELS: Record<VehicleType, string> = { sedan: 'صالون', suv: 'دفع رباعيّ', pickup: 'بيك أب', van: 'فان', other: 'أخرى' };
+export const VEHICLE_LABELS: Record<VehicleType, string> = { sedan: 'صالون', suv: 'SUV', pickup: 'بيك أب', van: 'فان', other: 'أخرى' };
 
 /** أيمكن للمواطن إلغاءُ حجزه مجّاناً؟ (قبل الموعد بأكثر من الحدّ) — وبعده يُعلَّم متأخّراً. */
 export function canCancel(startsAt: string, now = Date.now()): 'free' | 'late' | 'no' {
@@ -334,8 +496,8 @@ export const BOOKING_LABELS: Record<BookingStatus, string> = {
   expired: 'فات الموعد',
 };
 
-/** «٢٥٬٠٠٠ دينار». */
-export const iqd = (n: number): string => `${n.toLocaleString('ar-IQ')} دينار`;
+/** «25,000 د.ع» — الأرقامُ إنجليزيّة (طلبُ صاحب المنصّة). */
+export const iqd = (n: number): string => `${n.toLocaleString('en-US')} د.ع`;
 
 /** يومٌ بتقويم بغداد + n. */
 export function bgdDate(plusDays = 0, now = Date.now()): string {
@@ -353,11 +515,20 @@ export function bookingDays(
   return Array.from({ length: max + 1 }, (_, i) => ({ day: bgdDate(i, now), locked: i > open }));
 }
 
-/** «اليوم» / «غداً» / «الخميس ١٨/٩». */
+/** «اليوم» / «غداً» / «الخميس 18/9» — بأرقامٍ إنجليزيّة. */
 export function dayLabel(day: string, now = Date.now()): string {
   if (day === bgdDate(0, now)) return 'اليوم';
   if (day === bgdDate(1, now)) return 'غداً';
-  return new Date(`${day}T12:00:00`).toLocaleDateString('ar-IQ', { weekday: 'long', day: 'numeric', month: 'numeric' });
+  return new Date(`${day}T12:00:00+03:00`).toLocaleDateString('ar-IQ-u-nu-latn', { timeZone: 'Asia/Baghdad', weekday: 'long', day: 'numeric', month: 'numeric' });
+}
+
+/** خانةُ التقويم الأفقيّ: «اليوم / الخميس» و«غداً / الجمعة» و«السبت / 19». */
+export function calendarCell(day: string, now = Date.now()): { top: string; bottom: string } {
+  const d = new Date(`${day}T12:00:00+03:00`);
+  const weekday = d.toLocaleDateString('ar-IQ-u-nu-latn', { timeZone: 'Asia/Baghdad', weekday: 'long' });
+  if (day === bgdDate(0, now)) return { top: 'اليوم', bottom: weekday };
+  if (day === bgdDate(1, now)) return { top: 'غداً', bottom: weekday };
+  return { top: weekday, bottom: d.toLocaleDateString('ar-IQ-u-nu-latn', { timeZone: 'Asia/Baghdad', day: 'numeric', month: 'short' }) };
 }
 
 /** شبكةُ المواعيد ليومٍ (مرآةُ wash_slots في القاعدة) — للعرض قبل وصول العدّ،
@@ -377,8 +548,8 @@ export function slotGrid(
   return out;
 }
 
-/** «١٠:٣٠ صباحاً». */
-export const slotLabel = (slot: string): string => formatTime(slot.length === 5 ? `${slot}:00` : slot);
+/** «10:30 AM» — الموعدُ بأرقامٍ إنجليزيّة. */
+export const slotLabel = (slot: string): string => time12(slot);
 
 /** بطاقةُ الغسلات: «٣ من ٥ — بعد غسلتين واحدةٌ مجّانيّة». */
 export function loyaltyLine(stamps: number, target: number, free: number): string | null {
@@ -394,14 +565,25 @@ export const bookingHref = (code: string, phone: string) =>
 /** رسالةُ واتساب من المواطن إلى المغسلة برمز حجزه. */
 export function whatsappBooking(washPhone: string, b: { code: string; name: string; service_name: string; starts_at: string; car: string | null }): string {
   const core = washPhone.replace(/\D/g, '').replace(/^(00)?964/, '').replace(/^0+/, '');
-  const when = new Date(b.starts_at).toLocaleString('ar-IQ', { timeZone: 'Asia/Baghdad', weekday: 'long', hour: '2-digit', minute: '2-digit' });
+  const when = `${dateLine(b.starts_at, { weekday: 'long' })} ${at12(b.starts_at)}`;
   const text = `السلام عليكم، حجزتُ عبر المحطة التقنية — رمز الحجز ${b.code}\n${b.name} · ${b.service_name} · ${when}${b.car ? ` · ${b.car}` : ''}`;
   return `https://wa.me/964${core}?text=${encodeURIComponent(text)}`;
 }
 
-/** «حجوزاتي» على هذا الجهاز — مرآةٌ محلّيّة، لا قراءةَ لـanon من القاعدة. */
+/** «حجوزاتي» على هذا الجهاز — مرآةٌ محلّيّة، لا قراءةَ لـanon من القاعدة.
+ *  الحالةُ تُجلب عند فتح الصفحة بـwash_my_bookings(codes, phone). */
+export interface MyBooking {
+  code: string;
+  phone: string;
+  wash_id: string;
+  wash: string;
+  starts_at: string;
+  service?: string;
+  price?: number;
+  status?: BookingStatus;
+}
 const MINE = 'wash-bookings';
-export function rememberBooking(b: { code: string; phone: string; wash_id: string; wash: string; starts_at: string }): void {
+export function rememberBooking(b: MyBooking): void {
   try {
     const all = readMyBookings().filter((x) => x.code !== b.code);
     all.unshift(b);
@@ -410,7 +592,14 @@ export function rememberBooking(b: { code: string; phone: string; wash_id: strin
     /* تصفّحٌ خاصّ */
   }
 }
-export function readMyBookings(): { code: string; phone: string; wash_id: string; wash: string; starts_at: string }[] {
+export function forgetBooking(code: string): void {
+  try {
+    localStorage.setItem(MINE, JSON.stringify(readMyBookings().filter((x) => x.code !== code)));
+  } catch {
+    /* تصفّحٌ خاصّ */
+  }
+}
+export function readMyBookings(): MyBooking[] {
   try {
     const v = JSON.parse(localStorage.getItem(MINE) ?? '[]');
     return Array.isArray(v) ? v : [];

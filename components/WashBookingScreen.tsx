@@ -1,13 +1,28 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type HTMLAttributes, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { pokeWashTick } from '@/lib/washConfig';
 import { displayPhone } from '@/lib/phone';
-import { BOOKING_LABELS, iqd, whatsappBooking, type BookingStatus } from '@/lib/wash';
+import { BOOKING_LABELS, at12, dateLine, iqd, whatsappBooking, type BookingStatus } from '@/lib/wash';
 import { RouteButton } from './RouteButton';
-import { SpinnerIcon, WhatsappIcon, XIcon } from './icons';
+import { CalendarIcon, SpinnerIcon, WhatsappIcon, XIcon } from './icons';
+
+/**
+ * RouteButton (Waze/Google) بوسمٍ غيرِ وسمه: نصُّه وأيقونتُه يُخفيان ويُرسم فوقه ما نُمرّر.
+ * ponytail: يُحذف كلُّه حين يقبل RouteButton خاصيّةَ label — ملفُّه ليس من ملفّات قسم الغسيل.
+ */
+export function RouteCell({ lat, lng, compact, labelClass, className, children, ...rest }: { lat: number; lng: number; compact?: boolean; labelClass?: string; children: ReactNode } & HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div {...rest} className={`relative [&>div]:h-full [&>div>button]:h-full [&>div>button]:text-[0px] [&>div>button>svg]:hidden ${className ?? ''}`}>
+      <RouteButton lat={lat} lng={lng} compact={compact} />
+      <span aria-hidden className={`pointer-events-none absolute inset-0 flex items-center justify-center gap-1 ${labelClass ?? ''}`}>
+        {children}
+      </span>
+    </div>
+  );
+}
 
 type Booking = {
   id: string;
@@ -57,7 +72,7 @@ function ReviewBox({ code, phone, onDone }: { code: string; phone: string; onDon
           </button>
         ))}
       </div>
-      <textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={200} rows={2} className="field mt-2 text-sm" placeholder="تعليق اختياريّ (٢٠٠ حرف)" />
+      <textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={200} rows={2} className="field mt-2 text-sm" placeholder="تعليق اختياريّ (200 حرف)" />
       {err && <p role="alert" className="mt-1 text-[11px] text-traffic-red">{err}</p>}
       <button type="button" disabled={busy} onClick={send} className="btn-primary mt-2 w-full text-xs">
         {busy ? <SpinnerIcon className="h-4 w-4" /> : 'إرسال التقييم'}
@@ -66,7 +81,8 @@ function ReviewBox({ code, phone, onDone }: { code: string; phone: string; onDon
   );
 }
 
-const PILL: Record<BookingStatus, string> = {
+/** ألوانُ حالة الحجز — تشاركها بطاقةُ الحجز و«حجوزاتي». */
+export const BOOKING_PILL: Record<BookingStatus, string> = {
   pending: 'bg-amber-50 text-amber-800',
   confirmed: 'bg-brand-50 text-brand-700',
   arrived: 'bg-sky-50 text-sky-800',
@@ -90,7 +106,7 @@ const EVENT_LINE: Record<string, string> = {
   expired: 'فات الموعد بلا تأكيد',
   reminder: 'أُرسل تذكير',
 };
-const fmtAt = (iso: string) => new Date(iso).toLocaleString('ar-IQ', { timeZone: 'Asia/Baghdad', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'numeric' });
+const fmtAt = (iso: string) => `${dateLine(iso, { day: 'numeric', month: 'numeric' })} ${at12(iso)}`;
 
 /** بطاقةُ الحجز: الرمزُ الذي يُرى للعامل، وحالتُه، وما يُفعل به. */
 export function WashBookingScreen() {
@@ -141,18 +157,13 @@ export function WashBookingScreen() {
     );
   }
 
-  const when = new Date(b.starts_at).toLocaleString('ar-IQ', {
-    timeZone: 'Asia/Baghdad',
-    weekday: 'long',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const when = `${dateLine(b.starts_at)} · ${at12(b.starts_at)}`;
   const live = (b.status === 'pending' || b.status === 'confirmed') && new Date(b.starts_at).getTime() > Date.now();
 
   return (
     <main className="mx-auto max-w-md px-4 pb-24 pt-4">
-      <a href={`/wash/detail/?id=${b.wash_id}`} className="text-[12px] font-bold text-brand-700">
-        ← {b.wash}
+      <a href={`/wash/detail/?id=${b.wash_id}`} className="inline-flex min-h-[44px] items-center gap-1 text-[12px] font-bold text-brand-700">
+        <span aria-hidden className="text-base leading-none">‹</span> {b.wash}
       </a>
 
       <article className="card mt-3 p-5 text-center">
@@ -160,28 +171,28 @@ export function WashBookingScreen() {
         <p className="mt-1 font-mono text-4xl font-extrabold tracking-[0.2em] text-brand-900" dir="ltr">
           {b.code}
         </p>
-        <span className={`mt-3 inline-block rounded-full px-3 py-1 text-[12px] font-bold ${PILL[b.status]}`}>
+        <span className={`mt-3 inline-block rounded-full px-3 py-1 text-[12px] font-bold ${BOOKING_PILL[b.status]}`}>
           {b.status === 'pending' ? 'بانتظار تأكيد المغسلة' : BOOKING_LABELS[b.status]}
         </span>
 
-        <dl className="mt-5 space-y-2.5 text-right text-[13px]">
+        <dl className="mt-5 space-y-2.5 text-start text-[13px]">
           <div className="flex justify-between gap-3">
             <dt className="shrink-0 text-slate-500">المغسلة</dt>
-            <dd className="text-left font-bold text-slate-800">{b.wash}</dd>
+            <dd className="text-end font-bold text-slate-800">{b.wash}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt className="shrink-0 text-slate-500">العنوان</dt>
-            <dd className="text-left font-bold text-slate-800">{b.address}</dd>
+            <dd className="text-end font-bold text-slate-800">{b.address}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt className="shrink-0 text-slate-500">الخدمة</dt>
-            <dd className="text-left font-bold text-slate-800">
-              {b.service} · {b.use_free ? 'مجّانيّة 🎁' : iqd(b.price)}
+            <dd className="text-end font-bold text-slate-800">
+              {b.service} · {b.use_free ? 'مجّانيّة' : iqd(b.price)}
             </dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt className="shrink-0 text-slate-500">الموعد</dt>
-            <dd className="text-left font-bold text-slate-800">{when}</dd>
+            <dd className="text-end font-bold text-slate-800">{when}</dd>
           </div>
         </dl>
 
@@ -214,6 +225,12 @@ export function WashBookingScreen() {
             </a>
           )}
           <RouteButton lat={b.lat} lng={b.lng} />
+          {live && (
+            <a href={`/wash/book/?id=${b.wash_id}&replace=${encodeURIComponent(b.code)}`} className="btn-ghost w-full">
+              <CalendarIcon className="h-4 w-4" />
+              تعديل الموعد
+            </a>
+          )}
           {live && (
             <button type="button" onClick={cancel} disabled={busy} className="btn w-full text-red-700 active:bg-red-50">
               {busy ? <SpinnerIcon className="h-4 w-4" /> : <XIcon className="h-4 w-4" />}

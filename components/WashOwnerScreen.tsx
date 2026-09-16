@@ -4,23 +4,29 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { forgetLogin } from '@/lib/biometric';
-import { ADMIN_WA, normalizePhone } from '@/lib/phone';
+import { ADMIN_WA, displayPhone, isValidIraqiMobile, normalizePhone } from '@/lib/phone';
+import { num } from '@/lib/num';
 import {
   ACTION_LABELS,
+  ACTIVE_STATUSES,
   BOOKING_LABELS,
   VEHICLE_LABELS,
   VEHICLE_TYPES,
+  at12,
   bgdDate,
+  dateLine,
   dayLabel,
   daysLeft,
   nextStatuses,
   iqd,
   limitLabel,
+  offerPrice,
+  pct,
   planOf,
   profileCompletion,
-  slotLabel,
   type BookingStatus,
   type CarWash,
+  type VehicleType,
   type WashBooking,
   type WashClosure,
   type WashConfig,
@@ -36,6 +42,7 @@ import { WashPhotoUpload } from './WashPhotoUpload';
 import { WashDeviceLink } from './WashDeviceLink';
 import { WashDashboard } from './WashDashboard';
 import { WashStaff } from './WashStaff';
+import { VehiclePicker } from './VehiclePicker';
 import {
   CalendarIcon,
   CarIcon,
@@ -47,6 +54,7 @@ import {
   AlertTriangleIcon,
   ChartIcon,
   UserIcon,
+  ShieldIcon,
   SpinnerIcon,
   StarIcon,
   StoreIcon,
@@ -55,7 +63,7 @@ import {
 } from './icons';
 
 type Tab = 'today' | 'tomorrow' | 'past';
-type SheetKind = 'services' | 'offers' | 'hours' | 'photo' | 'pause' | 'walkin' | 'reviews' | 'stats' | 'staff' | null;
+type SheetKind = 'services' | 'offers' | 'hours' | 'profile' | 'photo' | 'pause' | 'walkin' | 'reviews' | 'stats' | 'staff' | null;
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'today', label: 'اليوم' },
@@ -68,10 +76,13 @@ const LOYALTY = [0, 4, 5, 6, 8, 10];
 
 /** بدايةُ يومٍ بغداديّ كحدٍّ لـtimestamptz. */
 const dayStart = (day: string) => `${day}T00:00:00+03:00`;
-/** «HH:MM» بتوقيت بغداد من timestamptz. */
-const bgdTime = (iso: string) =>
-  new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Baghdad', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
 const bookingDay = (b: WashBooking) => bgdDate(0, Date.parse(b.starts_at));
+/** «19 أيلول 2026» — تاريخُ الاشتراك بأرقامٍ إنجليزيّة. */
+const longDay = (d: string) => dateLine(d, { day: 'numeric', month: 'long', year: 'numeric' });
+/** «18/9 4:00 PM» — لحظةٌ قصيرة بتوقيت بغداد. */
+const shortAt = (iso: string) => `${dateLine(iso, { day: 'numeric', month: 'numeric' })} ${at12(iso)}`;
+/** الحجزُ الذي لا يُحتسب إيراداً: أُلغي أو فات أو لم يحضر. */
+const LOST: BookingStatus[] = ['cancelled', 'cancelled_by_business', 'expired', 'no_show'];
 
 const PILL: Record<BookingStatus, string> = {
   pending: 'bg-amber-100 text-amber-900',
@@ -102,8 +113,7 @@ function banner(w: CarWash, today: string): { cls: string; text: string } {
   if (w.status === 'suspended') return { cls: 'border-red-200 bg-red-50 text-traffic-red', text: 'موقوفة من الإدارة' };
   if (w.paid_until && w.paid_until >= today) {
     const left = Math.round((Date.parse(w.paid_until) - Date.parse(today)) / 86_400_000);
-    const until = new Date(`${w.paid_until}T12:00:00`).toLocaleDateString('ar-IQ', { day: 'numeric', month: 'long', year: 'numeric' });
-    return { cls: 'border-brand-200 bg-brand-50 text-brand-800', text: `الاشتراك فعّال حتى ${until}${left <= 7 ? ' — يجدَّد قريباً' : ''}` };
+    return { cls: 'border-brand-200 bg-brand-50 text-brand-800', text: `الاشتراك فعّال حتى ${longDay(w.paid_until)}${left <= 7 ? ' — يجدَّد قريباً' : ''}` };
   }
   return { cls: 'border-red-200 bg-red-50 text-traffic-red', text: 'انتهى الاشتراك — مغسلتك مخفيّة عن الزبائن حتى التجديد' };
 }
@@ -114,9 +124,22 @@ function SubscriptionCard({ wash, cfg }: { wash: CarWash; cfg: WashConfig | null
   const left = daysLeft(wash.paid_until);
   const grace = cfg?.grace_days ?? 3;
   const f = plan?.features ?? {};
-  const until = wash.paid_until
-    ? new Date(`${wash.paid_until}T12:00:00`).toLocaleDateString('ar-IQ', { day: 'numeric', month: 'long', year: 'numeric' })
-    : null;
+  const until = wash.paid_until ? longDay(wash.paid_until) : null;
+  /** حجوزاتُ الشهر من wash_dashboard — العدُّ المحلّيّ (اليوم وغداً و50 سابقة) لا يكفي. */
+  const [used, setUsed] = useState<{ used_bookings: number; limit: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const today = bgdDate(0);
+    supabase
+      .rpc('wash_dashboard', { p_wash: wash.id, p_from: `${today.slice(0, 7)}-01`, p_to: today })
+      .then(({ data }) => {
+        const s = (data as { subscription?: { used_bookings: number; limit: number } } | null)?.subscription;
+        if (alive && s) setUsed(s);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [wash.id]);
   const renew = `https://wa.me/${ADMIN_WA}?text=${encodeURIComponent(
     `السلام عليكم، أريد تجديد اشتراك مغسلة «${wash.name}» (${plan?.name ?? wash.plan}) في المحطة التقنية.`
   )}`;
@@ -143,6 +166,14 @@ function SubscriptionCard({ wash, cfg }: { wash: CarWash; cfg: WashConfig | null
           {f.offers_enabled ? ' · العروض' : ''}
           {f.featured ? ' · ظهور مميّز' : ''}
         </p>
+      )}
+      {used && (
+        <p className="mt-1 text-[11px] text-slate-500">
+          حجوزات هذا الشهر: {num(used.used_bookings)}{used.limit > 0 ? ` من ${limitLabel(used.limit, 'حجز')}` : ' — بلا حدّ'}
+        </p>
+      )}
+      {(f.sms_monthly_limit ?? 0) > 0 && (
+        <p className="mt-1 text-[11px] text-slate-500">رسائل SMS: {num(f.sms_monthly_limit)} شهرياً — تُفعَّل لاحقاً</p>
       )}
       {(left === null || left <= 7) && (
         <a href={renew} target="_blank" rel="noopener noreferrer" className="btn-primary mt-2 w-full text-xs">
@@ -308,6 +339,16 @@ export function WashOwnerScreen() {
   const rows = tab === 'past' ? past : upcoming.filter((b) => bookingDay(b) === bgdDate(tab === 'today' ? 0 : 1));
   const pendingCount = upcoming.filter((b) => b.status === 'pending').length;
   const note = banner(wash, today);
+  /** إحصائيّاتُ اليوم من الحجوزات المجلوبة أصلاً — لا نداءَ إضافيّاً. */
+  const todays = upcoming.filter((b) => bookingDay(b) === today);
+  const now = Date.now();
+  const todayStats: { label: string; value: string; wide?: boolean }[] = [
+    { label: 'الحجوزات', value: num(todays.length) },
+    { label: 'مكتملة', value: num(todays.filter((b) => b.status === 'completed').length) },
+    { label: 'قادمة', value: num(todays.filter((b) => ACTIVE_STATUSES.includes(b.status) && Date.parse(b.starts_at) >= now).length) },
+    { label: 'الإيراد المتوقع', value: iqd(todays.filter((b) => !LOST.includes(b.status)).reduce((s, b) => s + (b.use_free ? 0 : b.price), 0)), wide: true },
+    { label: 'مشاهدات الصفحة', value: num(views?.views) },
+  ];
 
   const grid: IconGridItem[] = [
     ...(owns
@@ -315,6 +356,7 @@ export function WashOwnerScreen() {
           { key: 'services', label: 'الخدمات', icon: CarIcon, onClick: () => setSheet('services') },
           { key: 'offers', label: 'العروض', icon: StarIcon, onClick: () => setSheet('offers') },
           { key: 'hours', label: 'الدوام والمسارب', icon: CalendarIcon, onClick: () => setSheet('hours') },
+          { key: 'profile', label: 'بيانات المغسلة', icon: StoreIcon, onClick: () => setSheet('profile') },
           { key: 'photo', label: 'الصورة', icon: ImageIcon, onClick: () => setSheet('photo') },
           { key: 'staff', label: 'الموظّفون', icon: UserIcon, onClick: () => setSheet('staff') },
         ] as IconGridItem[])
@@ -354,8 +396,11 @@ export function WashOwnerScreen() {
     <main className="mx-auto max-w-md px-4 pb-24 pt-6">
       <header className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="truncate text-lg font-extrabold text-brand">{wash.name}</h1>
-          <p className="text-[11px] font-bold text-slate-400">{wash.city}</p>
+          <h1 className="truncate text-lg font-extrabold text-brand">مرحباً، {wash.name}</h1>
+          <p className="text-[12px] text-slate-500">
+            {wash.city}
+            {wash.area ? ` – ${wash.area}` : ''}
+          </p>
         </div>
         <button
           type="button"
@@ -373,7 +418,7 @@ export function WashOwnerScreen() {
         return pc.pct < 100 ? (
           <div className="mt-3 rounded-xl border border-slate-200 p-3">
             <div className="flex items-center justify-between text-[12px]">
-              <span className="font-bold text-slate-700">حسابك مكتمل {pc.pct}٪</span>
+              <span className="font-bold text-slate-700">حسابك مكتمل {pct(pc.pct)}</span>
               <span className="text-slate-400">{pc.missing[0]}</span>
             </div>
             <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
@@ -384,13 +429,16 @@ export function WashOwnerScreen() {
       })()}
       {views && (
         <p className="mt-2 text-[11px] text-slate-400">
-          مشاهداتُ صفحتك {views.views} · اتصال {views.calls} · طريق {views.routes}
+          مشاهداتُ صفحتك {num(views.views)} · اتصال {num(views.calls)} · طريق {num(views.routes)}
         </p>
       )}
       {asAdmin && (
-        <p className="mt-3 rounded-xl bg-slate-800 px-3 py-2 text-[12px] font-bold text-white">
-          🛡 تعرض هذه اللوحةَ بصفة الإدارة — كلُّ ما تفعله هنا يقع على مغسلة «{wash.name}».{' '}
-          <a href="/admin/" className="underline">العودة إلى الإدارة</a>
+        <p className="mt-3 flex items-start gap-1.5 rounded-xl bg-slate-800 px-3 py-2 text-[12px] font-bold text-white">
+          <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            تعرض هذه اللوحةَ بصفة الإدارة — كلُّ ما تفعله هنا يقع على مغسلة «{wash.name}».{' '}
+            <a href="/admin/" className="underline">العودة إلى الإدارة</a>
+          </span>
         </p>
       )}
 
@@ -399,6 +447,18 @@ export function WashOwnerScreen() {
       ) : (
         <p className={`mt-4 rounded-xl border p-3 text-[12.5px] font-bold leading-relaxed ${note.cls}`}>{note.text}</p>
       )}
+
+      <section className="mt-3">
+        <h2 className="text-sm font-extrabold text-slate-800">إحصائيات اليوم</h2>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {todayStats.map((s) => (
+            <div key={s.label} className={`rounded-xl bg-brand-50 py-2.5 text-center ${s.wide ? 'col-span-2' : ''}`}>
+              <p className="text-lg font-extrabold leading-none tabular-nums text-brand-700">{s.value}</p>
+              <p className="mt-1 text-[11px] font-semibold text-slate-500">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {err && (
         <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-traffic-red">
@@ -452,7 +512,7 @@ export function WashOwnerScreen() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-extrabold text-slate-800">
                       {tab === 'past' && <span className="text-slate-500">{dayLabel(bookingDay(b))} · </span>}
-                      {slotLabel(bgdTime(b.starts_at))}
+                      {at12(b.starts_at)}
                     </span>
                     <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-extrabold ${PILL[b.status]}`}>
                       {BOOKING_LABELS[b.status]}
@@ -463,29 +523,36 @@ export function WashOwnerScreen() {
                     {b.car && <span className="font-medium text-slate-500"> · {b.car}</span>}
                   </p>
                   <p className="text-xs text-slate-600">
-                    {b.service_name} · {b.use_free ? 'مجّانيّة 🎁' : iqd(b.price)}
+                    {b.service_name} · {b.use_free ? 'مجّانيّة' : iqd(b.price)}
                   </p>
                   {b.is_subscriber && (
                     <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[10.5px] font-extrabold text-brand-700">
                       ⭐ مشترك المحطة التقنية
                     </span>
                   )}
-                  <div className="mt-2 flex gap-2">
-                    <a href={`tel:${b.phone}`} className="btn-ghost min-h-[40px] flex-1 text-xs" dir="ltr">
-                      <PhoneIcon className="h-4 w-4" />
-                      {b.phone}
-                    </a>
-                    <a
-                      href={`https://wa.me/964${normalizePhone(b.phone)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="واتساب"
-                      className="btn-ghost min-h-[40px] px-3"
-                    >
-                      <WhatsappIcon className="h-4 w-4" />
-                    </a>
-                  </div>
-                  {b.vehicle && <p className="text-[11px] text-slate-500">{VEHICLE_LABELS[b.vehicle]}{b.walk_in ? ' · بلا حجز' : ''}</p>}
+                  {/* سيّارةٌ دخلت بلا هاتف (add_walk_in) — لا أزرارَ اتّصال. */}
+                  {b.phone && (
+                    <div className="mt-2 flex gap-2">
+                      <a href={`tel:${b.phone}`} className="btn-ghost min-h-[40px] flex-1 text-xs" dir="ltr">
+                        <PhoneIcon className="h-4 w-4" />
+                        {b.phone}
+                      </a>
+                      <a
+                        href={`https://wa.me/964${normalizePhone(b.phone)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="واتساب"
+                        className="btn-ghost min-h-[40px] px-3"
+                      >
+                        <WhatsappIcon className="h-4 w-4" />
+                      </a>
+                    </div>
+                  )}
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-500">
+                    <span dir="ltr" className="font-mono font-bold text-slate-600">{b.code}</span>
+                    {b.vehicle && <span>{VEHICLE_LABELS[b.vehicle]}</span>}
+                    {b.walk_in && <span>بلا حجز</span>}
+                  </p>
                   {b.status === 'pending' && Date.parse(b.starts_at) < Date.now() && (
                     <p className="mt-1 text-[11px] font-bold text-traffic-red">فات موعدُه ولم يُؤكَّد</p>
                   )}
@@ -533,6 +600,9 @@ export function WashOwnerScreen() {
           </>
         )}
       </Sheet>
+      <Sheet open={sheet === 'profile'} onClose={() => setSheet(null)} title="بيانات المغسلة" hint="اسمُ المسؤول وأرقامُ التواصل — للإدارة والحجوزات، لا تُعرض على صفحتك العامّة.">
+        {sheet === 'profile' && <ProfileEditor wash={wash} onSave={patchWash} />}
+      </Sheet>
       <Sheet open={sheet === 'staff'} onClose={() => setSheet(null)} title="موظّفو المغسلة" hint="حساباتٌ تؤكّد الحجوزاتِ وتُتمّها معك.">
         {sheet === 'staff' && (
           <WashStaff washId={wash.id} washName={wash.name} washPhone={wash.phone} isOwner={owns} staffLimit={Math.max(0, Number(planOf(cfg, wash.plan)?.features.staff_limit ?? 0))} />
@@ -572,6 +642,7 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
   const [price, setPrice] = useState('');
   const [minutes, setMinutes] = useState(30);
   const [active, setActive] = useState(true);
+  const [desc, setDesc] = useState('');
   const [prices, setPrices] = useState<Record<string, string>>({});
   const [byVehicle, setByVehicle] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -583,6 +654,7 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
     setPrice('');
     setMinutes(30);
     setActive(true);
+    setDesc('');
     setPrices({});
     setByVehicle(false);
   }
@@ -592,6 +664,7 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
     setPrice(String(s.price));
     setMinutes(s.minutes);
     setActive(s.active);
+    setDesc(s.description ?? '');
     const pr = Object.fromEntries(Object.entries(s.prices ?? {}).map(([k, v]) => [k, String(v)]));
     setPrices(pr);
     setByVehicle(Object.keys(pr).length > 0);
@@ -607,7 +680,7 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
     const pv = byVehicle
       ? Object.fromEntries(Object.entries(prices).map(([k, v]) => [k, Number(v)]).filter(([, v]) => Number.isFinite(v) && (v as number) >= 0))
       : {};
-    const row = { name: name.trim(), price: p, minutes, active, prices: Object.keys(pv).length ? pv : null };
+    const row = { name: name.trim(), price: p, minutes, active, prices: Object.keys(pv).length ? pv : null, description: desc.trim().slice(0, 120) || null };
     const { error } = editing
       ? await supabase.from('wash_services').update(row).eq('id', editing.id)
       : await supabase.from('wash_services').insert({ ...row, wash_id: washId, sort: rows.length + 1 });
@@ -636,6 +709,7 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
                 <span>
                   {iqd(s.price)} · {s.minutes} دقيقة{!s.active && ' · معطّلة'}
                 </span>
+                {s.description && <span className="block truncate text-[11px] text-slate-500">{s.description}</span>}
               </span>
               <button type="button" onClick={() => edit(s)} className="font-bold text-brand-700 underline">
                 تعديل
@@ -660,7 +734,7 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             className="field"
-            placeholder="السعر بالدينار"
+            placeholder="السعر (د.ع)"
             aria-label="السعر"
             dir="ltr"
           />
@@ -672,6 +746,7 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
             ))}
           </select>
         </div>
+        <textarea value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={120} rows={2} className="field py-2 text-sm" placeholder="الوصف (اختياريّ) — ما تشمله الخدمة" aria-label="الوصف" />
         <label className="flex min-h-[40px] cursor-pointer items-center gap-2 text-sm">
           <input type="checkbox" checked={byVehicle} onChange={(e) => setByVehicle(e.target.checked)} className="h-4 w-4 accent-[#16a34a]" />
           سعرٌ يختلف بنوع السيارة
@@ -720,6 +795,7 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
 /* ── العروض ──────────────────────────────────────────────────────────────── */
 function OffersEditor({ washId, rows, services, enabled, onChange }: { washId: string; rows: WashOffer[]; services: WashService[]; enabled: boolean; onChange: () => void }) {
   const [title, setTitle] = useState('');
+  const [desc, setDesc] = useState('');
   const [endsAt, setEndsAt] = useState('');
   const [startsAt, setStartsAt] = useState('');
   const [serviceId, setServiceId] = useState('');
@@ -730,17 +806,25 @@ function OffersEditor({ washId, rows, services, enabled, onChange }: { washId: s
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  /** «بدلاً من / الآن» — معاينةُ السعر بعد العرض على الخدمة المختارة (مرآةُ book_wash). */
+  const base = services.find((s) => s.id === serviceId)?.price;
+  const n = Number(amount);
+  const preview =
+    base != null && kind !== 'none' && Number.isFinite(n) && n > 0
+      ? offerPrice(base, { offer_price: kind === 'price' ? n : null, discount_pct: kind === 'pct' ? n : null })
+      : null;
+
   async function add(e: React.FormEvent) {
     e.preventDefault();
     const t = title.trim();
-    if (t.length < 3 || t.length > 80) return setErr('اكتب عنوان العرض — حتى ٨٠ حرفاً.');
-    const n = Number(amount);
-    if (kind !== 'none' && (!Number.isFinite(n) || n <= 0 || (kind === 'pct' && n > 90))) return setErr(kind === 'pct' ? 'نسبةُ الخصم من ١ إلى ٩٠.' : 'اكتب السعر الخاصّ.');
+    if (t.length < 3 || t.length > 80) return setErr('اكتب عنوان العرض — حتى 80 حرفاً.');
+    if (kind !== 'none' && (!Number.isFinite(n) || n <= 0 || (kind === 'pct' && n > 90))) return setErr(kind === 'pct' ? 'نسبةُ الخصم من 1 إلى 90.' : 'اكتب السعر الخاصّ.');
     setBusy(true);
     setErr(null);
     const { error } = await supabase.from('wash_offers').insert({
       wash_id: washId,
       title: t,
+      description: desc.trim().slice(0, 120) || null,
       starts_at: startsAt || null,
       ends_at: endsAt || null,
       service_id: serviceId || null,
@@ -753,6 +837,7 @@ function OffersEditor({ washId, rows, services, enabled, onChange }: { washId: s
     setBusy(false);
     if (error) return setErr(error.message.includes('الباقة') ? error.message : 'تعذّر الحفظ. حاول مجدداً.');
     setTitle('');
+    setDesc('');
     setEndsAt('');
     setStartsAt('');
     setServiceId('');
@@ -787,11 +872,12 @@ function OffersEditor({ washId, rows, services, enabled, onChange }: { washId: s
                 <span className="min-w-0">
                   <span className="block truncate font-bold">{o.title}</span>
                   <span className="text-slate-500">
-                    {o.discount_pct != null ? `خصم ${o.discount_pct}٪` : o.offer_price != null ? iqd(o.offer_price) : 'إعلان'}
+                    {o.discount_pct != null ? `خصم ${pct(o.discount_pct)}` : o.offer_price != null ? iqd(o.offer_price) : 'إعلان'}
                     {o.service_id ? ` · ${services.find((s) => s.id === o.service_id)?.name ?? 'خدمة'}` : ''}
                     {o.ends_at ? ` · حتى ${dayLabel(o.ends_at)}` : ''}
-                    {o.max_redemptions ? ` · ${o.max_redemptions} مستفيداً` : ''}
+                    {o.max_redemptions ? ` · ${num(o.max_redemptions)} مستفيداً` : ''}
                   </span>
+                  {o.description && <span className="block truncate text-[11px] text-slate-400">{o.description}</span>}
                 </span>
               </label>
               <button type="button" onClick={() => remove(o)} className="font-bold text-traffic-red underline">
@@ -809,12 +895,13 @@ function OffersEditor({ washId, rows, services, enabled, onChange }: { washId: s
       )}
       <form onSubmit={add} className={`space-y-3 rounded-xl bg-brand-50/60 p-3 ${enabled ? '' : 'pointer-events-none opacity-50'}`}>
         <p className="text-xs font-extrabold text-brand-800">عرض جديد</p>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} className="field" placeholder="غسلة كاملة بـ٨٬٠٠٠ حتى الجمعة" aria-label="عنوان العرض" />
+        <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} className="field" placeholder="غسلة كاملة بـ8,000 حتى الجمعة" aria-label="عنوان العرض" />
+        <textarea value={desc} onChange={(e) => setDesc(e.target.value)} maxLength={120} rows={2} className="field py-2 text-sm" placeholder="الوصف (اختياريّ)" aria-label="الوصف" />
         <div className="grid grid-cols-2 gap-2">
           <select value={kind} onChange={(e) => setKind(e.target.value as 'none' | 'price' | 'pct')} className="field" aria-label="نوع العرض">
             <option value="none">إعلانٌ فقط</option>
             <option value="price">سعرٌ خاصّ</option>
-            <option value="pct">خصم ٪</option>
+            <option value="pct">خصم %</option>
           </select>
           <input type="number" inputMode="numeric" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} disabled={kind === 'none'} className="field" placeholder={kind === 'pct' ? 'النسبة' : 'السعر'} aria-label="القيمة" dir="ltr" />
         </div>
@@ -824,6 +911,11 @@ function OffersEditor({ washId, rows, services, enabled, onChange }: { washId: s
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
+        {preview != null && base != null && (
+          <p className="text-[12px] font-bold text-brand-800">
+            <span className="text-slate-400 line-through">بدلاً من {iqd(base)}</span> / الآن {iqd(preview)}
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-2">
           <label className="text-[11px] text-slate-600">
             يبدأ
@@ -861,21 +953,29 @@ function HoursEditor({ wash, onSave }: { wash: CarWash; onSave: (p: Partial<CarW
   const [slot, setSlot] = useState(wash.slot_minutes);
   const [loyalty, setLoyalty] = useState(wash.loyalty_target);
   const [auto, setAuto] = useState(wash.confirm_mode === 'auto');
+  const [area, setArea] = useState(wash.area ?? '');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
   async function save() {
     setBusy(true);
-    const ok = await onSave({ is_24h: is24h, opens_at: opensAt, closes_at: closesAt, bays, slot_minutes: slot, loyalty_target: loyalty, confirm_mode: auto ? 'auto' : 'manual' });
+    const ok = await onSave({ is_24h: is24h, opens_at: opensAt, closes_at: closesAt, bays, slot_minutes: slot, loyalty_target: loyalty, confirm_mode: auto ? 'auto' : 'manual', area: area.trim().slice(0, 40) || null });
     setBusy(false);
     setSaved(ok);
   }
 
   return (
     <div className="space-y-4">
+      <div>
+        <label htmlFor="hours-area" className="label">
+          المنطقة
+        </label>
+        <input id="hours-area" value={area} onChange={(e) => setArea(e.target.value)} maxLength={40} className="field" placeholder="شارع 60، الحيّ العسكريّ…" />
+        <p className="mt-1 text-[11px] text-slate-400">تُعرض بعد المدينة: «{wash.city} – {area.trim() || 'المنطقة'}».</p>
+      </div>
       <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 px-3">
         <input type="checkbox" checked={is24h} onChange={(e) => setIs24h(e.target.checked)} className="h-4 w-4 accent-[#16a34a]" />
-        <span className="text-sm font-medium">٢٤ ساعة</span>
+        <span className="text-sm font-medium">24 ساعة</span>
       </label>
       {!is24h && (
         <>
@@ -915,7 +1015,7 @@ function HoursEditor({ wash, onSave }: { wash: CarWash; onSave: (p: Partial<CarW
         <select id="hours-loyalty" value={loyalty} onChange={(e) => setLoyalty(Number(e.target.value))} className="field">
           {LOYALTY.map((n) => (
             <option key={n} value={n}>
-              {n === 0 ? '٠ = بلا بطاقة' : `${n} غسلات ثمّ واحدة مجّانيّة`}
+              {n === 0 ? '0 = بلا بطاقة' : `${n} غسلات ثمّ واحدة مجّانيّة`}
             </option>
           ))}
         </select>
@@ -934,15 +1034,66 @@ function HoursEditor({ wash, onSave }: { wash: CarWash; onSave: (p: Partial<CarW
   );
 }
 
+/* ── بياناتُ المغسلة: المسؤولُ وأرقامُ التواصل ──────────────────────────── */
+function ProfileEditor({ wash, onSave }: { wash: CarWash; onSave: (p: Partial<CarWash>) => Promise<boolean> }) {
+  const [ownerName, setOwnerName] = useState(wash.owner_name ?? '');
+  const [whatsapp, setWhatsapp] = useState(wash.whatsapp ?? '');
+  const [phone2, setPhone2] = useState(wash.phone2 ?? '');
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save() {
+    setErr(null);
+    setSaved(false);
+    if (whatsapp && !isValidIraqiMobile(whatsapp)) return setErr('رقم واتساب غير صحيح.');
+    if (phone2 && !isValidIraqiMobile(phone2)) return setErr('الرقم الإضافيّ غير صحيح.');
+    setBusy(true);
+    // كما يخزّنه التسجيل: 07XXXXXXXXX.
+    const ok = await onSave({
+      owner_name: ownerName.trim().slice(0, 60) || null,
+      whatsapp: whatsapp ? displayPhone(whatsapp) : null,
+      phone2: phone2 ? displayPhone(phone2) : null,
+    });
+    setBusy(false);
+    setSaved(ok);
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label htmlFor="profile-owner" className="label">
+          اسم المسؤول
+        </label>
+        <input id="profile-owner" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} maxLength={60} className="field" placeholder="اسم صاحب المغسلة" />
+      </div>
+      <div>
+        <label htmlFor="profile-wa" className="label">
+          رقم واتساب
+        </label>
+        <input id="profile-wa" type="tel" inputMode="numeric" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} className="field" placeholder="07XXXXXXXXX" dir="ltr" />
+      </div>
+      <div>
+        <label htmlFor="profile-phone2" className="label">
+          رقم إضافي
+        </label>
+        <input id="profile-phone2" type="tel" inputMode="numeric" value={phone2} onChange={(e) => setPhone2(e.target.value)} className="field" placeholder="07XXXXXXXXX" dir="ltr" />
+      </div>
+      {err && <p role="alert" className="text-xs text-traffic-red">{err}</p>}
+      <button type="button" onClick={save} disabled={busy} className="btn-primary w-full">
+        {busy ? <SpinnerIcon className="h-4 w-4" /> : saved ? 'حُفظ ✓' : 'حفظ'}
+      </button>
+    </div>
+  );
+}
+
 /* ── إيقافُ الحجوزات ─────────────────────────────────────────────────────── */
 function PauseSheet({ wash, paused, onSave }: { wash: CarWash; paused: boolean; onSave: (p: Partial<CarWash>) => Promise<void> }) {
   const [busy, setBusy] = useState<string | null>(null);
-  const until = wash.bookings_paused_until
-    ? new Date(wash.bookings_paused_until).toLocaleString('ar-IQ', { timeZone: 'Asia/Baghdad', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'numeric' })
-    : null;
+  const until = wash.bookings_paused_until ? shortAt(wash.bookings_paused_until) : null;
   const endOfDay = () => new Date(`${bgdDate()}T23:59:59+03:00`).toISOString();
   const options: { label: string; at: () => string | null }[] = [
-    { label: '٣٠ دقيقة', at: () => new Date(Date.now() + 30 * 60_000).toISOString() },
+    { label: '30 دقيقة', at: () => new Date(Date.now() + 30 * 60_000).toISOString() },
     { label: 'ساعة', at: () => new Date(Date.now() + 60 * 60_000).toISOString() },
     { label: 'حتى نهاية اليوم', at: endOfDay },
     { label: 'حتى أعيد التشغيل', at: () => new Date(Date.now() + 365 * 86_400_000).toISOString() },
@@ -1009,8 +1160,6 @@ function ClosuresEditor({ washId }: { washId: string }) {
     await supabase.from('wash_closures').delete().eq('id', id);
     void load();
   }
-  const fmt = (iso: string) => new Date(iso).toLocaleString('ar-IQ', { timeZone: 'Asia/Baghdad', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
-
   return (
     <div className="mt-6 border-t border-slate-100 pt-4">
       <p className="text-sm font-bold">إغلاق استثنائيّ</p>
@@ -1020,7 +1169,8 @@ function ClosuresEditor({ washId }: { washId: string }) {
           {rows.map((c) => (
             <li key={c.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs">
               <span className="min-w-0 flex-1">
-                <span className="block font-bold" dir="ltr">{fmt(c.starts_at)} → {fmt(c.ends_at)}</span>
+                {/* كلماتٌ عربيّة حول كلّ لحظة — وإلّا تمزّق «18‏/9» في اتّجاهين. */}
+                <span className="block font-bold">من {shortAt(c.starts_at)} إلى {shortAt(c.ends_at)}</span>
                 {c.reason && <span className="text-slate-500">{c.reason}</span>}
               </span>
               <button type="button" onClick={() => remove(c.id)} className="font-bold text-traffic-red underline">حذف</button>
@@ -1055,7 +1205,7 @@ function WalkInSheet({ wash, services, onDone }: { wash: CarWash; services: Wash
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [car, setCar] = useState('');
-  const [vehicle, setVehicle] = useState('');
+  const [vehicle, setVehicle] = useState<VehicleType | ''>('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -1093,15 +1243,12 @@ function WalkInSheet({ wash, services, onDone }: { wash: CarWash; services: Wash
           وقت الدخول
           <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field mt-0.5" dir="ltr" />
         </label>
-        <label className="text-[11px] text-slate-600">
-          نوع السيارة
-          <select value={vehicle} onChange={(e) => setVehicle(e.target.value)} className="field mt-0.5">
-            <option value="">—</option>
-            {VEHICLE_TYPES.map((v) => (
-              <option key={v} value={v}>{VEHICLE_LABELS[v]}</option>
-            ))}
-          </select>
-        </label>
+      </div>
+      <div>
+        <p className="text-[11px] text-slate-600">نوع السيارة</p>
+        <div className="mt-1">
+          <VehiclePicker value={vehicle} onChange={setVehicle} />
+        </div>
       </div>
       <input value={name} onChange={(e) => setName(e.target.value)} className="field" placeholder="اسم الزبون" aria-label="اسم الزبون" />
       <div className="grid grid-cols-2 gap-2">
@@ -1139,7 +1286,7 @@ function ReviewsList({ washId }: { washId: string }) {
           <div className="flex items-center justify-between gap-2">
             <span className="font-bold text-amber-600">{'★'.repeat(r.stars)}</span>
             <span className="text-[11px] text-slate-400">
-              {r.name} · {new Date(r.created_at).toLocaleDateString('ar-IQ', { day: 'numeric', month: 'numeric' })}
+              {r.name} · {dateLine(r.created_at, { day: 'numeric', month: 'numeric' })}
             </span>
           </div>
           {r.comment && <p className="mt-1 text-slate-700">{r.comment}</p>}

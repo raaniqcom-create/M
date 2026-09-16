@@ -28,8 +28,8 @@ type Range = 'today' | 'yesterday' | '7' | '30' | 'month';
 const RANGES: { key: Range; label: string }[] = [
   { key: 'today', label: 'اليوم' },
   { key: 'yesterday', label: 'أمس' },
-  { key: '7', label: '٧ أيام' },
-  { key: '30', label: '٣٠ يوماً' },
+  { key: '7', label: '7 أيام' },
+  { key: '30', label: '30 يوماً' },
   { key: 'month', label: 'شهر' },
 ];
 

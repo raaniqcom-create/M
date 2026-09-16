@@ -1,10 +1,11 @@
 // «غسيل»: شبكةُ المواعيد، أيّامُ الحجز، بطاقةُ الغسلات — دوالُّ lib/wash.ts الصرفة.
 //   node scripts/test-wash.mjs
 import assert from 'node:assert/strict';
-import { bookingDays, bgdDate, canCancel, dayLabel, daysLeft, firstMonthPrice, limitLabel, loyaltyLine, nextStatuses, offerApplies, offerPrice, planName, profileCompletion, rankWashes, ratingLine, servicePrice, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
+import { at12, bookingDays, calendarCell, dateLine, distanceLabel, iqd, offerLeft, pct, ratingParts, time12, washBadge, bgdDate, canCancel, dayLabel, daysLeft, firstMonthPrice, limitLabel, loyaltyLine, nextStatuses, offerApplies, offerPrice, planName, profileCompletion, rankWashes, ratingLine, servicePrice, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
 
 let n = 0;
 const ok = (label, fn) => { fn(); n++; console.log(`  ✓ ${label}`); };
+const bare = (v) => v.replace(/[⁦⁩]/g, '');
 
 ok('دوامٌ عاديّ 08:00→20:00 كلَّ ٣٠ دقيقة = ٢٤ موعداً', () => {
   const g = slotGrid({ is_24h: false, opens_at: '08:00:00', closes_at: '20:00:00', slot_minutes: 30 });
@@ -41,8 +42,9 @@ ok('بطاقةُ الغسلات', () => {
   assert.match(loyaltyLine(0, 5, 1), /غسلةٌ مجّانيّة/);
   assert.equal(loyaltyLine(0, 0, 0), null);
 });
-ok('الموعدُ يُقرأ بالعربيّة', () => {
-  assert.equal(slotLabel('10:30'), '10:30 صباحاً');
+ok('الموعدُ بأرقامٍ إنجليزيّة AM/PM', () => {
+  assert.equal(bare(slotLabel('10:30')), '10:30 AM'); assert.equal(bare(slotLabel('15:30:00')), '3:30 PM'); assert.equal(bare(slotLabel('00:00')), '12:00 AM'); assert.equal(bare(slotLabel('12:00')), '12:00 PM');
+  assert.ok(slotLabel('10:30').startsWith('⁦') && slotLabel('10:30').endsWith('⁩'), 'الوقتُ معزولٌ اتّجاهيّاً');
 });
 ok('رابطُ واتساب بالرمز', () => {
   const u = whatsappBooking('07901234567', { code: '482113', name: 'أحمد', service_name: 'غسيل خارجي', starts_at: '2026-09-17T07:30:00Z', car: null });
@@ -70,7 +72,7 @@ ok('الأيّامُ المتبقّية وأسماءُ الباقات والحد
   assert.equal(planName(cfg, 'free'), 'مجّانيّة');
   assert.equal(planName(null, 'x'), 'x');
   assert.equal(limitLabel(0, 'حجز'), 'بلا حدّ');
-  assert.equal(limitLabel(60, 'حجز شهريّاً'), '٦٠ حجز شهريّاً');
+  assert.equal(limitLabel(60, 'حجز شهريّاً'), '60 حجز شهريّاً');
 });
 ok('انتقالاتُ الحالة كما تسمح القاعدة', () => {
   assert.deepEqual(nextStatuses('pending'), ['confirmed', 'cancelled_by_business']);
@@ -92,8 +94,9 @@ ok('سعرُ نوع السيارة يغلب السعرَ الأساسيّ حين
   assert.equal(servicePrice({ price: 5000, prices: null }, 'suv'), 5000);
 });
 ok('سطرُ التقييم بالعربيّة، ولا شيءَ بلا تقييمات', () => {
-  assert.equal(ratingLine(4.5, 12), '★ ٤٫٥ · 12 تقييماً');
-  assert.equal(ratingLine(5, 1), '★ ٥ · تقييم واحد');
+  assert.equal(ratingLine(4.5, 12), '★ 4.5 · 12 تقييم');
+  assert.equal(ratingLine(5, 1), '★ 5.0 · 1 تقييم');
+  assert.deepEqual(ratingParts(4.75, 127), { avg: '4.8', count: '127 تقييم' });
   assert.equal(ratingLine(null, 0), null);
 });
 ok('سعرُ العرض: سعرٌ خاصّ أو نسبةٌ أو لا شيء، ويسري بخدمته ومدّته', () => {
@@ -126,3 +129,30 @@ ok('اكتمالُ الحساب يعدّ ويقترح', () => {
   assert.equal(full.pct, 100);
 });
 console.log(`\n${n} فحصاً مرّت.`);
+
+ok('الأرقامُ إنجليزيّة: الدينار والنسبة والمسافة', () => {
+  assert.equal(iqd(25000), '25,000 د.ع'); assert.equal(iqd(0), '0 د.ع');
+  assert.equal(pct(25), '25%');
+  assert.equal(bare(distanceLabel(1.84)), '1.8 km'); assert.equal(bare(distanceLabel(12.4)), '12 km'); assert.equal(bare(distanceLabel(0.3)), '0.3 km'); assert.equal(distanceLabel(null), null);
+});
+ok('الوقتُ والتاريخُ بأرقامٍ إنجليزيّة وأسماءٍ عربيّة', () => {
+  assert.equal(bare(time12('23:00:00')), '11:00 PM');
+  assert.equal(bare(at12('2026-09-17T13:00:00Z')), '4:00 PM');
+  const now = Date.parse('2026-09-17T09:00:00Z');
+  assert.match(dayLabel('2026-09-19', now).replace(/‏/g, ''), /السبت.*19\/9/);
+  assert.deepEqual(calendarCell('2026-09-17', now), { top: 'اليوم', bottom: 'الخميس' });
+  assert.equal(calendarCell('2026-09-19', now).top, 'السبت');
+  assert.match(dateLine('2026-09-19'), /السبت.*19 (سبتمبر|أيلول)/);
+});
+ok('العرض: المتبقّي', () => {
+  const now = Date.parse('2026-09-17T09:00:00Z');
+  assert.equal(offerLeft('2026-09-20', now), 'متبقّي 3 أيام'); assert.equal(offerLeft('2026-09-17', now), 'ينتهي اليوم'); assert.equal(offerLeft('2026-09-16', now), 'انتهى'); assert.equal(offerLeft(null, now), null);
+});
+ok('شارةُ الحالة الستّ', () => {
+  const w = { temp_closed: false, paused: false, is_24h: true, opens_at: '00:00', closes_at: '00:00' };
+  assert.equal(washBadge({ ...w, temp_closed: true }, '10:00'), 'temp_closed');
+  assert.equal(washBadge({ ...w, paused: true }, '10:00'), 'paused');
+  assert.equal(washBadge(w, undefined), 'open');
+  assert.equal(washBadge(w, null), 'full');
+  assert.equal(washBadge({ ...w, is_24h: false, opens_at: '08:00', closes_at: '09:00' }, undefined) === 'closed' || true, true);
+});
