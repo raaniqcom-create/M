@@ -2383,6 +2383,14 @@ async function proposeSchedule(chat: number, userId: number, text: string) {
  *  نصفُ عمله اليوميّ خارجُ القناة — يتّصل به أصحابُ محطات ويتابع صفحاتِهم.
  *  فالخبرُ يدخل من هنا إلى **جدول اليوم نفسِه**، ويمرّ بالمعاينة والأزرار
  *  نفسِها: مسارٌ واحدٌ لا ثانٍ له. */
+/** سطران فأكثر بصيغة «الاسم - المدينة - الوقود» (وأغلبُ الأسطر كذلك) — قائمةٌ لا سؤالُ بحث. */
+function isManualPaste(text: string): boolean {
+  if (!/[\r\n]/.test(text)) return false;
+  const rows = text.split(/\r?\n/).filter((l) => l.trim() && !/^\s*التاريخ\s*[:：]/.test(l));
+  const manual = rows.filter((l) => readManualLine(l)?.product).length;
+  return manual >= 2 && manual * 2 >= rows.length;
+}
+
 async function proposeManual(chat: number, userId: number, text: string) {
   const platform = await platformStations();
   const lines: ScheduleLine[] = [];
@@ -3404,6 +3412,9 @@ Deno.serve(async (req) => {
           await proposeSchedule(chat, from, text);
         } else if (draft.step === 'schedadd') {
           await proposeManual(chat, from, text);
+        } else if (draft.step === 'sched' && !draft.data.sched?.edit && isManualPaste(text)) {
+          // قائمةٌ جديدةٌ من أسطرٍ يدويّة تَجُبُّ المسوّدةَ القائمة — لا تُقرأ تصحيحاً لسطرٍ لم يُختر.
+          await proposeManual(chat, from, text);
         } else if (draft.step === 'sched') {
           await correctSchedule(chat, from, draft.data, text);
         } else {
@@ -3423,6 +3434,14 @@ Deno.serve(async (req) => {
       }
       if (!text.startsWith('/') && looksLikeSchedule(text)) {
         await proposeSchedule(chat, from, text);
+        return new Response('ok');
+      }
+      // ── أسطرُ «الاسم - المدينة - الوقود» تُقترح قبل البحث ────────────────
+      //
+      // كانت تصل البحثَ الحرَّ أوّلاً، ولا تُقترح إلّا إن خلا البحثُ من نتيجة —
+      // فقائمةُ محسنٍ قصيرة تحوي اسمَ محطةٍ مسجّلة تعود «نتائجَ بحث» ولا تُنشر.
+      if (!text.startsWith('/') && isManualPaste(text)) {
+        await proposeManual(chat, from, text);
         return new Response('ok');
       }
 
