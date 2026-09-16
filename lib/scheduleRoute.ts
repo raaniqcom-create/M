@@ -1,6 +1,6 @@
 import { normalizeName, searchKnownFuel } from './nearbyFuel.ts';
 import { CITY_WORDS, officialFor } from './officialStations.ts';
-import { EXTRA_STATIONS } from './roadStationsExtra.ts';
+import { EXTRA_STATIONS, ROAD_ADDRESSES } from './roadStationsExtra.ts';
 import { CITY_NAMES } from './cities.ts';
 
 /** «الطريق لها» لصفّ الجدول — إحداثيّاتٌ من النظام لا تخمين.
@@ -45,9 +45,9 @@ export function shortAddress(row: { name: string; address?: string | null }): st
   if (own) return own;
   const official = officialFor(row.name)?.address;
   if (official) return official;
-  // ما أملاه صاحبُ المنصّة بعنوانٍ مختصر («مفرق 35»).
+  // ما أملاه صاحبُ المنصّة بعنوانٍ مختصر («مفرق 35»، «الشراع»).
   const key = normalizeName(row.name);
-  return EXTRA_STATIONS.find((e) => e.a && normalizeName(e.n) === key)?.a ?? null;
+  return ROAD_ADDRESSES[key] ?? EXTRA_STATIONS.find((e) => e.a && normalizeName(e.n) === key)?.a ?? null;
 }
 
 /** صفحةُ التفاصيل داخل المنصّة: صفحةُ المحطة المسجّلة، أو صفحةُ «مكان» لغيرها. */

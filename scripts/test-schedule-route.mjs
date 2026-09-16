@@ -85,3 +85,14 @@ ok('«محطة الخالدية - بنزين» لا تُفرَّغ من اسمه
   assert.equal(l.name, 'محطة الخالدية');
 });
 console.log(`\n${n} فحصاً مرّت.`);
+
+// ── عناوينُ وأسماءٌ أملاها صاحبُ المنصّة لمحطاتٍ في المسح ──
+import { shortAddress } from '../lib/scheduleRoute.ts';
+import { ROAD_STATIONS } from '../lib/roadStations.ts';
+assert.equal(shortAddress({ name: 'محطة الريم للوقود' }), '35 الرمادي');
+assert.equal(shortAddress({ name: 'محطة تعبئة مها البادية' }), 'البو عيادة');
+assert.equal(shortAddress({ name: 'محطة وقود الكورنيش' }), 'الجزيرة');
+assert.equal(shortAddress({ name: 'محطة وقود أسوار المدينة' }), 'الشراع');
+assert.ok(ROAD_STATIONS.some((s) => s.n === 'محطة وقود الكورنيش') && !ROAD_STATIONS.some((s) => s.n.startsWith('البوذياب')));
+assert.equal(matchLine('الكورنيش الرمادي', []).name, 'محطة وقود الكورنيش');
+console.log('  ✓ عناوينُ الريم ومها البادية والكورنيش وأسوار المدينة، واسمُ الكورنيش');

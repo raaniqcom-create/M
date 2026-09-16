@@ -20,9 +20,9 @@ export interface RoadStation {
 
 // والإضافاتُ اليدويّة (roadStationsExtra.ts) تُدمج في آخر القائمة: المولِّدُ
 // يكتب السطرين نفسَيهما، فإعادةُ التوليد لا تُسقطها.
-import { EXTRA_STATIONS } from './roadStationsExtra.ts';
+import { EXTRA_STATIONS, ROAD_RENAMES } from './roadStationsExtra.ts';
 
-export const ROAD_STATIONS: readonly RoadStation[] = [
+const GENERATED: readonly RoadStation[] = [
   { n: "جوهرة العدنان", la: 33.31324, lo: 44.13996, c: "أبو غريب" },
   { n: "محطة تاج الهدى", la: 33.30038, lo: 44.15396, c: "أبو غريب" },
   { n: "محطة تعبئة وقود المسرات", la: 33.23743, lo: 44.02294, c: "أبو غريب" },
@@ -260,5 +260,9 @@ export const ROAD_STATIONS: readonly RoadStation[] = [
   { n: "محطة وقود قلعة هيت المشيدة", la: 33.63265, lo: 42.83748, c: "هيت" },
   { n: "محطة وقود هيت (للنفط فقط)", la: 33.64409, lo: 42.82039, c: "هيت" },
   { n: "محطة وقود هيت الجديدة", la: 33.61901, lo: 42.85166, c: "هيت" },
+];
+
+export const ROAD_STATIONS: readonly RoadStation[] = [
+  ...GENERATED.map((s) => (ROAD_RENAMES[s.n] ? { ...s, n: ROAD_RENAMES[s.n] } : s)),
   ...EXTRA_STATIONS,
 ];

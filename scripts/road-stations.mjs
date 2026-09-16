@@ -168,10 +168,14 @@ export interface RoadStation {
 
 // والإضافاتُ اليدويّة (roadStationsExtra.ts) تُدمج في آخر القائمة: المولِّدُ
 // يكتب السطرين نفسَيهما، فإعادةُ التوليد لا تُسقطها.
-import { EXTRA_STATIONS } from './roadStationsExtra.ts';
+import { EXTRA_STATIONS, ROAD_RENAMES } from './roadStationsExtra.ts';
+
+const GENERATED: readonly RoadStation[] = [
+${body}
+];
 
 export const ROAD_STATIONS: readonly RoadStation[] = [
-${body}
+  ...GENERATED.map((s) => (ROAD_RENAMES[s.n] ? { ...s, n: ROAD_RENAMES[s.n] } : s)),
   ...EXTRA_STATIONS,
 ];
 `,
