@@ -6,6 +6,9 @@ import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
 import { readChoice } from '@/lib/alerts';
 import { PlateTurnBadge } from './PlateTurnBadge';
+import { officialFor } from '@/lib/officialStations';
+import { routeFor, wazeUrl } from '@/lib/scheduleRoute';
+import { MapPinIcon } from './icons';
 import { withDeadline } from '@/lib/fn';
 import { isDown, readStatus } from '@/lib/status';
 import {
@@ -304,6 +307,30 @@ export function TomorrowScreen() {
                             · {whenLabel(r.period, r.time)}
                           </span>
                         )}
+                        {/* العنوانُ في الصورة التي تُنشر، و«الطريق لها» لمن يفتح التطبيق:
+                            «التعليقاتُ بالكامل على عناوين المحطات» (١٦ أيلول). */}
+                        {(() => {
+                          const address = officialFor(r.name)?.address ?? null;
+                          const route = r.state === 'out' ? null : routeFor(r);
+                          if (!address && !route) return null;
+                          return (
+                            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] font-normal text-white/70">
+                              {address && <span>{address}</span>}
+                              {route && (
+                                <a
+                                  href={wazeUrl(route.lat, route.lng)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  aria-label={`الطريق إلى ${r.name}`}
+                                  className="inline-flex min-h-[24px] items-center gap-0.5 font-bold text-white underline underline-offset-2"
+                                >
+                                  <MapPinIcon className="h-3 w-3" />
+                                  الطريق لها
+                                </a>
+                              )}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="w-[4.6rem] py-1.5 text-left text-[10.5px] font-bold text-white/75">
                         {PRODUCT_LABELS[r.product]}

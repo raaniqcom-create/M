@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Sheet } from './Sheet';
 import { ChevronDownIcon, FuelIcon, MapPinIcon } from './icons';
 import { baghdadDate } from '@/lib/board';
+import { wazeSearch, wazeUrl } from '@/lib/scheduleRoute';
 import { PRODUCT_LABELS, isOffered } from '@/lib/products';
 import { PARITY_LABEL, RATION, dayParity, plateDigit, shortDate, turnFor } from '@/lib/ration';
 import { loadSchedule } from '@/lib/scheduleData';
@@ -19,11 +20,11 @@ const stationsOf = (n: number) => `${ar(n)} ${n >= 3 && n <= 10 ? 'محطات' :
 // «بانزين» مفهومةٌ من عنوان البطاقة — يبقى النوعُ وحدَه في العمود الضيّق.
 const kind = (p: FuelProduct) => PRODUCT_LABELS[p].replace('بانزين ', '');
 // ويز وحدَه يهدي في العراق — قرارُ صاحب المنصّة. المعتمدةُ بإحداثيّاتها،
-// وغيرُها بحثاً بالاسم.
+// وغيرُها بحثاً بالاسم. (الرابطُ في lib/scheduleRoute.ts — نسخةٌ واحدة.)
 const wazeTo = (r: { name: string; city: string | null; lat?: number; lng?: number }) =>
   r.lat != null && r.lng != null
-    ? `https://waze.com/ul?ll=${r.lat},${r.lng}&navigate=yes`
-    : `https://waze.com/ul?q=${encodeURIComponent([r.name, r.city].filter(Boolean).join(' '))}`;
+    ? wazeUrl(r.lat, r.lng)
+    : wazeSearch([r.name, r.city].filter(Boolean).join(' '));
 
 /** سطرٌ في جدول «دوري»: محطةٌ واحدةٌ بمنتجاتها — المعتمدةُ (المسجّلةُ في
  *  المنصّة) لها إحداثيّاتٌ وصفحة، وقد يكون صاحبُها أعلن بنزيناً الآن. */

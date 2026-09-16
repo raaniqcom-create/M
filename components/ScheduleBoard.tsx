@@ -6,6 +6,8 @@ import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
 import { baghdadDate, type BoardGroup, type BoardRow } from '@/lib/scheduleData';
 import { officialFor } from '@/lib/officialStations';
+import { routeFor, wazeUrl } from '@/lib/scheduleRoute';
+import { MapPinIcon } from './icons';
 
 /** جدولُ الوقود — الخبرُ الوحيد الذي يُقال قبل وقوعه.
  *
@@ -47,6 +49,8 @@ function Row({ r }: { r: BoardRow }) {
   // العنوانُ الرسميُّ بين قوسين — «محطة تعبئة وقود طليحة الحكومية (الكيلو ١٦٠)»
   // — كما أملاه صاحبُ المنصّة؛ ولمحطةٍ ليست في القائمة لا قوسان.
   const address = officialFor(r.name)?.address ?? null;
+  // «الطريق لها»: إحداثيّاتُ المنصّة أو مساعدِ الطريق — ولا رابطَ بلا إحداثيّات.
+  const route = dim ? null : routeFor(r);
 
   const name = r.stationId ? (
     <a
@@ -76,13 +80,25 @@ function Row({ r }: { r: BoardRow }) {
             · {whenLabel(r.period, r.time)}
           </span>
         )}
-        {r.source === 'station' ? (
-          <span className="mt-0.5 block text-[10.5px] text-brand-700">
-            من لوحة المحطة{r.alsoInChannel ? ' وجدول التوزيع' : ''}
-          </span>
-        ) : (
-          <span className="mt-0.5 block text-[10.5px] text-slate-400">من جدول التوزيع</span>
-        )}
+        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10.5px]">
+          {r.source === 'station' ? (
+            <span className="text-brand-700">من لوحة المحطة{r.alsoInChannel ? ' وجدول التوزيع' : ''}</span>
+          ) : (
+            <span className="text-slate-400">من جدول التوزيع</span>
+          )}
+          {route && (
+            <a
+              href={wazeUrl(route.lat, route.lng)}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`الطريق إلى ${r.name}`}
+              className="inline-flex min-h-[28px] items-center gap-0.5 rounded-lg px-1 font-bold text-brand-700 active:bg-brand-50"
+            >
+              <MapPinIcon className="h-3.5 w-3.5" />
+              الطريق لها
+            </a>
+          )}
+        </span>
       </td>
       <td className="w-[5.6rem] py-2.5 pl-2 text-[11.5px] font-bold text-brand-700">
         {PRODUCT_LABELS[r.product]}

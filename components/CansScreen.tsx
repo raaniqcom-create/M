@@ -1,12 +1,12 @@
 'use client';
 
+import { wazeSearch } from '@/lib/scheduleRoute';
 import { CANS, outletsFor, type CanOutlet } from '@/lib/cans';
 import { useAlertChoice } from '@/lib/alerts';
 import { MapPinIcon } from './icons';
 
 // ويز وحدَه يهدي في العراق — بحثاً بالاسم، فالمنافذُ ليست في المنصّة.
-const wazeTo = (name: string, city: string) =>
-  `https://waze.com/ul?q=${encodeURIComponent(`${name} ${city}`)}`;
+const wazeTo = (name: string, city: string) => wazeSearch(`${name} ${city}`);
 
 /** «تعبئة العبوات البلاستيكية» — لصاحب الدرّاجة والتكتك والمولّدة بعد قرار المنع:
  *  القاعدةُ في ثلاث جمل، ثمّ منافذُ مدينتِه أوّلاً ثمّ الباقي — ولا تخفى

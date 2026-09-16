@@ -2,6 +2,7 @@ import { PRODUCT_LABELS } from './products.ts';
 import { metresBetween, normalizeName, searchKnownFuel } from './nearbyFuel.ts';
 import { CITY_NAMES } from './cities.ts';
 import { CITY_WORDS, officialFor } from './officialStations.ts';
+import { isAnbarCity } from './scheduleRoute.ts';
 import type { FuelProduct } from '../types/database.ts';
 
 /** جدولُ الغد — قراءةُ منشورٍ يصل كما هو، ومطابقةُ أسمائه.
@@ -372,7 +373,21 @@ function matchLoose(
   platform: PlatformStation[],
   product: FuelProduct
 ): ScheduleLine {
-  const [top] = searchKnownFuel(text, 1);
+  // ── الاسمُ ولو لصق به اسمُ المدينة ─────────────────────────────────────
+  //
+  // الكتابُ يكتب «الحق الرمادي» و«الكوثر الخالدية»: كلمةٌ من كلمتين تشترك مع
+  // «محطة الحق» فتحسب ٢٧٫٥ وتسقط دون الحدّ — ٣٢ صفّاً من ٩٧ في جدول ١٦ أيلول
+  // بقيت خاماً هكذا. فيُبحث بالنصّ كما وصل وبه بلا كلمات المدن، ويُؤخذ الأعلى.
+  //
+  // **وفي الأنبار وحدَها.** مساعدُ الطريق يحمل ١٢٦ محطةً على جانب بغداد،
+  // و«أنوار حديثة» بعد نزع المدينة تطابق «أنوار المدينة» في بغداد بـ٧٥ —
+  // وجدولُ التوزيع أنباريّ.
+  const bare = normalizeName(text).split(' ').filter((w) => w && !CITY_WORDS.has(w)).join(' ');
+  const candidates = [text, ...(bare && bare !== normalizeName(text) ? [bare] : [])]
+    .flatMap((t) => searchKnownFuel(t, 1))
+    .filter((h) => isAnbarCity(h.station.c))
+    .sort((a, b) => b.score - a.score);
+  const top = candidates[0];
   // **دون الحدّ لا مرشَّح.**
   //
   // قِيس على أسماء القناة نفسِها: الصحيحُ يقع بين ٧٥ و١٠٠، و«البو يشة» تُطابق
@@ -480,7 +495,9 @@ function matchLoose(
   return {
     raw,
     name: near?.name ?? fixDialect(n),
-    city: c || cityInText(raw),
+    // مدينةُ السطر إن كُتبت تسبق مدينةَ المسح: «الكوثر الخالدية» خالديّةٌ عند
+    // الكتاب وإن وضعها المسحُ في حصيبة الشرقية.
+    city: cityInText(raw) ?? c ?? null,
     stationId: near?.id ?? null,
     score: hit.score,
     product,
@@ -541,7 +558,22 @@ export function readManualLine(raw: string): ManualLine | null {
       extra.push(part);
     }
 
-    const name = [parts[0], ...extra].join(' ').trim();
+    // «الحق الرمادي | بنزين عادي»: المدينةُ ملتصقةٌ بالاسم في الجزء الأوّل ولم
+    // تُقرأ من جزءٍ آخر — تُنزع كلماتُها وتُسجَّل، كما يفعل مسارُ «بلا فواصل».
+    let head = parts[0];
+    if (!city) {
+      const c = cityInText(head);
+      if (c) {
+        const drop = new Set(normalizeName(c).split(' ').filter(Boolean));
+        const kept = head.split(/\s+/).filter((w) => !drop.has(normalizeName(w)));
+        // ويبقى اسمٌ حقيقيّ: «محطة الخالدية» اسمُها اسمُ ناحيتها فلا يُفرَّغ.
+        if (normalizeName(kept.join(' ')).length >= 2 && kept.length < head.split(/\s+/).length) {
+          city = c;
+          head = kept.join(' ');
+        }
+      }
+    }
+    const name = [head, ...extra].join(' ').trim();
     return name ? { name, city, product } : null;
   }
 

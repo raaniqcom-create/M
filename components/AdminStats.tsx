@@ -1,5 +1,7 @@
 'use client';
 
+import { ROAD_STATIONS } from '@/lib/roadStations';
+import { isAnbarCity } from '@/lib/scheduleRoute';
 import { num } from '@/lib/num';
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -65,6 +67,8 @@ export function AdminStats() {
   const [listeners, setListeners] = useState<Record<string, number> | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [byCity, setByCity] = useState<CityRow[]>([]);
+  /** جدولُ التوزيع منذ اعتماده — من admin_stats (RLS تحجب الماضي عن المتصفّح). */
+  const [schedule, setSchedule] = useState<{ stations: number; days: number; rows: number; since: string | null } | null>(null);
   const [reach, setReach] = useState<{ people: number; allCities: number } | null>(null);
   /** بأيّ عنوانٍ يصل التذكيرُ كلَّ محطة — من station_reach، وفارغةٌ إن لم تُطبَّق بعد */
   const [reachOf, setReachOf] = useState<Map<string, { devices: number; telegram: number }>>(new Map());
@@ -140,12 +144,22 @@ export function AdminStats() {
         byCity?: CityRow[];
         cityPeople?: number;
         allCities?: number;
+        scheduleStations?: number;
+        scheduleDays?: number;
+        scheduleRows?: number;
+        scheduleSince?: string | null;
       };
       setFailed(null);
       setDevices(v?.devices ?? {});
       setListeners(v?.listeners ?? {});
       setByCity(v?.byCity ?? []);
       setReach({ people: v?.cityPeople ?? 0, allCities: v?.allCities ?? 0 });
+      setSchedule({
+        stations: v?.scheduleStations ?? 0,
+        days: v?.scheduleDays ?? 0,
+        rows: v?.scheduleRows ?? 0,
+        since: v?.scheduleSince ?? null,
+      });
     }
     setRows((s.data as Row[]) ?? []);
   }, []);
@@ -430,6 +444,23 @@ export function AdminStats() {
           </div>
         </section>
       )}
+
+      {/* «أريد إحصائيّةَ عدد المحطات في الجدول منذ اعتماده، وعددَ المحطات المسجّلة في
+          مساعد الطريق» — ١٦ أيلول. مساعدُ الطريق قائمةٌ ثابتة في الحزمة، والجدولُ من الدالّة. */}
+      <section className="card p-5">
+        <h2 className="text-sm font-bold">جدول التوزيع ومساعد الطريق</h2>
+        <p className="mt-1 text-xs text-slate-400">
+          {schedule?.since
+            ? `الجدول منذ اعتماده في ${new Date(`${schedule.since}T00:00:00`).toLocaleDateString('ar-IQ', { day: 'numeric', month: 'long' })}: ${num(schedule.rows)} سطراً منشوراً.`
+            : 'لم يُنشر جدولٌ بعد.'}
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Stat label="محطات وردت في الجدول" value={schedule?.stations ?? 0} tone="brand" />
+          <Stat label="أيام منشورة" value={schedule?.days ?? 0} />
+          <Stat label="محطات مساعد الطريق" value={ROAD_STATIONS.length} tone="brand" />
+          <Stat label="منها داخل الأنبار" value={ROAD_STATIONS.filter((r) => isAnbarCity(r.c)).length} />
+        </div>
+      </section>
 
       <section className="card p-5">
         <h2 className="text-sm font-bold">المحطات</h2>

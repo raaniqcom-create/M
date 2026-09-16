@@ -1,5 +1,6 @@
 'use client';
 
+import { wazeUrl } from '@/lib/scheduleRoute';
 import { useEffect, useRef, useState } from 'react';
 import { MapPinIcon } from './icons';
 
@@ -13,7 +14,7 @@ type App = 'waze' | 'google';
 const LINKS: Record<App, { label: string; url: (lat: number, lng: number) => string }> = {
   waze: {
     label: 'Waze',
-    url: (lat, lng) => `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`,
+    url: wazeUrl,
   },
   google: {
     label: 'خرائط Google',

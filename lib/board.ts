@@ -115,6 +115,9 @@ export interface BoardRow {
   stationId: string | null;
   /** من الجدول المنشور، أم من لوحة المحطة نفسِها. */
   source: 'channel' | 'station';
+  /** إحداثيّاتُ محطة المنصّة — لرابط «الطريق لها»؛ صفُّ القناة يأخذها من مساعد الطريق. */
+  lat?: number | null;
+  lng?: number | null;
   /** `expected` وُعد به · `arrived` معروضٌ الآن · `out` نفد بعد أن وصل. */
   state: 'expected' | 'arrived' | 'out';
   /** الصباح/العصر/المساء — من لوحة المحطة وحدها. */
@@ -203,6 +206,8 @@ export function buildBoard(
         key: `s:${st.id}:${p.product}`,
         name: st.name,
         city: st.city,
+        lat: st.lat,
+        lng: st.lng,
         product: p.product,
         stationId: st.id,
         source: 'station',
@@ -256,6 +261,8 @@ export function buildBoard(
         key: `s:${st.id}:${live.product}`,
         name: st.name,
         city: st.city,
+        lat: st.lat,
+        lng: st.lng,
         product: live.product,
         stationId: st.id,
         source: 'station',
