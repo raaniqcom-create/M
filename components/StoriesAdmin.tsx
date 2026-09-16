@@ -34,7 +34,8 @@ export function StoriesAdmin() {
   const load = useCallback(async () => {
     const { data } = await supabase
       .from('platform_stories')
-      .select('id, title, lines, image_url, href, label, published_at, active')
+      .select('id, title, lines, image_url, href, label, published_at, active, pinned')
+      .order('pinned', { ascending: false })
       .order('published_at', { ascending: false });
     setRows((data ?? []) as Row[]);
   }, []);
@@ -83,6 +84,13 @@ export function StoriesAdmin() {
 
   async function stop(r: Row) {
     await supabase.from('platform_stories').update({ active: false }).eq('id', r.id);
+    void load();
+  }
+
+  /** مثبَّتةٌ واحدة أوّلَ الشريط: تثبيتُ هذه يفكّ غيرَها. */
+  async function pin(r: Row, on: boolean) {
+    if (on) await supabase.from('platform_stories').update({ pinned: false }).neq('id', r.id);
+    await supabase.from('platform_stories').update({ pinned: on }).eq('id', r.id);
     void load();
   }
 
@@ -258,6 +266,13 @@ export function StoriesAdmin() {
                     className="btn-ghost px-3 py-1 text-xs"
                   >
                     {r.active ? 'أوقف' : 'أعد النشر'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => pin(r, !r.pinned)}
+                    className={`px-3 py-1 text-xs font-bold ${r.pinned ? 'rounded-xl bg-brand text-white' : 'btn-ghost'}`}
+                  >
+                    {r.pinned ? 'مثبَّتة — فكّ' : 'ثبّت أوّلاً'}
                   </button>
                 </div>
               </article>

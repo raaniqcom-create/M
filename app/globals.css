@@ -515,3 +515,17 @@
   from { width: 0%; }
   to { width: 100%; }
 }
+
+/* سطرُ حالة المنصّة يدخل بعد الذي قبله — StoryViewer */
+@keyframes story-line-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.story-line {
+  opacity: 0;
+  animation: story-line-in 600ms ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .story-line { opacity: 1; animation: none; }
+}
+

@@ -23,6 +23,16 @@ async function recordView(id: string, at: string, fresh: boolean): Promise<numbe
 }
 
 const STEP_MS = 6000;
+/** كلُّ سطرٍ يظهر بعد الذي قبله بهذا القدر — ليُقرأ بالترتيب. */
+const LINE_MS = 1500;
+
+/** مدّةُ القصّة: ستُّ ثوانٍ للصورة، وللنصّ ما يكفي لقراءته سطراً سطراً
+ *  («نصائح لنُنهي الأزمة: أطِل وقتَها لإتمام قراءتها» — ١٦ أيلول). */
+function storyMs(s: Story): number {
+  if (!s.news) return STEP_MS;
+  const chars = s.news.lines.reduce((n, l) => n + l.length, 0);
+  return Math.min(45_000, Math.max(STEP_MS, s.news.lines.length * LINE_MS + 3000 + chars * 45));
+}
 
 /** عارضُ القصص — الصورةُ عاريةً على أسود، كإنستغرام.
  *
@@ -95,9 +105,9 @@ export function StoryViewer({
   // العدّاد: ستُّ ثوانٍ لكلّ قصّة ما لم يُوقَف بلمسة.
   useEffect(() => {
     if (paused || !drawn) return;
-    const t = setTimeout(next, STEP_MS);
+    const t = setTimeout(next, storyMs(story));
     return () => clearTimeout(t);
-  }, [i, paused, drawn, next]);
+  }, [i, paused, drawn, next, story]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -163,7 +173,14 @@ export function StoryViewer({
             <h2 className="mt-3 text-[22px] font-extrabold leading-tight">{story.news.title}</h2>
             <ul className="mt-4 space-y-2.5 text-[13px] leading-relaxed text-white/90">
               {story.news.lines.map((l, k) => (
-                <li key={k}>{l}</li>
+                // تسلسلٌ انتقاليّ: كلُّ سطرٍ يدخل بعد الذي قبله، فيُقرأ بالترتيب.
+                <li
+                  key={`${story.id}-${k}`}
+                  className="story-line"
+                  style={{ animationDelay: `${k * LINE_MS}ms`, animationPlayState: paused ? 'paused' : 'running' }}
+                >
+                  {l}
+                </li>
               ))}
             </ul>
             </div>
@@ -202,7 +219,7 @@ export function StoryViewer({
                 k === i
                   ? {
                       animationName: drawn ? 'story-fill' : undefined,
-                      animationDuration: `${STEP_MS}ms`,
+                      animationDuration: `${storyMs(story)}ms`,
                       animationTimingFunction: 'linear',
                       animationFillMode: 'forwards',
                       animationPlayState: paused ? 'paused' : 'running',

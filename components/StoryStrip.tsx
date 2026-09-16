@@ -35,7 +35,8 @@ export function StoryStrip({
     let alive = true;
     supabase
       .from('platform_stories')
-      .select('id, title, lines, image_url, href, label, published_at')
+      .select('id, title, lines, image_url, href, label, published_at, pinned')
+      .order('pinned', { ascending: false })
       .order('published_at', { ascending: false })
       .limit(5)
       .then(({ data }) => alive && data && setPlatform(data as PlatformStoryRow[]));

@@ -26,6 +26,8 @@ export interface Story {
    *  حمراء («أضفها إلى الحالات — غير مسجّلة وتظهر بالأحمر»). */
   kind?: 'station' | 'platform' | 'announced' | 'tomorrow';
   news?: { title: string; lines: string[]; image_url: string | null; href: string | null; label: string | null };
+  /** مثبَّتةٌ أوّلَ الشريط مهما جدّ بعدها. */
+  pinned?: boolean;
 }
 
 /** تنبيهُ «التوزيع غداً لا اليوم» كما تقرؤه الحالات (announcements.kind = tomorrow). */
@@ -49,6 +51,7 @@ export interface PlatformStoryRow {
   href: string | null;
   label: string | null;
   published_at: string;
+  pinned?: boolean;
 }
 
 /** اسمُ حلقة المنصّة من عنوانها: كلمةٌ لاتينيّة أولى تُؤخذ كما هي («CarPlay»)،
@@ -81,6 +84,7 @@ export function platformStory(r: PlatformStoryRow): Story {
     at: r.published_at,
     kind: 'platform',
     news: { title: r.title, lines: r.lines, image_url: r.image_url, href: r.href, label: r.label },
+    pinned: !!r.pinned,
   };
 }
 
@@ -177,7 +181,8 @@ export function storiesFor(
   // ما وراء الحافّة — «أريد الحالاتِ الأحدثَ تظهر يميناً وهكذا» (١٤ أيلول).
   // واللونُ يقول ما رُئي؛ الموضعُ يقول ما جدّ.
   const all = [...platform.map(platformStory), ...out];
-  all.sort((a, b) => b.at.localeCompare(a.at));
+  // المثبَّتُ أوّلاً (يميناً)، ثمّ بالزمن وحدَه.
+  all.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.at.localeCompare(a.at));
   return all;
 }
 
