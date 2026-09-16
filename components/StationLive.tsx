@@ -125,7 +125,12 @@ export function StationLive({
 
           return (
             <li key={product} className="flex items-center justify-between gap-2 py-2.5 text-sm">
-              <span>{PRODUCT_LABELS[product]}</span>
+              <span className="flex flex-col leading-tight">
+                {PRODUCT_LABELS[product]}
+                {/* عمرُ الإعلان تحت الاسم على كلّ منتجٍ متوفّر — لا سطرٌ واحدٌ
+                    للمحطة كلّها: المالك يضغط منتجاً واحداً حين يصله. */}
+                {inStock && <span className="text-[10.5px] text-slate-400">أُعلن {agoLabel(row?.updated_at)}</span>}
+              </span>
               <span
                 className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                   inStock

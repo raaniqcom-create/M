@@ -169,14 +169,19 @@ export function StationCard({
             return (
               <span
                 key={product}
-                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                className={`px-2 py-0.5 text-[10px] font-bold ${
                   inStock
-                    ? 'bg-brand-100 text-brand-900'
+                    ? 'inline-flex flex-col items-center rounded-lg bg-brand-100 leading-tight text-brand-900'
                     : stale || isExpectedLate(row.expected_at)
-                      ? 'bg-slate-100 text-slate-500'
-                      : 'bg-amber-50 text-amber-700'
+                      ? 'rounded-full bg-slate-100 text-slate-500'
+                      : 'rounded-full bg-amber-50 text-amber-700'
                 }`}
               >
+                {/* عمرُ الإعلان فوق كلّ شريحةٍ خضراء — «قبل ٥ دقائق» يقول
+                    للسائق إن كان الخبرُ خبرَ هذه الساعة أم خبرَ الصباح. */}
+                {inStock && (
+                  <span className="text-[8.5px] font-normal text-brand-700">{agoLabel(row.updated_at)}</span>
+                )}
                 {PRODUCT_LABELS[product]}
                 {/* موعدُ النفاد يُقرأ مع الشريحة الخضراء وحدَها: بعد مروره
                     يسقط المنتج من isOffered فلا شريحةَ أصلاً. */}
