@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { CITY_NAMES } from '@/lib/cities';
 import { isOpenNow, openingLine } from '@/lib/hours';
-import { ratingLine, type WashPublic } from '@/lib/wash';
+import { distanceKm } from '@/lib/stations';
+import { quietPosition } from '@/lib/vote';
+import { iqd, rankWashes, ratingLine, type WashPublic } from '@/lib/wash';
 import { RouteButton } from './RouteButton';
-import { CarIcon, FuelIcon, SpinnerIcon } from './icons';
+import { CarIcon, FuelIcon, SearchIcon, SpinnerIcon } from './icons';
 
 const TONE = {
   open: 'bg-brand-50 text-brand-700',
@@ -21,6 +23,12 @@ export function WashDirectory() {
   const [city, setCity] = useState('');
   const [openOnly, setOpenOnly] = useState(false);
   const [offerOnly, setOfferOnly] = useState(false);
+  const [q, setQ] = useState('');
+  /** موقعُ القارئ إن كان الإذنُ ممنوحاً أصلاً — لا سؤالَ من تلقاء الصفحة. */
+  const [here, setHere] = useState<{ lat: number; lng: number } | null>(null);
+  useEffect(() => {
+    void quietPosition().then(setHere);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -40,8 +48,12 @@ export function WashDirectory() {
 
   const all = rows ?? [];
   const cities = CITY_NAMES.filter((c) => all.some((w) => w.city === c));
-  const shown = all.filter(
-    (w) => (!city || w.city === city) && (!openOnly || isOpenNow(w)) && (!offerOnly || w.has_offer)
+  const needle = q.trim();
+  const shown = rankWashes(
+    all
+      .filter((w) => (!city || w.city === city) && (!openOnly || isOpenNow(w)) && (!offerOnly || w.has_offer))
+      .filter((w) => !needle || w.name.includes(needle) || w.address.includes(needle))
+      .map((w) => ({ ...w, distanceKm: here ? distanceKm(here, w) : null }))
   );
 
   const chip = (on: boolean) =>
@@ -59,7 +71,11 @@ export function WashDirectory() {
       <h1 className="mt-6 text-center text-xl font-extrabold text-slate-800">غسل السيارات</h1>
       <p className="mt-1 text-center text-xs text-slate-500">مغاسل الأنبار — احجز موعدك مجّاناً داخل التطبيق</p>
 
-      <div className="no-scrollbar mt-5 flex items-center gap-2 overflow-x-auto">
+      <label className="relative mt-5 block">
+        <SearchIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} className="field pr-9" placeholder="ابحث باسم المغسلة أو المنطقة" aria-label="بحث" />
+      </label>
+      <div className="no-scrollbar mt-3 flex items-center gap-2 overflow-x-auto">
         <select
           value={city}
           onChange={(e) => setCity(e.target.value)}
@@ -105,9 +121,9 @@ export function WashDirectory() {
             return (
               <li key={w.id}>
                 <article className="card overflow-hidden">
-                  {w.image_url ? (
+                  {w.thumb_url || w.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={w.image_url} alt="" loading="lazy" className="aspect-video w-full object-cover" />
+                    <img src={w.thumb_url ?? w.image_url ?? ''} alt="" loading="lazy" className="aspect-video w-full object-cover" />
                   ) : (
                     <div className="flex aspect-video items-center justify-center bg-gradient-to-br from-brand-50 to-brand-100 text-brand-400">
                       <CarIcon className="h-12 w-12" />
@@ -116,6 +132,9 @@ export function WashDirectory() {
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-2">
                       <h2 className="text-base font-extrabold leading-snug text-slate-800">{w.name}</h2>
+                      {w.featured && (
+                        <span className="shrink-0 rounded-full bg-brand text-white px-2 py-0.5 text-[10.5px] font-bold">مميّز</span>
+                      )}
                       {w.paused && (
                         <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-600">
                           متوقّفة عن الحجز
@@ -130,9 +149,11 @@ export function WashDirectory() {
                     <p className="mt-0.5 text-[12px] text-slate-500">
                       {w.city} · {w.address}
                     </p>
-                    {ratingLine(w.rating_avg, w.rating_n) && (
-                      <p className="mt-0.5 text-[11.5px] font-bold text-amber-600">{ratingLine(w.rating_avg, w.rating_n)}</p>
-                    )}
+                    <p className="mt-0.5 flex flex-wrap gap-x-2 text-[11.5px]">
+                      {ratingLine(w.rating_avg, w.rating_n) && <span className="font-bold text-amber-600">{ratingLine(w.rating_avg, w.rating_n)}</span>}
+                      {w.distanceKm != null && <span className="text-slate-500">يبعد عنك {w.distanceKm < 1 ? 'أقلّ من كيلومتر' : `${Math.round(w.distanceKm)} كم`}</span>}
+                      {w.from_price != null && <span className="text-slate-500">يبدأ من {iqd(w.from_price)}</span>}
+                    </p>
                     <p className="mt-2 flex items-center gap-1.5 text-[11.5px]">
                       <span className={`rounded-full px-2 py-0.5 font-bold ${TONE[o.tone]}`}>{o.badge}</span>
                       <span className="text-slate-500">{o.detail}</span>

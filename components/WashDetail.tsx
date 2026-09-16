@@ -29,9 +29,10 @@ import {
   type WashService,
 } from '@/lib/wash';
 import { pokeWashTick, useWashConfig } from '@/lib/washConfig';
+import { seenWash } from '@/lib/washViews';
 import { Sheet } from './Sheet';
 import { RouteButton } from './RouteButton';
-import { CarIcon, CalendarIcon, PhoneIcon, SpinnerIcon, StarIcon } from './icons';
+import { CarIcon, CalendarIcon, PhoneIcon, ShareIcon, SpinnerIcon, StarIcon } from './icons';
 
 /** ما يكتبه المواطن مرّةً ويُعاد ملؤه: `wash-me`. */
 const ME = 'wash-me';
@@ -87,6 +88,7 @@ export function WashDetail() {
   }
 
   useEffect(() => {
+    if (id) seenWash(id, 'view');
     const m = readMe();
     setMe(m);
     setStampsPhone(m.phone);
@@ -278,14 +280,35 @@ export function WashDetail() {
             </ul>
           )}
 
-          <div className="mt-4 flex gap-2">
+          {wash.photos && wash.photos.length > 0 && (
+            <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto">
+              {wash.photos.map((u) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={u} src={u} alt="" loading="lazy" className="h-24 w-36 shrink-0 rounded-lg object-cover" />
+              ))}
+            </div>
+          )}
+
+          <div className="mt-4 flex gap-2" onClickCapture={(e) => { if ((e.target as HTMLElement).closest('a,button')) seenWash(wash.id, 'route'); }}>
             <RouteButton lat={wash.lat} lng={wash.lng} />
             {wash.phone && (
-              <a href={`tel:${wash.phone}`} className="btn-ghost w-full" dir="ltr">
+              <a href={`tel:${wash.phone}`} onClick={() => seenWash(wash.id, 'call')} className="btn-ghost w-full" dir="ltr">
                 <PhoneIcon className="h-4 w-4" />
                 {displayPhone(wash.phone)}
               </a>
             )}
+            <button
+              type="button"
+              aria-label="مشاركة"
+              onClick={() => {
+                const url = location.href;
+                if (navigator.share) void navigator.share({ title: wash.name, url }).catch(() => undefined);
+                else void navigator.clipboard?.writeText(url);
+              }}
+              className="btn-ghost shrink-0 px-3"
+            >
+              <ShareIcon className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </article>

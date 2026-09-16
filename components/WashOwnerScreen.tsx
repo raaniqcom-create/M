@@ -17,6 +17,7 @@ import {
   iqd,
   limitLabel,
   planOf,
+  profileCompletion,
   slotLabel,
   type BookingStatus,
   type CarWash,
@@ -156,6 +157,7 @@ export function WashOwnerScreen() {
   /** ‎?id= — الإدارةُ تدخل لوحةَ أيّ مغسلة (التجريبيّةُ أوّلاً) لمتابعة الوضع بصفتها. */
   const viewId = useSearchParams().get('id');
   const [asAdmin, setAsAdmin] = useState(false);
+  const [views, setViews] = useState<{ views: number; calls: number; routes: number } | null>(null);
   const [wash, setWash] = useState<CarWash | null | undefined>(undefined);
   const [upcoming, setUpcoming] = useState<WashBooking[]>([]);
   const [past, setPast] = useState<WashBooking[]>([]);
@@ -211,7 +213,11 @@ export function WashOwnerScreen() {
       }
       if (!alive) return;
       setWash(w);
-      if (w) await Promise.all([loadBookings(w.id), loadLists(w.id)]);
+      if (w) {
+        await Promise.all([loadBookings(w.id), loadLists(w.id)]);
+        const { data: v } = await supabase.rpc('wash_views_for', { p_wash: w.id });
+        if (alive && v) setViews(v as { views: number; calls: number; routes: number });
+      }
     })();
     return () => {
       alive = false;
@@ -342,6 +348,25 @@ export function WashOwnerScreen() {
       </header>
 
       {!asAdmin && <WashDeviceLink linked={!!wash.owner_device} />}
+      {(() => {
+        const pc = profileCompletion(wash, services.length);
+        return pc.pct < 100 ? (
+          <div className="mt-3 rounded-xl border border-slate-200 p-3">
+            <div className="flex items-center justify-between text-[12px]">
+              <span className="font-bold text-slate-700">حسابك مكتمل {pc.pct}٪</span>
+              <span className="text-slate-400">{pc.missing[0]}</span>
+            </div>
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-brand" style={{ width: `${pc.pct}%` }} />
+            </div>
+          </div>
+        ) : null;
+      })()}
+      {views && (
+        <p className="mt-2 text-[11px] text-slate-400">
+          مشاهداتُ صفحتك {views.views} · اتصال {views.calls} · طريق {views.routes}
+        </p>
+      )}
       {asAdmin && (
         <p className="mt-3 rounded-xl bg-slate-800 px-3 py-2 text-[12px] font-bold text-white">
           🛡 تعرض هذه اللوحةَ بصفة الإدارة — كلُّ ما تفعله هنا يقع على مغسلة «{wash.name}».{' '}
@@ -500,7 +525,13 @@ export function WashOwnerScreen() {
         )}
       </Sheet>
       <Sheet open={sheet === 'photo'} onClose={() => setSheet(null)} title="الصورة" hint="تظهر في القائمة وصفحة مغسلتك.">
-        <WashPhotoUpload washId={wash.id} imageUrl={wash.image_url} onChange={(url) => setWash({ ...wash, image_url: url })} />
+        <WashPhotoUpload
+          washId={wash.id}
+          imageUrl={wash.image_url}
+          photos={wash.photos ?? []}
+          galleryLimit={Math.max(0, Number(planOf(cfg, wash.plan)?.features.gallery_limit ?? 1))}
+          onChange={(patch) => setWash({ ...wash, ...patch })}
+        />
       </Sheet>
     </main>
   );

@@ -1,7 +1,7 @@
 // «غسيل»: شبكةُ المواعيد، أيّامُ الحجز، بطاقةُ الغسلات — دوالُّ lib/wash.ts الصرفة.
 //   node scripts/test-wash.mjs
 import assert from 'node:assert/strict';
-import { bookingDays, bgdDate, canCancel, dayLabel, daysLeft, firstMonthPrice, limitLabel, loyaltyLine, nextStatuses, offerApplies, offerPrice, planName, ratingLine, servicePrice, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
+import { bookingDays, bgdDate, canCancel, dayLabel, daysLeft, firstMonthPrice, limitLabel, loyaltyLine, nextStatuses, offerApplies, offerPrice, planName, profileCompletion, rankWashes, ratingLine, servicePrice, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
 
 let n = 0;
 const ok = (label, fn) => { fn(); n++; console.log(`  ✓ ${label}`); };
@@ -107,5 +107,22 @@ ok('سعرُ العرض: سعرٌ خاصّ أو نسبةٌ أو لا شيء، و
   assert.equal(offerApplies(o, 's1', '2026-09-21'), false, 'بعد النهاية');
   assert.equal(offerApplies({ ...o, active: false }, 's1', '2026-09-18'), false);
   assert.equal(offerApplies({ ...o, service_id: null, starts_at: null, ends_at: null }, 'any', '2026-01-01'), true);
+});
+ok('ترتيبُ الدليل: مميّزةٌ ثمّ الأقربُ ثمّ الأعلى تقييماً', () => {
+  const r = rankWashes([
+    { name: 'ب', featured: false, rating_avg: 5, rating_n: 3, distanceKm: 2 },
+    { name: 'أ', featured: false, rating_avg: 4, rating_n: 10, distanceKm: 9 },
+    { name: 'ج', featured: true, rating_avg: null, rating_n: 0, distanceKm: 20 },
+  ]);
+  assert.deepEqual(r.map((x) => x.name), ['ج', 'ب', 'أ']);
+  const noLoc = rankWashes([{ name: 'ب', rating_avg: 5, rating_n: 3 }, { name: 'أ', rating_avg: 4, rating_n: 10 }]);
+  assert.deepEqual(noLoc.map((x) => x.name), ['أ', 'ب'], 'بلا موقعٍ يحكم التقييمُ مرجَّحاً بعدده');
+});
+ok('اكتمالُ الحساب يعدّ ويقترح', () => {
+  const pc = profileCompletion({ image_url: null, address: 'x', owner_name: null, owner_device: null, photos: [], loyalty_target: 5 }, 0);
+  assert.equal(pc.pct, 0);
+  assert.equal(pc.missing[0], 'أضف صورة الغلاف');
+  const full = profileCompletion({ image_url: 'u', address: 'x', owner_name: 'أبو أحمد', owner_device: 't', photos: ['p'], loyalty_target: 5 }, 2);
+  assert.equal(full.pct, 100);
 });
 console.log(`\n${n} فحصاً مرّت.`);

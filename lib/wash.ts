@@ -109,6 +109,38 @@ export interface WashPublic {
   paused?: boolean;
   rating_avg?: number | null;
   rating_n?: number;
+  thumb_url?: string | null;
+  photos?: string[];
+  from_price?: number | null;
+  featured?: boolean;
+}
+
+/** ترتيبُ الدليل: المميّزةُ أوّلاً (بشارة)، ثمّ الأقربُ إن عُرف الموقع، ثمّ الأعلى تقييماً، ثمّ الاسم. */
+export function rankWashes<T extends { featured?: boolean; rating_avg?: number | null; rating_n?: number; name: string; distanceKm?: number | null }>(rows: T[]): T[] {
+  return [...rows].sort(
+    (a, b) =>
+      Number(!!b.featured) - Number(!!a.featured) ||
+      (a.distanceKm != null && b.distanceKm != null ? a.distanceKm - b.distanceKm : 0) ||
+      (Number(b.rating_avg ?? 0) * Math.min(b.rating_n ?? 0, 10)) - (Number(a.rating_avg ?? 0) * Math.min(a.rating_n ?? 0, 10)) ||
+      a.name.localeCompare(b.name, 'ar')
+  );
+}
+
+/** «حسابك مكتمل ٨٠٪» وما ينقص — دافعٌ لا حكم (§85). */
+export function profileCompletion(
+  w: { image_url: string | null; address: string; owner_name?: string | null; owner_device?: string | null; photos?: string[]; loyalty_target: number },
+  services: number
+): { pct: number; missing: string[] } {
+  const checks: [boolean, string][] = [
+    [!!w.image_url, 'أضف صورة الغلاف'],
+    [services > 0, 'أضف خدماتك وأسعارها'],
+    [services > 1, 'أضف خدمةً ثانية'],
+    [!!w.owner_device, 'فعّل الإشعارات لتصلك الحجوزات'],
+    [!!w.owner_name, 'اكتب اسم صاحب المغسلة'],
+    [(w.photos?.length ?? 0) > 0, 'أضف صوراً إلى المعرض'],
+  ];
+  const done = checks.filter(([ok]) => ok).length;
+  return { pct: Math.round((done / checks.length) * 100), missing: checks.filter(([ok]) => !ok).map(([, m]) => m) };
 }
 
 export interface WashReview {
@@ -164,6 +196,8 @@ export interface CarWash extends Omit<WashPublic, 'phone' | 'has_offer'> {
   owner_device?: string | null;
   owner_platform?: 'ios' | 'android' | 'web' | null;
   bookings_paused_until?: string | null;
+  thumb_url?: string | null;
+  photos?: string[];
 }
 
 export interface WashService {
