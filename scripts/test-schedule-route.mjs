@@ -14,15 +14,35 @@ ok('«محطة الحق» من مساعد الطريق', () => {
   const c = roadCoords('محطة الحق', 'الرمادي');
   assert.ok(c && Math.abs(c.lat - 33.42113) < 1e-4, JSON.stringify(c));
 });
-ok('«أنوار حديثة» لا تذهب إلى بغداد', () => {
-  assert.equal(roadCoords('أنوار حديثة', 'حديثة'), null);
+ok('«أنوار حديثة» إلى حديثة (أملاها صاحبُ المنصّة) لا إلى «أنوار المدينة» في بغداد', () => {
+  const c = roadCoords('أنوار حديثة', 'حديثة');
+  assert.ok(c && Math.abs(c.lat - 34.12477) < 1e-4, JSON.stringify(c));
+});
+ok('«أنوار» وحدَها لا تذهب إلى بغداد', () => {
+  const c = roadCoords('أنوار', null);
+  assert.ok(!c || c.lat > 33.9, JSON.stringify(c));
+});
+ok('«مركز توزيع الفلوجة الفلوجة» يذهب إلى مركز الفلوجة لا الرمادي', () => {
+  const m = matchLine('مركز توزيع الفلوجة الفلوجة', []);
+  assert.equal(m.name, 'مركز توزيع الفلوجة');
+  const c = roadCoords('مركز توزيع الفلوجة', 'الفلوجة');
+  assert.ok(c && Math.abs(c.lng - 43.76111) < 1e-4, JSON.stringify(c));
+});
+ok('«الزاوية الرمادي» تجد «الزوية»', () => {
+  const m = matchLine('الزاوية الرمادي', []);
+  assert.ok(m.name.includes('الزاوية'), m.name);
+  assert.ok(m.score >= 55);
+});
+ok('«جبل النور هيت» تُربط بالمسجّلة في المحمدي', () => {
+  const m = matchLine('جبل النور هيت', [{ id: 'J', name: 'محطة جبل النور المشيدة', lat: 33.5256, lng: 42.8964, city: 'المحمدي' }]);
+  assert.equal(m.stationId, 'J');
 });
 ok('«الحق الرمادي» (صفٌّ قديم بكلمة المدينة) يجد طريقه', () => {
   const c = roadCoords('الحق الرمادي', 'الرمادي');
   assert.ok(c && Math.abs(c.lat - 33.42113) < 1e-4);
 });
 ok('اسمٌ مجهول → لا رابط', () => {
-  assert.equal(roadCoords('مركز توزيع الرمادي', 'الرمادي'), null);
+  assert.equal(roadCoords('محطة لا وجود لها أبداً', 'الرمادي'), null);
 });
 ok('ويز بالإحداثيّات', () => {
   assert.equal(wazeUrl(33.4, 43.3), 'https://waze.com/ul?ll=33.4,43.3&navigate=yes');
@@ -46,12 +66,13 @@ for (const [raw, needle, city] of [
     assert.equal(m.city, city);
   });
 }
-ok('«أنوار حديثة حديثة» تبقى كما وصلت', () => {
+ok('«أنوار حديثة حديثة» → محطة وقود أنوار حديثة (لا «أنوار المدينة» في بغداد)', () => {
   const m = matchLine('أنوار حديثة حديثة', []);
-  assert.ok(m.score < 55, `طابقت «${m.name}» بـ${m.score}`);
+  assert.equal(m.name, 'محطة وقود أنوار حديثة');
+  assert.equal(m.city, 'حديثة');
 });
-ok('«مركز توزيع الرمادي الرمادي» تبقى كما وصلت', () => {
-  assert.ok(matchLine('مركز توزيع الرمادي الرمادي', []).score < 55);
+ok('«مركز توزيع الرمادي الرمادي» تُعرف الآن', () => {
+  assert.equal(matchLine('مركز توزيع الرمادي الرمادي', []).name, 'مركز توزيع الرمادي');
 });
 ok('«الحق الرمادي | بنزين عادي» بالفواصل: المدينةُ تُنزع من الاسم', () => {
   const l = readManualLine('الحق الرمادي | بنزين عادي');

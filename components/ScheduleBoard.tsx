@@ -64,7 +64,7 @@ function Row({ r }: { r: BoardRow }) {
           {r.name}
         </a>
         {address && (
-          <span className={`text-[11px] ${dim ? 'text-slate-300' : 'text-slate-500'}`}> ({address})</span>
+          <span className={`block text-[11px] leading-snug ${dim ? 'text-slate-300' : 'text-slate-500'}`}>({address})</span>
         )}
         {r.state === 'expected' && whenLabel(r.period, r.time) && (
           <span className="mr-1.5 text-[10.5px] text-amber-700">

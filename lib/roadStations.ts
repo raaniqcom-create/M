@@ -18,6 +18,10 @@ export interface RoadStation {
   c: string;
 }
 
+// والإضافاتُ اليدويّة (roadStationsExtra.ts) تُدمج في آخر القائمة: المولِّدُ
+// يكتب السطرين نفسَيهما، فإعادةُ التوليد لا تُسقطها.
+import { EXTRA_STATIONS } from './roadStationsExtra.ts';
+
 export const ROAD_STATIONS: readonly RoadStation[] = [
   { n: "جوهرة العدنان", la: 33.31324, lo: 44.13996, c: "أبو غريب" },
   { n: "محطة تاج الهدى", la: 33.30038, lo: 44.15396, c: "أبو غريب" },
@@ -256,4 +260,5 @@ export const ROAD_STATIONS: readonly RoadStation[] = [
   { n: "محطة وقود قلعة هيت المشيدة", la: 33.63265, lo: 42.83748, c: "هيت" },
   { n: "محطة وقود هيت (للنفط فقط)", la: 33.64409, lo: 42.82039, c: "هيت" },
   { n: "محطة وقود هيت الجديدة", la: 33.61901, lo: 42.85166, c: "هيت" },
+  ...EXTRA_STATIONS,
 ];

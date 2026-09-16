@@ -1,5 +1,6 @@
 import { normalizeName, searchKnownFuel } from './nearbyFuel.ts';
 import { CITY_WORDS, officialFor } from './officialStations.ts';
+import { EXTRA_STATIONS } from './roadStationsExtra.ts';
 import { CITY_NAMES } from './cities.ts';
 
 /** «الطريق لها» لصفّ الجدول — إحداثيّاتٌ من النظام لا تخمين.
@@ -42,7 +43,11 @@ export function roadCoords(name: string, _city: string | null): { lat: number; l
 export function shortAddress(row: { name: string; address?: string | null }): string | null {
   const own = (row.address ?? '').trim();
   if (own) return own;
-  return officialFor(row.name)?.address ?? null;
+  const official = officialFor(row.name)?.address;
+  if (official) return official;
+  // ما أملاه صاحبُ المنصّة بعنوانٍ مختصر («مفرق 35»).
+  const key = normalizeName(row.name);
+  return EXTRA_STATIONS.find((e) => e.a && normalizeName(e.n) === key)?.a ?? null;
 }
 
 /** صفحةُ التفاصيل داخل المنصّة: صفحةُ المحطة المسجّلة، أو صفحةُ «مكان» لغيرها. */

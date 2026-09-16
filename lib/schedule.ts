@@ -274,6 +274,10 @@ const ALIAS_PAIRS: [string, string][] = [
   // وحدَها. قالها صاحبُ المنصّة ٢٠٢٦-٠٩-١١ عن جدول الغد.
   ['الجهدي المشيدة', 'محطة وقود المحمدي'],
   ['الجهدي', 'محطة وقود المحمدي'],
+  // «جبل النور هيت»: مسجّلةٌ باسم «محطة جبل النور المشيدة» في المحمدي (ناحيةٌ من
+  // هيت)، فحارسُ المدينة كان يردّها. قالها صاحبُ المنصّة: «موجودة في المنصّة».
+  ['جبل النور هيت', 'محطة جبل النور المشيدة'],
+  ['جبل النور', 'محطة جبل النور المشيدة'],
 ];
 
 // بالمفتاح المطبَّع: «البريشة» و«البريشه» و«البريشـة» مفتاحٌ واحد.
@@ -383,10 +387,12 @@ function matchLoose(
   // و«أنوار حديثة» بعد نزع المدينة تطابق «أنوار المدينة» في بغداد بـ٧٥ —
   // وجدولُ التوزيع أنباريّ.
   const bare = normalizeName(text).split(' ').filter((w) => w && !CITY_WORDS.has(w)).join(' ');
+  // وعند تساوي الدرجة تُفضَّل محطةُ مدينةِ السطر: «مركز توزيع» في الرمادي والفلوجة.
+  const lineCityHint = cityInText(raw);
   const candidates = [text, ...(bare && bare !== normalizeName(text) ? [bare] : [])]
-    .flatMap((t) => searchKnownFuel(t, 1))
+    .flatMap((t) => searchKnownFuel(t, 3))
     .filter((h) => isAnbarCity(h.station.c))
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => b.score - a.score || Number(b.station.c === lineCityHint) - Number(a.station.c === lineCityHint));
   const top = candidates[0];
   // **دون الحدّ لا مرشَّح.**
   //
@@ -439,6 +445,8 @@ function matchLoose(
       // به هكذا (جدول ١٥ أيلول). يُربط فقط إن لم يبقَ في السطر سوى مدن.
       if (nw.length === 1 && CITY_WORDS.has(nw[0])) {
         for (const w of lineWords) if (w !== nw[0] && !CITY_WORDS.has(w)) return false;
+        // واسمُها اسمُ مدينةٍ: «المحمدي هيت» تسمّي المحطةَ وقضاءَها، لا مدينتين.
+        return lineWords.has(nw[0]);
       }
       if (!nw.every((w) => lineWords.has(w))) return false;
       return !(lineCity && s.city && lineCity !== s.city);
@@ -496,8 +504,13 @@ function matchLoose(
     raw,
     name: near?.name ?? fixDialect(n),
     // مدينةُ السطر إن كُتبت تسبق مدينةَ المسح: «الكوثر الخالدية» خالديّةٌ عند
-    // الكتاب وإن وضعها المسحُ في حصيبة الشرقية.
-    city: cityInText(raw) ?? c ?? null,
+    // الكتاب وإن وضعها المسحُ في حصيبة الشرقية. إلّا حين تكون «المدينةُ»
+    // جزءاً من اسم المحطة نفسِه: «البغدادية الكرمة» ليست في البغدادي.
+    city: (() => {
+      const lc = cityInText(raw);
+      if (lc && !normalizeName(n).includes(normalizeName(lc))) return lc;
+      return c ?? lc ?? null;
+    })(),
     stationId: near?.id ?? null,
     score: hit.score,
     product,

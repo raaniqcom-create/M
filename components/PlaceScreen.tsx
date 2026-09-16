@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { normalizeName } from '@/lib/nearbyFuel';
 import { officialFor } from '@/lib/officialStations';
-import { roadCoords, wazeUrl } from '@/lib/scheduleRoute';
+import { roadCoords, shortAddress, wazeUrl } from '@/lib/scheduleRoute';
 import { baghdadDate, loadSchedule, type ScheduleRow } from '@/lib/scheduleData';
 import { MapPinIcon, SpinnerIcon } from './icons';
 
@@ -45,7 +45,7 @@ export function PlaceScreen() {
   }
 
   const official = officialFor(name);
-  const address = official?.address ?? null;
+  const address = shortAddress({ name });
   const coords = roadCoords(name, city);
   const today = baghdadDate();
   const days = new Map<string, ScheduleRow[]>();

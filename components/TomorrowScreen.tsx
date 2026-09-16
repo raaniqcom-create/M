@@ -308,7 +308,8 @@ export function TomorrowScreen() {
                             }`}
                           >
                             {r.name}
-                            {address && <span className="text-[10.5px] font-normal text-white/70"> ({address})</span>}
+                            {/* العنوانُ في سطرٍ تحت الاسم: «محطة الحق» ثمّ «(شارع 60 بجانب جسر الطاش)». */}
+                            {address && <span className="block text-[10.5px] font-normal leading-snug text-white/70">({address})</span>}
                             {r.state === 'expected' && whenLabel(r.period, r.time) && (
                               <span className="mr-1.5 text-[10px] text-white/60">
                                 {' '}

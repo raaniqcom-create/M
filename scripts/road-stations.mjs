@@ -166,8 +166,13 @@ export interface RoadStation {
   c: string;
 }
 
+// والإضافاتُ اليدويّة (roadStationsExtra.ts) تُدمج في آخر القائمة: المولِّدُ
+// يكتب السطرين نفسَيهما، فإعادةُ التوليد لا تُسقطها.
+import { EXTRA_STATIONS } from './roadStationsExtra.ts';
+
 export const ROAD_STATIONS: readonly RoadStation[] = [
 ${body}
+  ...EXTRA_STATIONS,
 ];
 `,
   'utf8'
