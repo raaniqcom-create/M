@@ -283,6 +283,9 @@ const ALIAS_PAIRS: [string, string][] = [
 // بالمفتاح المطبَّع: «البريشة» و«البريشه» و«البريشـة» مفتاحٌ واحد.
 const ALIASES = new Map(ALIAS_PAIRS.map(([k, v]) => [normalizeName(k), v]));
 
+/** كلماتٌ لا تسمّي محطةً وحدَها بعد التطبيع (normalizeName يُسقط «محطة» و«المشيدة» أصلاً). */
+const GENERIC_WORDS = new Set(['الحكوميه', 'الاهليه', 'الرئيسيه']);
+
 /** الناحيةُ إن كانت مكتوبةً في السطر نفسِه.
  *
  *  **قراءةٌ لا تخمين.** القناةُ تكتب أحياناً «الخالدية قرب مركز الخالدية»
@@ -387,9 +390,18 @@ function matchLoose(
   // و«أنوار حديثة» بعد نزع المدينة تطابق «أنوار المدينة» في بغداد بـ٧٥ —
   // وجدولُ التوزيع أنباريّ.
   const bare = normalizeName(text).split(' ').filter((w) => w && !CITY_WORDS.has(w)).join(' ');
+  // **وما بقي بعد نزع المدينة يجب أن يسمّي شيئاً.** «الكرابلة الحكومية» تصير
+  // «الحكومية» وحدَها، فتطابق «البغدادي الحكومية» بالاحتواء (٧٨) — وهي في
+  // البغدادي لا الكرابلة. وقع في جدول ١٧ أيلول («س.ن.هيت الحكومية» أيضاً).
+  // وإن لم يبقَ حرفٌ يسمّي («س.ن.هيت الحكومية» = مدينةٌ وصفةٌ) فلا بحثَ أصلاً: يبقى
+  // كما وصل. أمّا المدينةُ وحدَها («الخالدية») فتُبحث كما كانت — لها محطةٌ باسمها.
+  const words = normalizeName(text).split(' ').filter(Boolean);
+  const named = words.some((w) => w.length > 1 && !CITY_WORDS.has(w) && !GENERIC_WORDS.has(w));
+  const genericOnly = !named && words.some((w) => GENERIC_WORDS.has(w));
+  const bareUseful = bare.split(' ').some((w) => w.length > 1 && !GENERIC_WORDS.has(w));
   // وعند تساوي الدرجة تُفضَّل محطةُ مدينةِ السطر: «مركز توزيع» في الرمادي والفلوجة.
   const lineCityHint = cityInText(raw);
-  const candidates = [text, ...(bare && bare !== normalizeName(text) ? [bare] : [])]
+  const candidates = (genericOnly ? [] : [text, ...(bare && bareUseful && bare !== normalizeName(text) ? [bare] : [])])
     .flatMap((t) => searchKnownFuel(t, 3))
     .filter((h) => isAnbarCity(h.station.c))
     .sort((a, b) => b.score - a.score || Number(b.station.c === lineCityHint) - Number(a.station.c === lineCityHint));
