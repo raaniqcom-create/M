@@ -15,6 +15,7 @@ import {
   dayLabel,
   iqd,
   loyaltyLine,
+  ratingLine,
   readMyBookings,
   rememberBooking,
   servicePrice,
@@ -22,6 +23,7 @@ import {
   type VehicleType,
   type WashOffer,
   type WashPublic,
+  type WashReview,
   type WashService,
 } from '@/lib/wash';
 import { pokeWashTick, useWashConfig } from '@/lib/washConfig';
@@ -74,6 +76,12 @@ export function WashDetail() {
   /** أقربُ موعدٍ حرٍّ اليوم — يُقرأ مرّةً عند فتح الصفحة. */
   const [nextSlot, setNextSlot] = useState<string | null | undefined>(undefined);
   const cfg = useWashConfig();
+  /** آخرُ التقييمات — تُجلب عند الضغط لا مع الصفحة. */
+  const [reviews, setReviews] = useState<WashReview[] | null>(null);
+  async function loadReviews() {
+    const { data } = await supabase.from('wash_reviews_public').select('id, wash_id, stars, comment, name, created_at').eq('wash_id', id).order('created_at', { ascending: false }).limit(5);
+    setReviews((data as WashReview[] | null) ?? []);
+  }
 
   useEffect(() => {
     const m = readMe();
@@ -223,6 +231,28 @@ export function WashDetail() {
             {wash.city} — {wash.address}
           </p>
           <p className="mt-2 text-[12.5px] text-slate-700">{hoursLabel(wash)}</p>
+          {ratingLine(wash.rating_avg, wash.rating_n) && (
+            <p className="mt-1 text-[12px] font-bold text-amber-600">
+              {ratingLine(wash.rating_avg, wash.rating_n)}
+              {reviews === null && (
+                <button type="button" onClick={loadReviews} className="mr-2 font-semibold text-brand-700 underline">
+                  اعرض التقييمات
+                </button>
+              )}
+            </p>
+          )}
+          {reviews && (
+            <ul className="mt-2 space-y-1.5">
+              {reviews.length === 0 && <li className="text-[11.5px] text-slate-400">لا تقييمات بعد.</li>}
+              {reviews.map((r) => (
+                <li key={r.id} className="rounded-lg bg-slate-50 px-3 py-2 text-[12px]">
+                  <span className="font-bold text-amber-600">{'★'.repeat(r.stars)}</span>
+                  <span className="mr-2 text-slate-400">{r.name}</span>
+                  {r.comment && <p className="mt-0.5 text-slate-700">{r.comment}</p>}
+                </li>
+              ))}
+            </ul>
+          )}
 
           {wash.temp_closed && (
             <p role="status" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-[12px] font-bold text-red-700">

@@ -24,6 +24,7 @@ import {
   type WashClosure,
   type WashConfig,
   type WashOffer,
+  type WashReview,
   type WashService,
 } from '@/lib/wash';
 import { pokeWashTick, useWashConfig } from '@/lib/washConfig';
@@ -49,7 +50,7 @@ import {
 } from './icons';
 
 type Tab = 'today' | 'tomorrow' | 'past';
-type SheetKind = 'services' | 'offers' | 'hours' | 'photo' | 'pause' | 'walkin' | null;
+type SheetKind = 'services' | 'offers' | 'hours' | 'photo' | 'pause' | 'walkin' | 'reviews' | null;
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'today', label: 'اليوم' },
@@ -298,6 +299,7 @@ export function WashOwnerScreen() {
     { key: 'hours', label: 'الدوام والمسارب', icon: CalendarIcon, onClick: () => setSheet('hours') },
     { key: 'photo', label: 'الصورة', icon: ImageIcon, onClick: () => setSheet('photo') },
     { key: 'walkin', label: 'سيارة الآن', icon: PlusIcon, onClick: () => setSheet('walkin') },
+    { key: 'reviews', label: 'التقييمات', icon: StarIcon, onClick: () => setSheet('reviews') },
     {
       key: 'pause',
       label: paused ? 'الحجوزات متوقّفة' : 'إيقاف الحجوزات',
@@ -477,6 +479,9 @@ export function WashOwnerScreen() {
             <ClosuresEditor washId={wash.id} />
           </>
         )}
+      </Sheet>
+      <Sheet open={sheet === 'reviews'} onClose={() => setSheet(null)} title="التقييمات" hint="من زبائنَ اكتملت خدمتُهم فقط. يمكنك إخفاءَ تقييمٍ مسيء.">
+        {sheet === 'reviews' && <ReviewsList washId={wash.id} />}
       </Sheet>
       <Sheet open={sheet === 'pause'} onClose={() => setSheet(null)} title="إيقاف استقبال الحجوزات" hint="الصفحةُ تبقى ظاهرة، والحجزُ يتوقّف حتى الموعد الذي تختاره.">
         <PauseSheet wash={wash} paused={paused} onSave={async (p) => { const ok = await patchWash(p); if (ok) setSheet(null); }} />
@@ -980,6 +985,42 @@ function WalkInSheet({ wash, services, onDone }: { wash: CarWash; services: Wash
         {busy ? <SpinnerIcon className="h-4 w-4" /> : 'تسجيل الدخول للغسل'}
       </button>
     </div>
+  );
+}
+
+/* ── التقييمات ───────────────────────────────────────────────────────────── */
+function ReviewsList({ washId }: { washId: string }) {
+  const [rows, setRows] = useState<WashReview[] | null>(null);
+  const load = useCallback(async () => {
+    const { data } = await supabase.from('wash_reviews').select('booking_id, wash_id, stars, comment, name, hidden, created_at').eq('wash_id', washId).order('created_at', { ascending: false }).limit(50);
+    setRows((data as WashReview[] | null) ?? []);
+  }, [washId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  async function toggle(r: WashReview) {
+    await supabase.from('wash_reviews').update({ hidden: !r.hidden }).eq('booking_id', r.booking_id!);
+    void load();
+  }
+  if (!rows) return <SpinnerIcon className="mx-auto h-5 w-5 text-brand" />;
+  if (rows.length === 0) return <p className="text-sm text-slate-400">لا تقييمات بعد — تصل بعد كلّ خدمةٍ مكتملة.</p>;
+  return (
+    <ul className="space-y-2">
+      {rows.map((r) => (
+        <li key={r.booking_id} className={`rounded-xl border px-3 py-2 text-[12px] ${r.hidden ? 'border-slate-100 opacity-60' : 'border-slate-200'}`}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-bold text-amber-600">{'★'.repeat(r.stars)}</span>
+            <span className="text-[11px] text-slate-400">
+              {r.name} · {new Date(r.created_at).toLocaleDateString('ar-IQ', { day: 'numeric', month: 'numeric' })}
+            </span>
+          </div>
+          {r.comment && <p className="mt-1 text-slate-700">{r.comment}</p>}
+          <button type="button" onClick={() => toggle(r)} className="mt-1 text-[11px] font-bold text-slate-500 underline">
+            {r.hidden ? 'إظهار' : 'إخفاء'}
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

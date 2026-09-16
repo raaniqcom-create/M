@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { CITY_NAMES } from '@/lib/cities';
 import { isOpenNow, openingLine } from '@/lib/hours';
-import { type WashPublic } from '@/lib/wash';
+import { ratingLine, type WashPublic } from '@/lib/wash';
 import { RouteButton } from './RouteButton';
 import { CarIcon, FuelIcon, SpinnerIcon } from './icons';
 
@@ -130,6 +130,9 @@ export function WashDirectory() {
                     <p className="mt-0.5 text-[12px] text-slate-500">
                       {w.city} · {w.address}
                     </p>
+                    {ratingLine(w.rating_avg, w.rating_n) && (
+                      <p className="mt-0.5 text-[11.5px] font-bold text-amber-600">{ratingLine(w.rating_avg, w.rating_n)}</p>
+                    )}
                     <p className="mt-2 flex items-center gap-1.5 text-[11.5px]">
                       <span className={`rounded-full px-2 py-0.5 font-bold ${TONE[o.tone]}`}>{o.badge}</span>
                       <span className="text-slate-500">{o.detail}</span>

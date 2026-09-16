@@ -107,6 +107,25 @@ export interface WashPublic {
   has_offer: boolean;
   /** لا تستقبل حجوزاتٍ الآن (bookings_paused_until في المستقبل). */
   paused?: boolean;
+  rating_avg?: number | null;
+  rating_n?: number;
+}
+
+export interface WashReview {
+  id?: string;
+  booking_id?: string;
+  wash_id: string;
+  stars: number;
+  comment: string | null;
+  name: string | null;
+  hidden?: boolean;
+  created_at: string;
+}
+
+/** «★ ٤٫٥ · ١٢ تقييماً» أو null بلا تقييمات. */
+export function ratingLine(avg: number | null | undefined, n: number | undefined): string | null {
+  if (!n || avg == null) return null;
+  return `★ ${Number(avg).toLocaleString('ar-IQ', { maximumFractionDigits: 1 })} · ${plural(n, 'تقييم واحد', 'تقييمان', 'تقييمات', 'تقييماً')}`;
 }
 
 export interface WashClosure {

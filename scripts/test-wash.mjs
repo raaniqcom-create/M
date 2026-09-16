@@ -1,7 +1,7 @@
 // «غسيل»: شبكةُ المواعيد، أيّامُ الحجز، بطاقةُ الغسلات — دوالُّ lib/wash.ts الصرفة.
 //   node scripts/test-wash.mjs
 import assert from 'node:assert/strict';
-import { bookingDays, bgdDate, canCancel, dayLabel, daysLeft, firstMonthPrice, limitLabel, loyaltyLine, nextStatuses, planName, servicePrice, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
+import { bookingDays, bgdDate, canCancel, dayLabel, daysLeft, firstMonthPrice, limitLabel, loyaltyLine, nextStatuses, planName, ratingLine, servicePrice, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
 
 let n = 0;
 const ok = (label, fn) => { fn(); n++; console.log(`  ✓ ${label}`); };
@@ -90,5 +90,10 @@ ok('سعرُ نوع السيارة يغلب السعرَ الأساسيّ حين
   assert.equal(servicePrice(s, 'sedan'), 10000);
   assert.equal(servicePrice(s, null), 10000);
   assert.equal(servicePrice({ price: 5000, prices: null }, 'suv'), 5000);
+});
+ok('سطرُ التقييم بالعربيّة، ولا شيءَ بلا تقييمات', () => {
+  assert.equal(ratingLine(4.5, 12), '★ ٤٫٥ · 12 تقييماً');
+  assert.equal(ratingLine(5, 1), '★ ٥ · تقييم واحد');
+  assert.equal(ratingLine(null, 0), null);
 });
 console.log(`\n${n} فحصاً مرّت.`);

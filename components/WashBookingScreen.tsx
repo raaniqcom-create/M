@@ -28,8 +28,43 @@ type Booking = {
   vehicle: string | null;
   late: boolean;
   cancel_free_min: number;
+  reviewed: boolean;
   events: { kind: string; at: string }[];
 };
+
+/** بعد اكتمال الخدمة: خمسُ نجومٍ وتعليقٌ اختياريّ — مرّةً واحدة للحجز. */
+function ReviewBox({ code, phone, onDone }: { code: string; phone: string; onDone: () => void }) {
+  const [stars, setStars] = useState(0);
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  async function send() {
+    if (!stars) return setErr('اختر عدد النجوم.');
+    setBusy(true);
+    setErr('');
+    const { error } = await supabase.rpc('review_wash', { p_code: code, p_phone: phone, p_stars: stars, p_comment: comment.trim() || null });
+    setBusy(false);
+    if (error) return setErr(error.message);
+    onDone();
+  }
+  return (
+    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+      <p className="text-sm font-extrabold text-slate-800">قيّم تجربتك</p>
+      <div className="mt-2 flex justify-center gap-1" dir="ltr">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button key={n} type="button" onClick={() => setStars(n)} aria-label={`${n} نجوم`} className={`text-3xl ${n <= stars ? 'text-amber-500' : 'text-slate-300'}`}>
+            ★
+          </button>
+        ))}
+      </div>
+      <textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={200} rows={2} className="field mt-2 text-sm" placeholder="تعليق اختياريّ (٢٠٠ حرف)" />
+      {err && <p role="alert" className="mt-1 text-[11px] text-traffic-red">{err}</p>}
+      <button type="button" disabled={busy} onClick={send} className="btn-primary mt-2 w-full text-xs">
+        {busy ? <SpinnerIcon className="h-4 w-4" /> : 'إرسال التقييم'}
+      </button>
+    </div>
+  );
+}
 
 const PILL: Record<BookingStatus, string> = {
   pending: 'bg-amber-50 text-amber-800',
@@ -150,7 +185,15 @@ export function WashBookingScreen() {
           </div>
         </dl>
 
-        <p className="mt-4 rounded-xl bg-brand-50 px-3 py-2 text-[12px] font-bold text-brand-800">أرِ الرمز للعامل عند الوصول</p>
+        {b.status === 'completed' ? (
+          b.reviewed ? (
+            <p className="mt-4 rounded-xl bg-brand-50 px-3 py-2 text-[12px] font-bold text-brand-800">شكراً لتقييمك ✓</p>
+          ) : (
+            <ReviewBox code={code} phone={phone} onDone={() => window.location.reload()} />
+          )
+        ) : (
+          <p className="mt-4 rounded-xl bg-brand-50 px-3 py-2 text-[12px] font-bold text-brand-800">أرِ الرمز للعامل عند الوصول</p>
+        )}
 
         <div className="mt-4 space-y-2">
           {b.wash_phone && (
