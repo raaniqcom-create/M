@@ -34,6 +34,7 @@ import { Sheet } from './Sheet';
 import { TimeSelect } from './TimeSelect';
 import { WashPhotoUpload } from './WashPhotoUpload';
 import { WashDeviceLink } from './WashDeviceLink';
+import { WashDashboard } from './WashDashboard';
 import {
   CalendarIcon,
   CarIcon,
@@ -43,6 +44,7 @@ import {
   PhoneIcon,
   PlusIcon,
   AlertTriangleIcon,
+  ChartIcon,
   SpinnerIcon,
   StarIcon,
   StoreIcon,
@@ -51,7 +53,7 @@ import {
 } from './icons';
 
 type Tab = 'today' | 'tomorrow' | 'past';
-type SheetKind = 'services' | 'offers' | 'hours' | 'photo' | 'pause' | 'walkin' | 'reviews' | null;
+type SheetKind = 'services' | 'offers' | 'hours' | 'photo' | 'pause' | 'walkin' | 'reviews' | 'stats' | null;
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'today', label: 'اليوم' },
@@ -306,6 +308,7 @@ export function WashOwnerScreen() {
     { key: 'photo', label: 'الصورة', icon: ImageIcon, onClick: () => setSheet('photo') },
     { key: 'walkin', label: 'سيارة الآن', icon: PlusIcon, onClick: () => setSheet('walkin') },
     { key: 'reviews', label: 'التقييمات', icon: StarIcon, onClick: () => setSheet('reviews') },
+    { key: 'stats', label: 'الإحصائيّات', icon: ChartIcon, onClick: () => setSheet('stats') },
     {
       key: 'pause',
       label: paused ? 'الحجوزات متوقّفة' : 'إيقاف الحجوزات',
@@ -512,6 +515,9 @@ export function WashOwnerScreen() {
             <ClosuresEditor washId={wash.id} />
           </>
         )}
+      </Sheet>
+      <Sheet open={sheet === 'stats'} onClose={() => setSheet(null)} title="الإحصائيّات" hint="حجوزاتك وإيرادك وزبائنك — بحسب الفترة.">
+        {sheet === 'stats' && <WashDashboard washId={wash.id} />}
       </Sheet>
       <Sheet open={sheet === 'reviews'} onClose={() => setSheet(null)} title="التقييمات" hint="من زبائنَ اكتملت خدمتُهم فقط. يمكنك إخفاءَ تقييمٍ مسيء.">
         {sheet === 'reviews' && <ReviewsList washId={wash.id} />}

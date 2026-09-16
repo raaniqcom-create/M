@@ -18,6 +18,16 @@ interface Stats {
   expired: number;
   today: number;
   month: number;
+  mrr?: number;
+  paid_30d?: number;
+  reviews_7d?: number;
+  outbox_unsent?: number;
+  outbox_failed_24h?: number;
+  no_device_24h?: number;
+  expired_24h?: number;
+  pending_stale?: number;
+  tick_last?: string | null;
+  tick_age_min?: number | null;
 }
 
 type Booking = Pick<WashBooking, 'id' | 'code' | 'name' | 'phone' | 'starts_at' | 'status' | 'service_name'>;
@@ -253,6 +263,9 @@ export function WashAdmin() {
             { label: 'منتهية', value: stats?.expired, warn: !!stats?.expired },
             { label: 'حجوزات اليوم', value: stats?.today },
             { label: 'حجوزات الشهر', value: stats?.month },
+            { label: 'اشتراكات شهريّة (دينار)', value: stats?.mrr, tone: 'brand' },
+            { label: 'مقبوض ٣٠ يوماً', value: stats?.paid_30d },
+            { label: 'تقييمات الأسبوع', value: stats?.reviews_7d },
           ].map((s) => (
             <div key={s.label} className={`rounded-xl py-2.5 text-center ${s.tone ? 'bg-brand-50' : 'bg-slate-50'}`}>
               <p className={`text-lg font-extrabold leading-none tabular-nums ${s.warn ? 'text-traffic-red' : s.tone ? 'text-brand-700' : 'text-slate-700'}`}>
@@ -263,6 +276,21 @@ export function WashAdmin() {
           ))}
         </div>
       </section>
+
+      {stats && (
+        (() => {
+          const sick = (stats.tick_age_min == null || stats.tick_age_min > 30) || (stats.outbox_failed_24h ?? 0) > 20;
+          return (
+            <section className={`card p-4 ${sick ? 'border border-traffic-red bg-red-50' : ''}`}>
+              <h2 className="text-sm font-bold">صحّة القسم</h2>
+              <p className={`mt-1 text-[12px] ${sick ? 'text-traffic-red' : 'text-slate-600'}`}>
+                آخر دقّة {stats.tick_age_min == null ? 'لم تعمل بعد' : `قبل ${stats.tick_age_min} دقيقة`} · بانتظار الإرسال {num(stats.outbox_unsent)} · أعطال ٢٤ س {num(stats.outbox_failed_24h)}
+                {' '}· بلا جهاز {num(stats.no_device_24h)} · فات موعدُه {num(stats.expired_24h)} · معلّقٌ أكثر من ساعة {num(stats.pending_stale)}
+              </p>
+            </section>
+          );
+        })()
+      )}
 
       <section className="card p-5">
         <h2 className="text-sm font-bold">طلبات جديدة ({pending.length})</h2>
