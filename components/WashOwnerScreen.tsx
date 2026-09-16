@@ -6,10 +6,14 @@ import { supabase } from '@/lib/supabase';
 import { forgetLogin } from '@/lib/biometric';
 import { ADMIN_WA, normalizePhone } from '@/lib/phone';
 import {
+  ACTION_LABELS,
   BOOKING_LABELS,
+  VEHICLE_LABELS,
+  VEHICLE_TYPES,
   bgdDate,
   dayLabel,
   daysLeft,
+  nextStatuses,
   iqd,
   limitLabel,
   planOf,
@@ -62,9 +66,22 @@ const bookingDay = (b: WashBooking) => bgdDate(0, Date.parse(b.starts_at));
 const PILL: Record<BookingStatus, string> = {
   pending: 'bg-amber-100 text-amber-900',
   confirmed: 'bg-brand-100 text-brand-800',
+  arrived: 'bg-sky-100 text-sky-800',
+  in_service: 'bg-sky-100 text-sky-800',
   completed: 'bg-slate-100 text-slate-600',
   no_show: 'bg-red-50 text-traffic-red',
   cancelled: 'bg-red-50 text-traffic-red',
+  cancelled_by_business: 'bg-red-50 text-traffic-red',
+  expired: 'bg-slate-100 text-slate-500',
+};
+/** زرُّ الانتقال: الأخضرُ للتقدّم، والرماديُّ للغياب، والأحمرُ للإلغاء. */
+const ACTION_CLS: Partial<Record<BookingStatus, string>> = {
+  confirmed: 'btn-primary',
+  arrived: 'btn-primary',
+  in_service: 'btn-primary',
+  completed: 'btn-primary',
+  no_show: 'btn-ghost',
+  cancelled_by_business: 'btn-ghost text-traffic-red',
 };
 
 function banner(w: CarWash, today: string): { cls: string; text: string } {
@@ -406,25 +423,23 @@ export function WashOwnerScreen() {
                       <WhatsappIcon className="h-4 w-4" />
                     </a>
                   </div>
-                  {(b.status === 'pending' || b.status === 'confirmed') && (
-                    <div className="mt-2 flex gap-2">
-                      {b.status === 'pending' ? (
-                        <button type="button" disabled={busy} onClick={() => setStatus(b.id, 'confirmed')} className="btn-primary min-h-[40px] flex-1 text-xs">
-                          {busy ? <SpinnerIcon className="h-4 w-4" /> : 'تأكيد'}
+                  {b.vehicle && <p className="text-[11px] text-slate-500">{VEHICLE_LABELS[b.vehicle]}{b.walk_in ? ' · بلا حجز' : ''}</p>}
+                  {b.status === 'pending' && Date.parse(b.starts_at) < Date.now() && (
+                    <p className="mt-1 text-[11px] font-bold text-traffic-red">فات موعدُه ولم يُؤكَّد</p>
+                  )}
+                  {nextStatuses(b.status).length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {nextStatuses(b.status).map((s, i) => (
+                        <button
+                          key={s}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setStatus(b.id, s)}
+                          className={`min-h-[40px] text-xs ${i === 0 ? 'flex-1' : 'px-3'} ${ACTION_CLS[s] ?? 'btn-ghost'}`}
+                        >
+                          {busy && i === 0 ? <SpinnerIcon className="h-4 w-4" /> : ACTION_LABELS[s]}
                         </button>
-                      ) : (
-                        <>
-                          <button type="button" disabled={busy} onClick={() => setStatus(b.id, 'completed')} className="btn-primary min-h-[40px] flex-1 text-xs">
-                            {busy ? <SpinnerIcon className="h-4 w-4" /> : 'تمّت'}
-                          </button>
-                          <button type="button" disabled={busy} onClick={() => setStatus(b.id, 'no_show')} className="btn-ghost min-h-[40px] flex-1 text-xs">
-                            لم يحضر
-                          </button>
-                        </>
-                      )}
-                      <button type="button" disabled={busy} onClick={() => setStatus(b.id, 'cancelled')} className="btn-ghost min-h-[40px] px-3 text-xs text-traffic-red">
-                        إلغاء
-                      </button>
+                      ))}
                     </div>
                   )}
                 </li>
@@ -457,6 +472,8 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
   const [price, setPrice] = useState('');
   const [minutes, setMinutes] = useState(30);
   const [active, setActive] = useState(true);
+  const [prices, setPrices] = useState<Record<string, string>>({});
+  const [byVehicle, setByVehicle] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -466,6 +483,8 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
     setPrice('');
     setMinutes(30);
     setActive(true);
+    setPrices({});
+    setByVehicle(false);
   }
   function edit(s: WashService) {
     setEditing(s);
@@ -473,6 +492,9 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
     setPrice(String(s.price));
     setMinutes(s.minutes);
     setActive(s.active);
+    const pr = Object.fromEntries(Object.entries(s.prices ?? {}).map(([k, v]) => [k, String(v)]));
+    setPrices(pr);
+    setByVehicle(Object.keys(pr).length > 0);
   }
 
   async function save(e: React.FormEvent) {
@@ -481,7 +503,11 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
     if (name.trim().length < 2 || !Number.isFinite(p) || p < 0) return setErr('اكتب اسم الخدمة وسعرها.');
     setBusy(true);
     setErr(null);
-    const row = { name: name.trim(), price: p, minutes, active };
+    // أسعارُ الأنواع: ما كُتب رقماً صالحاً فقط، وإلّا null (سعرٌ واحد).
+    const pv = byVehicle
+      ? Object.fromEntries(Object.entries(prices).map(([k, v]) => [k, Number(v)]).filter(([, v]) => Number.isFinite(v) && (v as number) >= 0))
+      : {};
+    const row = { name: name.trim(), price: p, minutes, active, prices: Object.keys(pv).length ? pv : null };
     const { error } = editing
       ? await supabase.from('wash_services').update(row).eq('id', editing.id)
       : await supabase.from('wash_services').insert({ ...row, wash_id: washId, sort: rows.length + 1 });
@@ -546,6 +572,30 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
             ))}
           </select>
         </div>
+        <label className="flex min-h-[40px] cursor-pointer items-center gap-2 text-sm">
+          <input type="checkbox" checked={byVehicle} onChange={(e) => setByVehicle(e.target.checked)} className="h-4 w-4 accent-[#16a34a]" />
+          سعرٌ يختلف بنوع السيارة
+        </label>
+        {byVehicle && (
+          <div className="grid grid-cols-2 gap-2">
+            {VEHICLE_TYPES.map((v) => (
+              <label key={v} className="text-[11px] text-slate-600">
+                {VEHICLE_LABELS[v]}
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={250}
+                  value={prices[v] ?? ''}
+                  onChange={(e) => setPrices((p) => ({ ...p, [v]: e.target.value }))}
+                  className="field mt-0.5 py-1.5 text-sm"
+                  placeholder={price || 'السعر'}
+                  dir="ltr"
+                />
+              </label>
+            ))}
+          </div>
+        )}
         <label className="flex min-h-[40px] cursor-pointer items-center gap-2 text-sm">
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-[#16a34a]" />
           فعّالة
@@ -649,12 +699,13 @@ function HoursEditor({ wash, onSave }: { wash: CarWash; onSave: (p: Partial<CarW
   const [bays, setBays] = useState(wash.bays);
   const [slot, setSlot] = useState(wash.slot_minutes);
   const [loyalty, setLoyalty] = useState(wash.loyalty_target);
+  const [auto, setAuto] = useState(wash.confirm_mode === 'auto');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
   async function save() {
     setBusy(true);
-    const ok = await onSave({ is_24h: is24h, opens_at: opensAt, closes_at: closesAt, bays, slot_minutes: slot, loyalty_target: loyalty });
+    const ok = await onSave({ is_24h: is24h, opens_at: opensAt, closes_at: closesAt, bays, slot_minutes: slot, loyalty_target: loyalty, confirm_mode: auto ? 'auto' : 'manual' });
     setBusy(false);
     setSaved(ok);
   }
@@ -708,6 +759,13 @@ function HoursEditor({ wash, onSave }: { wash: CarWash; onSave: (p: Partial<CarW
           ))}
         </select>
       </div>
+      <label className="flex min-h-[44px] cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 px-3 py-2">
+        <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#16a34a]" />
+        <span className="text-sm">
+          <span className="font-medium">تأكيدٌ تلقائيّ</span>
+          <span className="block text-[11px] text-slate-500">الحجزُ يُؤكَّد فورَ توفّر الموعد بلا ضغطة منك. وإلّا يبقى «بانتظار التأكيد».</span>
+        </span>
+      </label>
       <button type="button" onClick={save} disabled={busy} className="btn-primary w-full">
         {busy ? <SpinnerIcon className="h-4 w-4" /> : saved ? 'حُفظ ✓' : 'حفظ'}
       </button>

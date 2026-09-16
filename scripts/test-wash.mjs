@@ -1,7 +1,7 @@
 // «غسيل»: شبكةُ المواعيد، أيّامُ الحجز، بطاقةُ الغسلات — دوالُّ lib/wash.ts الصرفة.
 //   node scripts/test-wash.mjs
 import assert from 'node:assert/strict';
-import { bookingDays, bgdDate, dayLabel, daysLeft, firstMonthPrice, limitLabel, loyaltyLine, planName, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
+import { bookingDays, bgdDate, canCancel, dayLabel, daysLeft, firstMonthPrice, limitLabel, loyaltyLine, nextStatuses, planName, servicePrice, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
 
 let n = 0;
 const ok = (label, fn) => { fn(); n++; console.log(`  ✓ ${label}`); };
@@ -71,5 +71,24 @@ ok('الأيّامُ المتبقّية وأسماءُ الباقات والحد
   assert.equal(planName(null, 'x'), 'x');
   assert.equal(limitLabel(0, 'حجز'), 'بلا حدّ');
   assert.equal(limitLabel(60, 'حجز شهريّاً'), '٦٠ حجز شهريّاً');
+});
+ok('انتقالاتُ الحالة كما تسمح القاعدة', () => {
+  assert.deepEqual(nextStatuses('pending'), ['confirmed', 'cancelled_by_business']);
+  assert.deepEqual(nextStatuses('in_service'), ['completed']);
+  assert.deepEqual(nextStatuses('completed'), []);
+  assert.deepEqual(nextStatuses('expired'), []);
+});
+ok('الإلغاءُ مجّانيٌّ قبل نصف ساعة، ومتأخّرٌ بعدها، وممنوعٌ بعد الموعد', () => {
+  const now = Date.parse('2026-09-17T10:00:00+03:00');
+  assert.equal(canCancel('2026-09-17T11:00:00+03:00', now), 'free');
+  assert.equal(canCancel('2026-09-17T10:20:00+03:00', now), 'late');
+  assert.equal(canCancel('2026-09-17T09:59:00+03:00', now), 'no');
+});
+ok('سعرُ نوع السيارة يغلب السعرَ الأساسيّ حين يُذكر', () => {
+  const s = { price: 10000, prices: { suv: 15000 } };
+  assert.equal(servicePrice(s, 'suv'), 15000);
+  assert.equal(servicePrice(s, 'sedan'), 10000);
+  assert.equal(servicePrice(s, null), 10000);
+  assert.equal(servicePrice({ price: 5000, prices: null }, 'suv'), 5000);
 });
 console.log(`\n${n} فحصاً مرّت.`);

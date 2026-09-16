@@ -7,6 +7,8 @@ import { hoursLabel } from '@/lib/hours';
 import { displayPhone, isValidIraqiMobile } from '@/lib/phone';
 import { knownAddress } from '@/lib/alerts';
 import {
+  VEHICLE_LABELS,
+  VEHICLE_TYPES,
   bgdDate,
   bookingDays,
   bookingHref,
@@ -15,11 +17,14 @@ import {
   loyaltyLine,
   readMyBookings,
   rememberBooking,
+  servicePrice,
   slotLabel,
+  type VehicleType,
   type WashOffer,
   type WashPublic,
   type WashService,
 } from '@/lib/wash';
+import { useWashConfig } from '@/lib/washConfig';
 import { Sheet } from './Sheet';
 import { RouteButton } from './RouteButton';
 import { CarIcon, CalendarIcon, PhoneIcon, SpinnerIcon, StarIcon } from './icons';
@@ -63,6 +68,12 @@ export function WashDetail() {
   const [slot, setSlot] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [vehicle, setVehicle] = useState<VehicleType | ''>('');
+  /** مفتاحُ التكرار: يثبت من فتح الورقة حتى نجاح الحجز — فإعادةُ المحاولة تُرجع الحجزَ نفسَه. */
+  const [clientKey, setClientKey] = useState('');
+  /** أقربُ موعدٍ حرٍّ اليوم — يُقرأ مرّةً عند فتح الصفحة. */
+  const [nextSlot, setNextSlot] = useState<string | null | undefined>(undefined);
+  const cfg = useWashConfig();
 
   useEffect(() => {
     const m = readMe();
@@ -91,19 +102,33 @@ export function WashDetail() {
     };
   }, [id]);
 
-  // المواعيدُ الحرّة لليوم المختار — من القاعدة، لا من الشبكة المحليّة
+  // المواعيدُ الحرّة لليوم والخدمة المختارَين — السعةُ بمدّة الخدمة (wash_slots v2).
   useEffect(() => {
     if (!open || !id) return;
     let alive = true;
     setSlots(null);
     setSlot('');
-    supabase.rpc('wash_slots', { p_wash: id, p_day: day }).then(({ data }) => {
+    if (!clientKey) setClientKey(crypto.randomUUID());
+    supabase.rpc('wash_slots', { p_wash: id, p_day: day, p_service: service || null }).then(({ data }) => {
       if (alive) setSlots(((data ?? []) as Slot[]).filter((x) => x.free > 0));
     });
     return () => {
       alive = false;
     };
-  }, [open, id, day]);
+  }, [open, id, day, service]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // «أقرب موعد اليوم» تحت الزرّ — نداءٌ واحدٌ عند فتح الصفحة.
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    supabase.rpc('wash_slots', { p_wash: id, p_day: bgdDate() }).then(({ data }) => {
+      const first = ((data ?? []) as Slot[]).find((x) => x.free > 0);
+      if (alive) setNextSlot(first ? first.slot : null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [id]);
 
   async function showStamps() {
     if (!wash || !isValidIraqiMobile(stampsPhone)) return;
@@ -137,12 +162,15 @@ export function WashDetail() {
       p_phone: phone,
       p_car: me.car.trim() || null,
       p_device: knownAddress() ?? localStorage.getItem('device-token') ?? null,
+      p_vehicle: vehicle || null,
+      p_client_key: clientKey || null,
     });
     if (error) {
       setBusy(false);
       return setErr(error.message);
     }
     const b = data as Booked;
+    setClientKey('');
     rememberBooking({ code: b.code, phone, wash_id: wash.id, wash: b.wash, starts_at: b.starts_at });
     window.location.href = bookingHref(b.code, phone);
   }
@@ -169,7 +197,7 @@ export function WashDetail() {
     );
   }
 
-  const days = bookingDays(subscriber);
+  const days = bookingDays(subscriber, Date.now(), cfg ? { guest: cfg.horizon_guest, subscriber: cfg.horizon_sub } : undefined);
   const line = stamps ? loyaltyLine(stamps.stamps, stamps.target, stamps.free) : null;
   const canBook = !wash.temp_closed && services.length > 0;
 
@@ -239,7 +267,12 @@ export function WashDetail() {
             ))}
           </ul>
         )}
-        <button type="button" onClick={() => setOpen(true)} disabled={!canBook} className="btn-primary mt-4 w-full">
+        {nextSlot !== undefined && (
+          <p className="mt-3 text-center text-[12px] text-slate-500">
+            {nextSlot ? <>أقرب موعد اليوم: <b className="text-brand-700">{slotLabel(nextSlot)}</b></> : 'لا مواعيدَ متاحة اليوم — جرّب الغد'}
+          </p>
+        )}
+        <button type="button" onClick={() => setOpen(true)} disabled={!canBook} className="btn-primary mt-3 w-full">
           <CalendarIcon className="h-4 w-4" />
           احجز موعداً
         </button>
@@ -316,11 +349,30 @@ export function WashDetail() {
                   <input type="radio" name="service" value={s.id} checked={service === s.id} onChange={() => setService(s.id)} />
                   <span className="font-bold text-slate-800">{s.name}</span>
                 </span>
-                <span className="shrink-0 text-slate-500">{iqd(s.price)}</span>
+                <span className="shrink-0 text-slate-500">{iqd(servicePrice(s, vehicle || null))}</span>
               </label>
             </li>
           ))}
         </ul>
+
+        {services.some((s) => s.prices && Object.keys(s.prices).length) && (
+          <>
+            <p className="label mt-4">نوع السيارة</p>
+            <div className="flex flex-wrap gap-1.5">
+              {VEHICLE_TYPES.map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={vehicle === v}
+                  onClick={() => setVehicle(vehicle === v ? '' : v)}
+                  className={`rounded-full border px-3 py-1.5 text-[12px] font-bold ${vehicle === v ? 'border-brand bg-brand text-white' : 'border-slate-200 text-slate-600'}`}
+                >
+                  {VEHICLE_LABELS[v]}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         <p className="label mt-4">اليوم</p>
         <div className="flex flex-wrap gap-1.5">

@@ -24,15 +24,37 @@ type Booking = {
   lat: number;
   lng: number;
   wash_phone: string | null;
+  vehicle: string | null;
+  late: boolean;
+  cancel_free_min: number;
+  events: { kind: string; at: string }[];
 };
 
 const PILL: Record<BookingStatus, string> = {
   pending: 'bg-amber-50 text-amber-800',
   confirmed: 'bg-brand-50 text-brand-700',
+  arrived: 'bg-sky-50 text-sky-800',
+  in_service: 'bg-sky-50 text-sky-800',
   completed: 'bg-slate-100 text-slate-600',
   no_show: 'bg-slate-100 text-slate-600',
   cancelled: 'bg-slate-100 text-slate-600',
+  cancelled_by_business: 'bg-red-50 text-red-700',
+  expired: 'bg-slate-100 text-slate-500',
 };
+/** سطرُ السجلّ كما يقرؤه الزبون. */
+const EVENT_LINE: Record<string, string> = {
+  new: 'أُرسل الحجز',
+  confirmed: 'أكّدت المغسلة',
+  arrived: 'سُجّل وصولك',
+  in_service: 'بدأ الغسل',
+  completed: 'اكتملت الخدمة',
+  no_show: 'سُجّل غياب',
+  cancelled: 'ألغيتَ الحجز',
+  cancelled_by_business: 'ألغت المغسلة الحجز',
+  expired: 'فات الموعد بلا تأكيد',
+  reminder: 'أُرسل تذكير',
+};
+const fmtAt = (iso: string) => new Date(iso).toLocaleString('ar-IQ', { timeZone: 'Asia/Baghdad', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'numeric' });
 
 /** بطاقةُ الحجز: الرمزُ الذي يُرى للعامل، وحالتُه، وما يُفعل به. */
 export function WashBookingScreen() {
@@ -55,7 +77,9 @@ export function WashBookingScreen() {
   }, [code, phone]);
 
   async function cancel() {
-    if (!confirm('إلغاء الحجز؟')) return;
+    const left = b ? Date.parse(b.starts_at) - Date.now() : 0;
+    const late = b ? left < b.cancel_free_min * 60_000 : false;
+    if (!confirm(late ? `الإلغاء الآن يُحسب متأخّراً (أقلّ من ${b?.cancel_free_min} دقيقة قبل الموعد). إلغاء الحجز؟` : 'إلغاء الحجز؟')) return;
     setBusy(true);
     const { data, error } = await supabase.rpc('cancel_wash_booking', { p_code: code, p_phone: phone });
     if (error || !data) {
@@ -150,6 +174,17 @@ export function WashBookingScreen() {
               {busy ? <SpinnerIcon className="h-4 w-4" /> : <XIcon className="h-4 w-4" />}
               إلغاء الحجز
             </button>
+          )}
+          {live && <p className="text-center text-[11px] text-slate-400">الإلغاء مجّانيّ قبل الموعد بـ{b.cancel_free_min} دقيقة على الأقلّ.</p>}
+          {b.events?.length > 1 && (
+            <ol className="mt-2 space-y-1 rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+              {b.events.map((e, i) => (
+                <li key={i} className="flex justify-between gap-2">
+                  <span>{EVENT_LINE[e.kind] ?? e.kind}</span>
+                  <span dir="ltr">{fmtAt(e.at)}</span>
+                </li>
+              ))}
+            </ol>
           )}
         </div>
         {err && (

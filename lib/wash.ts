@@ -133,6 +133,9 @@ export interface WashService {
   minutes: number;
   sort: number;
   active: boolean;
+  /** أسعارٌ بنوع السيارة {sedan, suv, …} — اختياريّة. */
+  prices?: Record<string, number> | null;
+  description?: string | null;
 }
 
 export interface WashOffer {
@@ -143,7 +146,62 @@ export interface WashOffer {
   active: boolean;
 }
 
-export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'no_show' | 'cancelled';
+export type BookingStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'arrived'
+  | 'in_service'
+  | 'completed'
+  | 'no_show'
+  | 'cancelled'
+  | 'cancelled_by_business'
+  | 'expired';
+
+/** نشطٌ = ما زال يشغل مسرباً. */
+export const ACTIVE_STATUSES: BookingStatus[] = ['pending', 'confirmed', 'arrived', 'in_service'];
+
+/** الانتقالاتُ التي تسمح بها القاعدة (set_wash_booking_status) — للأزرار. */
+export function nextStatuses(s: BookingStatus): BookingStatus[] {
+  switch (s) {
+    case 'pending':
+      return ['confirmed', 'cancelled_by_business'];
+    case 'confirmed':
+      return ['arrived', 'completed', 'no_show', 'cancelled_by_business'];
+    case 'arrived':
+      return ['in_service', 'completed', 'no_show'];
+    case 'in_service':
+      return ['completed'];
+    default:
+      return [];
+  }
+}
+
+/** ما يكتبه زرُّ الانتقال: فعلٌ لا حالة. */
+export const ACTION_LABELS: Partial<Record<BookingStatus, string>> = {
+  confirmed: 'تأكيد',
+  arrived: 'وصل',
+  in_service: 'بدأ الغسل',
+  completed: 'تمّت',
+  no_show: 'لم يحضر',
+  cancelled_by_business: 'إلغاء',
+};
+
+export const VEHICLE_TYPES = ['sedan', 'suv', 'pickup', 'van', 'other'] as const;
+export type VehicleType = (typeof VEHICLE_TYPES)[number];
+export const VEHICLE_LABELS: Record<VehicleType, string> = { sedan: 'صالون', suv: 'دفع رباعيّ', pickup: 'بيك أب', van: 'فان', other: 'أخرى' };
+
+/** أيمكن للمواطن إلغاءُ حجزه مجّاناً؟ (قبل الموعد بأكثر من الحدّ) — وبعده يُعلَّم متأخّراً. */
+export function canCancel(startsAt: string, now = Date.now()): 'free' | 'late' | 'no' {
+  const left = Date.parse(startsAt) - now;
+  if (left <= 0) return 'no';
+  return left >= 30 * 60_000 ? 'free' : 'late';
+}
+
+/** سعرُ الخدمة لنوع السيارة إن ذُكر، وإلّا سعرُها الأساسيّ. */
+export function servicePrice(s: { price: number; prices?: Record<string, number> | null }, vehicle: string | null): number {
+  const v = vehicle && s.prices ? s.prices[vehicle] : undefined;
+  return typeof v === 'number' && v >= 0 ? v : s.price;
+}
 
 export interface WashBooking {
   id: string;
@@ -152,11 +210,15 @@ export interface WashBooking {
   service_name: string;
   price: number;
   starts_at: string;
+  ends_at?: string | null;
   name: string;
   phone: string;
   car: string | null;
+  vehicle?: VehicleType | null;
   is_subscriber: boolean;
   use_free: boolean;
+  walk_in?: boolean;
+  late?: boolean;
   status: BookingStatus;
   created_at: string;
 }
@@ -164,9 +226,13 @@ export interface WashBooking {
 export const BOOKING_LABELS: Record<BookingStatus, string> = {
   pending: 'بانتظار التأكيد',
   confirmed: 'مؤكَّد',
+  arrived: 'وصل',
+  in_service: 'قيد الغسل',
   completed: 'تمّت',
   no_show: 'لم يحضر',
-  cancelled: 'مُلغى',
+  cancelled: 'ألغاه الزبون',
+  cancelled_by_business: 'ألغته المغسلة',
+  expired: 'فات الموعد',
 };
 
 /** «٢٥٬٠٠٠ دينار». */
