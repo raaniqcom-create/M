@@ -18,7 +18,7 @@ import {
  *
  *  ويُعرض فوق الحالتين معاً — لوحةٌ ممتلئةٌ ولوحةٌ فارغة: قد يصل جدولُ
  *  الرمادي ولا يصل جدولُ حديثة، فتمتلئ الصفحةُ ويبقى صاحبُ حديثة بلا خبر. */
-export function ScheduleNotice() {
+export function ScheduleNotice({ dark = false }: { dark?: boolean } = {}) {
   const [notice, setNotice] = useState<ScheduleNoticeRow | null>(null);
   const [text, setText] = useState('');
 
@@ -50,18 +50,27 @@ export function ScheduleNotice() {
   }, []);
 
   if (!notice) return null;
-  return <NoticeCard text={text} />;
+  return <NoticeCard text={text} dark={dark} />;
 }
 
-/** هيئةُ اللافتة — تعريفٌ واحدٌ تقرؤه الصفحةُ ومعاينةُ اللوحة معاً.
+/** هيئةُ اللافتة — تعريفٌ واحدٌ تقرؤه الصفحةُ وشاشةُ الغد ومعاينةُ اللوحة.
  *
  *  ولولا ذلك لكانت المعاينةُ نسخةً ثانيةً من الأصناف، فتنحرف عن الأصل بعد
- *  تعديلٍ واحد — ويكتب المشغّلُ نصّاً يراه في لوحته على غير ما يراه الناس. */
-export function NoticeCard({ text }: { text: string }) {
+ *  تعديلٍ واحد — ويكتب المشغّلُ نصّاً يراه في لوحته على غير ما يراه الناس.
+ *
+ *  و`dark` كـ`PlateTurnBadge`: شاشةُ الغد خضراءُ غامرة، وصندوقٌ كهرمانيٌّ فاتحٌ
+ *  فوقها بقعةٌ تُبهر ولا تُقرأ. «يستبدل النص بنص ابيض واضح» — صاحبُ المنصّة.
+ *  فالنسخةُ الداكنةُ نصٌّ أبيضُ عريضٌ على لوحٍ شفيفٍ من عائلة بطاقات الشاشة
+ *  نفسِها (bg-white/12)، فيُقرأ من بعيدٍ ولا يبدو غريباً عنها. */
+export function NoticeCard({ text, dark = false }: { text: string; dark?: boolean }) {
   return (
     <div
       role="status"
-      className="rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3 text-[12.5px] font-bold leading-relaxed text-amber-900"
+      className={
+        dark
+          ? 'rounded-2xl bg-white/12 px-4 py-3.5 text-[13px] font-extrabold leading-relaxed text-white'
+          : 'rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3 text-[12.5px] font-bold leading-relaxed text-amber-900'
+      }
     >
       {text}
     </div>

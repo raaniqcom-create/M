@@ -7,6 +7,7 @@ import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
 import { readChoice } from '@/lib/alerts';
 import { PlateTurnBadge } from './PlateTurnBadge';
+import { ScheduleNotice } from './ScheduleNotice';
 import { placeHref, shortAddress } from '@/lib/scheduleRoute';
 import { withDeadline } from '@/lib/fn';
 import { isDown, readStatus } from '@/lib/status';
@@ -216,6 +217,11 @@ export function TomorrowScreen() {
           <p className="mt-2 max-w-[19rem] text-[12.5px] leading-relaxed text-white/80">
             اختر منطقتك ليظهر لك ما يخصّك منه — ويصلك إشعارٌ كلَّما صدر جدولٌ جديد.
           </p>
+          {/* ومن لم يختر منطقةً يقرؤه باسم المحافظة — الخبرُ يعنيه كما يعني غيرَه.
+              و`empty:hidden` كي لا يبقى هامشٌ فارغٌ حين لا اعتذارَ منشور. */}
+          <div className="mt-3 w-full max-w-[21rem] text-right empty:hidden">
+            <ScheduleNotice dark />
+          </div>
           <div className="mt-5 flex items-center gap-3">
             <a
               href="/alerts"
@@ -270,6 +276,17 @@ export function TomorrowScreen() {
 
         <h1 className="mt-3 text-[17px] font-extrabold">محطات {when}</h1>
         <p className="mt-0.5 text-[11.5px] text-white/70">أين يصل الوقود — قبل أن يصل</p>
+
+        {/* ── والاعتذارُ تحت العنوان، لا تحت الجدول ───────────────────────
+            «الناس اعتادت على مشاهدة الجدول هنا، اليوم يدخلون يظهر لهم جدولُ
+            اليوم فقط والوقتُ تأخّر» — صاحبُ المنصّة. فهذه الشاشةُ هي البابُ:
+            تعلو كلَّ صفحةٍ بعد الثامنة مساءً، ومن رأى فيها جدولَ اليوم وحدَه
+            حسِب أنّ جدولَ الغد لم يُنشر لعطلٍ فينا. فيُقال له السببُ حيث
+            ينظر — قبل الجدول لا بعده. */}
+        <div className="mt-3 w-full max-w-[21rem] text-right empty:hidden">
+          <ScheduleNotice dark />
+        </div>
+
         <div className="mt-3 w-full max-w-[21rem] text-right">
           <PlateTurnBadge day={day} dark />
         </div>
