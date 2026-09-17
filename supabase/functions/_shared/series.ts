@@ -38,6 +38,10 @@ export interface SeriesOutcome {
   queued: number;
   skipped: number;
   cities: number;
+  /** كم صفّاً جاء من توفّرٍ معلَنٍ الآن خارج جدول اليوم. */
+  live: number;
+  /** عددُ صفوف جدول اليوم — صفرٌ يعني صباحاً بلا جدولٍ منشور. */
+  schedRows: number;
   startAt: string | null;
   endAt: string | null;
   why: string;
@@ -56,7 +60,7 @@ export async function queueMorningSeries(
   startAt: Date,
   opts: { dry?: boolean; refresh?: boolean } = {}
 ): Promise<SeriesOutcome> {
-  const out: SeriesOutcome = { day: forDate, items: [], queued: 0, skipped: 0, cities: 0, startAt: null, endAt: null, why: '', text: '' };
+  const out: SeriesOutcome = { day: forDate, items: [], queued: 0, skipped: 0, cities: 0, live: 0, schedRows: 0, startAt: null, endAt: null, why: '', text: '' };
   if (forDate < SERIES_START) {
     out.why = `قبل موعد البدء (${SERIES_START})`;
     return finish(out, opts.dry);
@@ -70,29 +74,34 @@ export async function queueMorningSeries(
     out.why = `fuel_schedule: ${rowsErr.message}`;
     return finish(out, opts.dry);
   }
-  if (!rows?.length) {
-    out.why = `لا جدولَ ليوم ${forDate}`;
-    return finish(out, opts.dry);
-  }
+  // **ولا خروجَ على جدولٍ فارغ.** كان صباحٌ بلا جدولٍ منشورٍ صباحاً صامتاً
+  // تماماً؛ وصاحبُ المنصّة أمر أن يستمرّ الإشعار «كلّ يوم»، فما تعلنه المحطاتُ
+  // على لوحاتها يكفي وحدَه. و`rowsErr` يبقى خروجاً: قراءةٌ فاشلةٌ ليست جدولاً
+  // فارغاً — ولو خُلطا لَنُشرت سلسلةُ لوحاتٍ في يومٍ له جدولٌ لم يُقرأ.
+  const sched = (rows ?? []) as SeriesRow[];
 
-  const ids = [...new Set((rows as SeriesRow[]).map((r) => r.linked_station_id).filter(Boolean))] as string[];
   const since = new Date(Date.now() - 24 * 3600_000).toISOString();
-  const [st, up, wc] = await Promise.all([
-    ids.length
-      ? db
-          .from('stations')
-          .select('id, name, city, address, status, is_demo, is_24h, opens_at, closes_at, temp_closed, station_products(product, is_available, updated_at, runs_out_at)')
-          .in('id', ids)
-      : Promise.resolve({ data: [], error: null }),
-    ids.length
-      ? db.from('station_updates').select('station_id, product, actor, change').in('station_id', ids).gte('created_at', since)
-      : Promise.resolve({ data: [], error: null }),
-    db.rpc('watchers_by_city', { p_cities: [...new Set(rows.map((r) => r.city).filter(Boolean))] }),
+  // المحطاتُ كلُّها لا المربوطةَ بالجدول: تسعٌ وأربعون محطةً بمنتجاتها صفحةٌ
+  // واحدة. ولا ترشيحَ على status/is_demo هنا — `qualifies` تردّهما، والنتيجةُ
+  // مجموعةٌ شاملةٌ لما كان يُقرأ، فمسارُ الجدول يبقى كما هو حرفاً بحرف.
+  const [st, up] = await Promise.all([
+    db
+      .from('stations')
+      .select('id, name, city, address, status, is_demo, is_24h, opens_at, closes_at, temp_closed, station_products(product, is_available, updated_at, runs_out_at)'),
+    db.from('station_updates').select('station_id, product, actor, change').gte('created_at', since),
   ]);
   if (st.error) {
     out.why = `stations: ${st.error.message}`;
     return finish(out, opts.dry);
   }
+  const wc = await db.rpc('watchers_by_city', {
+    p_cities: [
+      ...new Set([
+        ...sched.map((r) => r.city).filter(Boolean),
+        ...((st.data ?? []) as { city: string }[]).map((s) => s.city),
+      ]),
+    ],
+  });
 
   // تحديثاتُ صاحب المحطة خلال ٢٤ ساعة — بلا صفوف النظام (نفادٌ منتهٍ يكتبه الكرون بلا فاعل).
   const updates = new Map<string, number>();
@@ -107,10 +116,14 @@ export async function queueMorningSeries(
   const watchers: Record<string, number> = {};
   for (const w of (wc.data ?? []) as { city: string; watchers: number }[]) watchers[w.city] = Number(w.watchers) || 0;
 
-  out.items = buildMorningSeries({ forDate, rows: rows as SeriesRow[], stations, watchers });
+  out.items = buildMorningSeries({ forDate, rows: sched, stations, watchers });
   out.cities = new Set(out.items.map((i) => i.city)).size;
+  out.live = out.items.filter((i) => !i.inSchedule).length;
+  out.schedRows = sched.length;
   if (!out.items.length) {
-    out.why = 'لا مدينةَ معروفةً في الجدول';
+    out.why = sched.length
+      ? 'لا مدينةَ معروفةً في الجدول'
+      : `لا جدولَ ليوم ${forDate}، ولا محطةَ تُعلن توفّراً الآن`;
     return finish(out, opts.dry);
   }
   const keys = await Promise.all(out.items.map((i) => seriesKey(i.key)));
@@ -125,8 +138,18 @@ export async function queueMorningSeries(
   if (opts.refresh) {
     await db.from('announcements').delete().eq('kind', 'schedule').eq('note', tag).eq('active', true).is('sent_at', null);
   }
-  const { data: had } = await db.from('announcements').select('client_key').in('client_key', keys);
+  // صفوفُ اليوم كلُّها لا مفاتيحَ بعينها: المفتاحُ يمنع تكرارَ الخانة، والمدينةُ
+  // تمنع تبدّلَ **شكلِها** بين المرورات الستّة. فمدينةٌ بلا مسجّلةٍ نشطةٍ في
+  // السابعة تأخذ صفَّ «all»؛ ثمّ يضغط صاحبُ محطةٍ «أكّد التوفّر» في السابعة
+  // وثمانٍ، فيراها المرورُ التالي مؤهّلةً فيُصدر لكلّ وقودٍ صفّاً — فتُكدَّس
+  // صورتان على مدينةٍ واحدة. وقد صار هذا مرجَّحاً بعد التوسيع.
+  //
+  // و`refresh` استبدالٌ مقصودٌ من الإدارة: يُعاد بناءُ ما لم يُرسل، فلا تُقفل المدن.
+  const { data: had } = await db.from('announcements').select('client_key, origin_city').eq('note', tag);
   const existing = new Set(((had ?? []) as { client_key: string }[]).map((r) => r.client_key));
+  const done = opts.refresh
+    ? new Set<string>()
+    : new Set(((had ?? []) as { origin_city: string | null }[]).map((r) => r.origin_city));
 
   // ينتهي الصفُّ بنهاية يومه في بغداد (+03): خبرُ اليوم لا يُرسل غداً لو تعطّلت المِكنسة.
   const expires = `${forDate}T23:59:59+03:00`;
@@ -134,7 +157,7 @@ export async function queueMorningSeries(
   const errors: string[] = [];
   for (let i = 0; i < out.items.length; i++) {
     const it = out.items[i];
-    if (existing.has(keys[i])) {
+    if (existing.has(keys[i]) || done.has(it.city)) {
       out.skipped++;
       continue;
     }
@@ -180,14 +203,26 @@ function finish(out: SeriesOutcome, dry?: boolean): SeriesOutcome {
 /** «🌅 سلسلة الصباح — جدول 2026-09-17 · 41 إشعاراً في 17 مدينة · كلّ دقيقتين من 07:00 إلى 08:20». */
 function report(o: SeriesOutcome, dry: boolean): string {
   const lines: string[] = [];
-  lines.push(`🌅 <b>سلسلة الصباح — جدول ${o.day}</b>${dry ? ' · 🔎 بروفة، لم يُدرج شيء' : ''}`);
+  // ولا تُسمّى «جدولاً»: صارت تُبنى من الجدول ومن لوحات المحطات معاً، وقد تُبنى
+  // من اللوحات وحدَها في صباحٍ بلا جدولٍ منشور.
+  lines.push(`🌅 <b>سلسلة الصباح — ${o.day}</b>${dry ? ' · 🔎 بروفة، لم يُدرج شيء' : ''}`);
+  // وبروفةٌ قبل السابعة تقرأ المحطاتِ مغلقةً بالدوام (07:00–20:00)، فلا يظهر
+  // فيها «متوفّر الآن» — وهو صوابٌ لا عطب، يُقال كي لا يُصلَح ما ليس معطوباً.
+  if (
+    dry &&
+    Number(new Date().toLocaleString('en-US', { timeZone: 'Asia/Baghdad', hour: '2-digit', hour12: false })) < 7
+  ) {
+    lines.push('⏰ بروفةٌ قبل السابعة: المحطاتُ غيرُ الـ٢٤ ساعةً مغلقةٌ الآن، فلا «متوفّر الآن» فيها.');
+  }
   if (!o.items.length) {
     lines.push(escHtml(o.why || 'لا شيء'));
     return lines.join('\n');
   }
   const n = dry ? o.items.length : o.queued;
   const span = o.startAt && o.endAt ? ` · كلّ دقيقتين من ${baghdadClock(o.startAt)} إلى ${baghdadClock(o.endAt)} (بغداد)` : '';
-  lines.push(`${n} إشعاراً في ${o.cities} مدينة${span}`);
+  const src = o.live ? ` · منها ${o.live} من توفّرٍ معلَنٍ الآن خارج الجدول` : '';
+  lines.push(`${n} إشعاراً في ${o.cities} مدينة${span}${src}`);
+  if (!o.schedRows) lines.push('📋 لا جدولَ منشوراً اليوم — السلسلةُ من لوحات المحطات وحدَها.');
   if (o.skipped) lines.push(`(مُدرجٌ سلفاً أو مُلغى: ${o.skipped})`);
   if (o.why) lines.push(`⚠️ ${escHtml(o.why)}`);
   let city = '';
@@ -199,7 +234,13 @@ function report(o: SeriesOutcome, dry: boolean): string {
     }
     k++;
     const fuel = it.products.map((p) => PRODUCT_LABELS[p]).join(' و');
-    const mark = it.registered ? (it.offeredNow ? ' ✅ الآن' : '') : ' (غير مسجّلة)';
+    const mark = it.registered
+      ? it.offeredNow
+        ? it.inSchedule
+          ? ' ✅ الآن'
+          : ' ✅ الآن · خارج الجدول'
+        : ''
+      : ' (غير مسجّلة)';
     lines.push(`${k}. ${escHtml(fuel)} — ${escHtml(it.stationName)}${mark}`);
   }
   return lines.join('\n').slice(0, 3900);

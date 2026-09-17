@@ -49,4 +49,66 @@ const always = { is_24h: true, opens_at: '00:00:00', closes_at: '00:00:00' };
 assert.equal(decide(always, toMinutes('07:05'), null, TODAY), 'opening_first');
 assert.equal(decide(always, toMinutes('21:05'), TODAY, TODAY), 'closing_thanks');
 
-console.log('تذكير المحطات: 13 حالة تمرّ');
+// ── سؤالُ الساعتين: الخانةُ والمنتج ──────────────────────────────────────
+//
+// «يأتي إشعارٌ بعد كلّ ساعتين … والزرّ يكون أغلق المنتج» — صاحبُ المنصّة.
+const SLOT_MIN = 120;
+const MAX_SLOTS = 7;
+const slotOf = (m, open) => Math.min(MAX_SLOTS - 1, Math.max(0, Math.floor((m - open) / SLOT_MIN)));
+const OPEN = toMinutes('07:00');
+
+// سبعُ خاناتٍ من الفتح، كلُّ ساعتين
+assert.equal(slotOf(toMinutes('07:00'), OPEN), 0);
+assert.equal(slotOf(toMinutes('08:59'), OPEN), 0);
+assert.equal(slotOf(toMinutes('09:00'), OPEN), 1);
+assert.equal(slotOf(toMinutes('13:00'), OPEN), 3);
+assert.equal(slotOf(toMinutes('15:00'), OPEN), 4);
+// **وساعاتُ النفاد مغطّاةٌ**: كانت خمساً فتصمت عند الثالثة، وهو ما رُفع.
+assert.equal(slotOf(toMinutes('17:00'), OPEN), 5);
+assert.equal(slotOf(toMinutes('19:00'), OPEN), 6);
+assert.equal(slotOf(toMinutes('19:59'), OPEN), 6);
+// ويومُ 07:00–20:00 كلُّه سبعُ خاناتٍ متمايزة، لا التصاقَ قبل آخرِه
+assert.equal(new Set([7, 9, 11, 13, 15, 17, 19].map((h) => slotOf(h * 60, OPEN))).size, 7);
+
+// **النوعُ يحمل الخانةَ ثمّ المنتج.** لو تقدّم المنتجُ لصارت MESSAGES[baseKind]
+// غيرَ معرّفةٍ فترمي — وتُسقط الدورةَ كلَّها لتسعٍ وأربعين محطة، كلَّ ربع ساعة.
+const baseKind = (k) => k.split('#')[0];
+const askKind = (p, slot) => `stock_check#${slot}#${p}`;
+assert.equal(baseKind(askKind('gasoline_regular', 2)), 'stock_check');
+assert.equal(askKind('gasoline_regular', 2).split('#')[2], 'gasoline_regular');
+// ولا رسالةً مدفوعة: بوّابةُ tellPhone على 'stale' وحدَها
+assert.ok(!baseKind(askKind('kerosene', 3)).startsWith('stale'));
+// وحجمُ callback_data دون السقف (uuid ٣٦ محرفاً)
+assert.ok(`off:${'x'.repeat(36)}:gasoline_regular`.length <= 64);
+
+// ── المنتجُ الأقدمُ وحدَه يُسأل عنه ──────────────────────────────────────
+const H = 3600_000;
+const NOW = Date.now();
+const oldestAsk = (rows) =>
+  rows
+    .filter((r) => r.live && NOW - r.at >= 2 * H && NOW - r.at < 24 * H)
+    .sort((a, b) => a.at - b.at)[0]?.product ?? null;
+
+// محطةٌ لمست الغازَ قبل دقيقةٍ وبانزينُها معلَنٌ منذ تسع ساعات: البانزينُ يُسأل
+assert.equal(
+  oldestAsk([
+    { product: 'gas', at: NOW - 5 * H, live: true },
+    { product: 'gasoline_regular', at: NOW - 9 * H, live: true },
+    { product: 'kerosene', at: NOW - 0.5 * H, live: true },
+  ]),
+  'gasoline_regular'
+);
+assert.equal(oldestAsk([{ product: 'gas', at: NOW - 5 * H, live: false }]), null, 'النافدُ لا يُسأل');
+assert.equal(oldestAsk([{ product: 'gas', at: NOW - 30 * H, live: true }]), null, 'ما جاوز اليومَ لـstale_stock');
+assert.equal(oldestAsk([{ product: 'gas', at: NOW - 1.5 * H, live: true }]), null, 'ولا سؤالَ قبل ساعتين');
+
+// ── والخانةُ تُحجَز بخانتها لا بمنتجها ──────────────────────────────────
+const already = new Set();
+for (const k of ['stock_check#1#gasoline_regular', 'stock_check']) {
+  const [base, slot = '0'] = k.split('#');
+  if (base === 'stock_check') already.add(`stock_check#${slot}`);
+}
+assert.ok(already.has('stock_check#1'), 'من أُطفئ منتجُه لا يُسأل عن الذي يليه في الخانة نفسِها');
+assert.ok(already.has('stock_check#0'), 'والصفُّ القديمُ بلا خانةٍ يُقرأ صفراً');
+
+console.log('تذكير المحطات: 33 حالة تمرّ');

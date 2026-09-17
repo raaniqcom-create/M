@@ -44,7 +44,7 @@ export function OwnerReminders({ stationId }: { stationId: string }) {
       <section className="card p-5">
         <h3 className="text-sm font-bold">تذكير تحديث الحالة</h3>
         <p className="mt-1 text-xs leading-relaxed text-slate-500">
-          مُفعّل عبر إشعارات التطبيق. يصلك تنبيه عند فتح محطتك، ثمّ كل 3 ساعات أثناء
+          مُفعّل عبر إشعارات التطبيق. يصلك تنبيه عند فتح محطتك، ثمّ كل ساعتين أثناء
           ساعات عملك، وشكرٌ عند الإغلاق. لإيقافه، أوقف إشعارات التطبيق من إعدادات هاتفك.
         </p>
       </section>
@@ -57,7 +57,7 @@ export function OwnerReminders({ stationId }: { stationId: string }) {
         <div className="min-w-0">
           <h3 className="text-sm font-bold">تذكير تحديث الحالة</h3>
           <p className="mt-1 text-xs text-slate-500">
-            يصلك تنبيه على هاتفك عند فتح محطتك، ثمّ كل 3 ساعات أثناء ساعات عملك — حتى
+            يصلك تنبيه على هاتفك عند فتح محطتك، ثمّ كل ساعتين أثناء ساعات عملك — حتى
             والتطبيق مغلق — لتحديث توفر المنتجات وحالة الازدحام.
           </p>
         </div>

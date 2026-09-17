@@ -42,6 +42,7 @@ import { OwnerLocation } from '@/components/OwnerLocation';
 import { BiometricLockToggle } from '@/components/BiometricLockToggle';
 import { FaceLoginSetup } from '@/components/FaceLoginSetup';
 import { SuspendedNotice } from '@/components/SuspendedNotice';
+import { StaleProductPopup } from '@/components/StaleProductPopup';
 import { isSuspended } from '@/lib/silence';
 import { biometricLockEnabled, forgetLogin, verifyOwner } from '@/lib/biometric';
 import { BiometricLockScreen } from '@/components/BiometricLockScreen';
@@ -69,6 +70,8 @@ export default function OwnerPage() {
   const [savingProduct, setSavingProduct] = useState<FuelProduct | null>(null);
   /** المنتجُ المفتوحةُ تفاصيلُه — واحدٌ لا أكثر، فلا تطول الشاشة. */
   const [openProduct, setOpenProduct] = useState<FuelProduct | null>(null);
+  /** المنتجُ الذي جاء إشعارُ «هل ما زال متوفراً؟» من أجله — من `?off=`. */
+  const [offParam, setOffParam] = useState<FuelProduct | null>(null);
   // كتابةٌ سقطت تُقال. وكانت تُبتلع في مسارين من ثلاثة.
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [view, setView] = useState<OwnerView>('home');
@@ -153,10 +156,16 @@ export default function OwnerPage() {
   // المحطة يبحث عنها. ويُقرأ من location لا بـuseSearchParams: الأخيرة تُلزم
   // حدَّ Suspense في بناء التصدير الساكن، وهذه قراءةٌ واحدة عند التركيب.
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.search.includes('chat=1')) {
+    if (typeof window === 'undefined') return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('chat') === '1') {
       setView('chat');
       setUnread(0);
     }
+    // و`?off=` يحملها إشعارُ سؤال الساعتين، فتُقدَّم نافذتُه على غيرها.
+    // وقائمةٌ بيضاءُ لا تصديق: قيمةٌ من عنوانٍ تمشي إلى كتابةٍ في القاعدة.
+    const off = q.get('off');
+    if (off && (PRODUCT_ORDER as readonly string[]).includes(off)) setOffParam(off as FuelProduct);
   }, []);
 
   useEffect(() => {
@@ -754,6 +763,14 @@ export default function OwnerPage() {
             {isSuspended({ is_demo: station.is_demo, products }) && (
               <SuspendedNotice station={{ id: station.id, is_demo: station.is_demo, products }} />
             )}
+            {/* سؤالُ الساعتين حيث اليدُ على الزرّ — والجوابُ ضغطةٌ لا رحلة. */}
+            <StaleProductPopup
+              products={products}
+              prefer={offParam}
+              busy={savingProduct !== null}
+              onOff={(p) => setState(p, 'out')}
+              onKeep={(p) => patchProduct(p, { updated_at: new Date().toISOString() })}
+            />
             {/* «أرسل لهم طلبَ التفعيل ببصمة الوجه» — البطاقةُ أوّلُ ما يُرى حتى يفعّل. */}
             <FaceLoginSetup />
             {station.temp_closed && (

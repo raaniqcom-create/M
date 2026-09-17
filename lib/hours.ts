@@ -1,6 +1,7 @@
 // Station hours are Baghdad local clock times. Everything here works from the
 // station's clock, not the viewer's device — a driver abroad checking on
 // family, or a phone with the wrong timezone, must still see the truth.
+import { plural } from './freshness.ts';
 const BAGHDAD = 'Asia/Baghdad';
 
 export type ExpectedPeriod = 'morning' | 'afternoon' | 'evening';
@@ -247,7 +248,7 @@ export function runsOutLabel(runsOutAt: string | null | undefined): string {
 /** تاريخُ بغداد "YYYY-MM-DD" بإزاحةِ أيّامٍ اختياريّة — مرآةُ `baghdadDay` في
  *  supabase/functions/_shared/state.ts:17. و'en-CA' وحدَها تكتبه بهذا الترتيب
  *  وبأرقامٍ لاتينيّة. */
-const baghdadDay = (ms: number, plusDays = 0): string =>
+export const baghdadDay = (ms: number, plusDays = 0): string =>
   new Date(ms + plusDays * 86_400_000).toLocaleDateString('en-CA', { timeZone: BAGHDAD });
 
 /** "HH:MM" بتوقيت بغداد للحظةٍ مخزّنة — القراءةُ التي يُملأ بها حقلُ الوقت، وهي
@@ -291,9 +292,12 @@ export function ageLabel(updatedAt: string | null | undefined): string {
   if (!updatedAt) return 'غير معروف';
   const mins = Math.floor((Date.now() - new Date(updatedAt).getTime()) / 60000);
   if (mins < 1) return 'الآن';
-  if (mins < 60) return `قبل ${mins} دقيقة`;
+  // والعربيّةُ تعدّ على أربعة وجوه. كانت تقول «قبل 6 ساعة» و«قبل 5 دقيقة» —
+  // وهو الخطأُ الذي ردّه صاحبُ المنصّة مرّتين («5 سيّارة»)، و`plural` مكتوبةٌ
+  // عندنا لأجله. وتوأمُها `agoLabel` في lib/freshness.ts تعدّ صحيحاً منذ زمن.
+  if (mins < 60) return `قبل ${plural(mins, 'دقيقة', 'دقيقتين', 'دقائق', 'دقيقة')}`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `قبل ${hours} ساعة`;
+  if (hours < 24) return `قبل ${plural(hours, 'ساعة', 'ساعتين', 'ساعات', 'ساعة')}`;
   const days = Math.floor(hours / 24);
-  return days === 1 ? 'قبل يوم' : `قبل ${days} أيام`;
+  return `قبل ${plural(days, 'يوم', 'يومين', 'أيام', 'يوماً')}`;
 }

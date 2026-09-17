@@ -1894,6 +1894,56 @@ async function toggleProduct(
   await showOwnerPanel(chat, stationId, messageId);
 }
 
+/** «أغلق بانزين عادي» — بضغطةٍ واحدة.
+ *
+ *  والدورةُ (`t:`) تحتاج ضغطتين من «متوفّر» إلى «غير متوفّر» لأنّها تمرّ
+ *  بـ«متوقّع». ومن يقرأ إشعارَ «هل ما زال متوفّراً؟» على قفل الشاشة لا يضغط
+ *  مرّتين — فيبقى الوقودُ معروضاً وهو نافد، وهي العلّةُ نفسُها التي وُجد
+ *  السؤالُ لأجلها.
+ *
+ *  ولا نداءَ لـ`notify`: الإعلانُ خبرُ وصولٍ لا خبرُ إطفاء. */
+async function closeProduct(
+  chat: number,
+  messageId: number,
+  telegramId: number,
+  stationId: string,
+  product: string,
+  queryId: string
+) {
+  if (!(await ownsStation(telegramId, stationId))) {
+    return void (await answer(queryId, 'غير مصرّح لك بإدارة هذه المحطة'));
+  }
+
+  const { data: row } = await db
+    .from('station_products')
+    .select('is_available, runs_out_at, expected_at')
+    .eq('station_id', stationId)
+    .eq('product', product)
+    .maybeSingle();
+
+  const now = new Date().toISOString();
+  const { error } = await db.from('station_products').upsert(
+    {
+      station_id: stationId,
+      product,
+      is_available: false,
+      // والانتقالُ من التوفّر نفادٌ — لا الإطفاءُ المجرَّد. وما كان مطفأً
+      // أصلاً يبقى موعدُه كما هو.
+      runs_out_at: stillLive(row) ? now : (row?.runs_out_at ?? null),
+      updated_at: now,
+      // و«غير متوفر» تعني ما تقوله: لا وقودَ ولا وعد.
+      expected_at: null,
+      expected_period: null,
+      expected_time: null,
+    },
+    { onConflict: 'station_id,product' }
+  );
+  if (error) return void (await answer(queryId, 'تعذّر الحفظ — أعد المحاولة'));
+
+  await answer(queryId, `${PRODUCT_LABELS[product] ?? product}: أُغلق ✅`);
+  await showOwnerPanel(chat, stationId, messageId);
+}
+
 // ---------- جدولُ الغد ----------
 //
 // يصل صاحبَ المنصّة كلَّ مساءٍ منشورٌ بمحطاتٍ يصلها وقودٌ غداً، فيُحوَّل إلى
@@ -3447,6 +3497,11 @@ Deno.serve(async (req) => {
         await setRunOut(chat, messageId, from, data, cb.id);
       } else if (/^x[dphc]:/.test(data)) {
         await setExpectation(chat, messageId, from, data, cb.id);
+      } else if (data.startsWith('off:')) {
+        // و`off:` لا تصطدم بشيء: فُحصت البادئاتُ كلُّها، و«o:» حرفُها الثاني
+        // نقطتان لا «f». والحجمُ ٥٧ بايتاً من ٦٤ — فالمنتجُ باسمه كما في `t:`.
+        const [, sid, product] = data.split(':');
+        await closeProduct(chat, messageId, from, sid, product, cb.id);
       } else if (data.startsWith('t:')) {
         const [, stationId, product] = data.split(':');
         await toggleProduct(chat, messageId, from, stationId, product, cb.id);

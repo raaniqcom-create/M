@@ -24,6 +24,15 @@ const station = (id, name, city, o = {}) => ({
 });
 const row = (product, station_name, city, linked_station_id = null) => ({ product, station_name, city, linked_station_id });
 
+/** محطةٌ تُعلن هذه المنتجاتِ **الآن** على لوحتها — `isOffered` تصدّقها.
+ *  ولا يُختبر الإغلاقُ بالدوام: `isOffered` تقرأ الساعةَ الحقيقيّة، فيتبدّل
+ *  الفحصُ بساعة تشغيله. الإغلاقُ يُختبر بـ`temp_closed` وحدَه. */
+const liveStation = (id, name, city, products, o = {}) =>
+  station(id, name, city, {
+    ...o,
+    products: products.map((p) => ({ product: p, is_available: true, updated_at: ago(1), runs_out_at: null })),
+  });
+
 ok('ترتيبُ الوقود: المحسن ثمّ العادي ثمّ الكاز ثمّ الباقي', () => {
   assert.deepEqual(SERIES_PRODUCT_ORDER.slice(0, 3), ['gasoline_premium', 'gasoline_regular', 'kerosene']);
   assert.ok(SERIES_PRODUCT_ORDER.includes('gasoline_super') && SERIES_PRODUCT_ORDER.includes('white_oil'));
@@ -141,5 +150,89 @@ await (async () => {
   n++;
   console.log('  ✓ client_key ثابتٌ للمفتاح نفسِه وصالحٌ uuid v5');
 })();
+
+// ── التوسيع: «وسّعه ليشمل المتوفّرَ الآن» ───────────────────────────────
+//
+// كانت السلسلةُ تُبنى من جدول التوزيع وحدَه، فمحطةٌ تعلن وقوداً على لوحتها
+// وليست في جدول اليوم لا يذكرها أحد.
+
+ok('مدينةٌ خارج الجدول تدخل السلسلةَ بما تعلنه لوحتُها الآن', () => {
+  const out = buildMorningSeries({
+    forDate: DAY,
+    rows: [row('kerosene', 'محطة أ', 'حديثة')],
+    stations: [liveStation('k1', 'محطة الكرمة', 'الكرمة', ['gasoline_premium', 'kerosene'])],
+    watchers: { 'الكرمة': 1200, 'حديثة': 860 },
+  });
+  assert.deepEqual(
+    out.map((i) => `${i.city}:${i.product}`),
+    ['الكرمة:gasoline_premium', 'الكرمة:kerosene', 'حديثة:null']
+  );
+  assert.equal(out[0].registered, true);
+  assert.equal(out[0].offeredNow, true);
+  assert.equal(out[0].inSchedule, false);
+  // نطاقُ المفتاح واحدٌ لا نطاقان — ونطاقٌ ثانٍ يُضاعف السلسلةَ في المرور التالي
+  assert.equal(out[0].key, `series:${DAY}:الكرمة:gasoline_premium`);
+});
+
+ok('ونصُّها لا ينسب المحطةَ إلى الجدول', () => {
+  const [it] = buildMorningSeries({
+    forDate: DAY,
+    rows: [],
+    stations: [liveStation('k1', 'محطة الكرمة', 'الكرمة', ['gasoline_premium'])],
+    watchers: {},
+  });
+  assert.equal(it.title, 'بانزين محسن متوفر الآن في الكرمة');
+  assert.match(it.body, /أكّدت توفّره الآن على المنصّة/);
+  assert.doesNotMatch(it.body, /جدول التوزيع/);
+  assert.ok(it.title.length <= TITLE_MAX && it.body.length <= BODY_MAX);
+});
+
+ok('صباحٌ بلا جدول: السلسلةُ من اللوحات وحدَها، والصامتُ لا يدخل', () => {
+  const out = buildMorningSeries({
+    forDate: DAY,
+    rows: [],
+    stations: [
+      liveStation('k1', 'محطة الكرمة', 'الكرمة', ['gasoline_premium', 'gasoline_regular']),
+      station('x1', 'محطة صامتة', 'هيت'),
+      liveStation('d1', 'محطة تجريبية', 'الرمادي', ['kerosene'], { is_demo: true }),
+    ],
+    watchers: { 'الكرمة': 1200 },
+  });
+  assert.deepEqual(
+    out.map((i) => `${i.city}:${i.product}`),
+    ['الكرمة:gasoline_premium', 'الكرمة:gasoline_regular']
+  );
+});
+
+ok('المعلِنُ الآن يسبق المجدوَلَ على الخانة ولو كان أقلَّ نشاطاً', () => {
+  const out = buildMorningSeries({
+    forDate: DAY,
+    rows: [row('gasoline_premium', 'محطة المجدولة', 'الفلوجة', 's1')],
+    stations: [
+      station('s1', 'محطة المجدولة', 'الفلوجة', { updates: 9, age: 1 }),
+      liveStation('s2', 'محطة المعلِنة', 'الفلوجة', ['gasoline_premium'], { updates: 1 }),
+    ],
+    watchers: {},
+  });
+  assert.equal(out.length, 1, 'خانةٌ واحدةٌ للمحسن لا خانتان');
+  assert.equal(out[0].stationId, 's2', 'الأنشطُ يخسر أمام من يقول «عندي الآن»');
+  assert.equal(out[0].inSchedule, false);
+});
+
+ok('والجدولُ واللوحةُ يجتمعان في مدينةٍ واحدةٍ بنصَّين مختلفَين', () => {
+  const out = buildMorningSeries({
+    forDate: DAY,
+    rows: [row('kerosene', 'محطة المجدولة', 'الرمادي', 's1')],
+    stations: [
+      station('s1', 'محطة المجدولة', 'الرمادي'),
+      liveStation('s2', 'محطة المعلِنة', 'الرمادي', ['gasoline_premium']),
+    ],
+    watchers: {},
+  });
+  assert.deepEqual(out.map((i) => i.product), ['gasoline_premium', 'kerosene'], 'الترتيبُ باقٍ');
+  assert.equal(out[0].inSchedule, false);
+  assert.equal(out[1].inSchedule, true);
+  assert.match(out[1].body, /في جدول التوزيع اليوم/);
+});
 
 console.log(`\n${n} فحصاً مرّت.`);

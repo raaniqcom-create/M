@@ -71,18 +71,21 @@ async function logPush(kind: string, r: Response) {
   console.error(`${kind} ${r.status}: ${(await r.text().catch(() => '')).slice(0, 200)}`);
 }
 
-const SLOT_MIN = 180;
+// ساعتان لا ثلاث — «يأتي إشعارٌ بعد كلّ ساعتين» نصُّ صاحب المنصّة، ١٨ أيلول.
+// ومن بدّله فليبدّل السطرين في components/OwnerReminders.tsx:47,60.
+const SLOT_MIN = 120;
 // **والحدُّ يتبع يومَ العمل، لا رقماً اختير.**
 //
-// كان ثلاثاً، فيقف التذكيرُ بعد تسع ساعات. وقِيس على اثنتين وأربعين محطةً
-// معتمدة: وسيطُ يوم العمل **خمسَ عشرةَ ساعة** (أدنى ١٢، أعلى ١٨) — فآخرُ ستِّ
-// ساعاتٍ من يوم المحطة الوسطى كانت بلا تذكير، وهي ساعاتُ المساء التي يتبدّل
-// فيها التوفّرُ أكثرَ ما يتبدّل.
+// كان ثلاثاً بفاصل ثلاثِ ساعات، فيقف التذكيرُ بعد تسع؛ ثمّ خمساً، فيغطّي
+// خمسَ عشرةَ ساعةً كانت وسيطَ يوم المحطة يومَ قِيس.
 //
-// وخمسٌ تُغطّي الوسيطَ بالفاصل نفسِه — ثلاثُ ساعاتٍ بين واحدةٍ وأخرى، وهو ما
-// طلبه صاحبُ المنصّة نصّاً. والحدُّ يبقى حدّاً: الخوفُ المكتوبُ أعلاه صحيح —
-// من يُزعَج كثيراً يُغلق الإشعارَ فلا يصله شيءٌ أبداً — فلا يُرفع بلا قياس.
-const MAX_SLOTS = 5;
+// وصار الدوامُ موحّداً 07:00–20:00 (20260927_station_hours.sql) والفاصلُ
+// ساعتين، فحسابُه مباشر: خمسٌ تقف عند الثالثة عصراً ويبقى **17:00–20:00 بلا
+// سؤال** — وهي ساعاتُ النفاد. وسبعٌ تبلغ السابعةَ مساءً، فتغطّي اليومَ كلَّه.
+//
+// والحدُّ يبقى حدّاً: من يُزعَج كثيراً يُغلق الإشعارَ فلا يصله شيءٌ أبداً —
+// فلا يُرفع بلا قياس، ورفعُه هنا قياسُ الساعات لا تقديرٌ.
+const MAX_SLOTS = 7;
 const slotOf = (minutes: number, open: number) =>
   Math.min(MAX_SLOTS - 1, Math.max(0, Math.floor((minutes - open) / SLOT_MIN)));
 const withSlot = (kind: string, slot: number) => (slot ? `${kind}#${slot}` : kind);
@@ -221,7 +224,19 @@ interface Msg { title: string; body: string }
  *  from `alerts`. An invented one was asked for; the true figure is larger than
  *  the example that was suggested, and a number caught being invented would
  *  cost the platform every other number it prints. */
-const MESSAGES: Record<string, (name: string, n: number, city: string) => Msg> = {
+/** أسماءُ الوقود — نسخةٌ محلّيّةٌ كما في notify و notify-favorites و telegram.
+ *  الدالّةُ الطرفيّةُ تُرفع ملفّاً واحداً، فوحدةٌ مشتركةٌ تكلّف أكثرَ من النسخة. */
+const PRODUCT_LABELS: Record<string, string> = {
+  gasoline_regular: 'بانزين عادي',
+  gasoline_premium: 'بانزين محسن',
+  gasoline_super: 'بانزين سوبر',
+  kerosene: 'كاز',
+  gas: 'غاز',
+  lpg: 'LPG',
+  white_oil: 'نفط أبيض',
+};
+
+const MESSAGES: Record<string, (name: string, n: number, city: string, product?: string) => Msg> = {
   opening_first: (name, n, city) => ({
     title: `${name} — ابدأ يومك`,
     body: n
@@ -272,9 +287,15 @@ const MESSAGES: Record<string, (name: string, n: number, city: string) => Msg> =
   //
   // ولا يُخفى منتجه إن لم يردّ — قرار المالك: صمتُ رجلٍ مشغول ليس نفاداً،
   // والبطاقة تحمل عمر الخبر فيقرأه القارئ بنفسه.
-  stock_check: (name, _n, _city) => ({
-    title: `${name} — هل ما زال متوفراً؟`,
-    body: 'مضت ساعتان على إعلانك. ضغطةٌ واحدة تُطمئن من يقصدك: إن بقي فأكّده، وإن نفد فأخفِه — فلا يقطع أحدٌ الطريق عبثاً.',
+  //
+  // والسؤالُ باسم المنتج لا بالمحطة: «والزرّ الموجود يكون أغلق المنتج — مثلاً
+  // بنزين العادي» (صاحبُ المنصّة، ١٨ أيلول). ومحطةٌ تعرض أربعةً يُسأل صاحبُها
+  // عن أقدمِها وحدَه، فالجوابُ ضغطةٌ لا مراجعةُ لوح.
+  //
+  // و«وقودك» احتياطٌ لصفٍّ قديمٍ بلا منتجٍ في مفتاحه، يومَ النشر وحدَه.
+  stock_check: (name, _n, _city, product = 'وقودك') => ({
+    title: `${name} — هل ما زال ${product} متوفراً؟`,
+    body: `مضت ساعتان على إعلانك ${product}. ضغطةٌ واحدة تُطمئن من يقصدك: إن بقي فأكّده، وإن نفد فأغلقه — فلا يقطع أحدٌ الطريق عبثاً.`,
   }),
   // محطةٌ لا تظهر لأن لا شيء لديها تُعلنه.
   //
@@ -449,8 +470,9 @@ async function preview(req: Request, stationId: string): Promise<Response> {
         sent: sentKinds.has(withdrawn ? 'stale_withdrawn' : 'stale_stock'),
         sentAt: at(withdrawn ? 'stale_withdrawn' : 'stale_stock'),
         skipped: !staleStock,
-        // وتتكرّر: ثلاثُ خانات، كلّ ثلاث ساعات، ما دامت مفتوحةً وراكدة.
-        repeats: `حتى ${MAX_SLOTS} مرّات، كل ${SLOT_MIN / 60} ساعات`,
+        // وتتكرّر ما دامت مفتوحةً وراكدة. و«ساعتين» تُكتب ولا تُحسب: `${2} ساعات`
+        // عربيّةٌ مكسورة، والمثنّى كلمةٌ لا رقمٌ ووحدة.
+        repeats: `حتى ${MAX_SLOTS} مرّات، كل ساعتين`,
         note: withdrawn
           ? 'ستُرسل: سُحب توفّرها من العرض — مضى يومان بلا تأكيد'
           : staleStock
@@ -547,7 +569,7 @@ Deno.serve(async (req) => {
   const [{ data: products }, { data: pinged }, { data: votes }, { data: watchRows }] = await Promise.all([
     // سبعة صفوف لكل محطة: بلا حدّ صريح تُقرأ المحطات بعد القطع «لم تنشر قطّ»،
     // فتُرحَّب بها يومياً ولا يصلها شكر الإغلاق أبداً.
-    db.from('station_products').select('station_id, updated_at, is_available, expected_at, runs_out_at').in('station_id', ids).range(0, 99_999),
+    db.from('station_products').select('station_id, product, updated_at, is_available, expected_at, runs_out_at').in('station_id', ids).range(0, 99_999),
     // وعلامات اليوم: ضياعها يعني رسالةً مكرّرة لكل مالك.
     db.from('owner_pings').select('station_id, kind').eq('day', day).in('station_id', ids).range(0, 99_999),
     // Only the tail matters: a vote older than 45 minutes lapsed long ago and
@@ -567,6 +589,13 @@ Deno.serve(async (req) => {
   ]);
 
   const already = new Set((pinged ?? []).map((p) => `${p.station_id}:${p.kind}`));
+  // وخانةُ سؤال الساعتين تُحجَز بخانتها لا بمنتجها: من أغلق المنتجَ المسؤولَ
+  // عنه لا يُسأل بعد دقائقَ عن الذي يليه — رنّتان في خانةٍ واحدةٍ تُطفئ الإشعار.
+  // و`slot = '0'` تلتقط الصفوفَ التي كُتبت بلا خانةٍ قبل هذا التغيير.
+  for (const p of pinged ?? []) {
+    const [base, slot = '0'] = p.kind.split('#');
+    if (base === 'stock_check') already.add(`${p.station_id}:stock_check#${slot}`);
+  }
 
   const counts = new Map<string, number>(
     ((watchRows ?? []) as { city: string; watchers: number }[]).map((r) => [r.city, r.watchers])
@@ -603,6 +632,8 @@ Deno.serve(async (req) => {
   // ورسالةُ «لا شيء معروضاً فلا تظهر محطتك». فمالكٌ أعلن نفادَ الكاز ظهراً
   // يجب أن يصله مساءً أنه اختفى من القائمة، لا أن يُشكر على خبرٍ حجبناه.
   const lastAvailable = new Map<string, string>();
+  /** الصفوفُ الحيّةُ ومعها ختمُ كلٍّ منها — لا أحدثُها وحدَه. لسؤال الساعتين. */
+  const liveRows = new Map<string, { product: string; updated_at: string }[]>();
   const nowIso = new Date().toISOString();
   const live = (p: { is_available?: boolean | null; runs_out_at?: string | null }) =>
     !!p.is_available && !(p.runs_out_at && p.runs_out_at <= nowIso);
@@ -612,6 +643,10 @@ Deno.serve(async (req) => {
     if (live(p)) {
       const a = lastAvailable.get(p.station_id);
       if (!a || p.updated_at > a) lastAvailable.set(p.station_id, p.updated_at);
+      liveRows.set(p.station_id, [
+        ...(liveRows.get(p.station_id) ?? []),
+        p as { product: string; updated_at: string },
+      ]);
     }
   }
 
@@ -634,13 +669,25 @@ Deno.serve(async (req) => {
   // بلا الحدّ الأعلى يبتلع stale_stock: محطةٌ خبرها عمره ثلاثون ساعة تطابق
   // «أكثر من ساعتين» أولاً في السلسلة، فلا تصل رسالةُ اليوم الكامل أبداً.
   // فالنافذتان متجاورتان لا متداخلتان: ساعتان إلى أربعٍ وعشرين، ثم ما بعدها.
+  // **ولكلّ منتجٍ ساعتُه، لا للمحطة ساعةٌ واحدة.**
+  //
+  // كان المقياسُ أحدثَ ختمٍ في المحطة كلِّها: فمن لمس الغازَ قبل دقيقةٍ بدا
+  // بانزينُه المعلَنُ منذ ستّ ساعاتٍ حديثاً فلا يُسأل عنه أبداً — وهو الخبرُ
+  // الذي يقصده الناس. «والزرُّ يكون: أغلق المنتج، مثلاً بنزين العادي» —
+  // وزرٌّ باسم منتجٍ يحتاج سؤالاً باسم منتج.
+  //
+  // وواحدٌ لا سبعة: أربعةُ منتجاتٍ حيّةٍ تعني أربعَ رنّاتٍ كلَّ ساعتين، وهو
+  // التحذيرُ المكتوبُ في app/owner/page.tsx — خمسُ رنّاتٍ في عشر ثوانٍ تحذف
+  // التطبيق. فالأقدمُ يُسأل عنه، ومتى أُغلق أو أُكّد جاء الذي يليه في الخانة
+  // التالية.
   const ASK_MS = 2 * 3600_000;
-  const stockCheck = (id: string) => {
-    const a = lastAvailable.get(id);
-    if (!a) return false;
-    const age = Date.now() - new Date(a).getTime();
-    return age >= ASK_MS && age < 24 * 3600_000;
-  };
+  const oldestAsk = (id: string): string | null =>
+    (liveRows.get(id) ?? [])
+      .filter((p) => {
+        const age = Date.now() - new Date(p.updated_at).getTime();
+        return age >= ASK_MS && age < 24 * 3600_000;
+      })
+      .sort((a, b) => (a.updated_at < b.updated_at ? -1 : 1))[0]?.product ?? null;
 
   // ولا منتج معلَناً أصلاً — لا قديماً ولا حديثاً.
   //
@@ -676,6 +723,17 @@ Deno.serve(async (req) => {
     const publishedToday = !!last && baghdadDayOf(last) === day;
     const everPublished = !!last;
 
+    // أقدمُ منتجٍ حيٍّ مضت على إعلانه ساعتان — وخانةُ هذه الساعتين لم تُستعمل
+    // بعد. والخانةُ تُحسب مرّةً هنا كي يقرأها الفرعان معاً.
+    const slot = slotOf(minutes, open);
+    const ask =
+      minutes >= open &&
+      minutes < close &&
+      !s.temp_closed &&
+      !already.has(`${s.id}:stock_check#${slot}`)
+        ? oldestAsk(s.id)
+        : null;
+
     let kind: string | null = null;
     // و`temp_closed` تُفحص هنا كما تُفحص في كلّ فرعٍ أدناه. محطةٌ مغلقةٌ
     // لحادثٍ كانت تُحيّا كلَّ صباح بـ«ينتظرون خبر الوقود اليوم» — وهي مغلقة.
@@ -697,9 +755,12 @@ Deno.serve(async (req) => {
     ) {
       kind = 'traffic_confirm';
     } else if (minutes >= open && minutes < close && !s.temp_closed && staleStock(s.id)) {
-      kind = withSlot(withdrawn(s.id) ? 'stale_withdrawn' : 'stale_stock', slotOf(minutes, open));
-    } else if (minutes >= open && minutes < close && !s.temp_closed && stockCheck(s.id)) {
-      kind = withSlot('stock_check', slotOf(minutes, open));
+      kind = withSlot(withdrawn(s.id) ? 'stale_withdrawn' : 'stale_stock', slot);
+    } else if (ask) {
+      // **الخانةُ أوّلاً والمنتجُ آخراً.** `baseKind` تقطع عند أوّل `#`، فلو
+      // تقدّم المنتجُ لصارت `MESSAGES[baseKind(kind)]` غيرَ معرّفةٍ فترمي —
+      // وتُسقط الدورةَ كلَّها لتسعٍ وأربعين محطة، كلَّ ربع ساعة.
+      kind = `stock_check#${slot}#${ask}`;
     } else if (minutes >= open && minutes < close && !s.temp_closed && noStock(s.id)) {
       kind = 'no_stock';
     }
@@ -881,19 +942,33 @@ Deno.serve(async (req) => {
 
     // زرّان للسؤال وحده: «هل ما زال متوفراً؟» يُجاب بضغطة بلا فتح شيء —
     // وهذا هو الفرق بين سؤالٍ يُجاب وسؤالٍ يُقرأ ثم يُنسى.
+    const panel = { text: '📋 لوحة محطتي', callback_data: `r:${stationId}` };
+    const keep = { text: '✅ ما زال متوفراً', callback_data: `c:${stationId}` };
+    // وسؤالُ الساعتين يحمل جوابَيه معاً: الإغلاقُ بضغطةٍ واحدة، أو التأكيد.
+    //
+    // ودورةُ `t:` لا تصلح هنا: من «متوفّر» إلى «غير متوفّر» ضغطتان (تمرّ
+    // بـ«متوقّع»)، ومن يقرأ إشعاراً على قفل الشاشة لا يضغط مرّتين — فيبقى
+    // الوقودُ معروضاً وهو نافد، وهي العلّةُ التي وُجد السؤالُ لأجلها.
+    const off = baseKind(kind) === 'stock_check' ? (kind.split('#')[2] ?? null) : null;
     const keyboard =
       // baseKind لا kind: الخاناتُ جعلت النوعَ 'stock_check#2'، فسقط الزرّان
       // عن التذكيرين الثاني والثالث — وهما أحوجُ ما يكون إلى جوابٍ بضغطة.
-      baseKind(kind) === 'stock_check' || baseKind(kind) === 'stale_stock'
+      off
         ? {
             inline_keyboard: [
               [
-                { text: '✅ ما زال متوفراً', callback_data: `c:${stationId}` },
-                { text: '📋 لوحة محطتي', callback_data: `r:${stationId}` },
+                {
+                  text: `⛔ أغلق ${PRODUCT_LABELS[off] ?? off}`,
+                  callback_data: `off:${stationId}:${off}`,
+                },
+                keep,
               ],
+              [panel],
             ],
           }
-        : { inline_keyboard: [[{ text: '📋 لوحة محطتي', callback_data: `r:${stationId}` }]] };
+        : baseKind(kind) === 'stock_check' || baseKind(kind) === 'stale_stock'
+          ? { inline_keyboard: [[keep, panel]] }
+          : { inline_keyboard: [[panel]] };
 
     let ok = 0;
     for (const chat of chats) {
@@ -938,9 +1013,16 @@ ${body}`,
               title: `${station.name} — فعّل الدخول بالوجه`,
               body: 'بعض المحطات خرجت من التطبيق واحتاجت كلمة المرور. افتح لوحتك وأدخل كلمتك مرّةً واحدة في بطاقة «فعّل الدخول بالوجه» — وبعدها تدخل بوجهك أو بصمتك دائماً.',
             }
-          : MESSAGES[baseKind(kind)](station.name, watchersFor(station.city), station.city);
-    // الدفعُ يفتح تبويبَ الرسائل مباشرةً، لا اللوحةَ ثمّ بحثاً عنه
-    const deepLink = chatMsg ? '/owner?chat=1' : '/owner';
+          : MESSAGES[baseKind(kind)](
+              station.name,
+              watchersFor(station.city),
+              station.city,
+              PRODUCT_LABELS[kind.split('#')[2] ?? ''],
+            );
+    // الدفعُ يفتح تبويبَ الرسائل مباشرةً، لا اللوحةَ ثمّ بحثاً عنه.
+    // وسؤالُ الساعتين يحمل منتجَه، فتفتح اللوحةُ على نافذته بلا بحث.
+    const askProduct = baseKind(kind) === 'stock_check' ? (kind.split('#')[2] ?? null) : null;
+    const deepLink = chatMsg ? '/owner?chat=1' : askProduct ? `/owner?off=${askProduct}` : '/owner';
 
     // تيليجرام أولاً، وقبل حارس «لا أجهزة».
     //

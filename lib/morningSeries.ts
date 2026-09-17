@@ -56,6 +56,8 @@ export interface SeriesItem {
   address: string | null;
   registered: boolean;
   offeredNow: boolean;
+  /** أهذا الوقودُ في جدول اليوم لهذه المحطة — أم من لوحتها وحدَها. */
+  inSchedule: boolean;
   watchers: number;
   title: string;
   body: string;
@@ -82,7 +84,18 @@ export function displayName(name: string): string {
 
 const labels = (ps: FuelProduct[]) => ps.map((p) => PRODUCT_LABELS[p]).join(' و');
 
-type Candidate = { key: string; name: string; stationId: string | null; products: Set<FuelProduct>; station: SeriesStation | null };
+type Candidate = {
+  key: string;
+  name: string;
+  stationId: string | null;
+  /** من جدول التوزيع اليوم. */
+  sched: Set<FuelProduct>;
+  /** معروضٌ على لوحتها الآن (isOffered). */
+  live: Set<FuelProduct>;
+  /** الاتّحاد — عليه الترتيبُ والترجيح. */
+  products: Set<FuelProduct>;
+  station: SeriesStation | null;
+};
 
 export function buildMorningSeries(
   input: { forDate: string; rows: SeriesRow[]; stations: SeriesStation[]; watchers: Record<string, number> },
@@ -91,20 +104,56 @@ export function buildMorningSeries(
   const byId = new Map(input.stations.map((s) => [s.id, s]));
   // المدينةُ → مرشّحوها (محطةٌ = مجموعةُ صفوفها بمنتجاتها).
   const cities = new Map<string, Map<string, Candidate>>();
+  const candidate = (
+    city: string,
+    key: string,
+    name: string,
+    stationId: string | null,
+    station: SeriesStation | null
+  ): Candidate => {
+    const cands = cities.get(city) ?? new Map<string, Candidate>();
+    let c = cands.get(key);
+    if (!c) {
+      c = { key, name, stationId, sched: new Set(), live: new Set(), products: new Set(), station };
+      cands.set(key, c);
+      cities.set(city, cands);
+    }
+    return c;
+  };
+
   for (const r of input.rows) {
     if (!r.city) continue;
-    const cands = cities.get(r.city) ?? new Map<string, Candidate>();
     const key = r.linked_station_id ?? `n:${r.station_name}`;
-    const c = cands.get(key) ?? {
+    const c = candidate(
+      r.city,
       key,
-      name: r.station_name,
-      stationId: r.linked_station_id,
-      products: new Set<FuelProduct>(),
-      station: r.linked_station_id ? (byId.get(r.linked_station_id) ?? null) : null,
-    };
+      r.station_name,
+      r.linked_station_id,
+      r.linked_station_id ? (byId.get(r.linked_station_id) ?? null) : null
+    );
+    c.sched.add(r.product);
     c.products.add(r.product);
-    cands.set(key, c);
-    cities.set(r.city, cands);
+  }
+
+  // ── وما تعلنه المحطاتُ على لوحاتها الآن ─────────────────────────────────
+  //
+  // «وسّعه ليشمل المتوفّرَ الآن» — صاحبُ المنصّة، ١٨ أيلول. وكانت السلسلةُ
+  // تُبنى من جدول التوزيع وحدَه، فمحطةٌ تعلن وقوداً على لوحتها وليست في جدول
+  // اليوم لا يذكرها أحد — وهي أصدقُ خبراً من وعدٍ كُتب البارحة.
+  //
+  // والمقياسُ `isOffered` نفسُه الذي يُخضّر البطاقة، لا منظورُ القاعدة
+  // `station_products_live` (نافذتُه ٤٨ ساعةً لا ٢٤): صفٌّ عمرُه ثلاثون ساعةً
+  // يُرسم في التطبيق **رماديّاً**، فإشعارٌ يقول «متوفّر الآن» ويفتح بطاقةً
+  // رماديّةً هو العطبُ الذي كُتبت `isOffered` لإنهائه.
+  for (const s of input.stations) {
+    if (!qualifies(s, now)) continue;
+    const offered = s.products.filter((p) => isOffered(s, p));
+    if (!offered.length) continue;
+    const c = candidate(s.city, s.id, s.name, s.id, s);
+    for (const p of offered) {
+      c.live.add(p.product);
+      c.products.add(p.product);
+    }
   }
 
   // الأكبرُ جمهوراً أوّلاً: حاجزُ الشخص ٤٥ دقيقة يعطيه أوّلَ صفٍّ يطابقه، فالأكثرون
@@ -128,7 +177,11 @@ export function buildMorningSeries(
       // إشعارٌ لكلّ وقودٍ في جدول المدينة — المسجّلةُ النشطةُ أوّلاً، وإلّا الأكثرُ منتجاتٍ ومنها هذا الوقود.
       const present = SERIES_PRODUCT_ORDER.filter((p) => cands.some((c) => c.products.has(p)));
       for (const product of present) {
-        const reg = qualified.filter((c) => c.products.has(product)).sort(mostActive)[0];
+        // والمعلِنُ الآن يسبق المجدوَل: الجدولُ وعدٌ، واللوحةُ خبر. وما عدا
+        // ذلك فالترجيحُ كما كان — الأنشطُ ثمّ الأحدثُ ثمّ الاسم.
+        const reg = qualified
+          .filter((c) => c.products.has(product))
+          .sort((a, b) => Number(b.live.has(product)) - Number(a.live.has(product)) || mostActive(a, b))[0];
         const c = reg ?? cands.filter((c) => c.products.has(product)).sort(mostProducts)[0];
         out.push(item(input.forDate, city, product, [product], c, !!reg, watchers));
       }
@@ -159,9 +212,17 @@ function item(
   const a = address ? ` (${address})` : '';
   const t = labels(products);
 
+  // أهذا الوقودُ في جدول اليوم لهذه المحطة؟ — تفرّق الجملةَ ولا تفرّق الجمهور.
+  const inSchedule = product ? c.sched.has(product) : c.sched.size > 0;
+
   let title: string;
   let body: string;
-  if (product && registered && offeredNow) {
+  if (product && offeredNow && !inSchedule) {
+    // معلَنٌ على لوحتها وليست في جدول اليوم — ولا يُنسب إلى الجدول بحرف.
+    // ولا يُقال «ليست في الجدول» أيضاً: نفيٌ لم يسأل عنه القارئُ يُقرأ اعتذاراً.
+    title = `${t} متوفر الآن في ${city}`;
+    body = `${name}${a} — أكّدت توفّره الآن على المنصّة. اضغط لصفحتها.`;
+  } else if (product && registered && offeredNow) {
     title = `${t} متوفر الآن في ${city}`;
     body = `${name}${a} — أكّدت توفّره الآن وهي في جدول التوزيع اليوم. اضغط لصفحتها.`;
   } else if (product && registered) {
@@ -187,6 +248,7 @@ function item(
     address,
     registered,
     offeredNow,
+    inSchedule,
     watchers,
     title: title.slice(0, TITLE_MAX),
     body: body.slice(0, BODY_MAX),

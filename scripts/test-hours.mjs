@@ -30,16 +30,16 @@ assert.ok(isOpenNow({ is_24h: true, opens_at: '06:00', closes_at: '07:00' }), '2
 
 console.log('opening hours: all assertions passed');
 
-// isoDateIn must follow the LOCAL calendar day, not UTC. In Iraq (UTC+3/+4)
-// toISOString() rolls back a day for most of the evening.
+// isoDateIn must follow BAGHDAD's calendar day — not UTC (toISOString rolls the
+// day back all evening east of Greenwich) and not the reader's device either.
+//
+// والثاني هو الذي كان: جهازٌ على +04:00 الساعةَ 00:24 يقول 09-18 وبغدادُ تقول
+// 09-17، فيُكتب «متوقّع اليوم» بيومٍ لم يبدأ بعد. رُصد حيّاً وأسقط test-list-tier.
 const { isoDateIn } = await import('../lib/products.ts');
-const localDay = (offset) => {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-assert.equal(isoDateIn(0), localDay(0), 'today must match local calendar day');
-assert.equal(isoDateIn(1), localDay(1), 'tomorrow must match local calendar day');
+const baghdadDay = (offset) =>
+  new Date(Date.now() + offset * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Baghdad' });
+assert.equal(isoDateIn(0), baghdadDay(0), 'today must be Baghdad’s day, not the device’s');
+assert.equal(isoDateIn(1), baghdadDay(1), 'tomorrow must be Baghdad’s day');
 assert.notEqual(isoDateIn(1), isoDateIn(0), 'tomorrow must differ from today');
 console.log('expected-date helper: assertions passed');
 

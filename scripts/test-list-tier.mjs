@@ -4,11 +4,11 @@ import assert from 'node:assert/strict';
 import { listTier } from '../lib/products.ts';
 
 const iso = (hoursAgo) => new Date(Date.now() - hoursAgo * 3600_000).toISOString();
-const day = (plusDays) => {
-  const d = new Date();
-  d.setDate(d.getDate() + plusDays);
-  return d.toISOString().slice(0, 10);
-};
+// بتقويم بغداد كما تقرؤه `isoDateIn` — لا بـ`toISOString` التي تعطي UTC.
+// كانتا تتّفقان أكثرَ اليوم وتفترقان ليلاً: الساعةَ 01:20 ببغداد يقول UTC إنّه
+// أمسِ، فيصير «متوقّعٌ اليوم» وعداً فائتاً ويسقط الفحصُ ساعةً كلَّ ليلة.
+const day = (plusDays) =>
+  new Date(Date.now() + plusDays * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Baghdad' });
 const station = (products, extra = {}) => ({
   is_24h: true,
   opens_at: '00:00:00',

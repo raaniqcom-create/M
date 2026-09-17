@@ -1,6 +1,6 @@
 import type { FuelProduct, TrafficLevel } from '../types/database.ts';
 import { plural } from './freshness.ts';
-import { hasRunOut, isFresh, isOpenNow, isWithdrawn, whenLabel } from './hours.ts';
+import { baghdadDay, hasRunOut, isFresh, isOpenNow, isWithdrawn, whenLabel } from './hours.ts';
 import type { ExpectedPeriod } from './hours.ts';
 
 // single source of truth for the 6 fixed products — mirrors the fuel_product
@@ -129,16 +129,22 @@ export function expectedText(row: {
   return tail ? `${head} ${tail}` : head;
 }
 
-// Built from local date parts, not toISOString(): that converts to UTC first,
-// so "tomorrow" silently becomes "today" for any timezone ahead of UTC once the
-// local clock passes the offset — exactly Iraq's case.
-export function isoDateIn(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${month}-${day}`;
-}
+/** «اليوم» و«غداً» بتقويم **بغداد** لا بتقويم الجهاز.
+ *
+ *  ── وما كان يقع ────────────────────────────────────────────────────────
+ *
+ *  كانت تُبنى من أجزاء التاريخ المحلّيّة — وهو تصحيحٌ صحيحٌ لعطبٍ أوّل
+ *  (`toISOString` تحوّل إلى UTC فيصير «غداً» «اليومَ» لكلّ منطقةٍ شرقَ غرينتش)،
+ *  لكنّه بقي يقرأ ساعةَ القارئ. فمن هاتفُه على توقيتٍ غيرِ بغداد يكتب في
+ *  `expected_at` يوماً غيرَ الذي يقصد — والبوتُ يكتب يومَ بغداد، فيختلف
+ *  السطرُ عن نفسِه.
+ *
+ *  ورُصد حيّاً: الساعةُ 00:24 على جهازٍ +04:00، فقال الجهازُ 2026-09-18 وقالت
+ *  بغدادُ 2026-09-17 — وسقط `scripts/test-list-tier.mjs` بـ«متوقّعٌ اليوم».
+ *
+ *  والمنصّةُ كلُّها تعمل من ساعة المحطة لا من ساعة الزائر (`lib/hours.ts:1-3`)،
+ *  فهذه تتبعها. */
+export const isoDateIn = (days: number): string => baghdadDay(Date.now(), days);
 
 /** كم تبقى حالة الازدحام التي يحدّدها صاحب المحطة صالحة. */
 export const MANUAL_TRAFFIC_MINUTES = 30;
