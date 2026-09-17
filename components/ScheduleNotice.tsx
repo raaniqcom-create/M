@@ -19,38 +19,44 @@ import {
  *  ويُعرض فوق الحالتين معاً — لوحةٌ ممتلئةٌ ولوحةٌ فارغة: قد يصل جدولُ
  *  الرمادي ولا يصل جدولُ حديثة، فتمتلئ الصفحةُ ويبقى صاحبُ حديثة بلا خبر. */
 export function ScheduleNotice({ dark = false }: { dark?: boolean } = {}) {
-  const [notice, setNotice] = useState<ScheduleNoticeRow | null>(null);
-  const [text, setText] = useState('');
+  const [text, setText] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    void (async () => {
-      // والسياسةُ في القاعدة ترشّح المنتهيَ وغيرَ المُرسَل، لكنّ `sent_at`
-      // يُعاد فحصُه هنا: سياسةُ «admin write» هي `for all`، فالإداريُّ نفسُه
-      // يرى مسوّداتِه لولا هذا — وهو حارسُ NewsTicker.tsx:52 نفسُه.
-      const { data, error } = await supabase
-        .from('announcements')
-        .select('id, body, cities, expires_at')
-        .eq('kind', NOTICE_KIND)
-        .eq('active', true)
-        .not('sent_at', 'is', null)
-        .order('sent_at', { ascending: false })
-        .limit(5);
-      if (!alive || error) return;
-
-      const mine = readChoice()?.cities ?? [];
-      const hit = liveNotice((data ?? []) as ScheduleNoticeRow[], mine);
-      if (!hit) return;
-      setNotice(hit);
-      setText(renderNotice(hit.body, hit.cities, mine));
-    })();
+    void loadNotice().then((t) => {
+      if (alive) setText(t);
+    });
     return () => {
       alive = false;
     };
   }, []);
 
-  if (!notice) return null;
+  if (!text) return null;
   return <NoticeCard text={text} dark={dark} />;
+}
+
+/** الاعتذارُ الحيُّ لهذا القارئ نصّاً جاهزاً — أو `null`.
+ *
+ *  دالّةٌ لا خُطّاف: شاشةُ الغد تنادي هذه **بعد** أن تقرّر أنّها ستُفتح، فلا
+ *  يدفع استعلاماً زائداً من لا تُفتح عنده — وهي مركّبةٌ في `app/layout.tsx`،
+ *  أي في كلّ فتحةِ صفحةٍ من كلّ مسارٍ لكلّ إنسان. */
+export async function loadNotice(): Promise<string | null> {
+  // والسياسةُ في القاعدة ترشّح المنتهيَ وغيرَ المُرسَل، لكنّ `sent_at` يُعاد
+  // فحصُه هنا: سياسةُ «admin write» هي `for all`، فالإداريُّ نفسُه يرى
+  // مسوّداتِه لولا هذا — وهو حارسُ NewsTicker.tsx:52 نفسُه.
+  const { data, error } = await supabase
+    .from('announcements')
+    .select('id, body, cities, expires_at')
+    .eq('kind', NOTICE_KIND)
+    .eq('active', true)
+    .not('sent_at', 'is', null)
+    .order('sent_at', { ascending: false })
+    .limit(5);
+  if (error) return null;
+
+  const mine = readChoice()?.cities ?? [];
+  const hit = liveNotice((data ?? []) as ScheduleNoticeRow[], mine);
+  return hit ? renderNotice(hit.body, hit.cities, mine) : null;
 }
 
 /** هيئةُ اللافتة — تعريفٌ واحدٌ تقرؤه الصفحةُ وشاشةُ الغد ومعاينةُ اللوحة.

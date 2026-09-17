@@ -7,7 +7,7 @@ import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
 import { readChoice } from '@/lib/alerts';
 import { PlateTurnBadge } from './PlateTurnBadge';
-import { ScheduleNotice } from './ScheduleNotice';
+import { NoticeCard, loadNotice } from './ScheduleNotice';
 import { placeHref, shortAddress } from '@/lib/scheduleRoute';
 import { withDeadline } from '@/lib/fn';
 import { isDown, readStatus } from '@/lib/status';
@@ -79,6 +79,8 @@ export function TomorrowScreen() {
   const [open, setOpen] = useState(false);
   /** لا منطقةَ مختارة — فتُعرض دعوةٌ إلى اختيارها، لا الجدولُ كلُّه. */
   const [prompt, setPrompt] = useState(false);
+  /** اعتذارٌ منشورٌ يخصّ هذا القارئ — وحضورُه يطوي الجدولَ تحته. */
+  const [apology, setApology] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -144,7 +146,20 @@ export function TomorrowScreen() {
         const myProducts = new Set<string>(choice?.products ?? []);
 
         let rows = applyOverrides(buildBoard(schedule, stations, shown), await loadOverrides(), shown);
-        if (!rows.length) return;
+
+        // ── والاعتذارُ يحجب الجدولَ لا يعلوه ──────────────────────────────
+        //
+        // «يفترض عند ظهور الاعتذار اختفاء جدول اليوم» — صاحبُ المنصّة. وهو
+        // محقّ: الشاشةُ عنوانُها «محطات اليوم» ويقرؤها الناسُ جدولَ الغد، فلو
+        // بقي الجدولُ تحت الاعتذار لَناقضه — يقول «لم يصلنا» وتحته جدولٌ كامل.
+        //
+        // ويُنادى هنا لا في خُطّاف: بعد حارسَي الساعة والجلسة، فلا يدفع
+        // استعلاماً من لا تُفتح عنده الشاشةُ أصلاً — وهي في `app/layout.tsx`،
+        // أي في كلّ فتحةِ صفحةٍ لكلّ إنسان.
+        const apology = await loadNotice();
+        if (!alive) return;
+        // واعتذارٌ بلا جدولٍ يفتح الشاشةَ وحدَه: تلك أهمُّ ليلةٍ يُقال فيها.
+        if (!rows.length && !apology) return;
 
         // ── والشاشةُ تتبع الإشعارَ حرفيّاً ──────────────────────────────
         //
@@ -163,13 +178,14 @@ export function TomorrowScreen() {
             /* تصفّحٌ خاصّ */
           }
           setDay(shown);
+          setApology(apology);
           setPrompt(true);
           setOpen(true);
           return;
         }
         if (myProducts.size) rows = rows.filter((r) => myProducts.has(r.product));
         rows = rows.filter((r) => r.city && myCities.has(r.city));
-        if (!rows.length) return;
+        if (!rows.length && !apology) return;
 
         const mine = groupBoard(rows, choice?.cities ?? []);
         try {
@@ -178,9 +194,12 @@ export function TomorrowScreen() {
           /* تصفّحٌ خاصّ — لا يُكتب شيء، فتُعرض في الفتحة التالية أيضاً */
         }
 
-        setGroups(mine.slice(0, MAX_GROUPS));
-        setMore(mine.slice(MAX_GROUPS).reduce((n, g) => n + g.rows.length, 0));
+        // والجدولُ يُطوى عند الاعتذار — لا يُحذف من الحساب: زرُّ «الجدول
+        // كاملاً» يبقى، فمن أراد جدولَ اليوم بلغه بضغطة.
+        setGroups(apology ? [] : mine.slice(0, MAX_GROUPS));
+        setMore(apology ? 0 : mine.slice(MAX_GROUPS).reduce((n, g) => n + g.rows.length, 0));
         setDay(shown);
+        setApology(apology);
         setOpen(true);
       } catch {
         /* الشاشةُ ترفٌ: فشلُ جلبها لا يُظهر خطأً لأحد */
@@ -220,7 +239,7 @@ export function TomorrowScreen() {
           {/* ومن لم يختر منطقةً يقرؤه باسم المحافظة — الخبرُ يعنيه كما يعني غيرَه.
               و`empty:hidden` كي لا يبقى هامشٌ فارغٌ حين لا اعتذارَ منشور. */}
           <div className="mt-3 w-full max-w-[21rem] text-right empty:hidden">
-            <ScheduleNotice dark />
+            {apology && <NoticeCard dark text={apology} />}
           </div>
           <div className="mt-5 flex items-center gap-3">
             <a
@@ -274,7 +293,11 @@ export function TomorrowScreen() {
           style={{ height: 56, width: 56 }}
         />
 
-        <h1 className="mt-3 text-[17px] font-extrabold">محطات {when}</h1>
+        {/* والعنوانُ يتبع ما تحته: «محطات اليوم» فوق شاشةٍ بلا محطاتٍ كذبةٌ
+            صغيرة. فإن طوى الاعتذارُ الجدولَ صار العنوانُ اسمَ الشيء نفسِه. */}
+        <h1 className="mt-3 text-[17px] font-extrabold">
+          {apology ? 'جدول التوزيع' : `محطات ${when}`}
+        </h1>
         <p className="mt-0.5 text-[11.5px] text-white/70">أين يصل الوقود — قبل أن يصل</p>
 
         {/* ── والاعتذارُ تحت العنوان، لا تحت الجدول ───────────────────────
@@ -284,14 +307,14 @@ export function TomorrowScreen() {
             حسِب أنّ جدولَ الغد لم يُنشر لعطلٍ فينا. فيُقال له السببُ حيث
             ينظر — قبل الجدول لا بعده. */}
         <div className="mt-3 w-full max-w-[21rem] text-right empty:hidden">
-          <ScheduleNotice dark />
+          {apology && <NoticeCard dark text={apology} />}
         </div>
 
         <div className="mt-3 w-full max-w-[21rem] text-right">
           <PlateTurnBadge day={day} dark />
         </div>
 
-        <div className="mt-5 w-full max-w-[21rem] space-y-3">
+        <div className="mt-5 w-full max-w-[21rem] space-y-3 empty:hidden">
           {groups.map((g) => (
             <section key={g.city ?? '؟'} className="rounded-2xl bg-white/12 p-3 text-right">
               <h2 className="text-[12.5px] font-extrabold">
