@@ -43,6 +43,7 @@ import { WashDeviceLink } from './WashDeviceLink';
 import { WashDashboard } from './WashDashboard';
 import { WashStaff } from './WashStaff';
 import { VehiclePicker } from './VehiclePicker';
+import { CarThumb, asVehicle } from './WashBookingScreen';
 import {
   CalendarIcon,
   CarIcon,
@@ -61,6 +62,9 @@ import {
   WhatsappIcon,
   XIcon,
 } from './icons';
+
+/** الحجزُ كما يُقرأ من الجدول: سياراتُ الطلب الواحد تتشارك group_key. */
+type OwnerBooking = WashBooking & { group_key?: string | null };
 
 type Tab = 'today' | 'tomorrow' | 'past';
 type SheetKind = 'services' | 'offers' | 'hours' | 'profile' | 'photo' | 'pause' | 'walkin' | 'reviews' | 'stats' | 'staff' | null;
@@ -196,8 +200,8 @@ export function WashOwnerScreen() {
   /** مالكٌ (أو إدارة) لا موظّف — الأوراقُ الحسّاسة تُخفى عن الموظّف. */
   const [owns, setOwns] = useState(true);
   const [wash, setWash] = useState<CarWash | null | undefined>(undefined);
-  const [upcoming, setUpcoming] = useState<WashBooking[]>([]);
-  const [past, setPast] = useState<WashBooking[]>([]);
+  const [upcoming, setUpcoming] = useState<OwnerBooking[]>([]);
+  const [past, setPast] = useState<OwnerBooking[]>([]);
   const [tab, setTab] = useState<Tab>('today');
   const [refreshing, setRefreshing] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
@@ -214,8 +218,8 @@ export function WashOwnerScreen() {
       supabase.from('wash_bookings').select('*').eq('wash_id', washId).gte('starts_at', t0).lt('starts_at', dayStart(bgdDate(2))).order('starts_at'),
       supabase.from('wash_bookings').select('*').eq('wash_id', washId).lt('starts_at', t0).order('starts_at', { ascending: false }).limit(50),
     ]);
-    setUpcoming((up as WashBooking[] | null) ?? []);
-    setPast((old as WashBooking[] | null) ?? []);
+    setUpcoming((up as OwnerBooking[] | null) ?? []);
+    setPast((old as OwnerBooking[] | null) ?? []);
   }, []);
 
   const loadLists = useCallback(async (washId: string) => {
@@ -338,6 +342,9 @@ export function WashOwnerScreen() {
   const paused = !!wash.bookings_paused_until && Date.parse(wash.bookings_paused_until) > Date.now();
   const rows = tab === 'past' ? past : upcoming.filter((b) => bookingDay(b) === bgdDate(tab === 'today' ? 0 : 1));
   const pendingCount = upcoming.filter((b) => b.status === 'pending').length;
+  /** كم سيّارةً في كلّ طلب — عدّاً من الحجوزات المحمَّلة أصلاً، بلا نداءٍ جديد. */
+  const groupSizes = new Map<string, number>();
+  for (const b of [...upcoming, ...past]) if (b.group_key) groupSizes.set(b.group_key, (groupSizes.get(b.group_key) ?? 0) + 1);
   const note = banner(wash, today);
   /** إحصائيّاتُ اليوم من الحجوزات المجلوبة أصلاً — لا نداءَ إضافيّاً. */
   const todays = upcoming.filter((b) => bookingDay(b) === today);
@@ -526,8 +533,9 @@ export function WashOwnerScreen() {
                     {b.service_name} · {b.use_free ? 'مجّانيّة' : iqd(b.price)}
                   </p>
                   {b.is_subscriber && (
-                    <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[10.5px] font-extrabold text-brand-700">
-                      ⭐ مشترك المحطة التقنية
+                    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[10.5px] font-extrabold text-brand-700">
+                      <StarIcon className="h-3 w-3" />
+                      مشترك المحطة التقنية
                     </span>
                   )}
                   {/* سيّارةٌ دخلت بلا هاتف (add_walk_in) — لا أزرارَ اتّصال. */}
@@ -548,9 +556,20 @@ export function WashOwnerScreen() {
                       </a>
                     </div>
                   )}
-                  <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-500">
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
                     <span dir="ltr" className="font-mono font-bold text-slate-600">{b.code}</span>
-                    {b.vehicle && <span>{VEHICLE_LABELS[b.vehicle]}</span>}
+                    {b.group_key && (groupSizes.get(b.group_key) ?? 0) > 1 && (
+                      <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10.5px] font-extrabold text-brand-700">
+                        {/* «السابقة» مقصوصةٌ على 50 صفّاً، فقد يَنقُص عدُّ الطلب — لا نطبع رقماً لا نثق به. */}
+                        {tab === 'past' ? 'ضمن طلبٍ من عدّة سيارات' : `ضمن طلب من ${groupSizes.get(b.group_key)} سيارات`}
+                      </span>
+                    )}
+                    {b.vehicle && (
+                      <span className="flex items-center gap-1">
+                        <CarThumb vehicle={b.vehicle} className="h-7 w-7" />
+                        {VEHICLE_LABELS[asVehicle(b.vehicle)]}
+                      </span>
+                    )}
                     {b.walk_in && <span>بلا حجز</span>}
                   </p>
                   {b.status === 'pending' && Date.parse(b.starts_at) < Date.now() && (

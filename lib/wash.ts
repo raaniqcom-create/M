@@ -44,6 +44,8 @@ export interface WashConfig {
   cancel_free_min: number;
   horizon_guest: number;
   horizon_sub: number;
+  /** أقصى عددِ سياراتٍ في الطلب الواحد (wash_max_cars_order) — العدّادُ يقف عنده. */
+  max_cars_order: number;
 }
 
 export const EMPTY_WASH_CONFIG: WashConfig = {
@@ -54,6 +56,7 @@ export const EMPTY_WASH_CONFIG: WashConfig = {
   cancel_free_min: 30,
   horizon_guest: WASH.horizonDays.guest,
   horizon_sub: WASH.horizonDays.subscriber,
+  max_cars_order: 5,
 };
 
 /** يضمن أنّ رأسَ المصادقة لُصق بعميل PostgREST قبل أوّل كتابةٍ بعد التسجيل/الدخول.
@@ -407,6 +410,21 @@ export function offerApplies(o: WashOffer, serviceId: string, day: string): bool
   return true;
 }
 
+/** مفتاحُ أيقونةِ الخدمة من اسمها — الأسماءُ حرّةٌ في القاعدة، فتُطابَق بالكلمات. */
+export type ServiceIconKey = 'exterior' | 'full' | 'interior' | 'polish' | 'wax' | 'seats' | 'other';
+const SERVICE_WORDS: [ServiceIconKey, string[]][] = [
+  ['full', ['شامل', 'كامل']],
+  ['interior', ['داخلي', 'داخليّ', 'تنظيف داخلي']],
+  ['polish', ['تلميع', 'بولش', 'بوليش']],
+  ['wax', ['شمع', 'واكس', 'نانو', 'سيراميك']],
+  ['seats', ['مقاعد', 'كراسي', 'فرش', 'سجاد']],
+  ['exterior', ['خارجي', 'خارجيّ', 'غسيل', 'غسل']],
+];
+export function serviceIconKey(name: string): ServiceIconKey {
+  for (const [key, words] of SERVICE_WORDS) if (words.some((w) => name.includes(w))) return key;
+  return 'other';
+}
+
 export type BookingStatus =
   | 'pending'
   | 'confirmed'
@@ -447,11 +465,61 @@ export const ACTION_LABELS: Partial<Record<BookingStatus, string>> = {
   cancelled_by_business: 'إلغاء',
 };
 
+/** صورةُ كلّ نوع. الرسومُ المرفقة (svg) هي الأصلُ اليوم؛ ومتى وُضعت صورٌ حقيقيّةٌ
+ *  (public/vehicles/<type>.png) يُرفع العلَمُ التالي سطراً واحداً فتُعرض بدلَها.
+ *  ولا يُجرَّب png قبل وجودها: محاولةٌ فاشلةٌ لكلّ نوعٍ في كلّ فتحةِ صفحة. */
+export const REAL_VEHICLE_PHOTOS = false;
+export const vehiclePhoto = (v: VehicleType): string => `/vehicles/${v}.png`;
+export const vehicleArt = (v: VehicleType): string => `/vehicles/${v}.svg`;
+/** ما يُعرض فعلاً — الصورةُ الحقيقيّةُ إن أُعلن عنها، وإلّا الرسم. */
+export const vehicleImg = (v: VehicleType): string => (REAL_VEHICLE_PHOTOS ? vehiclePhoto(v) : vehicleArt(v));
+
 export const VEHICLE_TYPES = ['sedan', 'suv', 'pickup', 'van', 'other'] as const;
 export type VehicleType = (typeof VEHICLE_TYPES)[number];
 export const VEHICLE_LABELS: Record<VehicleType, string> = { sedan: 'صالون', suv: 'SUV', pickup: 'بيك أب', van: 'فان', other: 'أخرى' };
 
 /** أيمكن للمواطن إلغاءُ حجزه مجّاناً؟ (قبل الموعد بأكثر من الحدّ) — وبعده يُعلَّم متأخّراً. */
+/* ── عدّادُ السيارات: طلبٌ واحدٌ لعدّة سيارات ──────────────────────────────── */
+
+/** كم سيّارةً من كلّ نوع في هذا الطلب. */
+export type VehicleCounts = Partial<Record<VehicleType, number>>;
+
+export const totalCars = (c: VehicleCounts): number => VEHICLE_TYPES.reduce((n, v) => n + (c[v] ?? 0), 0);
+
+/** العدّادُ مبسوطاً قائمةً: {sedan:2, suv:1} → ['sedan','sedan','suv'] — ترتيبُ VEHICLE_TYPES. */
+export const carsList = (c: VehicleCounts): VehicleType[] =>
+  VEHICLE_TYPES.flatMap((v) => Array.from({ length: Math.max(0, c[v] ?? 0) }, () => v));
+
+/** «سيّارتان» / «3 سيارات» — عنوانُ الملخّص. */
+export const carsLabel = (n: number): string => plural(n, 'سيّارة واحدة', 'سيّارتان', 'سيارات', 'سيّارة');
+
+/** مجموعُ سعرِ الطلب: سعرُ الخدمة لكلّ نوعٍ مضروباً بعدده (والعرضُ يسري على كلّ سيّارة). */
+export function orderTotal(
+  service: { price: number; prices?: Record<string, number> | null },
+  counts: VehicleCounts,
+  offer?: Pick<WashOffer, 'offer_price' | 'discount_pct'> | null
+): number {
+  return carsList(counts).reduce((sum, v) => sum + offerPrice(servicePrice(service, v), offer), 0);
+}
+
+/** سيّارةٌ محجوزةٌ ضمن الطلب — ما يردّه book_wash_group. */
+export interface BookedCar {
+  code: string;
+  vehicle: VehicleType | null;
+  starts_at: string;
+  price: number;
+  status: BookingStatus;
+}
+
+export interface BookedGroup {
+  group_key: string;
+  wash: string;
+  wash_id: string;
+  wash_phone: string | null;
+  service: string;
+  cars: BookedCar[];
+}
+
 export function canCancel(startsAt: string, now = Date.now()): 'free' | 'late' | 'no' {
   const left = Date.parse(startsAt) - now;
   if (left <= 0) return 'no';
@@ -581,6 +649,9 @@ export interface MyBooking {
   service?: string;
   price?: number;
   status?: BookingStatus;
+  /** سياراتُ الطلب الواحد تتشارك المفتاح — تُعرض بطاقةً واحدة. */
+  group_key?: string | null;
+  vehicle?: VehicleType | null;
 }
 const MINE = 'wash-bookings';
 export function rememberBooking(b: MyBooking): void {

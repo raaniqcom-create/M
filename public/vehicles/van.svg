@@ -1,0 +1,30 @@
+<svg viewBox="0 0 220 120" xmlns="http://www.w3.org/2000/svg">
+  <!-- فان: صندوقٌ واحدٌ — سقفٌ مسطّحٌ طويلٌ وزجاجُ بابٍ منزلقٍ كبيرٌ ومؤخّرةٌ عموديّة -->
+  <!-- الهيكلُ شبهُ أسودَ فالشريطُ السفليُّ أفتحُ لا أغمق، وإلّا اختفى -->
+  <ellipse cx="110" cy="112" rx="92" ry="7" fill="#0f172a" opacity=".10"/>
+  <g stroke="#0f172a" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M14 92 L14 38 Q14 31 22 30 L150 29 Q157 29 161 33 L176 50 L197 55 Q206 57 207 66 L207 92 Z" fill="#111827"/>
+    <rect x="16" y="80" width="189" height="10" fill="#374151" stroke="none"/>
+    <path d="M23 38 L54 37 L54 58 L23 58 Z" fill="#dbeafe"/>
+    <path d="M60 37 L130 36 L130 58 L60 58 Z" fill="#dbeafe"/>
+    <path d="M136 36 L150 36 Q155 36 157 39 L166 56 L136 56 Z" fill="#dbeafe"/>
+    <path d="M70 37 L84 37 L70 58 L60 58 L60 51 Z" fill="#ffffff" opacity=".5" stroke="none"/>
+    <path d="M141 37 L149 37 L140 56 L136 56 L136 50 Z" fill="#ffffff" opacity=".5" stroke="none"/>
+    <path d="M57 58 L57 80 M133 58 L133 80" stroke-width="3" stroke="#6b7280"/>
+    <path d="M58 64 L132 64" stroke-width="3" stroke="#6b7280"/>
+    <rect x="112" y="67" width="16" height="5" rx="2.5" fill="#9ca3af" stroke="none"/>
+    <path d="M166 55 L157 52 L157 57 Z" fill="#9ca3af" stroke-width="3" stroke="#6b7280"/>
+    <rect x="190" y="61" width="17" height="8" rx="3" fill="#fde68a" stroke-width="3"/>
+    <rect x="14" y="40" width="12" height="11" rx="3" fill="#fecaca" stroke-width="3"/>
+    <circle cx="54" cy="87" r="17" fill="#1e293b"/>
+    <circle cx="172" cy="87" r="17" fill="#1e293b"/>
+  </g>
+  <g fill="#cbd5e1">
+    <circle cx="54" cy="87" r="8"/>
+    <circle cx="172" cy="87" r="8"/>
+  </g>
+  <g fill="#64748b">
+    <circle cx="54" cy="87" r="3"/>
+    <circle cx="172" cy="87" r="3"/>
+  </g>
+</svg>

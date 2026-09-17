@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { num } from '@/lib/num';
 import { displayPhone, isValidIraqiMobile } from '@/lib/phone';
 import { distanceKm } from '@/lib/stations';
 import { quietPosition } from '@/lib/vote';
@@ -24,6 +25,8 @@ import {
   ratingParts,
   readFavs,
   readMyBookings,
+  serviceIconKey,
+  servicePrice,
   toggleFav,
   washBadge,
   type WashOffer,
@@ -33,7 +36,7 @@ import {
 } from '@/lib/wash';
 import { seenWash } from '@/lib/washViews';
 import { RouteCell } from './WashBookingScreen';
-import { CalendarIcon, ClockIcon, HeartIcon, MapPinIcon, PhoneIcon, ShareIcon, SpinnerIcon, StarIcon, TagIcon, WashIcon, XIcon } from './icons';
+import { CalendarIcon, ClockIcon, HeartIcon, MapPinIcon, PhoneIcon, SERVICE_ICON, ShareIcon, SpinnerIcon, StarIcon, TagIcon, WashIcon, XIcon } from './icons';
 
 type Slot = { slot: string; free: number };
 type Stamps = { stamps: number; free: number; target: number };
@@ -45,6 +48,8 @@ const slideIndex = (el: HTMLElement) => Math.round(Math.abs(el.scrollLeft) / Mat
 export function WashDetail() {
   const id = useSearchParams().get('id') ?? '';
   const [wash, setWash] = useState<WashPublic | null | undefined>(undefined);
+  /** فشلُ القراءة لا يعني «لا وجودَ لها» — تُفصل عن null كي لا نكذب على القارئ. */
+  const [failed, setFailed] = useState(false);
   const [services, setServices] = useState<WashService[]>([]);
   const [offers, setOffers] = useState<WashOffer[]>([]);
   const [mine, setMine] = useState<ReturnType<typeof readMyBookings>>([]);
@@ -98,12 +103,19 @@ export function WashDetail() {
       supabase.rpc('wash_slots', { p_wash: id, p_day: bgdDate() }),
     ]).then(([w, s, o, sl]) => {
       if (!alive) return;
+      if (w.error) {
+        setFailed(true);
+        return;
+      }
       const today = bgdDate();
       setWash((w.data as WashPublic | null) ?? null);
       setServices((s.data ?? []) as WashService[]);
       setOffers(((o.data ?? []) as WashOffer[]).filter((x) => (!x.ends_at || x.ends_at.slice(0, 10) >= today) && (!x.starts_at || x.starts_at.slice(0, 10) <= today)));
-      const first = ((sl.data ?? []) as Slot[]).find((x) => x.free > 0);
-      setNextSlot(first ? first.slot : null);
+      // فشلُ wash_slots يُبقي nextSlot=undefined فتبقى الشارةُ «مفتوحة» — لا «ممتلئة اليوم» كذباً.
+      if (!sl.error) {
+        const first = ((sl.data ?? []) as Slot[]).find((x) => x.free > 0);
+        setNextSlot(first ? first.slot : null);
+      }
     });
     return () => {
       alive = false;
@@ -141,6 +153,13 @@ export function WashDetail() {
     return (
       <main className="mx-auto max-w-md px-4 py-10 text-center text-sm text-slate-500">
         لا مغسلةَ في الرابط. <a href="/wash/" className="font-bold text-brand underline">دليل المغاسل</a>
+      </main>
+    );
+  }
+  if (failed) {
+    return (
+      <main className="mx-auto max-w-md px-4 py-10 text-center text-sm text-slate-500" role="alert">
+        تعذّر التحميل — تحقّق من الاتصال وأعد المحاولة.
       </main>
     );
   }
@@ -217,7 +236,11 @@ export function WashDetail() {
             {reviews.length === 0 && <li className="text-[12px] text-slate-400">لا تقييمات بعد.</li>}
             {reviews.map((r) => (
               <li key={r.id} className="rounded-xl bg-slate-50 px-3 py-2 text-[12px]">
-                <span className="font-bold text-amber-500">{'★'.repeat(r.stars)}</span>
+                <span className="inline-flex gap-0.5 align-middle text-amber-500">
+                  {Array.from({ length: r.stars }, (_, i) => (
+                    <StarIcon key={i} className="h-3.5 w-3.5" filled />
+                  ))}
+                </span>
                 <span className="ms-2 text-slate-400">{r.name}</span>
                 {r.comment && <p className="mt-0.5 text-slate-700">{r.comment}</p>}
               </li>
@@ -278,38 +301,45 @@ export function WashDetail() {
         {services.length === 0 ? (
           <p className="mt-2 text-[12px] text-slate-400">لم تُضف المغسلة خدماتها بعد.</p>
         ) : (
-          <ul className="mt-2 divide-y divide-slate-100">
+          <div className="mt-3 grid grid-cols-2 gap-3">
             {services.map((s) => {
+              const Icon = SERVICE_ICON[serviceIconKey(s.name)];
               const prices = s.prices ?? {};
               const keys = VEHICLE_TYPES.filter((v) => typeof prices[v] === 'number');
+              // بأسعارٍ لكلّ نوعٍ لا سعرَ واحد: البلاطةُ تقول «يبدأ من» أرخصِها — عبر servicePrice
+              // على الأنواع كلِّها، لأنّ نوعاً بلا سعرٍ في الخريطة يُحسب بالسعر الأساسيّ لا بأدنى الخريطة.
+              const from = keys.length ? Math.min(...VEHICLE_TYPES.map((v) => servicePrice(s, v))) : null;
               return (
-                <li key={s.id} className="flex items-start justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-800">{s.name}</p>
-                    {s.description && <p className="mt-0.5 text-[12px] text-slate-500">{s.description}</p>}
-                    <p className="mt-1 flex items-center gap-1 text-[12px] text-slate-500">
+                // الشفةُ الملوّنة: صندوقٌ أخضرُ خلف البلاطة يطلّ شريطاً من تحتها — بلون الشفة نفسِه في القسم كلِّه.
+                <div key={s.id} className="rounded-[22px] bg-brand-600/90 pb-[4px]">
+                  <a
+                    href={`/wash/book/?id=${wash.id}&service=${s.id}`}
+                    // h-full كي تتمدّد البلاطةُ البيضاءُ إلى ارتفاع الصفّ، وإلّا اتّسعت الشفةُ الخضراءُ تحت الأقصر.
+                    className="flex h-full min-h-[136px] flex-col items-center rounded-[22px] bg-white px-3 py-3.5 text-center ring-1 ring-slate-200/70 transition active:scale-[0.98]"
+                  >
+                    <Icon className="h-8 w-8 text-brand-700" />
+                    <p className="mt-2 line-clamp-2 text-[13px] font-extrabold leading-tight text-slate-800">{s.name}</p>
+                    {/* وصفُ صاحب المغسلة — كان يختفي مع تحوّل القائمة إلى بلاطات. */}
+                    {s.description && <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-slate-500">{s.description}</p>}
+                    <p className="mt-1 flex items-center gap-1 text-[11.5px] text-slate-500">
                       <ClockIcon className="h-3.5 w-3.5" />
-                      المدة {s.minutes} دقيقة
+                      {s.minutes} دقيقة
                     </p>
-                    {keys.length ? (
-                      <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                        {keys.map((v) => (
-                          <li key={v} className="rounded-full bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700">
-                            {VEHICLE_LABELS[v]} <b>{iqd(prices[v])}</b>
+                    <p className="mt-auto pt-1.5 text-[13px] font-black text-brand-700">{from != null ? `يبدأ من ${iqd(from)}` : iqd(s.price)}</p>
+                    {keys.length > 0 && (
+                      <ul className="mt-1.5 flex flex-wrap justify-center gap-1">
+                        {keys.slice(0, 3).map((v) => (
+                          <li key={v} className="rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-800">
+                            {VEHICLE_LABELS[v]} {num(prices[v])}
                           </li>
                         ))}
                       </ul>
-                    ) : (
-                      <p className="mt-1 text-[13px] font-bold text-brand-700">{iqd(s.price)}</p>
                     )}
-                  </div>
-                  <a href={`/wash/book/?id=${wash.id}&service=${s.id}`} className="btn-primary min-h-[40px] shrink-0 px-4 text-[12px]">
-                    اختيار
                   </a>
-                </li>
+                </div>
               );
             })}
-          </ul>
+          </div>
         )}
       </section>
 

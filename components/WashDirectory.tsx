@@ -147,7 +147,7 @@ export function WashDirectory() {
       {/* بحثٌ عائمٌ يتراكب على أسفل الرأس الغامر — نمطُ تطبيقات الحجز */}
       <div className="relative z-10 -mt-9">
         <label className="relative block rounded-2xl bg-white p-1 shadow-lift ring-1 ring-slate-200/70">
-          <SearchIcon className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-brand-500" />
+          <SearchIcon className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-brand" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -234,7 +234,8 @@ export function WashDirectory() {
               const base = baseOf(o);
               const left = offerLeft(o.ends_at);
               return (
-                <li key={o.id}>
+                <li key={o.id} className="rounded-2xl bg-brand-600/90 pb-[5px]">
+                  {/* الشفةُ الخضراء تحت البطاقة — لغةُ البطاقات نفسُها في القسم كلِّه. */}
                   <article className="card p-4">
                     <p className="text-[12px] text-slate-500">{byId.get(o.wash_id)?.name}</p>
                     <h3 className="mt-0.5 text-base font-extrabold text-slate-800">{o.title}</h3>
@@ -261,7 +262,7 @@ export function WashDirectory() {
               const href = adHref(a);
               const ext = /^https?:/.test(href);
               return (
-                <li key={a.id}>
+                <li key={a.id} className="rounded-2xl bg-brand-600/90 pb-[5px]">
                   <article className="card overflow-hidden">
                     {a.image_url && (
                       // eslint-disable-next-line @next/next/no-img-element

@@ -1,4 +1,7 @@
 // Lucide paths, inlined — one icon family, 1.75 stroke, no emoji, no dependency.
+import type { ReactElement } from 'react';
+import type { ServiceIconKey } from '@/lib/wash';
+
 type IconProps = { className?: string };
 
 const base = {
@@ -432,3 +435,90 @@ export const VehicleIcon = ({ className = 'h-5 w-5' }: IconProps) => (
     <circle cx="7.5" cy="17" r="1.8" /><circle cx="16.5" cy="17" r="1.8" />
   </svg>
 );
+
+/* ── أيقوناتُ الخدمات — بلاطةٌ لكلّ خدمةٍ في صفحة المغسلة ─────────────────── */
+
+/** نجمةُ لمعانٍ بحجمٍ ثابت، تُوضع بـtransform — تتكرّر في «شامل» و«داخلي». */
+const SPARK = 'M0-2q.4 1.6 2 2-1.6.4-2 2-.4-1.6-2-2 1.6-.4 2-2z';
+
+/** هيكلُ سيّارةٍ مصغَّرٌ يترك يمينَ المربّع للرغوة/اللمعان — يُكتب مرّةً لخدمتين. */
+const CarBody = () => (
+  <>
+    <path d="M4 17H2.8a.9.9 0 0 1-.9-.9v-2.5l1.4-3.4c.3-.6.8-1 1.5-1h8.1c.7 0 1.2.4 1.5 1l1.4 3.4v2.5a.9.9 0 0 1-.9.9h-1.2" />
+    <path d="M7.1 17h3.8" />
+    <circle cx="5.5" cy="17" r="1.6" /><circle cx="12.5" cy="17" r="1.6" />
+  </>
+);
+
+/** غسيلٌ خارجيّ: سيّارةٌ وقوسا رغوةٍ من الخرطوم. */
+export const ExteriorWashIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <CarBody />
+    <path d="M16.6 9.8c.5-3 2.6-5.2 5.4-5.9" />
+    <path d="M18.2 13.7c.3-2 1.6-3.4 3.5-3.9" />
+  </svg>
+);
+
+/** غسيلٌ شامل: سيّارةٌ بلمعانٍ داخلها وخارجها. */
+export const FullWashIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <CarBody />
+    <path d={SPARK} transform="translate(9 13)" />
+    <path d={SPARK} transform="translate(19.5 5)" />
+  </svg>
+);
+
+/** تنظيفٌ داخليّ: مقعدُ سيّارةٍ ولمعان. */
+export const InteriorIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="M8.5 14V6a3 3 0 0 1 3-3h.3a3 3 0 0 1 3 3v8" />
+    <path d="M11.6 5.5V14" />
+    <path d="M7.5 14h9a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-3z" />
+    <path d={SPARK} transform="translate(19.8 4)" />
+    <path d={SPARK} transform="translate(4.6 7.5)" />
+  </svg>
+);
+
+/** تلميع: قرصُ ماكينة التلميع وخطوطُ اللمعان. */
+export const PolishIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <circle cx="10.5" cy="14.5" r="6" />
+    <circle cx="10.5" cy="14.5" r="2.2" />
+    <path d="M10.5 8.5V6a2 2 0 0 1 2-2H14" />
+    <path d="M17.5 5h4M18.5 8.5l2.8-1M18 1.6l2.4 1.4" />
+  </svg>
+);
+
+/** شمعٌ/نانو: بخّاخٌ وقطرات. */
+export const WaxIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="M11 9h4a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" />
+    <path d="M11 9V6h4v3" />
+    <path d="M11 7H7.5L6 5.5" />
+    <path d="M9 13h8" />
+    <path d="M4.4 2.6c-.6.9-1 1.6-1 2.2a1 1 0 0 0 2 0c0-.6-.4-1.3-1-2.2z" />
+    <path d="M2.8 7.4c-.6.9-1 1.6-1 2.2a1 1 0 0 0 2 0c0-.6-.4-1.3-1-2.2z" />
+  </svg>
+);
+
+/** مقاعدُ وفرش: كنبةٌ وفرشاةُ تنظيف. */
+export const SeatsIcon = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg className={className} {...base}>
+    <path d="M14.5 10.5V8A1.5 1.5 0 0 0 13 6.5H4A1.5 1.5 0 0 0 2.5 8v2.5" />
+    <path d="M1.5 12v4a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5v-4a1.5 1.5 0 0 0-3 0v1.5h-8V12a1.5 1.5 0 0 0-3 0z" />
+    <path d="M4 17.5v2M13 17.5v2" />
+    <path d="M18.5 2.5h3a1 1 0 0 1 1 1V6a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1z" />
+    <path d="M18.3 7v2M20 7v2.5M21.7 7v2" />
+  </svg>
+);
+
+/** مفاتيحُ serviceIconKey() — «أخرى» ترثُ أيقونةَ الغسيل العامّة. */
+export const SERVICE_ICON: Record<ServiceIconKey, (p: { className?: string }) => ReactElement> = {
+  exterior: ExteriorWashIcon,
+  full: FullWashIcon,
+  interior: InteriorIcon,
+  polish: PolishIcon,
+  wax: WaxIcon,
+  seats: SeatsIcon,
+  other: WashIcon,
+};

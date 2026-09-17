@@ -5,9 +5,45 @@ import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { pokeWashTick } from '@/lib/washConfig';
 import { displayPhone } from '@/lib/phone';
-import { BOOKING_LABELS, at12, dateLine, iqd, whatsappBooking, type BookingStatus } from '@/lib/wash';
+import {
+  BOOKING_LABELS,
+  VEHICLE_LABELS,
+  VEHICLE_TYPES,
+  at12,
+  bookingHref,
+  dateLine,
+  iqd,
+  vehicleArt,
+  vehicleImg,
+  whatsappBooking,
+  type BookingStatus,
+  type VehicleType,
+} from '@/lib/wash';
 import { RouteButton } from './RouteButton';
 import { CalendarIcon, SpinnerIcon, WhatsappIcon, XIcon } from './icons';
+
+/** نوعٌ معروفٌ أو «أخرى» — القاعدةُ قد تعيد null أو نوعاً قديماً لا نعرفه. */
+export const asVehicle = (v: string | null | undefined): VehicleType =>
+  (VEHICLE_TYPES as readonly string[]).includes(v ?? '') ? (v as VehicleType) : 'other';
+
+/** صورةُ نوع السيارة: الصورةُ الحقيقيّة (png) إن وُضعت في public/vehicles/، وإلّا الرسمُ (svg).
+ *  السقوطُ يتمّ مرّةً واحدة (شرطُ الامتداد) كي لا يدور onError بلا نهاية إن غاب الاثنان. */
+export function CarThumb({ vehicle, className = 'h-9 w-9' }: { vehicle: string | null | undefined; className?: string }) {
+  const v = asVehicle(vehicle);
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={vehicleImg(v)}
+      alt={VEHICLE_LABELS[v]}
+      loading="lazy"
+      onError={(e) => {
+        const el = e.currentTarget;
+        if (el.src.endsWith('.png')) el.src = vehicleArt(v);
+      }}
+      className={`shrink-0 object-contain ${className}`}
+    />
+  );
+}
 
 /**
  * RouteButton (Waze/Google) بوسمٍ غيرِ وسمه: نصُّه وأيقونتُه يُخفيان ويُرسم فوقه ما نُمرّر.
@@ -45,6 +81,9 @@ type Booking = {
   cancel_free_min: number;
   reviewed: boolean;
   events: { kind: string; at: string }[];
+  /** سياراتُ الطلب الواحد: المفتاحُ المشترك ورموزُ الإخوة بالترتيب (يشمل هذا الرمز). */
+  group_key: string | null;
+  group_codes: string[] | null;
 };
 
 /** بعد اكتمال الخدمة: خمسُ نجومٍ وتعليقٌ اختياريّ — مرّةً واحدة للحجز. */
@@ -142,6 +181,21 @@ export function WashBookingScreen() {
     window.location.reload();
   }
 
+  /** إلغاءُ سيّارات الطلب كلِّها بنداءٍ واحد — الرموزُ الأخرى تتبع المفتاحَ لا الرمز.
+   *  ‎group_codes بلا حالات، فلا عددَ في السؤال: القاعدةُ لا تُلغي إلّا ما زال نشطاً. */
+  async function cancelGroup(group: string) {
+    if (!confirm('إلغاء كلّ سيّارات هذا الطلب؟')) return;
+    setBusy(true);
+    // ترجع عدداً؛ و0 (هاتفٌ لا يطابق أو موعدٌ فات) لا يرفع استثناءً — فلا نُعيد التحميل بصمت.
+    const { data, error } = await supabase.rpc('cancel_wash_group', { p_group: group, p_phone: phone });
+    if (error || !data) {
+      setBusy(false);
+      return setErr(error?.message ?? 'تعذّر الإلغاء.');
+    }
+    pokeWashTick();
+    window.location.reload();
+  }
+
   if (b === undefined) {
     return (
       <main className="flex justify-center py-16">
@@ -159,6 +213,8 @@ export function WashBookingScreen() {
 
   const when = `${dateLine(b.starts_at)} · ${at12(b.starts_at)}`;
   const live = (b.status === 'pending' || b.status === 'confirmed') && new Date(b.starts_at).getTime() > Date.now();
+  /** إخوةُ هذه السيّارة في الطلب — الرموزُ فقط تعود من القاعدة، فحالاتُهم غيرُ معروفةٍ هنا. */
+  const siblings = b.group_key && (b.group_codes?.length ?? 0) > 1 && b.group_codes!.includes(b.code) ? b.group_codes! : null;
 
   return (
     <main className="mx-auto max-w-md px-4 pb-24 pt-4">
@@ -171,6 +227,26 @@ export function WashBookingScreen() {
         <p className="mt-1 font-mono text-4xl font-extrabold tracking-[0.2em] text-brand-900" dir="ltr">
           {b.code}
         </p>
+        {siblings && (
+          <div className="mt-2">
+            <p className="text-[11px] font-bold text-slate-500">
+              سيّارة {siblings.indexOf(b.code) + 1} من {siblings.length} في هذا الطلب
+            </p>
+            <div className="mt-1.5 flex flex-wrap justify-center gap-1.5">
+              {siblings.map((c) =>
+                c === b.code ? (
+                  <span key={c} dir="ltr" className="inline-flex min-h-[36px] items-center rounded-full bg-brand-600 px-3 font-mono text-[11px] font-bold text-white">
+                    {c}
+                  </span>
+                ) : (
+                  <a key={c} href={bookingHref(c, phone)} dir="ltr" className="inline-flex min-h-[36px] items-center rounded-full border border-brand-100 bg-brand-50 px-3 font-mono text-[11px] font-bold text-brand-700">
+                    {c}
+                  </a>
+                )
+              )}
+            </div>
+          </div>
+        )}
         <span className={`mt-3 inline-block rounded-full px-3 py-1 text-[12px] font-bold ${BOOKING_PILL[b.status]}`}>
           {b.status === 'pending' ? 'بانتظار تأكيد المغسلة' : BOOKING_LABELS[b.status]}
         </span>
@@ -225,17 +301,32 @@ export function WashBookingScreen() {
             </a>
           )}
           <RouteButton lat={b.lat} lng={b.lng} />
-          {live && (
+          {/* ‎replace= يُلغي رمزاً واحداً: في طلبٍ متعدّد السيارات يبقى بقيّتُه حيّاً فيُرفض الحجزُ الجديد.
+              تعديلُ موعد الطلب كلِّه في «حجوزاتي» حيث تُعرف حالاتُ سياراته. */}
+          {live && !siblings && (
             <a href={`/wash/book/?id=${b.wash_id}&replace=${encodeURIComponent(b.code)}`} className="btn-ghost w-full">
               <CalendarIcon className="h-4 w-4" />
               تعديل الموعد
             </a>
           )}
+          {live && siblings && (
+            <a href="/wash/mine/" className="btn-ghost w-full">
+              <CalendarIcon className="h-4 w-4" />
+              تعديل موعد الطلب من «حجوزاتي»
+            </a>
+          )}
           {live && (
-            <button type="button" onClick={cancel} disabled={busy} className="btn w-full text-red-700 active:bg-red-50">
-              {busy ? <SpinnerIcon className="h-4 w-4" /> : <XIcon className="h-4 w-4" />}
-              إلغاء الحجز
-            </button>
+            <div className={siblings ? 'flex gap-2' : ''}>
+              <button type="button" onClick={cancel} disabled={busy} className="btn w-full text-red-700 active:bg-red-50">
+                {busy ? <SpinnerIcon className="h-4 w-4" /> : <XIcon className="h-4 w-4" />}
+                إلغاء الحجز
+              </button>
+              {siblings && (
+                <button type="button" onClick={() => cancelGroup(b.group_key!)} disabled={busy} className="btn w-full text-red-700 active:bg-red-50">
+                  إلغاء الطلب كامل
+                </button>
+              )}
+            </div>
           )}
           {live && <p className="text-center text-[11px] text-slate-400">الإلغاء مجّانيّ قبل الموعد بـ{b.cancel_free_min} دقيقة على الأقلّ.</p>}
           {b.events?.length > 1 && (
