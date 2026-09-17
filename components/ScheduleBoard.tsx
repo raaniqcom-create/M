@@ -1,6 +1,7 @@
 'use client';
 
 import { PlateTurnBadge } from './PlateTurnBadge';
+import { ScheduleNotice } from './ScheduleNotice';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
@@ -111,27 +112,35 @@ export function ScheduleBoard({
     // عطلاً في التطبيق. وهو مبدأُ «نفد» نفسُه في `lib/board.ts`.
     if (off) {
       return (
-        <div className="card p-8 text-center">
-          <p className="text-sm font-bold text-slate-700">أُوقف جدولُ {dayLabel(day)} مؤقّتاً.</p>
-          <p className="mt-2 text-[11.5px] leading-relaxed text-slate-500">
-            سُحب بعد نشره — قد يكون التوزيع تغيّر أو وردت الأسماء خطأً. وصفحةُ كلِّ محطةٍ
-            تعرض ما تقوله هي عن نفسها.
-          </p>
-          <a href="/" className="btn-ghost mt-4 inline-flex px-6">
-            المحطات الآن
-          </a>
+        <div className="space-y-4">
+          <ScheduleNotice />
+          <div className="card p-8 text-center">
+            <p className="text-sm font-bold text-slate-700">أُوقف جدولُ {dayLabel(day)} مؤقّتاً.</p>
+            <p className="mt-2 text-[11.5px] leading-relaxed text-slate-500">
+              سُحب بعد نشره — قد يكون التوزيع تغيّر أو وردت الأسماء خطأً. وصفحةُ كلِّ محطةٍ
+              تعرض ما تقوله هي عن نفسها.
+            </p>
+            <a href="/" className="btn-ghost mt-4 inline-flex px-6">
+              المحطات الآن
+            </a>
+          </div>
         </div>
       );
     }
     return (
-      <div className="card p-8 text-center">
-        <p className="text-sm text-slate-600">لا جدولَ {dayLabel(day)} بعد.</p>
-        <p className="mt-2 text-[11.5px] leading-relaxed text-slate-400">
-          يصل الجدولُ عادةً بعد التاسعة مساءً.
-        </p>
-        <a href="/alerts" className="btn-ghost mt-4 inline-flex px-6">
-          فعّل التنبيهات ليصلك أوّلَ ما يصل
-        </a>
+      <div className="space-y-4">
+        {/* والاعتذارُ فوق «لا جدولَ بعد»: الجملةُ الثابتةُ تصف العادة، وهذه تصف
+            هذه الليلةَ بعينها — ومن فتح الصفحةَ يسأل عن الليلة. */}
+        <ScheduleNotice />
+        <div className="card p-8 text-center">
+          <p className="text-sm text-slate-600">لا جدولَ {dayLabel(day)} بعد.</p>
+          <p className="mt-2 text-[11.5px] leading-relaxed text-slate-400">
+            يصل الجدولُ عادةً بعد التاسعة مساءً.
+          </p>
+          <a href="/alerts" className="btn-ghost mt-4 inline-flex px-6">
+            فعّل التنبيهات ليصلك أوّلَ ما يصل
+          </a>
+        </div>
       </div>
     );
   }
@@ -145,6 +154,11 @@ export function ScheduleBoard({
 
           وفيها ما طلبه حرفاً: أنّ الإعلانَ رسميّ، وأنّ النفادَ وارد، وأنّ
           الجوابَ عند المنصّة أو عند المحطة نفسِها. */}
+      {/* واللوحةُ الممتلئةُ تحتاجه كذلك: قد يصل جدولُ الرمادي ولا يصل جدولُ
+          حديثة، فتمتلئ الصفحةُ ويبقى صاحبُ حديثة بلا خبر — و`groupBoard` لا
+          تُخرج مجموعةً لمدينةٍ بلا صفوف، فغيابُها صامتٌ تماماً. */}
+      <ScheduleNotice />
+
       {/* الفرديُّ والزوجيّ — لمن كتب لوحتَه فقط؛ الباقي كما هو. */}
       <PlateTurnBadge day={day} />
 

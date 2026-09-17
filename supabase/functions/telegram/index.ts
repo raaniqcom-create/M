@@ -2992,9 +2992,20 @@ async function publishDraft(
           .eq('for_date', stillOff)
           .eq('action', 'off');
 
+  // والاعتذارُ يُسحب مع الإيقاف — من العائلة نفسِها: علاماتُ «ليس هنا» تسقط
+  // لحظةَ يصل. ونصُّه يَعِد حرفاً «سنبلغكم فور وصوله»، فبقاؤه بعد وصوله يجعل
+  // المنصّةَ تُكذّب نفسَها على صفحتها. (`kind='apology'` — lib/scheduleNotice.ts)
+  const { data: pulled } = await db
+    .from('announcements')
+    .update({ active: false })
+    .eq('kind', 'apology')
+    .eq('active', true)
+    .select('id');
+
   const resumed = liftErr
     ? `${NL}⚠️ تعذّر رفعُ الإيقاف: ${esc(liftErr.message)} — ارفعه من 🛠.`
     : (lifted?.length ? `${NL}♻️ ورُفع إيقافُ الجدول — صار ظاهراً.` : '') +
+      (pulled?.length ? `${NL}🙏 وسُحب اعتذارُ تأخّر الجدول من الصفحة.` : '') +
       (offNow ? `${NL}⛔️ لكنّ لوحةَ ${stillOff} موقوفةٌ — لا يُعرض شيءٌ حتى تُرفع من 🛠.` : '');
 
   const when = for_date === baghdadDay() ? 'اليوم' : 'غداً';

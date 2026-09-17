@@ -34,6 +34,7 @@ import { biometricLockEnabled, verifyOwner } from '@/lib/biometric';
 import { BiometricLockScreen } from '@/components/BiometricLockScreen';
 import { whatsappFollowInstead, whatsappLink, whatsappVerifyLocation, whatsappVerifyRole } from '@/lib/phone';
 import { ScheduleAdmin } from '@/components/ScheduleAdmin';
+import { ScheduleNoticeAdmin } from '@/components/ScheduleNoticeAdmin';
 import { AdminStationForm } from '@/components/AdminStationForm';
 import { BroadcastPanel } from '@/components/BroadcastPanel';
 import { AdminThreads } from '@/components/AdminThreads';
@@ -465,7 +466,10 @@ export default function AdminPage() {
       )}
 
       {tab === 'schedule' && (
-        <div className="mt-4">
+        <div className="mt-4 space-y-4">
+          {/* الاعتذارُ فوق التحكّم: من فتح هذا التبويبَ وقد تأخّر الجدولُ يريد
+              أن يقول للناس شيئاً قبل أن يصحّح صفوفاً لم تصل بعد. */}
+          <ScheduleNoticeAdmin />
           <ScheduleAdmin />
         </div>
       )}
