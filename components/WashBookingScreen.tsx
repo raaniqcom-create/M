@@ -9,40 +9,34 @@ import {
   BOOKING_LABELS,
   VEHICLE_LABELS,
   VEHICLE_TYPES,
+  REAL_VEHICLE_PHOTOS,
   at12,
   bookingHref,
   dateLine,
   iqd,
-  vehicleArt,
   vehicleImg,
   whatsappBooking,
   type BookingStatus,
   type VehicleType,
 } from '@/lib/wash';
 import { RouteButton } from './RouteButton';
+import { VEHICLE_ART } from './VehicleArtwork';
 import { CalendarIcon, SpinnerIcon, WhatsappIcon, XIcon } from './icons';
 
 /** نوعٌ معروفٌ أو «أخرى» — القاعدةُ قد تعيد null أو نوعاً قديماً لا نعرفه. */
 export const asVehicle = (v: string | null | undefined): VehicleType =>
   (VEHICLE_TYPES as readonly string[]).includes(v ?? '') ? (v as VehicleType) : 'other';
 
-/** صورةُ نوع السيارة: الصورةُ الحقيقيّة (png) إن وُضعت في public/vehicles/، وإلّا الرسمُ (svg).
- *  السقوطُ يتمّ مرّةً واحدة (شرطُ الامتداد) كي لا يدور onError بلا نهاية إن غاب الاثنان. */
-export function CarThumb({ vehicle, className = 'h-9 w-9' }: { vehicle: string | null | undefined; className?: string }) {
+/** ظلُّ نوع السيارة — أحاديُّ اللون يرث لونَ النصّ حوله (أو الصورةُ الحقيقيّة متى وُجدت). */
+export function CarThumb({ vehicle, className = 'h-9 w-9 text-slate-400' }: { vehicle: string | null | undefined; className?: string }) {
   const v = asVehicle(vehicle);
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={vehicleImg(v)}
-      alt={VEHICLE_LABELS[v]}
-      loading="lazy"
-      onError={(e) => {
-        const el = e.currentTarget;
-        if (el.src.endsWith('.png')) el.src = vehicleArt(v);
-      }}
-      className={`shrink-0 object-contain ${className}`}
-    />
-  );
+  const Art = VEHICLE_ART[v];
+  if (REAL_VEHICLE_PHOTOS)
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={vehicleImg(v)} alt={VEHICLE_LABELS[v]} loading="lazy" className={`shrink-0 object-contain ${className}`} />
+    );
+  return <Art className={`shrink-0 ${className}`} />;
 }
 
 /**

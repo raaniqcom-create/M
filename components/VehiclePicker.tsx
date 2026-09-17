@@ -1,51 +1,27 @@
 'use client';
 
 import {
+  REAL_VEHICLE_PHOTOS,
   VEHICLE_LABELS,
   VEHICLE_TYPES,
   carsLabel,
   totalCars,
-  vehicleArt,
   vehicleImg,
   type VehicleCounts,
   type VehicleType,
 } from '@/lib/wash';
-import { PickupIcon, SedanIcon, SuvIcon, VanIcon, VehicleIcon } from './icons';
+import { VEHICLE_ART } from './VehicleArtwork';
 
-/** أيقونةُ كلّ نوعٍ — تبقى خلف الصورة: إن غابت الصورةُ والرسمُ معاً لا ينهار الصفّ. */
-export const VEHICLE_ICON: Record<VehicleType, (p: { className?: string }) => React.ReactElement> = {
-  sedan: SedanIcon,
-  suv: SuvIcon,
-  pickup: PickupIcon,
-  van: VanIcon,
-  other: VehicleIcon,
-};
-
-/** صورةُ النوع: الصورةُ الحقيقيّةُ (png) ثمّ الرسمُ (svg) ثمّ الأيقونةُ الخلفيّة.
- *  الصندوقُ بارتفاعٍ ثابتٍ كي لا تُقصّر صورةٌ مكسورةٌ البطاقةَ. */
-export function VehicleArt({ v, className = 'h-[104px] w-[124px]' }: { v: VehicleType; className?: string }) {
-  const Icon = VEHICLE_ICON[v];
-  return (
-    <span className={`relative grid shrink-0 place-items-center ${className}`}>
-      <Icon className="h-2/5 w-2/5 text-brand-600/35" />
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={vehicleImg(v)}
-        alt={VEHICLE_LABELS[v]}
-        loading="lazy"
-        onError={(e) => {
-          // سقطةٌ واحدةٌ إلى svg ثمّ إخفاء — بلا حارسٍ تُعيد ضبطُ src نداءَ onError بلا نهاية.
-          const el = e.currentTarget;
-          if (el.dataset.fb) el.style.display = 'none';
-          else {
-            el.dataset.fb = '1';
-            el.src = vehicleArt(v);
-          }
-        }}
-        className="absolute inset-0 h-full w-full object-contain"
-      />
-    </span>
-  );
+/** ظلُّ النوع: يُلوَّن من الواجهة (currentColor) فيصير اللونُ معنى الاختيار لا زينة.
+ *  وحين تصل صورٌ حقيقيّة (REAL_VEHICLE_PHOTOS) تحلّ الصورةُ محلَّ الظلّ في المكان نفسِه. */
+export function VehicleArt({ v, className = 'h-[76px] w-[116px]' }: { v: VehicleType; className?: string }) {
+  const Art = VEHICLE_ART[v];
+  if (REAL_VEHICLE_PHOTOS)
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={vehicleImg(v)} alt={VEHICLE_LABELS[v]} loading="lazy" className={`shrink-0 object-contain ${className}`} />
+    );
+  return <Art className={`shrink-0 ${className}`} />;
 }
 
 /** لسانٌ أخضرُ يطلّ تحت البطاقة — لغةُ البطاقات المرفوعة في قسم «غسيل». */
@@ -71,8 +47,8 @@ export function VehiclePicker({
         return (
           <div key={v} className={LIP}>
             <button type="button" aria-pressed={on} onClick={() => onChange(on ? '' : v)} className={`w-full ${CARD} ${cardTone(on)}`}>
-              <VehicleArt v={v} />
-              <span className={`text-[15px] font-extrabold ${on ? 'text-brand-800' : 'text-slate-800'}`}>{VEHICLE_LABELS[v]}</span>
+              <span className={on ? 'text-brand' : 'text-slate-400'}><VehicleArt v={v} /></span>
+              <span className={`whitespace-nowrap text-[15px] font-extrabold ${on ? 'text-brand-800' : 'text-slate-800'}`}>{VEHICLE_LABELS[v]}</span>
             </button>
           </div>
         );
@@ -123,7 +99,7 @@ export function VehicleCounter({
             {/* الصورةُ أضيقُ هنا منها في الاختيار المفرد، والاسمُ يتقلّص (min-w-0): الصفُّ الثلاثيُّ
                 مع حبّة العدّاد يتجاوز عرضَ البطاقة على شاشة 390px وإلّا خرج «+» عن حافّتها. */}
             <div className={`${CARD} ${cardTone(n > 0)}`}>
-              <VehicleArt v={v} className="h-[88px] w-[88px]" />
+              <span className={n > 0 ? 'text-brand' : 'text-slate-400'}><VehicleArt v={v} className="h-[76px] w-[112px]" /></span>
               <span className={`min-w-0 flex-1 text-[14px] font-extrabold ${n > 0 ? 'text-brand-800' : 'text-slate-800'}`}>{label}</span>
               <span className="flex shrink-0 items-center gap-0.5 rounded-full border border-slate-200 bg-white p-1">
                 <button
