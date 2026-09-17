@@ -65,6 +65,40 @@ export function hourWord(t: string): string {
   return `${h12}:${m} ${h24 < 12 ? 'صباحاً' : 'مساءً'}`;
 }
 
+/** "HH:MM" بتوقيت بغداد للحظةٍ مخزّنة — مرآةُ baghdadClock في lib/hours.ts.
+ *
+ *  و`hourCycle: 'h23'` لا `hour12: false`: الثانيةُ تكتب منتصفَ الليل "24:00"
+ *  في محرّكاتٍ قديمة، فتقرؤها `hourWord` «12:00 مساءً» — نقيضَ اللحظة. */
+export function baghdadClock(iso: string): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: BAGHDAD,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(iso));
+  const at = (t: string) => parts.find((p) => p.type === t)?.value ?? '00';
+  return `${at('hour')}:${at('minute')}`;
+}
+
+/** «حتى ٦:٣٠ مساءً» — مرآةُ runsOutLabel في lib/hours.ts، بلا كلمة «حتى»:
+ *  الجملةُ تختلف بين البوت واللوحة، والساعةُ لا تختلف. */
+export const runsOutWord = (iso: string): string => hourWord(baghdadClock(iso));
+
+/** ساعةُ حائطٍ بغداديّة ← لحظةٌ بعينها — مرآةُ runsOutFromClock في lib/hours.ts،
+ *  ونمطُ `publishAtFor` في بوت تيليجرام نفسُه.
+ *
+ *  العراقُ على +03:00 صيفاً وشتاءً بلا تحويل، فيُكتب الفارقُ حرفاً لا يُستنبط.
+ *  وما مضى من اليوم يُقرأ غداً — من قال ليلاً «حتى السادسة صباحاً» قصد غداً —
+ *  فالحاصلُ أبداً بين اللحظة وأربعٍ وعشرين ساعة. */
+export function runsOutFromClock(hhmm: string, nowMs: number = Date.now()): string | null {
+  const day = (plus: number) =>
+    new Date(nowMs + plus * 86_400_000).toLocaleDateString('en-CA', { timeZone: BAGHDAD });
+  const at = (d: string) => new Date(`${d}T${hhmm.slice(0, 5)}:00+03:00`).getTime();
+  const today = at(day(0));
+  if (Number.isNaN(today)) return null;
+  return new Date(today > nowMs ? today : at(day(1))).toISOString();
+}
+
 /** ذيلُ الوعد: الساعةُ إن ذُكرت، وإلّا الفترة. والساعةُ تغلب — «الصباح ٦:٠٠»
  *  حشوٌ يُقرأ مرّتين. مرآةُ whenLabel في lib/hours.ts. */
 export const whenWord = (period?: string | null, time?: string | null): string =>

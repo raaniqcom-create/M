@@ -2,7 +2,15 @@
 
 import { useState } from 'react';
 import { PRODUCT_LABELS, expectedText, isoDateIn } from '@/lib/products';
-import { PERIODS, PERIOD_LABELS, hasRunOut, runsOutLabel, type ExpectedPeriod } from '@/lib/hours';
+import {
+  PERIODS,
+  PERIOD_LABELS,
+  baghdadClock,
+  formatTime,
+  hasRunOut,
+  runsOutLabel,
+  type ExpectedPeriod,
+} from '@/lib/hours';
 import { SpinnerIcon } from './icons';
 import type { FuelProduct, StationProduct } from '@/types/database';
 
@@ -26,6 +34,23 @@ const RUNS_OUT = [
   { label: '3 ساعات', hours: 3 },
   { label: '6 ساعات', hours: 6 },
 ];
+
+/** ومن يعرف الساعةَ بعينها يقولها: «افعل الآن، اطفئه الساعة 8:00» — صاحبُ
+ *  المنصّة. والأزرارُ تبقى فوقها لأنّها أسرعُ بإصبعٍ في ساحةٍ مزدحمة.
+ *
+ *  ── ولماذا قائمةٌ لا `<input type="time">` ──────────────────────────────
+ *
+ *  الحقلُ الأصليُّ يرسم قيمتَه بلغة المتصفّح، فيكتبها على هاتفٍ عربيٍّ
+ *  «٠٨:٠٠ ص» — أرقاماً هنديّةً في منصّةٍ أرقامُها لاتينيّةٌ كلُّها. وهو نفسُ
+ *  السبب الذي كُتب لأجله `TimeSelect` (components/TimeSelect.tsx:5).
+ *
+ *  والقائمةُ تكسبه مرّتين: كلُّ خيارٍ يمرّ بـ`formatTime` فيُقرأ «8:00 صباحاً»
+ *  بأرقامٍ لاتينيّةٍ وكلمةٍ عربيّة، ولها حالةُ «لم يُختر» التي لا يملكها
+ *  `TimeSelect` بأعمدته الثلاثة — وهي تعني هنا شيئاً: لا موعدَ بعد. */
+const CLOCK_SLOTS = Array.from({ length: 48 }, (_, i) => {
+  const m = i * 30;
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+});
 
 /** ثلاثةُ أزرارٍ مسمّاةٍ لا اثنان، ولا مفتاحُ تبديل.
  *
@@ -66,7 +91,9 @@ export function ProductControl({
     period: ExpectedPeriod | null,
     time: string | null
   ) => void;
-  onSetRunsOut: (hours: number | null) => void;
+  /** عددٌ = ساعاتٌ من الآن (الأزرار)، ونصٌّ = "HH:MM" بتوقيت بغداد (الحقل)،
+   *  وnull = بلا موعد. والثلاثةُ تلتقي في عمودٍ واحد: لحظةٌ بعينها. */
+  onSetRunsOut: (when: number | string | null) => void;
 }) {
   const available = row?.is_available ?? false;
   const expectedAt = row?.expected_at ?? null;
@@ -83,6 +110,11 @@ export function ProductControl({
   // ثمّ عدل بقي على ما كان، ولم تُكتب في لوحته كلمةٌ لم يقلها.
   const [asking, setAsking] = useState(false);
   const showRunsOut = open && state === 'in';
+
+  // وموعدٌ ضبطته الأزرارُ لا يقع على نصف ساعةٍ غالباً (5:20)، فيُضاف خياراً
+  // بنفسه — وإلّا قرأ صاحبُ المحطة «اختر» عن موعدٍ ضبطه قبل ثانية.
+  const clock = runsOutAt ? baghdadClock(runsOutAt) : '';
+  const slots = clock && !CLOCK_SLOTS.includes(clock) ? [clock, ...CLOCK_SLOTS] : CLOCK_SLOTS;
   const showExpected = open && (state === 'soon' || asking);
 
   // كلُّ ضغطةٍ تفتح هذا المنتجَ وتُغلق غيرَه. وضغطةٌ على الحالة القائمة لا
@@ -182,7 +214,38 @@ export function ProductControl({
             ))}
           </div>
 
-          <p className="mt-2 text-[11px] leading-relaxed font-bold text-brand-900">
+          {/* والساعةُ لمن يعرفها: «متى يطفئ الاشعار؟ مثلا افعل الان اطفئه مثلا
+              الساعة 8:00» — صاحبُ المنصّة. والأزرارُ تبقى فوقها لأنّها أسرعُ
+              بإصبعٍ في ساحةٍ مزدحمة، وهذه لمن عنده الجوابُ الدقيق.
+
+              حقلٌ أصليٌّ كحقلِ الوصول تحته: iOS يفتح العجلةَ وأندرويد الساعة،
+              و`dir="ltr"` كي تُقرأ 8:00 لا 00:8.
+
+              ويُعرض فيه الموعدُ القائمُ أيّاً كان مصدرُه — فمن ضغط «3 ساعات» رأى
+              فيه 5:20. فلا يُخزَّن «كيف قالها» ولا يُعرض اختياران لشيءٍ واحد. */}
+          <label className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-brand-800">
+            أو أطفئه الساعة
+            <select
+              disabled={saving}
+              aria-describedby={`runs-out-note-${product}`}
+              value={clock}
+              // وقائمةٌ أُفرغت لا تمحو الموعد: المحوُ زرُّ «بلا موعد» وحدَه.
+              onChange={(e) => e.target.value && onSetRunsOut(e.target.value)}
+              className="min-h-[34px] rounded-lg bg-white px-2 text-[12px] font-semibold text-brand-900 disabled:opacity-50"
+            >
+              <option value="">اختر</option>
+              {slots.map((t) => (
+                <option key={t} value={t}>
+                  {formatTime(t)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <p
+            id={`runs-out-note-${product}`}
+            className="mt-2 text-[11px] leading-relaxed font-bold text-brand-900"
+          >
             {runsOutAt
               ? `يظهر للمستخدمين: حتى ${runsOutLabel(runsOutAt)} — وبعدها يختفي من القائمة حتى تؤكّده.`
               : 'بلا موعد يبقى معروضاً حتى تُطفئه بنفسك.'}

@@ -18,7 +18,10 @@ import {
   nextState,
   baghdadDay,
   promiseWord,
+  runsOutFromClock,
+  runsOutWord,
   stateOf,
+  stillLive,
   type OwnerState,
 } from '../_shared/state.ts';
 
@@ -504,11 +507,20 @@ async function screenOwner(to: string) {
       title: `${MARK[st]} ${PRODUCT_LABELS[p]}`,
       description:
         st === 'in'
-          ? 'متوفر — اضغط ليصير متوقّعاً'
+          ? r?.runs_out_at
+            ? `متوفر حتى ${runsOutWord(r.runs_out_at)} — اضغط ليصير متوقّعاً`
+            : 'متوفر — اضغط ليصير متوقّعاً'
           : st === 'soon'
             ? `متوقّع ${w} — اضغط ليصير غير متوفر`
             : 'غير متوفر — اضغط ليصير متوفراً',
     };
+  });
+
+  // سبعةٌ من عشرة مشغولةٌ بالمنتجات، فمواعيدُ النفاد شاشةٌ لا صفوفٌ هنا.
+  rows.push({
+    id: `o:${station.id}`,
+    title: '⏳ مواعيد النفاد',
+    description: 'متى يُطفأ كلُّ منتجٍ وحدَه',
   });
 
   return sendList(
@@ -518,6 +530,131 @@ async function screenOwner(to: string) {
     'المنتجات',
     rows
   );
+}
+
+/** ــ مواعيدُ النفاد ــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+ *
+ *  «متى يطفئ الاشعار؟ مثلا افعل الان اطفئه مثلا الساعة 8:00» — صاحبُ المنصّة.
+ *  والعمودُ قائمٌ وكرونُ `expire_run_outs` يطفئ به، لكن واتساب لم يكتبه إلّا
+ *  عند الإطفاء. وعشرةُ صفوفٍ سقفُ القائمة: أربعُ مُددٍ وأربعُ ساعاتٍ وبلا موعدٍ
+ *  ورجوع — ومن أراد ساعةً أدقَّ فاللوحةُ والبوتُ أوسع. */
+const RUNOUT_HOURS: [number, string][] = [
+  [1, 'ساعة'],
+  [2, 'ساعتان'],
+  [3, '3 ساعات'],
+  [6, '6 ساعات'],
+];
+const RUNOUT_SLOTS = ['08:00', '12:00', '18:00', '22:00'];
+
+async function screenRunOuts(to: string, stationId: string) {
+  const owner = await ownedStation(to);
+  if (!owner || owner.id !== stationId) {
+    return sendText(to, 'هذه المحطة ليست مسجّلة على رقمك.');
+  }
+
+  const { data: rowsDb } = await db
+    .from('station_products')
+    .select('product, is_available, runs_out_at')
+    .eq('station_id', stationId);
+
+  const byProduct = new Map((rowsDb ?? []).map((r) => [r.product, r]));
+  // ولا يُعرض إلّا المتوفّر: موعدُ نفادٍ لما ليس عندك جملةٌ بلا معنى.
+  const live = Object.keys(PRODUCT_LABELS).filter((p) => stillLive(byProduct.get(p)));
+
+  if (!live.length) {
+    await sendText(to, '⏳ لا منتجَ متوفّراً الآن، ولا موعدَ نفادٍ لما ليس عندك.');
+    return screenOwner(to);
+  }
+
+  const rows = live.map((p) => {
+    const at = byProduct.get(p)?.runs_out_at;
+    return {
+      id: `o:${stationId}:${p}`,
+      title: PRODUCT_LABELS[p],
+      description: at ? `ينفد ${runsOutWord(at)}` : 'بلا موعد — يبقى حتى تُطفئه',
+    };
+  });
+  rows.push({ id: 'manage', title: '⬅️ رجوع', description: 'لوحة محطتك' });
+
+  return sendList(
+    to,
+    '⏳ *مواعيد النفاد*\nعند الموعد يُطفأ المنتجُ وحدَه ويختفي من القائمة حتى تؤكّده.',
+    'المنتجات',
+    rows
+  );
+}
+
+async function screenRunOutOne(to: string, stationId: string, product: string) {
+  const owner = await ownedStation(to);
+  if (!owner || owner.id !== stationId) {
+    return sendText(to, 'هذه المحطة ليست مسجّلة على رقمك.');
+  }
+
+  const { data: r } = await db
+    .from('station_products')
+    .select('runs_out_at')
+    .eq('station_id', stationId)
+    .eq('product', product)
+    .maybeSingle();
+
+  const rows = [
+    ...RUNOUT_HOURS.map(([h, label]) => ({
+      id: `xo:${stationId}:${product}:h${h}`,
+      title: label,
+      description: 'من الآن',
+    })),
+    ...RUNOUT_SLOTS.map((t) => ({
+      id: `xo:${stationId}:${product}:t${t.replace(':', '')}`,
+      title: t,
+      description: 'ساعةُ الحائط — وساعةٌ مضت تُحسب لغد',
+    })),
+    { id: `xo:${stationId}:${product}:x`, title: '♾ بلا موعد', description: 'يبقى حتى تُطفئه' },
+    { id: `o:${stationId}`, title: '⬅️ رجوع', description: 'مواعيد النفاد' },
+  ];
+
+  return sendList(
+    to,
+    `⏳ *${PRODUCT_LABELS[product]}*\n` +
+      `الآن: ${r?.runs_out_at ? `ينفد ${runsOutWord(r.runs_out_at)}` : 'بلا موعد'}`,
+    'اختر',
+    rows
+  );
+}
+
+async function setRunOut(to: string, stationId: string, product: string, arg: string) {
+  const owner = await ownedStation(to);
+  if (!owner || owner.id !== stationId) {
+    return sendText(to, 'هذه المحطة ليست مسجّلة على رقمك.');
+  }
+
+  let runs_out_at: string | null = null;
+  if (arg?.[0] === 'h') {
+    runs_out_at = new Date(Date.now() + Number(arg.slice(1)) * 3600_000).toISOString();
+  } else if (arg?.[0] === 't') {
+    runs_out_at = runsOutFromClock(`${arg.slice(1, 3)}:${arg.slice(3, 5)}`);
+  }
+  // وما لم يُقرأ ساعةً لا يُكتب صفراً: بلا هذا يُمحى موعدٌ قائمٌ عن زرٍّ مشوّه.
+  if (arg !== 'x' && runs_out_at === null) {
+    return sendText(to, 'اختيارٌ غيرُ مفهوم.');
+  }
+
+  // والختمُ يُجدَّد — وهو أيضاً ما يرفع «مغلقة مؤقتاً» عن المحطة (المُشغّلُ في
+  // 20260926_reopen_on_update.sql).
+  const { error } = await db
+    .from('station_products')
+    .update({ runs_out_at, updated_at: new Date().toISOString() })
+    .eq('station_id', stationId)
+    .eq('product', product);
+
+  if (error) {
+    console.error('setRunOut', error);
+    return sendText(to, 'تعذّر الحفظ — أعد المحاولة.');
+  }
+  await sendText(
+    to,
+    `${PRODUCT_LABELS[product]} — ${runs_out_at ? `ينفد ${runsOutWord(runs_out_at)}` : 'بلا موعد'}`
+  );
+  return screenRunOuts(to, stationId);
 }
 
 async function toggleProduct(to: string, stationId: string, product: string) {
@@ -543,7 +680,7 @@ async function toggleProduct(to: string, stationId: string, product: string) {
   // والانتقالُ من التوفّر نفادٌ — إلى «متوقّع» كما إلى «غير متوفر».
   const ranOut = cur === 'in' && !next ? now : null;
 
-  await db
+  const { error: saveErr } = await db
     .from('station_products')
     .upsert(
       {
@@ -562,6 +699,13 @@ async function toggleProduct(to: string, stationId: string, product: string) {
       },
       { onConflict: 'station_id,product' }
     );
+
+  // وكتابةٌ سقطت لا تُقال «تمّت»: تيليجرام يفحص خطأه منذ اليوم الأوّل، وهذه
+  // وحدَها كانت تبتلعه — فيمضي صاحبُ المحطة وهو يظنّ وقودَه معلَناً.
+  if (saveErr) {
+    console.error('toggleProduct', saveErr);
+    return sendText(to, 'تعذّر الحفظ — أعد المحاولة.');
+  }
 
   // ــ وخبرُ الوصول يخرج إلى الناس ــــــــــــــــــــــــــــــــــــــــــ
   //
@@ -907,6 +1051,14 @@ async function handle(from: string, message: Record<string, any>, name: string |
     }
     if (id.startsWith('s:')) return screenStation(from, id.slice(2));
     if (id.startsWith('f:')) return screenFuel(from, id.slice(2));
+    if (id.startsWith('xo:')) {
+      const [, stationId, product, arg] = id.split(':');
+      return setRunOut(from, stationId, product, arg);
+    }
+    if (id.startsWith('o:')) {
+      const [, stationId, product] = id.split(':');
+      return product ? screenRunOutOne(from, stationId, product) : screenRunOuts(from, stationId);
+    }
     if (id.startsWith('t:')) {
       const [, stationId, product] = id.split(':');
       return toggleProduct(from, stationId, product);

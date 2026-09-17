@@ -61,3 +61,45 @@ for (let h = 0; h < 24; h++) {
   assert.equal(to24Hour(Number(hh), '15', morning), stored, `round trip failed for ${stored}`);
 }
 console.log('12-hour conversion: assertions passed');
+
+// ── ساعةُ الحائط ← لحظةُ النفاد ─────────────────────────────────────────────
+//
+// «افعل الآن، اطفئه الساعة 8:00». والمحلِّلُ يُستورد حقيقيّاً لا يُحاكى: كلُّ
+// عطبٍ محتملٍ فيه في المنطقة الزمنيّة، ومحاكاتُه تُوافق نفسَها ولا تُثبت شيئاً.
+const { runsOutFromClock, baghdadClock, runsOutLabel } = await import('../lib/hours.ts');
+
+// لحظةٌ ثابتة: 09:00Z = الثانيةَ عشرةَ ظهراً ببغداد
+const NOON = Date.parse('2026-09-17T09:00:00Z');
+
+assert.equal(runsOutFromClock('18:00', NOON), '2026-09-17T15:00:00.000Z', 'ساعةٌ لم تأتِ → اليومَ');
+assert.equal(runsOutFromClock('08:00', NOON), '2026-09-18T05:00:00.000Z', 'ساعةٌ مضت → غداً');
+// والحدُّ نفسُه: الساعةُ الحاليّةُ بالضبط ليست موعداً، فتُقرأ غداً
+assert.equal(runsOutFromClock('12:00', NOON), '2026-09-18T09:00:00.000Z', 'الآنَ بالضبط → غداً');
+assert.equal(runsOutFromClock('12:01', NOON), '2026-09-17T09:01:00.000Z', 'ودقيقةٌ بعدها اليومَ');
+
+// ولا موعدَ يتجاوز أربعاً وعشرين ساعة — سقفُ FRESH_HOURS نفسُه، فلا يشيخ الخبرُ
+// قبل الموعد الذي يحمله.
+for (const hh of ['00:00', '05:30', '12:00', '23:59']) {
+  const d = Date.parse(runsOutFromClock(hh, NOON)) - NOON;
+  assert.ok(d > 0 && d <= 24 * 3600_000, `${hh} خارج النافذة`);
+}
+
+// ولا تحويلَ صيفيّ في العراق: كانونُ الثاني وتمّوزُ على +03:00 سواءً. لو تسلّل
+// حسابُ إزاحةٍ محليّةٍ لانحرف أحدُهما ساعةً عن أخيه.
+assert.equal(runsOutFromClock('08:00', Date.parse('2026-01-10T04:00:00Z')), '2026-01-10T05:00:00.000Z');
+assert.equal(runsOutFromClock('08:00', Date.parse('2026-07-10T04:00:00Z')), '2026-07-10T05:00:00.000Z');
+
+// وما لا يُقرأ ساعةً لا يُكتب موعداً
+assert.equal(runsOutFromClock('', NOON), null);
+assert.equal(runsOutFromClock('8:00', NOON), null, 'ساعةٌ بخانةٍ واحدة ليست ISO');
+
+// ذهاباً وإياباً: ما تكتبه الساعةُ تقرؤه الساعة — وإلّا كذب الحقلُ على مالئه
+assert.equal(baghdadClock(runsOutFromClock('06:45', NOON)), '06:45');
+// ومنتصفُ الليل "00:00" لا "24:00" — 21:00Z هو منتصفُ ليل بغداد
+assert.equal(baghdadClock('2026-09-17T21:00:00.000Z'), '00:00');
+
+// و«غداً» تُقال لغدٍ وحدَه — وإلّا قرأ السائقُ موعدَ أمسِ موعدَ غد
+assert.ok(runsOutLabel(new Date(Date.now() + 86_400_000).toISOString()).endsWith('غداً'));
+assert.ok(!runsOutLabel(new Date(Date.now() - 3600_000).toISOString()).endsWith('غداً'), 'وما مضى ليس غداً');
+assert.ok(!/[٠-٩]/.test(runsOutLabel(new Date(Date.now() + 3600_000).toISOString())), 'أرقامٌ لاتينيّة');
+console.log('run-out wall clock: assertions passed');

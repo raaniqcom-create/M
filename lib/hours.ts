@@ -31,13 +31,17 @@ export function whenLabel(
   return period ? PERIOD_LABELS[period] : '';
 }
 
-/** Minutes since midnight, right now, in Baghdad. */
+/** Minutes since midnight, right now, in Baghdad.
+ *
+ *  و`hourCycle: 'h23'` لا `hour12: false`: الثانيةُ تكتب منتصفَ الليل "24:00"
+ *  في محرّكاتٍ قديمة — وهي واقعُ WebView على هواتفَ رخيصةٍ في الأنبار — فتصير
+ *  الدقائقُ ١٤٤٠، فتُقرأ محطةٌ دوامُها ٠٠:٠٠–٠٨:٠٠ **مغلقةً** في منتصف الليل. */
 export function baghdadMinutesNow(): number {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: BAGHDAD,
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    hourCycle: 'h23',
   }).formatToParts(new Date());
 
   const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
@@ -229,15 +233,57 @@ export function hasRunOut(runsOutAt: string | null | undefined): boolean {
  *  فلو نُسّقت الساعةُ محليّاً لقرأ موعدَ نفادٍ يسبق الحقيقة بساعة — ولا يعلم. */
 export function runsOutLabel(runsOutAt: string | null | undefined): string {
   if (!runsOutAt) return '';
+  const label = formatTime(baghdadClock(runsOutAt));
+  // «حتى 8:00 صباحاً» وقد مضت الثامنةُ اليومَ جملةٌ تُقرأ على غير وجهها: صاحبُها
+  // يظنّها الليلةَ والسائقُ يظنّها ما مضى. فيُقال «غداً» صراحةً — وهنا لا في
+  // اللوحة، فيقرأ السائقُ على البطاقة الجملةَ التي كتبها صاحبُ المحطة نفسُها.
+  //
+  // وغدٌ وحدَه: ما وقع أمسِ يُقرأ في السجلّ ولوحةِ الجدول، ولا يُقال عنه «غداً».
+  return baghdadDay(new Date(runsOutAt).getTime()) === baghdadDay(Date.now(), 1)
+    ? `${label} غداً`
+    : label;
+}
+
+/** تاريخُ بغداد "YYYY-MM-DD" بإزاحةِ أيّامٍ اختياريّة — مرآةُ `baghdadDay` في
+ *  supabase/functions/_shared/state.ts:17. و'en-CA' وحدَها تكتبه بهذا الترتيب
+ *  وبأرقامٍ لاتينيّة. */
+const baghdadDay = (ms: number, plusDays = 0): string =>
+  new Date(ms + plusDays * 86_400_000).toLocaleDateString('en-CA', { timeZone: BAGHDAD });
+
+/** "HH:MM" بتوقيت بغداد للحظةٍ مخزّنة — القراءةُ التي يُملأ بها حقلُ الوقت، وهي
+ *  نفسُها التي تبني منها `runsOutLabel` جملتَها. فلا صيغتان لشيءٍ واحد. */
+export function baghdadClock(iso: string): string {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: BAGHDAD,
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
-  }).formatToParts(new Date(runsOutAt));
-  const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
-  const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
-  return formatTime(`${hour}:${minute}`);
+    hourCycle: 'h23',
+  }).formatToParts(new Date(iso));
+  const at = (t: string) => parts.find((p) => p.type === t)?.value ?? '00';
+  return `${at('hour')}:${at('minute')}`;
+}
+
+/** ساعةُ حائطٍ بغداديّة ← لحظةٌ بعينها: عكسُ `runsOutLabel` تماماً.
+ *
+ *  «افعل الآن، اطفئه الساعة 8:00» — صاحبُ المنصّة. والثامنةُ التي يقصدها ثامنةُ
+ *  ساحتِه لا ثامنةُ جهازه: هاتفٌ على توقيت عمّان يكتب موعداً يسبق الحقيقةَ
+ *  بساعة، ولا يعلم صاحبُه.
+ *
+ *  والعراقُ على +03:00 صيفاً وشتاءً بلا تحويل، فيُكتب الفارقُ حرفاً كما كُتب في
+ *  `publishAtFor` ببوت تيليجرام — لا يُستنبط من ساعة القارئ.
+ *
+ *  وما مضى من اليوم يُقرأ غداً: من قال في الحادية عشرة ليلاً «حتى السادسة
+ *  صباحاً» قصد صباحَ غدٍ قطعاً، ولا معنى لرفضِ ما قال. فالحاصلُ أبداً بين
+ *  اللحظة وأربعٍ وعشرين ساعة — وهو `FRESH_HOURS` نفسُه، فلا يُولد وعدٌ أطولُ من
+ *  عمر الخبر الذي يحمله.
+ *
+ *  وما لا يُقرأ ساعةً يُرجع null لا استثناءً: حقلُ وقتٍ نصفُ مكتوبٍ على سطح
+ *  المكتب يُرسل "0" و"08:" قبل "08:00". */
+export function runsOutFromClock(hhmm: string, nowMs: number = Date.now()): string | null {
+  const at = (day: string) => new Date(`${day}T${hhmm.slice(0, 5)}:00+03:00`).getTime();
+  const today = at(baghdadDay(nowMs));
+  if (Number.isNaN(today)) return null;
+  return new Date(today > nowMs ? today : at(baghdadDay(nowMs, 1))).toISOString();
 }
 
 /** «قبل ٣ ساعات» / «قبل يومين» — the age of the claim, in the driver's words. */

@@ -32,7 +32,7 @@ import { OwnerReminders } from '@/components/OwnerReminders';
 import { StationChat } from '@/components/StationChat';
 import { JoinPoster } from '@/components/JoinPoster';
 import { ChangePassword } from '@/components/ChangePassword';
-import { FRESH_HOURS, WITHDRAW_HOURS, ageLabel, hasRunOut } from '@/lib/hours';
+import { FRESH_HOURS, WITHDRAW_HOURS, ageLabel, hasRunOut, runsOutFromClock } from '@/lib/hours';
 import { DeleteAccount } from '@/components/DeleteAccount';
 import type { ExpectedPeriod } from '@/lib/hours';
 import { FuelIcon, LogOutIcon, SpinnerIcon } from '@/components/icons';
@@ -233,6 +233,19 @@ export default function OwnerPage() {
       setSaveErr('تعذّر الحفظ — تحقّق من اتصالك وأعد المحاولة.');
       return false;
     }
+
+    // والقاعدةُ ترفع «مغلقة مؤقتاً» عن كلّ إعلانِ توفّر (المُشغّلُ في
+    // 20260926_reopen_on_update.sql) — فترفعه اللوحةُ معها. وإلّا بقيت اللافتةُ
+    // الحمراءُ تقول «محطتك مغلقة» عن صفٍّ فُتح قبل ثانية، فيضغطها صاحبُها
+    // فيُغلقها من جديد. والشرطُ نسخةُ `when` في المُشغّل حرفاً بحرف: صفٌّ
+    // متوفّرٌ لمسه إنسان — فلا يرفعه ضبطُ ازدحامٍ لا يختم `updated_at`.
+    if (
+      station.temp_closed &&
+      (patch.is_available ?? before?.is_available) &&
+      (patch.is_available !== undefined || patch.updated_at !== undefined)
+    ) {
+      setStation((s) => (s ? { ...s, temp_closed: false } : s));
+    }
     return true;
   }
 
@@ -286,11 +299,23 @@ export default function OwnerPage() {
     setDirty(true);
   }
 
-  /** «متى تتوقّع نفاده؟» — ساعاتٌ من الآن لا ساعةُ حائط: صاحبُ المحطة يعرف
-   *  كم بقي عنده، لا متى ينتهي بالضبط. */
-  async function setRunsOut(product: FuelProduct, hours: number | null) {
+  /** «متى تتوقّع نفاده؟» — ساعاتٌ من الآن، أو ساعةُ حائطٍ بغداديّة.
+   *
+   *  الأزرارُ تقول «كم بقي عندي» وهو ما يعرفه صاحبُ المحطة غالباً، والحقلُ
+   *  يقول «متى أطفئه» وهو ما طلبه صاحبُ المنصّة صراحةً. والعمودُ واحدٌ لا
+   *  يميّز بينهما: لحظةٌ بعينها. */
+  async function setRunsOut(product: FuelProduct, when: number | string | null) {
     const runs_out_at =
-      hours === null ? null : new Date(Date.now() + hours * 3600_000).toISOString();
+      when === null
+        ? null
+        : typeof when === 'number'
+          ? new Date(Date.now() + when * 3600_000).toISOString()
+          : runsOutFromClock(when);
+
+    // ونصٌّ لم يُقرأ ساعةً لا يُكتب صفراً: بلا هذا الحارس يُمحى موعدٌ قائمٌ عن
+    // حقلٍ نصفِ مكتوب، فيبقى الوقودُ معروضاً بعد ساعتِه.
+    if (when !== null && runs_out_at === null) return;
+
     // والختمُ يُجدَّد: من ضبط موعدَ نفادٍ تكلّم الآن، فلا تُلاحقه رسالةُ
     // «وقودك معروضٌ بخبرٍ قديم» عن لوحةٍ لمسها بيده.
     if (await patchProduct(product, { runs_out_at, updated_at: new Date().toISOString() })) {
@@ -388,6 +413,11 @@ export default function OwnerPage() {
         p.is_available && p.runs_out_at && p.runs_out_at < now ? { ...p, runs_out_at: null } : p
       )
     );
+    // و«تأكيد» يختم الصفوفَ كلَّها، فالقاعدةُ تفتح المحطةَ إن كان فيها متوفّرٌ
+    // واحد — واللوحةُ تتبعها كي لا تبقى اللافتةُ الحمراءُ على محطةٍ فُتحت.
+    if (station.temp_closed && products.some((p) => p.is_available)) {
+      setStation((s) => (s ? { ...s, temp_closed: false } : s));
+    }
     setConfirmedAt(now);
     setNotifyNote(null);
     setQuietNote(null);
@@ -498,11 +528,24 @@ export default function OwnerPage() {
     // has always told the owner it «تُمسح تلقائياً»; nothing ever cleared it —
     // the 30-minute expiry is read-side only and the column kept its value
     // forever. Now the sentence is true for the one case the owner controls.
+    // والإغلاقُ يُخفي المحطةَ عن كلّ سطح، وهو أيقونةٌ واحدةٌ بين ثمانٍ يُخطئها
+    // الإبهام — وثلاثٌ من تسعٍ وأربعين وُجدت عالقةً مغلقةً وأصحابُها لا يعلمون.
+    // فيُسأل عنه مرّةً. والفتحُ لا يُسأل عنه: من عاد لا يُعرقَل.
+    if (next && !confirm('إغلاق المحطة مؤقتاً؟ لن تظهر للناس حتى تُعيد فتحها.')) return;
     const patch = next
       ? { temp_closed: true, manual_traffic_level: null, manual_traffic_set_at: null }
       : { temp_closed: false };
     setStation({ ...station, ...patch });
-    await supabase.from('stations').update(patch).eq('id', station.id);
+    const { error } = await supabase.from('stations').update(patch).eq('id', station.id);
+    if (error) {
+      // كان الزرُّ ينقلب على الشاشة سواءٌ كُتب الصفُّ أم لا — وهذه الكتابةُ
+      // بالذات هي التي تُخفي المحطةَ أو تُظهرها. (`patchProduct` و`setTraffic`
+      // كلتاهما تسترجعان؛ هذه وحدَها كانت تبتلع.)
+      setStation({ ...station });
+      setSaveErr(
+        next ? 'تعذّر إغلاق المحطة — تحقّق من اتصالك.' : 'تعذّر إعادة الفتح — تحقّق من اتصالك.'
+      );
+    }
   }
 
   async function setTraffic(level: TrafficLevel) {
@@ -759,7 +802,7 @@ export default function OwnerPage() {
                     onSetExpected={(date, period, time) =>
                       setExpected(product, date, period, time)
                     }
-                    onSetRunsOut={(hours) => setRunsOut(product, hours)}
+                    onSetRunsOut={(when) => setRunsOut(product, when)}
                   />
                 ))}
               </ul>

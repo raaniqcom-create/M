@@ -15,7 +15,13 @@ assert.equal(describeChange('gasoline_regular', { is_available: true }), 'بان
 assert.equal(describeChange('kerosene', { is_available: false }), 'كاز → غير متوفّر');
 assert.equal(describeChange(null, { confirm: true }), 'أكّد التوفّر');
 assert.equal(describeChange('gasoline_regular', { runs_out_at: null }), 'بانزين عادي: أُلغي موعد النفاد');
-assert.match(describeChange('gasoline_regular', { runs_out_at: '2026-09-16T10:30:00Z' }), /^بانزين عادي: ينفد /);
+// وموعدٌ نسبيٌّ لا ثابت: تاريخٌ مكتوبٌ باليد يشيخ فيصير «غداً» يوماً ثمّ لا يصير.
+// والسجلُّ كان وحدَه في المنصّة يكتب الساعةَ بأرقامٍ هنديّة — فيُشهَد عليه هنا.
+const ranOut = describeChange('gasoline_regular', {
+  runs_out_at: new Date(Date.now() - 3 * 3600_000).toISOString(),
+});
+assert.match(ranOut, /^بانزين عادي: ينفد \d{1,2}:\d{2} (صباحاً|مساءً)$/);
+assert.ok(!/[٠-٩]/.test(ranOut), 'أرقامٌ لاتينيّة في السجلّ');
 assert.equal(describeChange('gasoline_premium', { traffic_level: 'red' }), 'بانزين محسن: الازدحام مزدحم');
 assert.equal(describeChange('gasoline_premium', { traffic_level: null }), 'بانزين محسن: مُسح الازدحام');
 assert.equal(describeChange('kerosene', { expected_at: null }), 'كاز: أُلغي موعد الوصول');

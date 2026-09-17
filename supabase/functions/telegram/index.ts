@@ -36,6 +36,8 @@ import {
   dayWord,
   hourWord,
   promiseWord,
+  runsOutFromClock,
+  runsOutWord,
   stateOf,
   type OwnerState,
 } from '../_shared/state.ts';
@@ -1348,7 +1350,14 @@ async function showOwnerPanel(chat: number, stationId: string, messageId?: numbe
   const keyboard = PRODUCTS.map((p) => {
     const r = byRow.get(p);
     const st = stateOf(r);
-    const tail = st === 'soon' && r ? promiseWord(r) : '';
+    // وموعدُ النفاد يُطبع كما يُطبع الوعد: صاحبُ المحطة يضبطه ثمّ لا يجد له أثراً
+    // في البوت فيحسبه ضاع، فيضبطه مرّةً أخرى — أو يظنّ وقودَه معروضاً بلا أجل.
+    const tail =
+      st === 'soon' && r
+        ? promiseWord(r)
+        : st === 'in' && r?.runs_out_at
+          ? `حتى ${runsOutWord(r.runs_out_at)}`
+          : '';
     return [
       {
         text: `${MARK[st]} ${PRODUCT_LABELS[p]}${tail ? ` — ${tail}` : ''}`,
@@ -1357,6 +1366,7 @@ async function showOwnerPanel(chat: number, stationId: string, messageId?: numbe
     ];
   });
   keyboard.push([{ text: '🕒 مواعيد الوصول', callback_data: `e:${stationId}` }]);
+  keyboard.push([{ text: '⏳ مواعيد النفاد', callback_data: `o:${stationId}` }]);
   keyboard.push([{ text: '🔄 تحديث', callback_data: `r:${stationId}` }]);
   keyboard.push([{ text: '🏠 القائمة', callback_data: 'menu' }]);
 
@@ -1544,6 +1554,149 @@ async function setExpectation(
   }
 
   await showExpectOne(chat, stationId, i, messageId);
+}
+
+/** ــ شاشاتُ مواعيد النفاد ــــــــــــــــــــــــــــــــــــــــــــــــــ
+ *
+ *  «متى يطفئ الاشعار؟ مثلا افعل الان اطفئه مثلا الساعة 8:00» — صاحبُ المنصّة.
+ *
+ *  والعمودُ `runs_out_at` قائمٌ منذ أيلول، وكرونُ `expire_run_outs` يطفئ به كلَّ
+ *  خمس دقائق، وحارسُ `notify` يمنع الإعلانَ عمّا قال صاحبُه إنّه نفد — لكنّ
+ *  البوتين لم يكن فيهما بابٌ إليه أصلاً: يُكتب عند الإطفاء فقط. وأصحابُ المحطات
+ *  يعملون من الهاتف في الساحة لا من اللوحة، فبقيت الميزةُ حبيسةَ الويب.
+ *
+ *  والخياران معاً كما في اللوحة: مُدّةٌ من الآن لمن يعرف كم بقي عنده، وساعةُ
+ *  حائطٍ لمن يعرف متى يُغلق. والحصّةُ توزَّع في الغالب على ساعتين إلى ستّ. */
+const RUNOUT_SLOTS = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'];
+const RUNOUT_HOURS: [number, string][] = [
+  [1, 'ساعة'],
+  [2, 'ساعتان'],
+  [3, '3 ساعات'],
+  [6, '6 ساعات'],
+];
+
+async function showRunOuts(chat: number, stationId: string, messageId?: number) {
+  const { data: rows } = await db
+    .from('station_products')
+    .select('product, is_available, runs_out_at')
+    .eq('station_id', stationId);
+
+  const byRow = new Map((rows ?? []).map((r) => [r.product, r]));
+  // ولا يُعرض إلّا المتوفّر: موعدُ نفادٍ لما ليس عندك جملةٌ بلا معنى، وسبعةُ
+  // صفوفٍ نصفُها معطّلٌ تُخفي الثلاثةَ التي تعني شيئاً.
+  const live = PRODUCTS.filter((p) => stillLive(byRow.get(p)));
+
+  if (!live.length) {
+    return void (await show(
+      chat,
+      messageId,
+      `⏳ <b>مواعيد النفاد</b>${NL}لا منتجَ متوفّراً الآن، ولا موعدَ نفادٍ لما ليس عندك.`,
+      { reply_markup: { inline_keyboard: [[{ text: '⬅️ رجوع', callback_data: `r:${stationId}` }]] } }
+    ));
+  }
+
+  const keyboard = live.map((p) => {
+    const at = byRow.get(p)?.runs_out_at;
+    return [
+      {
+        text: `${PRODUCT_LABELS[p]}${at ? ` — حتى ${runsOutWord(at)}` : ' — بلا موعد'}`,
+        callback_data: `o:${stationId}:${PRODUCTS.indexOf(p)}`,
+      },
+    ];
+  });
+  keyboard.push([{ text: '⬅️ رجوع', callback_data: `r:${stationId}` }]);
+
+  await show(
+    chat,
+    messageId,
+    `⏳ <b>مواعيد النفاد</b>${NL}` +
+      `متى ينفد كلُّ منتج؟ عند الموعد يُطفأ وحدَه ويختفي من القائمة حتى تؤكّده.${NL}` +
+      `${NL}اختر المنتج.`,
+    { reply_markup: { inline_keyboard: keyboard } }
+  );
+}
+
+async function showRunOutOne(chat: number, stationId: string, i: number, messageId?: number) {
+  const product = PRODUCTS[i];
+  if (!product) return void (await showRunOuts(chat, stationId, messageId));
+
+  const { data: r } = await db
+    .from('station_products')
+    .select('is_available, runs_out_at')
+    .eq('station_id', stationId)
+    .eq('product', product)
+    .maybeSingle();
+
+  // والساعةُ بلا نقطتين في `callback_data`: `split(':')` تقطعها نصفين لولا ذلك،
+  // فـ«t2000» تُقرأ «20:00» عند الكتابة. والسقفُ أربعةٌ وستّون بايتاً والحاصلُ
+  // نحوُ ستّةٍ وأربعين — ولهذا يُحمل المنتجُ فهرساً لا اسماً.
+  const keyboard = [
+    RUNOUT_HOURS.map(([h, label]) => ({
+      text: label,
+      callback_data: `xo:${stationId}:${i}:h${h}`,
+    })),
+    ...[0, 4].map((s) =>
+      RUNOUT_SLOTS.slice(s, s + 4).map((t) => ({
+        text: t,
+        callback_data: `xo:${stationId}:${i}:t${t.replace(':', '')}`,
+      }))
+    ),
+    [{ text: '♾ بلا موعد', callback_data: `xo:${stationId}:${i}:x` }],
+    [{ text: '⬅️ رجوع', callback_data: `o:${stationId}` }],
+  ];
+
+  await show(
+    chat,
+    messageId,
+    `⏳ <b>${PRODUCT_LABELS[product]}</b>${NL}` +
+      `الآن: ${r?.runs_out_at ? `ينفد ${esc(runsOutWord(r.runs_out_at))}` : 'بلا موعد'}${NL}` +
+      `${NL}الصفُّ الأوّل مدّةٌ من الآن، وتحته ساعةُ الحائط — وساعةٌ مضت تُحسب لغد.`,
+    { reply_markup: { inline_keyboard: keyboard } }
+  );
+}
+
+/** يكتب موعدَ النفاد — مدّةً أو ساعةً — أو يمحوه. */
+async function setRunOut(
+  chat: number,
+  messageId: number,
+  telegramId: number,
+  data: string,
+  queryId: string
+) {
+  const [, stationId, idx, arg] = data.split(':');
+  const i = Number(idx);
+  const product = PRODUCTS[i];
+  if (!product) return void (await answer(queryId, 'منتجٌ غيرُ معروف'));
+
+  if (!(await ownsStation(telegramId, stationId))) {
+    return void (await answer(queryId, 'غير مصرّح لك بإدارة هذه المحطة'));
+  }
+
+  let runs_out_at: string | null = null;
+  if (arg?.[0] === 'h') {
+    runs_out_at = new Date(Date.now() + Number(arg.slice(1)) * 3600_000).toISOString();
+  } else if (arg?.[0] === 't') {
+    runs_out_at = runsOutFromClock(`${arg.slice(1, 3)}:${arg.slice(3, 5)}`);
+  } else if (arg !== 'x') {
+    return void (await answer(queryId, 'اختيارٌ غيرُ معروف'));
+  }
+  // وما لم يُقرأ ساعةً لا يُكتب صفراً: بلا هذا يُمحى موعدٌ قائمٌ عن زرٍّ مشوّه.
+  if (arg !== 'x' && runs_out_at === null) {
+    return void (await answer(queryId, 'ساعةٌ غيرُ مفهومة'));
+  }
+
+  // والختمُ يُجدَّد: من ضبط موعدَ نفادٍ تكلّم الآن، فلا تُلاحقه رسالةُ «وقودك
+  // معروضٌ بخبرٍ قديم» عن لوحةٍ لمسها بيده. (وهو أيضاً ما يرفع «مغلقة مؤقتاً»
+  // عن محطته — المُشغّلُ في 20260926_reopen_on_update.sql.)
+  const { error } = await db
+    .from('station_products')
+    .update({ runs_out_at, updated_at: new Date().toISOString() })
+    .eq('station_id', stationId)
+    .eq('product', product);
+
+  if (error) return void (await answer(queryId, 'تعذّر الحفظ — أعد المحاولة'));
+  await answer(queryId, runs_out_at ? `ينفد ${runsOutWord(runs_out_at)}` : 'بلا موعد');
+  await showRunOutOne(chat, stationId, i, messageId);
 }
 
 async function linkByContact(chat: number, telegramId: number, rawPhone: string) {
@@ -3272,6 +3425,15 @@ Deno.serve(async (req) => {
         const [, sid, idx] = data.split(':');
         if (idx === undefined) await showExpected(chat, sid, messageId);
         else await showExpectOne(chat, sid, Number(idx), messageId);
+      } else if (data.startsWith('o:')) {
+        // شاشاتُ مواعيد النفاد. و`o:` لا تصطدم بـ`ok:`/`ok1:`: الحرفُ الثاني
+        // فيهما «k» لا نقطتان.
+        await answer(cb.id);
+        const [, sid, idx] = data.split(':');
+        if (idx === undefined) await showRunOuts(chat, sid, messageId);
+        else await showRunOutOne(chat, sid, Number(idx), messageId);
+      } else if (data.startsWith('xo:')) {
+        await setRunOut(chat, messageId, from, data, cb.id);
       } else if (/^x[dphc]:/.test(data)) {
         await setExpectation(chat, messageId, from, data, cb.id);
       } else if (data.startsWith('t:')) {

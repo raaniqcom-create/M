@@ -1,5 +1,5 @@
 import { PRODUCT_LABELS, TRAFFIC_LABELS } from './products.ts';
-import { PERIOD_LABELS, type ExpectedPeriod } from './hours.ts';
+import { PERIOD_LABELS, runsOutLabel, type ExpectedPeriod } from './hours.ts';
 import type { FuelProduct, TrafficLevel } from '../types/database.ts';
 
 /** سجلُّ التحديثات — صفُّ `station_updates` كما يُقرأ. */
@@ -37,12 +37,12 @@ export function actorName(
   return 'الإدارة';
 }
 
+/** ولا تنسيقَ ثانياً لشيءٍ واحد: `runsOutLabel` هي التي رآها صاحبُ المحطة في
+ *  لوحته وهي التي يقرؤها السائقُ على البطاقة، فيقرأ السجلُّ الجملةَ نفسَها.
+ *  و'ar-IQ' كانت — وحدَها في المنصّة — تكتبها بأرقامٍ هنديّة. */
 const hm = (v: unknown): string => {
   if (typeof v !== 'string') return '';
-  const d = new Date(v);
-  return Number.isNaN(d.getTime())
-    ? v
-    : d.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Baghdad' });
+  return Number.isNaN(new Date(v).getTime()) ? v : runsOutLabel(v);
 };
 
 /** «بانزين عادي → متوفّر» — جملةٌ واحدة لكلّ مفتاحٍ تغيّر. */
