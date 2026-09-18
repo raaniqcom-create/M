@@ -301,6 +301,7 @@ async function mainMenu(userId: number) {
     const before = rows.findIndex((r) => r[0] === mine);
     rows.splice(before < 0 ? rows.length : before, 0,
       [{ text: '➕ أضِف إلى جدول اليوم', callback_data: 'addsched' }],
+      [{ text: '🏭 جدول المصافي', callback_data: 'refsched' }],
       [{ text: '🛠 تحكّم بجدول اليوم', callback_data: 'bd' }],
       [{ text: `📋 طلبات المحطات (${n})`, callback_data: 'req' }],
       [{ text: '🏬 المحطات المسجلة', callback_data: 'people' }],
@@ -3487,6 +3488,35 @@ Deno.serve(async (req) => {
             { reply_markup: { inline_keyboard: [[{ text: '✖️ ألغِ', callback_data: 'wx' }]] } }
           );
         }
+      } else if (data === 'refsched') {
+        await answer(cb.id);
+        if (!isAdmin(from)) {
+          await send(chat, 'هذا الزرّ للإدارة.');
+        } else {
+          // ــ بابٌ صريحٌ لجدول المصافي ــــــــــــــــــــــــــــــــــــــ
+          //
+          // **وقيمتُه أنّه لا يُمَيَّز.** النصُّ الذي يصل البوتَ اليوم يُوزَّن على
+          // ثلاث بوّابات — كتابٌ رسميّ، ثمّ جدولُ قناة، ثمّ أسطرٌ يدويّة — وكلُّ
+          // وزنٍ احتمالٌ يخطئ. وجدولُ المصافي لا قرينةَ صياغةٍ فيه («غدا»،
+          // «تجهيز»، «المحطات التالية»)، فتمييزُه يقوم على شكل العنوان وحدَه.
+          //
+          // فمن ضغط هذا الزرَّ قال بلسانه «هذا جدولُ مصافٍ»، ولا حاجةَ بعده إلى
+          // ترجيح. والبوّاباتُ الثلاث تبقى كما هي لمن لصق بلا زرّ.
+          await saveDraft(from, chat, 'refsched', {});
+          await send(
+            chat,
+            `<b>🏭 جدولُ المصافي</b>${NL}${NL}` +
+              `الصق الجدولَ كما وصلك. لكلّ قسمٍ عنوانٌ فيه الوقودُ والمصفى:${NL}` +
+              `<code>كاز | مصفى الصينية</code>${NL}` +
+              `وتحته أسماءُ المحطات، اسمٌ في كلّ سطر.${NL}${NL}` +
+              `وما كان لغير السيّارات يُوسَم في آخر سطره:${NL}` +
+              `<code>مركز توزيع الرمادي - مولدات</code>${NL}` +
+              `<code>طليحة الحكومية - خط سير تصدير</code>${NL}${NL}` +
+              `<i>الموسومُ يظهر في الجدول بشارته، ولا يدخل الإشعارَ ولا لوحاتِ المحطات.</i>${NL}` +
+              `وإن طال الجدولُ على رسالةٍ واحدة، أرسله <b>قسماً قسماً</b> — كلُّ رسالةٍ تبدأ بعنوانها — ثمّ انشر كلَّ واحدةٍ حين تظهر معاينتُها.`,
+            { reply_markup: { inline_keyboard: [[{ text: '✖️ ألغِ', callback_data: 'wx' }]] } }
+          );
+        }
       } else if (data === 'bd' || data.startsWith('bd:')) {
         // **والحارسُ هنا لا في القائمة.** `menuKeyboard` لا تعرض هذا الزرَّ لغير
         // الإدارة، لكنّ `callback_data` نصٌّ يرسله من شاء — ومن أرسل `bd:ct:0:h`
@@ -3693,7 +3723,13 @@ Deno.serve(async (req) => {
         // التجهيز»، و«تجهيز» إحدى قرائن `looksLikeSchedule` — ففيه أسماءُ
         // وقودٍ وقرينةُ صياغة، ولو سُئل القديمُ أوّلاً لَالتقطه ومزّقه: يقرأ
         // الصفَّ كلَّه اسمَ محطةٍ واحداً طويلاً. مقيسٌ في test-official-table.
-        if (looksLikeOfficialTable(text) && !draft.data.sched?.edit) {
+        // **والبابُ الصريحُ يسبق كلَّ ترجيح.** من فتح 🏭 قال ما يلصق، فلا يُوزَن
+        // نصُّه على الكتاب الرسميّ — وحاشيةُ الكتاب وعوارضُه أقربُ شبهاً بجدول
+        // المصافي من أيّ صيغةٍ أخرى، فترجيحٌ خاطئٌ هنا يقرأ الصفَّ كلَّه اسمَ
+        // محطةٍ واحداً طويلاً.
+        if (draft.step === 'refsched') {
+          await proposeSchedule(chat, from, text);
+        } else if (looksLikeOfficialTable(text) && !draft.data.sched?.edit) {
           await proposeOfficial(chat, from, text);
         } else if (
           looksLikeSchedule(text) &&

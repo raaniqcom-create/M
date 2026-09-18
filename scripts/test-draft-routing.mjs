@@ -30,6 +30,8 @@ const looksLikeSchedule = (t) =>
 
 /** مرآةُ التوجيه بعد الإصلاح — supabase/functions/telegram/index.ts:2568. */
 function route(step, text, edit = false) {
+  // **والبابُ الصريحُ يسبق كلَّ ترجيح** — من فتح 🏭 قال ما يلصق.
+  if (step === 'refsched') return 'proposeSchedule';
   if (looksLikeSchedule(text) && (step === 'schedadd' || (step === 'sched' && !edit))) {
     return 'proposeSchedule';
   }
@@ -105,6 +107,33 @@ const ok = (cond, what) => { assert.ok(cond, what); n++; };
     routeOld('schedadd', MANUAL_LINE) === route('schedadd', MANUAL_LINE),
     'والسطرُ اليدويُّ يسلك الطريقَ نفسَه قبل وبعد'
   );
+}
+
+// ــ والبابُ الصريح: 🏭 جدول المصافي ــــــــــــــــــــــــــــــــــــــــ
+//
+// صيغةُ المصافي لا قرينةَ صياغةٍ فيها — لا «غدا» ولا «تجهيز» ولا «المحطات
+// التالية» — فتمييزُها يقوم على شكل العنوان وحدَه. ومن ضغط الزرَّ قال بلسانه
+// ما يلصق، فلا يُوزَن نصُّه على ثلاث بوّابات كلُّ وزنٍ فيها احتمالٌ يخطئ.
+{
+  const REFINERY = `كاز | مصفى الصينية
+مركز توزيع الفلوجة -مولدات
+الفلوجة الجديدة الحكومية
+طليحة الحكومية - خط سير تصدير`;
+
+  ok(
+    looksLikeSchedule(REFINERY) === false,
+    'جدولُ المصافي لا قرينةَ صياغةٍ فيه — ولذلك لزم بابٌ صريح'
+  );
+  ok(route('refsched', REFINERY) === 'proposeSchedule', 'والبابُ يُوصله إلى محلّل الجدول');
+  ok(
+    route('refsched', 'محطة وادي حجلان - حديثة - محسن') === 'proposeSchedule',
+    'وما لُصق فيه يُقرأ جدولاً، لا سطراً يدويّاً — فالمشغّلُ قال ما يلصق'
+  );
+  ok(
+    route('schedadd', REFINERY) === 'proposeManual',
+    'والأبوابُ الأخرى تبقى كما هي لمن لم يضغطه'
+  );
+  ok(route('sched', 'تصحيح', false) === 'correctSchedule', 'وتصحيحُ السطر لا يُمسّ');
 }
 
 console.log(`✔ ${n} حالة — والمنشورُ يُقرأ منشوراً أيّاً كان البابُ المفتوح.`);
