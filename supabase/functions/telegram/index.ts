@@ -2049,7 +2049,7 @@ async function showSchedule(
   const tagged = d.lines.filter((l) => l.purpose).length;
 
   const rows = d.lines.map((l, i) => {
-    const mark = l.stationId ? '✅' : l.city ? '⚪️' : '❓';
+    const mark = lineMark(l);
     const where = l.city ?? 'منطقةٌ لم أعرفها';
     const tail = l.stationId ? 'مسجّلة' : 'خارج المنصّة';
     const pr = mixed ? ` · <b>${esc(PRODUCT_LABELS[l.product] ?? l.product)}</b>` : '';
@@ -2116,8 +2116,13 @@ async function showSchedule(
     shown.push(r);
   }
   const hidden = rows.length - shown.length;
+  // والمقصوصُ قد يكون فيه المعطوب — فيُقال عددُه هنا، ويُفتح عليه ✏️ تعديل
+  // مباشرةً: المنتقي يرتّب ❓ أوّلاً مهما كان موضعُها في الجدول.
+  const lostUnknown = d.lines.slice(shown.length).filter((l) => !l.city).length;
   const more = hidden
-    ? `${NL}… و${countWord(hidden)} لا تتّسع لها هذه الرسالة — <b>وتُنشر معها كلُّها</b>. راجعها بـ✏️ تعديل.`
+    ? `${NL}… و${countWord(hidden)} لا تتّسع لها هذه الرسالة — <b>وتُنشر معها كلُّها</b>.` +
+      (lostUnknown ? ` <b>وفيها ${lostUnknown} بلا منطقة (❓).</b>` : '') +
+      ` افتح ✏️ تعديل — يبدأ بـ❓.`
     : '';
 
   await show(
@@ -2446,15 +2451,52 @@ async function boardRoute(chat: number, data: string, msgId?: number) {
   );
 }
 
-/** الشاشةُ الأولى: أيَّ سطرٍ تُصحّح؟ */
+/** علامةُ السطر — واحدةٌ في المعاينة وفي المنتقي، فلا يفترق ما يراه المشغّل. */
+const lineMark = (l: ScheduleLine) => (l.stationId ? '✅' : l.city ? '⚪️' : '❓');
+
+/** الشاشةُ الأولى: أيَّ سطرٍ تُصحّح؟
+ *
+ *  ── والمعطوبُ أوّلاً، وبعلامته ──────────────────────────────────────────
+ *
+ *  **كان يعرض الأسطرَ بترتيبها وبلا علامة.** فمن أراد إصلاحَ سطرٍ لم يُعرف
+ *  اسمُه لزمه أن يتذكّر رقمَه من المعاينة — والمعاينةُ تُقصّ عند ٣٨٠٠ حرف،
+ *  فجدولُ المصافي (١٠١ سطراً) يُخفي آخرَه. فما لم يظهر لا يُصحَّح.
+ *
+ *  فالترتيبُ بالحاجة لا بالورود: ما لا منطقةَ له (❓) أوّلاً، ثمّ ما عُرفت
+ *  منطقتُه ولم يُربط (⚪️)، ثمّ المربوط (✅). ورقمُ السطر يبقى رقمَه في
+ *  الجدول لا في هذه الشاشة، وإلّا اختلف ما يراه هنا عمّا يراه هناك.
+ *
+ *  ── وسقفُ الأزرار ───────────────────────────────────────────────────────
+ *
+ *  تيليجرام ترفض لوحةً تتجاوز مئةَ صفّ — فجدولٌ من ١٠١ سطراً كان **يسقط
+ *  كلُّه**: تُضغط «✏️ تعديل» فلا تُفتح شاشة. والحدُّ هنا لا يُخفي معطوباً:
+ *  المعطوبُ في الصدر، والمقصوصُ من الذيل سليمٌ مربوط. ويُقال عددُه صراحةً. */
+const PICK_MAX = 90;
+
 function linePicker(d: { lines: ScheduleLine[] }) {
+  const RANK = { '❓': 0, '⚪️': 1, '✅': 2 } as const;
+  const ordered = d.lines
+    .map((l, i) => ({ l, i }))
+    .sort((a, b) => RANK[lineMark(a.l)] - RANK[lineMark(b.l)] || a.i - b.i);
+
+  const shown = ordered.slice(0, PICK_MAX);
+  const hidden = ordered.length - shown.length;
+  const unknown = d.lines.filter((l) => !l.city).length;
+  const loose = d.lines.filter((l) => l.city && !l.stationId).length;
+
+  const head =
+    `<b>أيَّ سطرٍ تُصحّح؟</b>${NL}` +
+    (unknown ? `❓ ${unknown} بلا منطقة — وهي أوّل القائمة.${NL}` : '') +
+    (loose ? `⚪️ ${loose} منطقتُها معروفةٌ وليست على المنصّة.${NL}` : '') +
+    (hidden ? `${NL}<i>وأُخفي ${hidden} سطراً مربوطاً — سقفُ أزرار تيليجرام.</i>` : '');
+
   return {
-    text: '<b>أيَّ سطرٍ تُصحّح؟</b>',
+    text: head.trim(),
     extra: {
       reply_markup: {
         inline_keyboard: [
-          ...d.lines.map((l, i) => [
-            { text: `${i + 1} ${l.name}`.slice(0, 40), callback_data: `se:${l.key}` },
+          ...shown.map(({ l, i }) => [
+            { text: `${lineMark(l)} ${i + 1} ${l.name}`.slice(0, 40), callback_data: `se:${l.key}` },
           ]),
           [{ text: '↩︎ رجوع', callback_data: 'sb' }],
         ],

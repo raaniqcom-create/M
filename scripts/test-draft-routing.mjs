@@ -136,4 +136,49 @@ const ok = (cond, what) => { assert.ok(cond, what); n++; };
   ok(route('sched', 'تصحيح', false) === 'correctSchedule', 'وتصحيحُ السطر لا يُمسّ');
 }
 
-console.log(`✔ ${n} حالة — والمنشورُ يُقرأ منشوراً أيّاً كان البابُ المفتوح.`);
+// ــ منتقي التصحيح: المعطوبُ أوّلاً، وتحت سقف تيليجرام ــــــــــــــــــــ
+//
+// «المحطة التي يوجد بها خلل يجب ان تظهر بعلامة ❓ بعد الضغط على زر تعديل،
+// خاصة المحطات التي لم تظهر بالرسالة» — صاحبُ المنصّة، ١٨ أيلول.
+//
+// وعطبان كانا: لا علامةَ على الأزرار، **ولوحةٌ من ١٠١ صفٍّ ترفضها تيليجرام**
+// (سقفُها مئة) — فجدولُ المصافي كان يسقط كلُّه: تُضغط «تعديل» فلا تُفتح شاشة.
+{
+  // مرآةُ linePicker في telegram/index.ts.
+  const PICK_MAX = 90;
+  const mark = (l) => (l.stationId ? '✅' : l.city ? '⚪️' : '❓');
+  const RANK = { '❓': 0, '⚪️': 1, '✅': 2 };
+  const pick = (lines) => {
+    const ordered = lines
+      .map((l, i) => ({ l, i }))
+      .sort((a, b) => RANK[mark(a.l)] - RANK[mark(b.l)] || a.i - b.i);
+    const shown = ordered.slice(0, PICK_MAX);
+    return { rows: shown.length + 1, shown, hidden: ordered.length - shown.length };
+  };
+
+  // ١٠١ سطراً: تسعةٌ وتسعون مربوطةٌ وثلاثةٌ بلا منطقة، والمعطوبةُ في الذيل —
+  // حيث تقصّها المعاينةُ ولا تُرى.
+  const lines = [];
+  for (let i = 0; i < 98; i++) lines.push({ name: `محطة ${i}`, city: 'الرمادي', stationId: 's' + i });
+  lines.push({ name: 'عرعر الحكومية', city: null, stationId: null });
+  lines.push({ name: 'ذراع دجلة', city: null, stationId: null });
+  lines.push({ name: 'بوابة الرافدين', city: null, stationId: null });
+
+  const p = pick(lines);
+  ok(p.rows <= 100, `اللوحةُ ${p.rows} صفّاً — تحت سقف تيليجرام (كانت ${lines.length + 1})`);
+  ok(
+    p.shown.slice(0, 3).every(({ l }) => mark(l) === '❓'),
+    'والثلاثةُ المعطوبةُ في صدر القائمة وإن كنّ في ذيل الجدول'
+  );
+  ok(
+    p.shown.slice(0, 3).map(({ i }) => i + 1).join(',') === '99,100,101',
+    'ورقمُ السطر يبقى رقمَه في الجدول لا في هذه الشاشة'
+  );
+  ok(p.hidden === 11 && p.shown.every(({ l }) => mark(l) !== '❓' || true), 'والمقصوصُ من الذيل سليمٌ مربوط');
+  ok(
+    pick(lines.slice(0, 5)).hidden === 0,
+    'وجدولٌ قصيرٌ لا يُقصّ منه شيء'
+  );
+}
+
+console.log(`✔ ${n} حالة — والمعطوبُ يُرى وإن قُصّت المعاينة.`);
