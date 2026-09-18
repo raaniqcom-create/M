@@ -9,11 +9,16 @@
 // وجهازُ المالك (car_washes.owner_device). قراءةُ device_tokens/alerts نقطيّةٌ وبلا
 // كتابة — الرمزُ الميّت يُكتب في wash_events.error لا يُحذف من جدول وقود.
 // ونقلُ FCM/APNs/webpush منسوخٌ من test-push عمداً: دالّةٌ مستقلّةٌ لا تُسقط غيرَها.
+// وقناةٌ رابعة: تيليجرام — بوتُ «محطة الغسل» (wash-bot). المالكُ المربوطُ في wash_bot_users
+// تصله الحجوزاتُ بأزرار تأكيد/إلغاء، والزبونُ الذي حجز من البوت (device = 'tg:<chat>') تصله
+// إشعاراتُه هناك. الرمزُ WASH_TELEGRAM_BOT_TOKEN وحدَه — لا مفتاحَ بوت الوقود.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import webpush from 'npm:web-push@3.6.7';
+import { esc, ownerButtons, starButtons } from '../_shared/washBot.ts';
 
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? '';
+const TG = Deno.env.get('WASH_TELEGRAM_BOT_TOKEN');
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
@@ -105,6 +110,15 @@ async function sendWeb(endpoint: string, keys: { p256dh?: string; auth?: string 
     return `web ${err.statusCode ?? ''}: ${(err.body ?? err.message ?? String(e)).slice(0, 100)}`;
   }
 }
+async function sendTg(chat: string, text: string, reply_markup?: unknown): Promise<string | null> {
+  if (!TG) return 'رمزُ بوت الغسل غير مضبوط';
+  const res = await fetch(`https://api.telegram.org/bot${TG}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chat, text, parse_mode: 'HTML', reply_markup }),
+  });
+  return res.ok ? null : `tg ${res.status}: ${(await res.text()).slice(0, 100)}`;
+}
 
 // ── الأنواعُ والنصوص ──────────────────────────────────────────────────────
 type Ev = { id: number; wash_id: string; booking_id: string | null; kind: string; payload: Record<string, unknown> | null };
@@ -112,7 +126,13 @@ type Booking = { id: string; code: string; name: string; phone: string; car: str
 type Wash = { id: string; name: string; owner_device: string | null; owner_platform: string | null; owner_keys: { p256dh?: string; auth?: string } | null };
 
 const OWNER_KINDS = new Set(['new', 'cancelled', 'review', 'expiry_7', 'expiry_3', 'expiry_1', 'expiry_0']);
-const CITIZEN_KINDS = new Set(['confirmed', 'cancelled_by_business', 'in_service', 'completed', 'reminder']);
+const CITIZEN_KINDS = new Set(['confirmed', 'cancelled_by_business', 'in_service', 'completed', 'reminder', 'expired']);
+
+/** أزرارُ تيليجرام تحت الإشعار: تأكيد/إلغاء للمالك على حجزٍ معلّق، ونجومٌ للزبون بعد الاكتمال. */
+const tgButtons = (ev: Ev, b: Booking | null) =>
+  ev.kind === 'new' && ev.payload?.status === 'pending' && b ? ownerButtons({ id: b.id, status: 'pending' })
+  : ev.kind === 'completed' && b ? starButtons(b.code)
+  : undefined;
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString('ar-IQ', { timeZone: 'Asia/Baghdad', weekday: 'long', hour: '2-digit', minute: '2-digit' });
@@ -145,6 +165,8 @@ function compose(ev: Ev, b: Booking | null, w: Wash): { title: string; body: str
       return b && { title: `اكتملت الخدمة — ${w.name}`, body: 'شكراً لك! قيّم تجربتك بضغطة واحدة', url: bookingUrl };
     case 'reminder':
       return b && { title: `موعدك بعد ساعة — ${w.name}`, body: `${b.service_name} · ${when(b.starts_at)} · رمزك ${b.code}`, url: bookingUrl };
+    case 'expired':
+      return b && { title: 'انتهى حجزك دون ردّ', body: 'لم تؤكّد المغسلة في الوقت — احجز موعداً آخر', url: bookingUrl };
     default:
       return null;
   }
@@ -171,13 +193,17 @@ async function flush(dry: boolean) {
 
   const bookingIds = [...new Set(actionable.map((e) => e.booking_id).filter(Boolean))] as string[];
   const washIds = [...new Set(actionable.map((e) => e.wash_id))];
-  const [{ data: bookings }, { data: washes }, { data: sentToday }] = await Promise.all([
+  const [{ data: bookings }, { data: washes }, { data: sentToday }, { data: tgUsers }] = await Promise.all([
     bookingIds.length ? db.from('wash_bookings').select('id, code, name, phone, car, service_name, starts_at, device, wash_id').in('id', bookingIds) : Promise.resolve({ data: [] }),
     db.from('car_washes').select('id, name, owner_device, owner_platform, owner_keys').in('id', washIds),
     db.from('wash_events').select('wash_id').in('wash_id', washIds).gte('sent_at', new Date(Date.now() - 86_400_000).toISOString()).gt('sent_n', 0),
+    db.from('wash_bot_users').select('wash_id, chat_id').in('wash_id', washIds),
   ]);
   const bById = new Map(((bookings ?? []) as Booking[]).map((b) => [b.id, b]));
   const wById = new Map(((washes ?? []) as Wash[]).map((w) => [w.id, w]));
+  // محادثاتُ تيليجرام لكلّ مغسلة (المالكُ وموظّفوه المربوطون).
+  const tgByWash = new Map<string, number[]>();
+  for (const r of (tgUsers ?? []) as { wash_id: string; chat_id: number }[]) tgByWash.set(r.wash_id, [...(tgByWash.get(r.wash_id) ?? []), r.chat_id]);
   const capUsed = new Map<string, number>();
   for (const r of (sentToday ?? []) as { wash_id: string }[]) capUsed.set(r.wash_id, (capUsed.get(r.wash_id) ?? 0) + 1);
   const { data: capRow } = await db.from('app_config').select('value').eq('key', 'wash_push_daily_cap').maybeSingle();
@@ -195,10 +221,16 @@ async function flush(dry: boolean) {
     const text = compose(ev, b, w);
     if (!text) { await mark({ sent_at: new Date().toISOString() }); continue; }
 
-    // الهدف: المالكُ من صفّ المغسلة، والزبونُ من عنوان حجزه (webpush أو رمزُ جهاز).
+    // الهدف: المالكُ من صفّ المغسلة (وتيليجرام يغلب حين مربوط)، والزبونُ من عنوان حجزه
+    // (تيليجرام 'tg:<chat>' أو webpush أو رمزُ جهاز).
     let address: string | null = null, platform: string | null = null, keys: Wash['owner_keys'] = null;
-    if (OWNER_KINDS.has(ev.kind)) {
+    const tgChats = tgByWash.get(w.id);
+    if (OWNER_KINDS.has(ev.kind) && tgChats?.length) {
+      address = tgChats.join(','); platform = 'tg';
+    } else if (OWNER_KINDS.has(ev.kind)) {
       address = w.owner_device; platform = w.owner_platform; keys = w.owner_keys;
+    } else if (b?.device?.startsWith('tg:')) {
+      address = b.device.slice(3); platform = 'tg';
     } else if (b?.device) {
       address = b.device;
       if (address.startsWith('https://')) {
@@ -215,12 +247,23 @@ async function flush(dry: boolean) {
 
     preview.push({ id: ev.id, kind: ev.kind, to: platform, title: text.title });
     if (dry) continue;
-    const err =
-      platform === 'web' ? await sendWeb(address, keys, text.title, text.body, text.url)
-      : platform === 'ios' ? await sendApns(address, text.title, text.body, text.url)
-      : await sendFcm(address, text.title, text.body, text.url);
+    let err: string | null, sentN = 1;
+    if (platform === 'tg') {
+      // فيضٌ على محادثاتِ المغسلة: وصل لواحدةٍ = وصل. المحظورُ (403) يُفكّ ربطُه فلا يُرسَل إليه ثانية.
+      const chats = address.split(',');
+      const errs = await Promise.all(chats.map((c) => sendTg(c, `<b>${esc(text.title)}</b>\n${esc(text.body)}`, tgButtons(ev, b))));
+      errs.forEach((e, i) => e && console.error('tg', chats[i], e));
+      const dead = chats.filter((_, i) => errs[i]?.startsWith('tg 403')).map(Number);
+      if (dead.length) await db.from('wash_bot_users').update({ wash_id: null }).in('chat_id', dead);
+      sentN = errs.filter((e) => !e).length;
+      err = sentN ? null : errs[0];
+    } else {
+      err = platform === 'web' ? await sendWeb(address, keys, text.title, text.body, text.url)
+        : platform === 'ios' ? await sendApns(address, text.title, text.body, text.url)
+        : await sendFcm(address, text.title, text.body, text.url);
+    }
     if (err) { await mark({ error: err.slice(0, 200) }); failed++; continue; }
-    await mark({ sent_at: new Date().toISOString(), sent_n: 1 });
+    await mark({ sent_at: new Date().toISOString(), sent_n: sentN });
     capUsed.set(w.id, (capUsed.get(w.id) ?? 0) + 1);
     sent++;
     log.push({ address, kind: `wash:${ev.kind}`, title: text.title, body: text.body });

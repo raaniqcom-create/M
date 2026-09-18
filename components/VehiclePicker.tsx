@@ -1,36 +1,35 @@
 'use client';
 
 import {
-  REAL_VEHICLE_PHOTOS,
+  VEHICLE_HINT,
   VEHICLE_LABELS,
   VEHICLE_TYPES,
   carsLabel,
   totalCars,
-  vehicleImg,
   type VehicleCounts,
   type VehicleType,
 } from '@/lib/wash';
-import { VEHICLE_ART } from './VehicleArtwork';
-
-/** ظلُّ النوع: يُلوَّن من الواجهة (currentColor) فيصير اللونُ معنى الاختيار لا زينة.
- *  وحين تصل صورٌ حقيقيّة (REAL_VEHICLE_PHOTOS) تحلّ الصورةُ محلَّ الظلّ في المكان نفسِه. */
-export function VehicleArt({ v, className = 'h-[76px] w-[116px]' }: { v: VehicleType; className?: string }) {
-  const Art = VEHICLE_ART[v];
-  if (REAL_VEHICLE_PHOTOS)
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={vehicleImg(v)} alt={VEHICLE_LABELS[v]} loading="lazy" className={`shrink-0 object-contain ${className}`} />
-    );
-  return <Art className={`shrink-0 ${className}`} />;
-}
+import { VehicleImage } from './VehicleArtwork';
+import { CheckIcon } from './icons';
 
 /** لسانٌ أخضرُ يطلّ تحت البطاقة — لغةُ البطاقات المرفوعة في قسم «غسيل». */
 const LIP = 'rounded-[26px] bg-brand-600/90 pb-[5px]';
 const CARD = 'flex items-center gap-3 rounded-[26px] border p-3 text-start transition-colors';
 const cardTone = (on: boolean) => (on ? 'border-brand bg-brand-50 ring-1 ring-brand' : 'border-slate-200 bg-white');
 
-/** مُنتقي نوع السيارة صوراً لا أسماء (طلبُ صاحب المنصّة): الأسماءُ تختلف بين الناس
- *  (صالون/سيدان، بيك أب/حمل) والصورةُ تحسم. قابلٌ للإلغاء بضغطةٍ ثانية. */
+/** عنوانُ الحجم وسطرُه المفسّر: التسمياتُ تختلف بين الناس (صالون/سيدان، بيك أب/حمل)
+ *  فالسطرُ الصغير يحسم ما يندرج تحت كلّ حجم، والصورةُ تحسم الباقي. */
+function SizeText({ v, on }: { v: VehicleType; on: boolean }) {
+  return (
+    <span className="min-w-0 flex-1">
+      <span className={`block text-[15px] font-extrabold ${on ? 'text-brand-800' : 'text-slate-800'}`}>{VEHICLE_LABELS[v]}</span>
+      <span className={`block text-[11px] font-medium ${on ? 'text-brand-700/80' : 'text-slate-500'}`}>{VEHICLE_HINT[v]}</span>
+    </span>
+  );
+}
+
+/** مُنتقي حجم السيارة صورةً لا اسماً (طلبُ صاحب المنصّة): الصورةُ تحسم حين تختلف الأسماء.
+ *  قابلٌ للإلغاء بضغطةٍ ثانية. */
 export function VehiclePicker({
   value,
   onChange,
@@ -47,8 +46,16 @@ export function VehiclePicker({
         return (
           <div key={v} className={LIP}>
             <button type="button" aria-pressed={on} onClick={() => onChange(on ? '' : v)} className={`w-full ${CARD} ${cardTone(on)}`}>
-              <span className={on ? 'text-brand' : 'text-slate-400'}><VehicleArt v={v} /></span>
-              <span className={`whitespace-nowrap text-[15px] font-extrabold ${on ? 'text-brand-800' : 'text-slate-800'}`}>{VEHICLE_LABELS[v]}</span>
+              {/* اللونُ يمرّ إلى الظلّ المرسوم («أخرى» بلا صورة) فيصير معنى الاختيار لا زينة. */}
+              <span className={on ? 'text-brand' : 'text-slate-400'}>
+                <VehicleImage v={v} className="h-[76px] w-[116px]" />
+              </span>
+              <SizeText v={v} on={on} />
+              {on && (
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-white">
+                  <CheckIcon className="h-4 w-4" />
+                </span>
+              )}
             </button>
           </div>
         );
@@ -64,7 +71,7 @@ const STEP = 'grid h-11 w-11 place-items-center rounded-full text-[20px] font-ex
  *  مكانُها الطبيعيُّ lib/wash.ts لكنّه خارج ملكيّة هذا العمل. */
 export const carsTo = (n: number): string => (n === 1 ? 'لسيّارة واحدة' : n === 2 ? 'لسيّارتين' : `لـ${carsLabel(n)}`);
 
-/** العدّاد: طلبٌ واحدٌ لعدّة سيارات — «− 0 +» على بطاقة كلّ نوع.
+/** العدّاد: طلبٌ واحدٌ لعدّة سيارات — «− 0 +» على بطاقة كلّ حجم.
  *  `max` سقفُ الطلب (wash_config)، و`remaining` سعةُ الموعد المختار إن عُرفت. */
 export function VehicleCounter({
   counts,
@@ -99,8 +106,10 @@ export function VehicleCounter({
             {/* الصورةُ أضيقُ هنا منها في الاختيار المفرد، والاسمُ يتقلّص (min-w-0): الصفُّ الثلاثيُّ
                 مع حبّة العدّاد يتجاوز عرضَ البطاقة على شاشة 390px وإلّا خرج «+» عن حافّتها. */}
             <div className={`${CARD} ${cardTone(n > 0)}`}>
-              <span className={n > 0 ? 'text-brand' : 'text-slate-400'}><VehicleArt v={v} className="h-[76px] w-[112px]" /></span>
-              <span className={`min-w-0 flex-1 text-[14px] font-extrabold ${n > 0 ? 'text-brand-800' : 'text-slate-800'}`}>{label}</span>
+              <span className={n > 0 ? 'text-brand' : 'text-slate-400'}>
+                <VehicleImage v={v} className="h-[76px] w-[112px]" />
+              </span>
+              <SizeText v={v} on={n > 0} />
               <span className="flex shrink-0 items-center gap-0.5 rounded-full border border-slate-200 bg-white p-1">
                 <button
                   type="button"

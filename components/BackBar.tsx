@@ -16,7 +16,8 @@ import { useNativeApp } from '@/lib/useNativeApp';
  *
  *  اللوحاتُ (/owner، /admin، /branch) لها رأسُها و«‹ الرئيسية» الداخليّ، والمالكُ
  *  يُحوَّل من الرئيسية إلى لوحته — فزرٌّ يعيده إليها يدور. */
-const HIDDEN = /^\/(owner|admin|branch)(\/|$)/;
+// و/wash/ الرئيسية: «المغسلة التقنية» تطبيقٌ مصغّرٌ برأسه وزرِّ «العودة إلى المحطة التقنية» فيه.
+const HIDDEN = /^\/(owner|admin|branch)(\/|$)|^\/wash\/?$/;
 
 export function BackBar() {
   const pathname = usePathname();

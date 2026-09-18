@@ -1,7 +1,7 @@
 // «غسيل»: شبكةُ المواعيد، أيّامُ الحجز، بطاقةُ الغسلات — دوالُّ lib/wash.ts الصرفة.
 //   node scripts/test-wash.mjs
 import assert from 'node:assert/strict';
-import { at12, bookingDays, calendarCell, dateLine, distanceLabel, iqd, offerLeft, pct, ratingParts, time12, washBadge, bgdDate, canCancel, dayLabel, daysLeft, firstMonthPrice, limitLabel, loyaltyLine, nextStatuses, offerApplies, offerPrice, planName, profileCompletion, rankWashes, ratingLine, servicePrice, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
+import { at12, bookingDays, calendarCell, carsList, dateLine, distanceLabel, iqd, offerLeft, orderTotal, pct, ratingParts, time12, totalCars, washBadge, bgdDate, canCancel, dayLabel, daysLeft, firstMonthPrice, limitLabel, loyaltyLine, nextStatuses, offerApplies, offerPrice, planName, profileCompletion, rankWashes, ratingLine, servicePrice, slotGrid, slotLabel, whatsappBooking } from '../lib/wash.ts';
 
 let n = 0;
 const ok = (label, fn) => { fn(); n++; console.log(`  ✓ ${label}`); };
@@ -86,12 +86,23 @@ ok('الإلغاءُ مجّانيٌّ قبل نصف ساعة، ومتأخّرٌ 
   assert.equal(canCancel('2026-09-17T10:20:00+03:00', now), 'late');
   assert.equal(canCancel('2026-09-17T09:59:00+03:00', now), 'no');
 });
-ok('سعرُ نوع السيارة يغلب السعرَ الأساسيّ حين يُذكر', () => {
-  const s = { price: 10000, prices: { suv: 15000 } };
-  assert.equal(servicePrice(s, 'suv'), 15000);
-  assert.equal(servicePrice(s, 'sedan'), 10000);
+ok('سعرُ حجم السيارة يغلب السعرَ الأساسيّ حين يُذكر', () => {
+  const s = { price: 10000, prices: { mid: 15000 } };
+  assert.equal(servicePrice(s, 'mid'), 15000);
+  assert.equal(servicePrice(s, 'small'), 10000);
   assert.equal(servicePrice(s, null), 10000);
-  assert.equal(servicePrice({ price: 5000, prices: null }, 'suv'), 5000);
+  assert.equal(servicePrice({ price: 5000, prices: null }, 'mid'), 5000);
+  const big = { price: 5000, prices: { large: 9000 } };
+  assert.equal(servicePrice(big, 'large'), 9000);
+  assert.equal(servicePrice(big, 'small'), 5000, 'حجمٌ بلا سعرٍ في الخريطة يأخذ الأساسيّ');
+});
+ok('عدّادُ السيارات: المجموعُ والقائمةُ وسعرُ الطلب', () => {
+  const big = { price: 5000, prices: { large: 9000 } };
+  assert.equal(orderTotal(big, { small: 2, large: 1 }), 19000);
+  assert.equal(totalCars({ small: 2, large: 1 }), 3);
+  assert.equal(totalCars({}), 0);
+  assert.deepEqual(carsList({ small: 1, mid: 1 }), ['small', 'mid'], 'الترتيبُ ترتيبُ VEHICLE_TYPES');
+  assert.deepEqual(carsList({ large: 2 }), ['large', 'large']);
 });
 ok('سطرُ التقييم بالعربيّة، ولا شيءَ بلا تقييمات', () => {
   assert.equal(ratingLine(4.5, 12), '★ 4.5 · 12 تقييم');
@@ -128,8 +139,6 @@ ok('اكتمالُ الحساب يعدّ ويقترح', () => {
   const full = profileCompletion({ image_url: 'u', address: 'x', owner_name: 'أبو أحمد', owner_device: 't', photos: ['p'], loyalty_target: 5 }, 2);
   assert.equal(full.pct, 100);
 });
-console.log(`\n${n} فحصاً مرّت.`);
-
 ok('الأرقامُ إنجليزيّة: الدينار والنسبة والمسافة', () => {
   assert.equal(iqd(25000), '25,000 د.ع'); assert.equal(iqd(0), '0 د.ع');
   assert.equal(pct(25), '25%');
@@ -156,3 +165,6 @@ ok('شارةُ الحالة الستّ', () => {
   assert.equal(washBadge(w, null), 'full');
   assert.equal(washBadge({ ...w, is_24h: false, opens_at: '08:00', closes_at: '09:00' }, undefined) === 'closed' || true, true);
 });
+
+// الملخّصُ آخرَ الملفّ: كان قبل أربعةِ فحوصٍ فيطبع عدداً أقلَّ ممّا جرى.
+console.log(`\n${n} فحصاً مرّت.`);

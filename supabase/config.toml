@@ -94,3 +94,8 @@ verify_jwt = false
 # (تفريغٌ فقط، بلا جسمٍ يُقرأ). الحارسُ داخل الدالّة.
 [functions.wash-tick]
 verify_jwt = false
+
+# بوتُ «محطة الغسل»: تيليجرام لا ترسل Authorization؛ الحارسُ
+# x-telegram-bot-api-secret-token (WASH_TELEGRAM_WEBHOOK_SECRET) داخل الدالّة.
+[functions.wash-bot]
+verify_jwt = false

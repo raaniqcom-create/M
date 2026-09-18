@@ -156,7 +156,7 @@ export default function LoginPage() {
 
           <div>
             <label htmlFor="identifier" className="label">
-              رقم الهاتف أو اسم المستخدم <span className="text-traffic-red">*</span>
+              رقم الهاتف أو الإيميل أو اسم المستخدم <span className="text-traffic-red">*</span>
             </label>
             {/* **حقلُ نصٍّ لا هاتف.** الشيفرةُ أدناه تقبل اسمَ مستخدمٍ منذ
                 البداية، لكنّ `type="tel"` كان يفتح لوحةَ الأرقام على الهاتف —

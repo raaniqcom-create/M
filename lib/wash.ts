@@ -6,7 +6,8 @@ import { plural } from './freshness.ts';
  *  `active` يفتح القسمَ للجمهور (القائمةُ الجانبيّة والفهرسة)؛ قبله يبقى خلف
  *  `AdminOnly` كما بدأ «مساعد الطريق». */
 export const WASH = {
-  active: false,
+  /** محلّيّاً (next dev) مفتوحٌ بلا حساب؛ التصديرُ الساكن يبقيه خلف الإدارة. */
+  active: process.env.NODE_ENV === 'development',
   /** أيّامُ الحجز المسبق الافتراضيّة — الفعليّةُ من wash_config (الإدارة تضبطها). */
   horizonDays: { subscriber: 3, guest: 1 },
 } as const;
@@ -91,6 +92,12 @@ export interface WashPayment {
   days: number;
   note: string | null;
   created_at: string;
+  /** claimed = إيصالٌ بانتظار التدقيق؛ paid = دفعةٌ مسجَّلة؛ rejected = رُفض (20260929). */
+  status?: 'claimed' | 'paid' | 'rejected';
+  method?: 'zaincash' | 'qicard' | 'later' | null;
+  /** مسارٌ في حاوية wash-receipts الخاصّة — يُوقَّع عند العرض (createSignedUrl)، لا رابطٌ عامّ. */
+  receipt_path?: string | null;
+  admin_note?: string | null;
 }
 
 export const planOf = (cfg: Pick<WashConfig, 'plans'> | null, code: string): WashPlan | undefined =>
@@ -436,7 +443,7 @@ export type BookingStatus =
   | 'cancelled_by_business'
   | 'expired';
 
-/** نشطٌ = ما زال يشغل مسرباً. */
+/** نشطٌ = ما زال يشغل خانةً. */
 export const ACTIVE_STATUSES: BookingStatus[] = ['pending', 'confirmed', 'arrived', 'in_service'];
 
 /** الانتقالاتُ التي تسمح بها القاعدة (set_wash_booking_status) — للأزرار. */
@@ -465,18 +472,54 @@ export const ACTION_LABELS: Partial<Record<BookingStatus, string>> = {
   cancelled_by_business: 'إلغاء',
 };
 
-/** صورةُ كلّ نوع. الرسومُ المرفقة (svg) هي الأصلُ اليوم؛ ومتى وُضعت صورٌ حقيقيّةٌ
- *  (public/vehicles/<type>.png) يُرفع العلَمُ التالي سطراً واحداً فتُعرض بدلَها.
- *  ولا يُجرَّب png قبل وجودها: محاولةٌ فاشلةٌ لكلّ نوعٍ في كلّ فتحةِ صفحة. */
-export const REAL_VEHICLE_PHOTOS = false;
+/** صورةُ الحجم: صورةٌ فوتوغرافيّةٌ في public/vehicles/<type>.png للأحجام الثلاثة.
+ *  و«أخرى» بلا صورة — ظلٌّ مرسومٌ عمداً كي تُقرأ مخرجاً لا حجماً رابعاً. */
+export const REAL_VEHICLE_PHOTOS = true;
 export const vehiclePhoto = (v: VehicleType): string => `/vehicles/${v}.png`;
-export const vehicleArt = (v: VehicleType): string => `/vehicles/${v}.svg`;
-/** ما يُعرض فعلاً — الصورةُ الحقيقيّةُ إن أُعلن عنها، وإلّا الرسم. */
-export const vehicleImg = (v: VehicleType): string => (REAL_VEHICLE_PHOTOS ? vehiclePhoto(v) : vehicleArt(v));
+/** أللحجم صورةٌ فوتوغرافيّة؟ «أخرى» لا. */
+export const hasVehiclePhoto = (v: VehicleType): boolean => v !== 'other' && REAL_VEHICLE_PHOTOS;
 
-export const VEHICLE_TYPES = ['sedan', 'suv', 'pickup', 'van', 'other'] as const;
+/** أحجامُ السيارة — ثلاثةٌ بصورةٍ و«أخرى» مخرجاً. الترتيبُ هو ترتيبُ العرض والإدراج. */
+export const VEHICLE_TYPES = ['small', 'mid', 'large', 'other'] as const;
 export type VehicleType = (typeof VEHICLE_TYPES)[number];
-export const VEHICLE_LABELS: Record<VehicleType, string> = { sedan: 'صالون', suv: 'SUV', pickup: 'بيك أب', van: 'فان', other: 'أخرى' };
+export const VEHICLE_LABELS: Record<VehicleType, string> = {
+  small: 'سيارة صغيرة',
+  mid: 'سيارة وسط',
+  large: 'سيارة كبيرة',
+  other: 'أخرى',
+};
+/** سطرٌ صغيرٌ تحت العنوان يحسم ما يندرج تحت كلّ حجم — التسمياتُ تختلف بين الناس. */
+export const VEHICLE_HINT: Record<VehicleType, string> = {
+  small: 'صالون · كوبيه · هاتشباك',
+  mid: 'دفع رباعيّ · كروس أوفر',
+  large: 'فان · 7 ركّاب · بيك أب',
+  other: 'حمل · باص · غير ذلك',
+};
+/** جملةُ الطمأنة أسفلَ بطاقات الحجم. */
+export const SIZE_NOTE = 'سيتم تحديد السعر النهائي حسب نوع الخدمة والمحطة المختارة';
+
+/* ── الحجمُ المختارُ يُحفظ على الجهاز: يُسأل مرّةً ثمّ تُملأ الخطوةُ تلقائياً ──────── */
+const SIZE_KEY = 'wash-size';
+export function rememberSize(counts: VehicleCounts): void {
+  try {
+    localStorage.setItem(SIZE_KEY, JSON.stringify(counts));
+  } catch {
+    /* تصفّحٌ خاصّ */
+  }
+}
+export function readSize(): VehicleCounts {
+  try {
+    const v = JSON.parse(localStorage.getItem(SIZE_KEY) ?? '{}') as Record<string, unknown>;
+    const out: VehicleCounts = {};
+    for (const k of VEHICLE_TYPES) {
+      const n = Number(v?.[k]);
+      if (Number.isFinite(n) && n > 0) out[k] = Math.min(20, Math.floor(n));
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 /** أيمكن للمواطن إلغاءُ حجزه مجّاناً؟ (قبل الموعد بأكثر من الحدّ) — وبعده يُعلَّم متأخّراً. */
 /* ── عدّادُ السيارات: طلبٌ واحدٌ لعدّة سيارات ──────────────────────────────── */

@@ -23,9 +23,9 @@ import { BOOKING_PILL, CarThumb, RouteCell, asVehicle } from './WashBookingScree
 import { CalendarIcon, MapPinIcon, SpinnerIcon, WashIcon, XIcon } from './icons';
 
 /** ما يردّه wash_my_bookings لكلّ رمز. */
-type Remote = { code: string; status: BookingStatus; starts_at: string; ends_at: string; service: string; price: number; wash: string; wash_id: string; address: string; lat: number; lng: number; vehicle: VehicleType | null; group_key: string | null; late: boolean; service_id: string };
+type Remote = { code: string; status: BookingStatus; starts_at: string; ends_at: string; service: string; price: number; wash: string; wash_id: string; address: string; lat: number; lng: number; vehicle: VehicleType | null; group_key: string | null; late: boolean; service_id: string; reviewed?: boolean };
 /** الصفُّ المحلّيّ + ما يُحفظ منه من القاعدة كي تعمل الصفحة بلا شبكة. */
-type Row = MyBooking & { address?: string; lat?: number; lng?: number };
+type Row = MyBooking & { address?: string; lat?: number; lng?: number; reviewed?: boolean };
 /** طلبٌ واحد: سياراتٌ تتشارك group_key، أو حجزٌ مفردٌ بلا مفتاح. */
 type Order = { key: string; cars: Row[] };
 
@@ -37,6 +37,8 @@ const TABS: { key: Tab; label: string; empty: string }[] = [
 ];
 
 const CANCELLED: (BookingStatus | undefined)[] = ['cancelled', 'cancelled_by_business'];
+/** مكتملٌ ولم يُقيَّم وخلال 14 يوماً — حدودُ review_wash نفسُها. */
+const canReview = (b: Row) => b.status === 'completed' && b.reviewed === false && Date.now() - new Date(b.starts_at).getTime() < 14 * 864e5;
 function tabOf(b: Row, now: number): Tab {
   if (CANCELLED.includes(b.status)) return 'cancelled';
   const active = b.status === undefined || ACTIVE_STATUSES.includes(b.status);
@@ -85,7 +87,7 @@ export function WashMyBookings() {
         const merged = local.map((b) => {
           const r = remote.get(b.code);
           // ‎?? المحلّيّ: الموقعُ ينشر في دقائقَ والهجرةُ قد تتأخّر — قاعدةٌ أقدمُ لا تعيد group_key/vehicle فلا نمحوهما.
-          return r ? { ...b, status: r.status, starts_at: r.starts_at, service: r.service, price: r.price, wash: r.wash, wash_id: r.wash_id, address: r.address, lat: r.lat, lng: r.lng, group_key: r.group_key ?? b.group_key, vehicle: r.vehicle ?? b.vehicle } : b;
+          return r ? { ...b, status: r.status, starts_at: r.starts_at, service: r.service, price: r.price, wash: r.wash, wash_id: r.wash_id, address: r.address, lat: r.lat, lng: r.lng, group_key: r.group_key ?? b.group_key, vehicle: r.vehicle ?? b.vehicle, reviewed: r.reviewed } : b;
         });
         // تُحفظ معكوسةً لأنّ rememberBooking تُصدّر — فيبقى الترتيبُ كما كان.
         [...merged].reverse().forEach(rememberBooking);
@@ -243,7 +245,8 @@ export function WashMyBookings() {
                       <div className="mt-3 flex flex-wrap gap-2">
                         {o.cars.map((c) => (
                           <span key={c.code} className="flex items-center gap-1.5 rounded-xl border border-slate-100 bg-slate-50 px-2 py-1">
-                            <CarThumb vehicle={c.vehicle} className="h-9 w-9" />
+                            {/* أيُّ className يُمرَّر يستبدل الافتراضيَّ كلَّه — فالتلوينُ يُعاد هنا صراحةً، وإلّا خرج ظلُّ «أخرى» أسودَ. */}
+                            <CarThumb vehicle={c.vehicle} className="h-9 w-9 text-slate-400" />
                             <span className="leading-tight">
                               <span className="block text-[11px] font-bold text-slate-700">{VEHICLE_LABELS[asVehicle(c.vehicle)]}</span>
                               <span className="block font-mono text-[10px] text-slate-400" dir="ltr">
@@ -259,6 +262,11 @@ export function WashMyBookings() {
                       <a href={bookingHref(head.code, head.phone)} className="flex min-h-[44px] flex-1 items-center text-[12px] font-bold text-brand-700 underline">
                         عرض الحجز
                       </a>
+                      {canReview(head) && (
+                        <a href={bookingHref(head.code, head.phone)} className="btn-primary min-h-[36px] px-3 text-[12px]">
+                          قيّم تجربتك ⭐
+                        </a>
+                      )}
                       {!grouped && (
                         <span className="font-mono text-[11px] text-slate-400" dir="ltr">
                           {head.code}

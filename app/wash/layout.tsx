@@ -1,8 +1,10 @@
+import './wash.css';
 import type { Metadata } from 'next';
 
 /** قسمُ «غسيل» لم يُعلَن بعد: لا فهرسة حتى يُفتح (`WASH.active`). */
 export const metadata: Metadata = {
-  title: 'غسل السيارات | المحطة التقنية',
+  title: 'المغسلة التقنية | المحطة التقنية',
+  icons: { icon: '/wash/mark.png' },
   robots: { index: false, follow: false },
 };
 

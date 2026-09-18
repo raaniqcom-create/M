@@ -1,17 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { ANBAR_CITIES } from '@/lib/cities';
 import { displayPhone, isValidIraqiMobile, phoneToEmail } from '@/lib/phone';
-import { awaitAuthReady, iqd, limitLabel, time12, VEHICLE_LABELS, VEHICLE_TYPES, type CarWash } from '@/lib/wash';
+import { awaitAuthReady, iqd, limitLabel, time12, VEHICLE_HINT, VEHICLE_LABELS, VEHICLE_TYPES, type CarWash } from '@/lib/wash';
 import { useWashConfig } from '@/lib/washConfig';
-import { MAX_SIDE, THUMB_SIDE, putWashImage, shrinkImage } from '@/lib/washUpload';
 import { num } from '@/lib/num';
 import { TimeSelect } from './TimeSelect';
-import { CheckIcon, EyeIcon, EyeOffIcon, ImageIcon, PlusIcon, SpinnerIcon, XIcon } from './icons';
+import { CheckIcon, EyeIcon, EyeOffIcon, PlusIcon, SpinnerIcon } from './icons';
 
 // Leaflet يلمس window عند الاستيراد — لا يُرسَم على الخادم
 const MapPicker = dynamic(() => import('./MapPicker'), {
@@ -23,18 +22,16 @@ const MapPicker = dynamic(() => import('./MapPicker'), {
   ),
 });
 
-const STEPS = ['رقم الهاتف', 'معلومات المحطة', 'صور المحطة', 'أوقات العمل', 'الخدمات والأسعار', 'اختيار الاشتراك', 'المراجعة والإرسال'];
+const STEPS = ['الحساب', 'المغسلة', 'الدوام والخدمات', 'الاشتراك والإرسال'];
 const LAST = STEPS.length - 1;
 const SLOTS = [15, 30, 45, 60];
-const LOYALTY = [0, 4, 5, 6, 8, 10];
 const MINUTES = Array.from({ length: 22 }, (_, i) => 15 + i * 5);
-const GALLERY_MAX = 4;
 
 const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 /** نداءُ دالّة otp — الرسائلُ عربيّةٌ من الخادم وتُعرض كما هي؛ الحالةُ تميّز «مسجّلٌ مسبقاً» (409). */
-async function otp(body: Record<string, unknown>): Promise<{ retryIn?: number }> {
+async function otp(body: Record<string, unknown>): Promise<{ retryIn?: number; via?: string }> {
   const res = await fetch(`${URL_}/functions/v1/otp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}` },
@@ -45,8 +42,8 @@ async function otp(body: Record<string, unknown>): Promise<{ retryIn?: number }>
   return data;
 }
 
-type Phase = 'phone' | 'code' | 'login' | 'password' | 'ready';
-type Pic = { file: File; url: string };
+/** 'email': تسجيلٌ بإيميلٍ حقيقيٍّ بلا رمزِ تحقّق — الهاتفُ يبقى لاسترجاع كلمة المرور والتواصل. */
+type Phase = 'phone' | 'code' | 'login' | 'password' | 'ready' | 'email';
 interface Row {
   name: string;
   price: string;
@@ -66,16 +63,21 @@ const rowOk = (r: Row) => {
   return n >= 2 && n <= 40 && r.description.length <= 160 && r.price.trim() !== '' && Number.isFinite(Number(r.price)) && Number(r.price) >= 0;
 };
 
-/** تسجيلُ محطّة غسيل — سبعُ خطوات: الهاتفُ يُتحقَّق أوّلاً (OTP)، والحسابُ يُنشأ عند الإرسال. */
+/** تسجيلُ مغسلة — أربعُ خطوات: الحسابُ أوّلاً، والحسابُ يُنشأ عند الإرسال؛ الصورُ تُرفع لاحقاً من اللوحة. */
 export function WashRegisterForm() {
   const router = useRouter();
   const [step, setStep] = useState(0);
 
   // 1 — الهاتف
-  const [phase, setPhase] = useState<Phase>('phone');
+  const [phase, setPhase] = useState<Phase>('email');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [left, setLeft] = useState(0);
+  /** من أين وصل الرمز: null = رسالة، وإلّا اسمُ بوت تيليجرام. */
+  const [via, setVia] = useState<string | null>(null);
+  const [emailAddr, setEmailAddr] = useState('');
+  /** عنوانُ الدخول بعد «مسجّلٌ مسبقاً» من تبويب الإيميل — وإلّا الإيميلُ المشتقُّ من الهاتف. */
+  const [loginEmail, setLoginEmail] = useState<string | null>(null);
   const [loginPw, setLoginPw] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -93,29 +95,16 @@ export function WashRegisterForm() {
   const [address, setAddress] = useState('');
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
 
-  // 3 — الصور (ملفّاتٌ في الذاكرة حتى الإرسال: الصفُّ يجب أن يوجد قبل الرفع)
-  const [cover, setCover] = useState<Pic | null>(null);
-  const [gallery, setGallery] = useState<Pic[]>([]);
-  const urls = useRef<string[]>([]);
-  useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
-  function pic(file: File): Pic {
-    const url = URL.createObjectURL(file);
-    urls.current.push(url);
-    return { file, url };
-  }
-
-  // 4 — الدوام
+  // 3 — الدوام والخدمات (بطاقةُ الغسلات تُضبط من اللوحة — الافتراضيُّ 5)
   const [is24h, setIs24h] = useState(false);
   const [opensAt, setOpensAt] = useState('08:00');
   const [closesAt, setClosesAt] = useState('22:00');
   const [bays, setBays] = useState(2);
   const [slotMinutes, setSlotMinutes] = useState(30);
-  const [loyalty, setLoyalty] = useState(5);
-
-  // 5 — الخدمات
+  const loyalty = 5;
   const [rows, setRows] = useState<Row[]>(seed);
 
-  // 6 — الباقة
+  // 4 — الباقة
   const cfg = useWashConfig();
   const [plan, setPlan] = useState<string>('');
   const chosenPlan = cfg?.plans.find((p) => p.code === (plan || cfg.plans[0]?.code));
@@ -124,11 +113,23 @@ export function WashRegisterForm() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  /** من إعلان «سجّل مغسلتك في {المدينة}»: المدينةُ محدّدةٌ مسبقاً، وfree = مدينةٌ دون ألف مشترك. */
+  const [promo, setPromo] = useState<'free' | 'paid' | null>(null);
 
-  // من له مغسلةٌ أصلاً لا يسجّل ثانية — إلى لوحته.
+  // تصديرٌ ساكن: الاستعلامُ يُقرأ في أثرٍ لا أثناء الرسم.
+  useEffect(() => {
+    const q = new URLSearchParams(location.search);
+    const c = q.get('city');
+    if (c && (ANBAR_CITIES as readonly { name: string }[]).some((x) => x.name === c)) setCity(c);
+    const pr = q.get('promo');
+    if (pr === 'free' || pr === 'paid') setPromo(pr);
+  }, []);
+
+  // من له مغسلةٌ أصلاً لا يسجّل ثانية — إلى لوحته. والمشرفُ (?as=admin) يستعرض المعالجَ بعين المسجِّل.
   useEffect(() => {
     let alive = true;
     (async () => {
+      if (new URLSearchParams(location.search).get('as') === 'admin') return;
       const { data } = await supabase.auth.getSession();
       if (!alive || !data.session) return;
       const { data: mine } = await supabase.rpc('my_wash').maybeSingle();
@@ -167,11 +168,12 @@ export function WashRegisterForm() {
     }
   }
 
-  const send = () =>
+  const send = (channel?: 'telegram') =>
     run(async () => {
       if (!isValidIraqiMobile(phone)) throw new Error('رقم الهاتف غير صحيح. اكتبه هكذا: 07XXXXXXXXX');
       try {
-        await otp({ action: 'send', phone, purpose: 'register' });
+        const r = await otp({ action: 'send', phone, purpose: 'register', channel });
+        setVia(r.via ?? null);
         setCode('');
         setPhase('code');
         setLeft(60);
@@ -196,7 +198,7 @@ export function WashRegisterForm() {
 
   const login = () =>
     run(async () => {
-      const { data, error: e } = await supabase.auth.signInWithPassword({ email: phoneToEmail(phone), password: loginPw });
+      const { data, error: e } = await supabase.auth.signInWithPassword({ email: loginEmail ?? phoneToEmail(phone), password: loginPw });
       if (e || !data.user) throw new Error('كلمة المرور غير صحيحة.');
       const { data: mine } = await supabase.rpc('my_wash').maybeSingle();
       if (mine) return router.replace('/wash/owner');
@@ -206,6 +208,7 @@ export function WashRegisterForm() {
 
   function resetPhone() {
     setPhase('phone');
+    setLoginEmail(null);
     setExisting(false);
     setCode('');
     setLoginPw('');
@@ -215,21 +218,18 @@ export function WashRegisterForm() {
   }
 
   const pwOk = password.length >= 6 && password === confirm;
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddr.trim());
   const canNext = [
-    phase === 'ready' || (phase === 'password' && pwOk),
+    phase === 'ready' || (phase === 'password' && pwOk) || (phase === 'email' && emailOk && isValidIraqiMobile(phone) && pwOk),
     name.trim().length >= 3 &&
       name.trim().length <= 60 &&
-      area.trim().length >= 1 &&
       area.trim().length <= 40 &&
       address.trim().length >= 5 &&
       !!coords &&
       (!phone2 || isValidIraqiMobile(phone2)) &&
       (!whatsapp || isValidIraqiMobile(whatsapp)),
-    true,
-    true,
     rows.length > 0 && rows.every(rowOk),
     !!chosenPlan && agree,
-    true,
   ][step];
 
   /** «إدخال» في الخطوة الأولى يفعل ما يفعله زرُّها. */
@@ -237,6 +237,7 @@ export function WashRegisterForm() {
     if (busy) return;
     if (phase === 'phone') return void send();
     if (phase === 'code' && code.length === 6) return void verify();
+    if (phase === 'email' && !canNext) return;
     if (phase === 'login' && loginPw) return void login();
     if (canNext) go(1);
   }
@@ -247,18 +248,20 @@ export function WashRegisterForm() {
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!coords) return setError('ارجع إلى خطوة معلومات المحطة وحدّد موقعها.');
+    if (!coords) return setError('ارجع إلى خطوة المغسلة وحدّد موقعها.');
     if (!chosenPlan) return setError('اختر باقة.');
+    if (!agree) return setError('وافق على شروط الاشتراك أوّلاً.');
 
     setBusy(true);
     setError(null);
-    const email = phoneToEmail(phone);
+    // بالإيميل: عنوانُ الدخول هو الإيميلُ نفسُه، والهاتفُ في بيانات الحساب لاسترجاع كلمة المرور بالرمز.
+    const email = phase === 'email' ? emailAddr.trim().toLowerCase() : phoneToEmail(phone);
 
     let ownerId: string | null = null;
     if (existing) {
       ownerId = (await supabase.auth.getUser()).data.user?.id ?? null;
     } else {
-      const { data: auth, error: signUpError } = await supabase.auth.signUp({ email, password });
+      const { data: auth, error: signUpError } = await supabase.auth.signUp({ email, password, options: { data: { phone: displayPhone(phone) } } });
       ownerId = auth.user?.id ?? null;
       if (signUpError || !ownerId) {
         const already = signUpError?.message.toLowerCase().includes('already');
@@ -318,7 +321,6 @@ export function WashRegisterForm() {
       return setError('حُفظت المغسلة لكن تعذّر فتحُ لوحتها — سجّل الدخول من صفحة الدخول.');
     }
     const id = (wash as CarWash).id;
-    const notes: string[] = [];
 
     const { error: svcErr } = await supabase.from('wash_services').insert(
       rows.map((r, i) => {
@@ -340,36 +342,8 @@ export function WashRegisterForm() {
         };
       })
     );
-    if (svcErr) notes.push('تعذّر حفظ الخدمات — أضفها من لوحتك لاحقاً.');
-
-    // الصورُ بعد الصفّ: الغلافُ ومصغّرُه أوّلاً، ثمّ المعرضُ بحدّ الباقة كما يحسبه حارسُ القاعدة (غائب = 1، صفر = بلا معرض) —
-    // تحديثان منفصلان كي لا يُسقط رفضُ المعرض الغلافَ معه.
-    const limit = Math.max(0, Number(chosenPlan.features.gallery_limit ?? 1));
-    const keep = gallery.slice(0, limit);
-    if (keep.length < gallery.length) notes.push(limit > 0 ? `باقتك تسمح بـ${limit} من الصور — رُفعت ${limit} منها.` : 'باقتك لا تشمل معرض صور — رُفع الغلاف فقط.');
-    try {
-      if (cover) {
-        const [c, t] = await Promise.all([shrinkImage(cover.file, MAX_SIDE), shrinkImage(cover.file, THUMB_SIDE)]);
-        const image_url = await putWashImage(`${id}/cover.jpg`, c);
-        const thumb_url = await putWashImage(`${id}/thumb.jpg`, t);
-        const { error: e2 } = await supabase.from('car_washes').update({ image_url, thumb_url }).eq('id', id);
-        if (e2) throw e2;
-      }
-    } catch {
-      notes.push('تعذّر رفع الغلاف — أضفه من لوحتك لاحقاً.');
-    }
-    try {
-      if (keep.length) {
-        const photos = await Promise.all(keep.map(async (p, i) => putWashImage(`${id}/g${i + 1}.jpg`, await shrinkImage(p.file, MAX_SIDE))));
-        const { error: e3 } = await supabase.from('car_washes').update({ photos }).eq('id', id);
-        if (e3) throw e3;
-      }
-    } catch {
-      notes.push('تعذّر رفع الصور — أضفها من لوحتك لاحقاً.');
-    }
-
     setBusy(false);
-    setDone(notes.join(' '));
+    setDone(svcErr ? 'تعذّر حفظ الخدمات — أضفها من لوحتك لاحقاً.' : '');
   }
 
   if (done !== null) {
@@ -378,13 +352,24 @@ export function WashRegisterForm() {
         <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-50 text-brand">
           <CheckIcon className="h-8 w-8" />
         </span>
-        <h2 className="text-lg font-extrabold text-slate-800">تم استلام طلب تسجيل المحطة</h2>
-        <p className="text-sm leading-relaxed text-slate-600">سيتم مراجعة المعلومات وتفعيل الحساب بعد الموافقة.</p>
+        <h2 className="text-lg font-extrabold text-slate-800">تم استلام طلب تسجيل المغسلة</h2>
+        <p className="text-sm leading-relaxed text-slate-600">سيتم مراجعة المعلومات وتفعيل الحساب بعد الدفع والموافقة.</p>
         <p className="text-sm text-slate-600">
           سنتواصل معك على <span dir="ltr">{displayPhone(phone)}</span>
         </p>
         {done && <p className="rounded-xl bg-amber-50 px-3 py-2 text-[12px] text-amber-800">{done}</p>}
-        <a href="/wash/owner/" className="btn-primary w-full">
+        {promo === 'free' && (cfg?.trial_days ?? 0) > 0 ? (
+          <p className="rounded-xl bg-brand-50 px-3 py-2 text-[12px] font-bold text-brand-800">مدينتك ضمن عرض الانطلاق — تفعّل الإدارة التجربة المجانية بعد المراجعة.</p>
+        ) : (
+          <>
+            <a href="/wash/owner/subscription/" className="btn-primary w-full">
+              ادفع الآن — إدارة الاشتراك
+            </a>
+            <p className="text-[12px] leading-relaxed text-slate-500">أو ادفع لاحقاً: يبقى حسابك غير مفعّل حتى تدخل إلى صفحة الاشتراكات وتضيف إيصال الدفع وتكتب في ملاحظات التحويل «المغسلة».</p>
+          </>
+        )}
+        <p className="text-[11px] text-slate-400">الصور تُرفع لاحقاً من لوحة المغسلة.</p>
+        <a href="/wash/owner/" className="btn-ghost w-full">
           لوحة المغسلة
         </a>
         <a href="/wash/" className="btn-ghost w-full">
@@ -405,6 +390,28 @@ export function WashRegisterForm() {
     >
       {showPassword ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
     </button>
+  );
+  /** حقلا كلمة المرور — بعد رمز الهاتف، أو مع الإيميل مباشرة. */
+  const pwFields = (
+    <>
+      <div>
+        <label htmlFor="wash-password" className="label">
+          كلمة المرور {req}
+        </label>
+        <div className="relative">
+          <input id="wash-password" type={showPassword ? 'text' : 'password'} minLength={6} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className="field pr-12" dir="ltr" />
+          {eye}
+        </div>
+        <p className="mt-1 text-xs text-slate-400">6 أحرف أو أرقام على الأقل</p>
+      </div>
+      <div>
+        <label htmlFor="wash-confirm" className="label">
+          تأكيد كلمة المرور {req}
+        </label>
+        <input id="wash-confirm" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="field" dir="ltr" />
+        {confirm && password !== confirm && <p className="mt-1 text-xs text-traffic-red">كلمتا المرور غير متطابقتين.</p>}
+      </div>
+    </>
   );
   const edit = (s: number) => (
     <button type="button" onClick={() => jump(s)} className="-my-2 min-h-[44px] shrink-0 text-[12px] font-bold text-brand-700 underline">
@@ -437,6 +444,36 @@ export function WashRegisterForm() {
 
       {step === 0 && (
         <div className="space-y-4">
+          {(phase === 'phone' || phase === 'email') && (
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="طريقة التسجيل">
+              {(['email', 'phone'] as const).map((m) => (
+                <button key={m} type="button" role="tab" aria-selected={phase === m} onClick={() => { setPhase(m); setError(null); }} className={`min-h-[40px] rounded-lg text-[12.5px] font-bold ${phase === m ? 'bg-white text-brand-700 shadow-soft' : 'text-slate-500'}`}>
+                  {m === 'email' ? 'بالإيميل — الأسهل' : 'برقم الهاتف — رمز تحقق'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {phase === 'email' && (
+            <>
+              <div>
+                <label htmlFor="wash-email" className="label">
+                  الإيميل {req}
+                </label>
+                <input id="wash-email" type="email" inputMode="email" value={emailAddr} onChange={(e) => setEmailAddr(e.target.value)} className="field" placeholder="name@example.com" dir="ltr" autoComplete="email" />
+                <p className="mt-1 text-xs text-brand-700">هذا هو اسم الدخول. لا رمز تحقّق ولا رسائل.</p>
+              </div>
+              <div>
+                <label htmlFor="wash-phone-e" className="label">
+                  رقم هاتف المغسلة {req}
+                </label>
+                <input id="wash-phone-e" type="tel" inputMode="numeric" value={phone} onChange={(e) => setPhone(e.target.value)} className="field" placeholder="07XXXXXXXXX" dir="ltr" autoComplete="tel" />
+                <p className="mt-1 text-xs text-slate-500">يظهر للزبائن، وبه تسترجع كلمة المرور إن نسيتها.</p>
+              </div>
+              {pwFields}
+            </>
+          )}
+
           {phase === 'phone' && (
             <>
               <div>
@@ -446,17 +483,21 @@ export function WashRegisterForm() {
                 <input id="wash-phone" type="tel" inputMode="numeric" value={phone} onChange={(e) => setPhone(e.target.value)} className="field" placeholder="07XXXXXXXXX" dir="ltr" autoComplete="tel" />
                 <p className="mt-1 text-xs text-brand-700">هذا الرقم هو اسم الدخول، ويظهر للزبائن.</p>
               </div>
-              <button type="button" onClick={send} disabled={busy || !isValidIraqiMobile(phone)} className="btn-primary w-full">
+              <button type="button" onClick={() => send()} disabled={busy || !isValidIraqiMobile(phone)} className="btn-primary w-full">
                 {busy && <SpinnerIcon className="h-4 w-4" />}
-                إرسال رمز التحقق
+                إرسال رمز التحقق برسالة
               </button>
+              <button type="button" onClick={() => send('telegram')} disabled={busy || !isValidIraqiMobile(phone)} className="btn-ghost w-full">
+                إرسال الرمز عبر تيليجرام
+              </button>
+              <p className="text-[11px] text-slate-400">تيليجرام يعمل لمن شارك رقمه مع بوت «محطة الغسل».</p>
             </>
           )}
 
           {phase === 'code' && (
             <>
               <p className="rounded-xl bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700">
-                أرسلنا رمزاً من 6 أرقام إلى <span dir="ltr">{displayPhone(phone)}</span>.
+                أرسلنا رمزاً من 6 أرقام {via ? `عبر تيليجرام (بوت ${via})` : 'برسالة'} إلى <span dir="ltr">{displayPhone(phone)}</span>.
               </p>
               <input
                 type="text"
@@ -475,7 +516,7 @@ export function WashRegisterForm() {
                 تحقّق
               </button>
               <div className="flex items-center justify-between text-xs">
-                <button type="button" onClick={send} disabled={busy || left > 0} className="min-h-[44px] font-semibold text-brand-700 disabled:text-slate-400">
+                <button type="button" onClick={() => send(via ? 'telegram' : undefined)} disabled={busy || left > 0} className="min-h-[44px] font-semibold text-brand-700 disabled:text-slate-400">
                   {left > 0 ? `إعادة الإرسال بعد ${left} ث` : 'لم يصلك الرمز؟ أعد الإرسال'}
                 </button>
                 <button type="button" onClick={resetPhone} className="min-h-[44px] font-semibold text-slate-500">
@@ -488,7 +529,7 @@ export function WashRegisterForm() {
           {phase === 'login' && (
             <>
               <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
-                هذا الرقم مسجّل مسبقاً — أدخل كلمة المرور لتكمل بحسابك.
+                {loginEmail ? 'هذا الإيميل' : 'هذا الرقم'} مسجّل مسبقاً — أدخل كلمة المرور لتكمل بحسابك.
               </p>
               <div>
                 <label htmlFor="wash-login-pw" className="label">
@@ -525,27 +566,7 @@ export function WashRegisterForm() {
                   تغيير
                 </button>
               </p>
-              {phase === 'password' && (
-                <>
-                  <div>
-                    <label htmlFor="wash-password" className="label">
-                      كلمة المرور {req}
-                    </label>
-                    <div className="relative">
-                      <input id="wash-password" type={showPassword ? 'text' : 'password'} minLength={6} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className="field pr-12" dir="ltr" />
-                      {eye}
-                    </div>
-                    <p className="mt-1 text-xs text-slate-400">6 أحرف أو أرقام على الأقل</p>
-                  </div>
-                  <div>
-                    <label htmlFor="wash-confirm" className="label">
-                      تأكيد كلمة المرور {req}
-                    </label>
-                    <input id="wash-confirm" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="field" dir="ltr" />
-                    {confirm && password !== confirm && <p className="mt-1 text-xs text-traffic-red">كلمتا المرور غير متطابقتين.</p>}
-                  </div>
-                </>
-              )}
+              {phase === 'password' && pwFields}
             </>
           )}
         </div>
@@ -555,34 +576,10 @@ export function WashRegisterForm() {
         <div className="space-y-4">
           <div>
             <label htmlFor="wash-name" className="label">
-              اسم المحطة {req}
+              اسم المغسلة {req}
             </label>
             <input id="wash-name" value={name} onChange={(e) => setName(e.target.value)} minLength={3} maxLength={60} className="field" placeholder="مغسلة النخيل" autoComplete="off" />
             <p className="mt-1 text-[11px] text-slate-400">كما يعرفه الناس — 3 أحرف على الأقل.</p>
-          </div>
-          <div>
-            <label htmlFor="wash-owner" className="label">
-              اسم المسؤول
-            </label>
-            <input id="wash-owner" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} maxLength={60} className="field" placeholder="أبو أحمد" />
-          </div>
-          <div>
-            <span className="label">رقم الهاتف</span>
-            <input value={displayPhone(phone)} readOnly className="field bg-slate-50 text-slate-500" dir="ltr" aria-label="رقم الهاتف" />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label htmlFor="wash-phone2" className="label">
-                رقم إضافي
-              </label>
-              <input id="wash-phone2" type="tel" inputMode="numeric" value={phone2} onChange={(e) => setPhone2(e.target.value)} className="field" placeholder="07XXXXXXXXX" dir="ltr" />
-            </div>
-            <div>
-              <label htmlFor="wash-wa" className="label">
-                رقم واتساب
-              </label>
-              <input id="wash-wa" type="tel" inputMode="numeric" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} className="field" placeholder="07XXXXXXXXX" dir="ltr" />
-            </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -599,7 +596,7 @@ export function WashRegisterForm() {
             </div>
             <div>
               <label htmlFor="wash-area" className="label">
-                المنطقة {req}
+                المنطقة
               </label>
               <input id="wash-area" value={area} onChange={(e) => setArea(e.target.value)} maxLength={40} className="field" placeholder="شارع 60" />
             </div>
@@ -614,102 +611,42 @@ export function WashRegisterForm() {
             <span className="label">الموقع على الخريطة {req}</span>
             {/* MapPicker يقرأ center عند التركيب فقط — المفتاحُ يعيد تركيبَه مع كلّ مدينة (والدبّوسُ المختارُ يبقى لأنّ coords تسبق center). */}
             <MapPicker key={city} coords={coords} onPick={setCoords} center={ANBAR_CITIES.find((c) => c.name === city)} />
-            <p className="mt-1 text-xs text-slate-400">حرّك الخريطة حتى يقع المؤشّر على المحطة.</p>
+            <p className="mt-1 text-xs text-slate-400">حرّك الخريطة حتى يقع المؤشّر على المغسلة.</p>
           </div>
+          <details className="rounded-xl border border-slate-200 p-3">
+            <summary className="cursor-pointer text-sm font-bold text-slate-600">بيانات إضافية (اختياري)</summary>
+            <div className="mt-3 space-y-3">
+              <div>
+                <label htmlFor="wash-owner" className="label">
+                  اسم المسؤول
+                </label>
+                <input id="wash-owner" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} maxLength={60} className="field" placeholder="أبو أحمد" />
+              </div>
+              <div>
+                <span className="label">رقم الهاتف</span>
+                <input value={displayPhone(phone)} readOnly className="field bg-slate-50 text-slate-500" dir="ltr" aria-label="رقم الهاتف" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label htmlFor="wash-phone2" className="label">
+                    رقم إضافي
+                  </label>
+                  <input id="wash-phone2" type="tel" inputMode="numeric" value={phone2} onChange={(e) => setPhone2(e.target.value)} className="field" placeholder="07XXXXXXXXX" dir="ltr" />
+                </div>
+                <div>
+                  <label htmlFor="wash-wa" className="label">
+                    رقم واتساب
+                  </label>
+                  <input id="wash-wa" type="tel" inputMode="numeric" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} className="field" placeholder="07XXXXXXXXX" dir="ltr" />
+                </div>
+              </div>
+            </div>
+          </details>
         </div>
       )}
 
       {step === 2 && (
-        <div className="space-y-4">
-          <div>
-            <span className="label">صورة الغلاف</span>
-            {cover ? (
-              <div className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={cover.url} alt="" className="h-40 w-full rounded-xl object-cover" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    URL.revokeObjectURL(cover.url);
-                    setCover(null);
-                  }}
-                  aria-label="حذف الغلاف"
-                  className="absolute end-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white text-traffic-red shadow-soft before:absolute before:-inset-2 before:content-['']"
-                >
-                  <XIcon className="h-4 w-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex h-40 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
-                <ImageIcon className="h-10 w-10" />
-              </div>
-            )}
-            <label className="btn-ghost mt-2 w-full cursor-pointer">
-              <ImageIcon className="h-4 w-4" />
-              {cover ? 'تغيير الغلاف' : 'اختر صورة الغلاف'}
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = '';
-                  if (f) setCover(pic(f));
-                }}
-              />
-            </label>
-            <p className="mt-1 text-[11px] text-slate-400">اختياريّة — لكنّ محطّةً بصورةٍ تُحجز أكثر.</p>
-          </div>
-
-          <div>
-            <p className="label">
-              صور إضافية <span className="font-normal text-slate-400">({gallery.length} من {GALLERY_MAX})</span>
-            </p>
-            {gallery.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                {gallery.map((p) => (
-                  <div key={p.url} className="relative shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.url} alt="" className="h-20 w-28 rounded-lg object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        URL.revokeObjectURL(p.url);
-                        setGallery((g) => g.filter((x) => x !== p));
-                      }}
-                      aria-label="حذف الصورة"
-                      className="absolute -start-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-white text-traffic-red shadow-soft before:absolute before:-inset-2.5 before:content-['']"
-                    >
-                      <XIcon className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {gallery.length < GALLERY_MAX && (
-              <label className="btn-ghost mt-2 w-full cursor-pointer">
-                <PlusIcon className="h-4 w-4" />
-                إضافة صورة
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files ?? []);
-                    e.target.value = '';
-                    setGallery((g) => [...g, ...files.slice(0, GALLERY_MAX - g.length).map(pic)]);
-                  }}
-                />
-              </label>
-            )}
-            <p className="mt-1 text-[11px] text-slate-400">تُرفع الصورُ بعد الإرسال، بحدّ باقتك.</p>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 px-3">
             <input type="checkbox" checked={is24h} onChange={(e) => setIs24h(e.target.checked)} className="h-4 w-4 accent-[#16a34a]" />
             <span className="text-sm font-medium">مفتوحة 24 ساعة</span>
@@ -720,48 +657,35 @@ export function WashRegisterForm() {
               <TimeSelect id="wash-closes" label="وقت الإغلاق" value={closesAt} onChange={setClosesAt} />
             </>
           )}
-          <div>
-            <label htmlFor="wash-bays" className="label">
-              المسارب
-            </label>
-            <select id="wash-bays" value={bays} onChange={(e) => setBays(Number(e.target.value))} className="field">
-              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-[11px] text-slate-400">كم سيّارة تُغسل في الوقت نفسه؟</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label htmlFor="wash-bays" className="label">
+                عدد الخانات
+              </label>
+              <select id="wash-bays" value={bays} onChange={(e) => setBays(Number(e.target.value))} className="field">
+                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-slate-400">كم خانة؟ — كم سيارة تُغسل في الوقت نفسه</p>
+            </div>
+            <div>
+              <label htmlFor="wash-slot" className="label">
+                مدّة الموعد
+              </label>
+              <select id="wash-slot" value={slotMinutes} onChange={(e) => setSlotMinutes(Number(e.target.value))} className="field">
+                {SLOTS.map((n) => (
+                  <option key={n} value={n}>
+                    {n} دقيقة
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div>
-            <label htmlFor="wash-slot" className="label">
-              مدّة الموعد
-            </label>
-            <select id="wash-slot" value={slotMinutes} onChange={(e) => setSlotMinutes(Number(e.target.value))} className="field">
-              {SLOTS.map((n) => (
-                <option key={n} value={n}>
-                  {n} دقيقة
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="wash-loyalty" className="label">
-              بطاقة الغسلات
-            </label>
-            <select id="wash-loyalty" value={loyalty} onChange={(e) => setLoyalty(Number(e.target.value))} className="field">
-              {LOYALTY.map((n) => (
-                <option key={n} value={n}>
-                  {n === 0 ? 'بلا بطاقة' : `${n} غسلات ثمّ واحدة مجّانيّة`}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      )}
 
-      {step === 4 && (
-        <div className="space-y-3">
+          <p className="label pt-2">الخدمات والأسعار</p>
           <p className="rounded-xl bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700">عدّل الأسعار كما تريد — كلّ شيء يُدار من لوحتك لاحقاً.</p>
           {rows.map((r, i) => (
             <div key={i} className="space-y-2 rounded-xl border border-slate-200 p-3">
@@ -790,7 +714,9 @@ export function WashRegisterForm() {
                 <div className="grid grid-cols-2 gap-2">
                   {VEHICLE_TYPES.map((v) => (
                     <label key={v} className="text-[11px] text-slate-600">
-                      {VEHICLE_LABELS[v]}
+                      <span className="block font-bold text-slate-700">{VEHICLE_LABELS[v]}</span>
+                      {/* التسمياتُ تختلف بين الناس — السطرُ يحسم ما يندرج تحت كلّ حجم قبل أن يُسعّره. */}
+                      <span className="block text-[11px] leading-tight text-slate-500">{VEHICLE_HINT[v]}</span>
                       <input
                         type="number"
                         inputMode="numeric"
@@ -817,7 +743,7 @@ export function WashRegisterForm() {
         </div>
       )}
 
-      {step === 5 && (
+      {step === 3 && (
         <div className="space-y-3">
           {!cfg ? (
             <div className="flex justify-center py-6">
@@ -825,7 +751,9 @@ export function WashRegisterForm() {
             </div>
           ) : (
             <>
-              {cfg.promo_first_month > 0 && (
+              {promo === 'free' && cfg.trial_days > 0 ? (
+                <p className="rounded-xl bg-brand-50 px-3 py-2 text-xs font-bold text-brand-800">مدينتك ضمن عرض الانطلاق: {cfg.trial_days} يوماً مجاناً على أيّ باقة — تُفعَّل بعد موافقة الإدارة، بلا دفع.</p>
+              ) : cfg.promo_first_month > 0 && (
                 <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">عرض الإطلاق: أوّل شهر {iqd(cfg.promo_first_month)} لأيّ باقة.</p>
               )}
               {cfg.plans.map((p) => {
@@ -859,41 +787,40 @@ export function WashRegisterForm() {
               </label>
             </>
           )}
-        </div>
-      )}
 
-      {step === 6 && (
-        <dl className="divide-y divide-slate-100 text-sm">
-          {(
-            [
-              ['رقم الهاتف', <span dir="ltr">{displayPhone(phone)}</span>, 0],
-              ['المحطة', `${name.trim()} — ${city} – ${area.trim()}`, 1],
-              ['العنوان', address.trim(), 1],
-              ['الصور', cover || gallery.length ? `${cover ? 'غلاف' : 'بلا غلاف'} · ${num(gallery.length)} إضافية` : 'بلا صور', 2],
-              ['الدوام', is24h ? 'مفتوحة 24 ساعة' : `${time12(opensAt)} – ${time12(closesAt)}`, 3],
-              ['المسارب والموعد', `${num(bays)} مسرب · ${num(slotMinutes)} دقيقة`, 3],
-              ['الخدمات', `${num(rows.length)} خدمات: ${rows.map((r) => r.name.trim()).join('، ')}`, 4],
-              ['الباقة', chosenPlan ? `${chosenPlan.name} — ${iqd(chosenPlan.price_iqd)} / شهر` : '—', 5],
-            ] as [string, React.ReactNode, number][]
-          ).map(([k, v, s]) => (
-            <div key={k} className="flex items-start gap-2 py-2.5">
-              <dt className="w-24 shrink-0 text-[12px] text-slate-500">{k}</dt>
-              <dd className="flex min-w-0 flex-1 items-start justify-between gap-2 break-words font-medium text-slate-800">
-                <span className="min-w-0">{v}</span>
-                {edit(s)}
-              </dd>
-            </div>
-          ))}
-        </dl>
+          <p className="label pt-2">مراجعة الطلب</p>
+          <dl className="divide-y divide-slate-100 text-[13px]">
+            {(
+              [
+                ['رقم الهاتف', <span dir="ltr">{displayPhone(phone)}</span>, 0],
+                ['المغسلة', `${name.trim()} — ${city}${area.trim() ? ` – ${area.trim()}` : ''}`, 1],
+                ['العنوان', address.trim(), 1],
+                ['الدوام', is24h ? 'مفتوحة 24 ساعة' : `${time12(opensAt)} – ${time12(closesAt)}`, 2],
+                ['الخانات والموعد', `${num(bays)} خانة · ${num(slotMinutes)} دقيقة`, 2],
+                ['الخدمات', `${num(rows.length)} خدمات: ${rows.map((r) => r.name.trim()).join('، ')}`, 2],
+              ] as [string, React.ReactNode, number][]
+            ).map(([k, v, s]) => (
+              <div key={k} className="flex items-start gap-2 py-2">
+                <dt className="w-24 shrink-0 text-[12px] text-slate-500">{k}</dt>
+                <dd className="flex min-w-0 flex-1 items-start justify-between gap-2 break-words font-medium text-slate-800">
+                  <span className="min-w-0">{v}</span>
+                  {edit(s)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       )}
 
       {error === 'ALREADY' ? (
         <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
-          <p className="font-bold">هذا الرقم مسجّل من قبل — سجّل الدخول.</p>
+          <p className="font-bold">{phase === 'email' ? 'هذا الإيميل' : 'هذا الرقم'} مسجّل من قبل — سجّل الدخول.</p>
           <button
             type="button"
             onClick={() => {
+              const viaEmail = phase === 'email' ? emailAddr.trim().toLowerCase() : null;
               resetPhone();
+              setLoginEmail(viaEmail);
               setPhase('login');
               jump(0);
             }}
@@ -921,7 +848,7 @@ export function WashRegisterForm() {
             التالي
           </button>
         ) : (
-          <button type="submit" disabled={busy} className="btn-primary flex-[2]">
+          <button type="submit" disabled={busy || !canNext} className="btn-primary flex-[2]">
             {busy && <SpinnerIcon className="h-4 w-4" />}
             إرسال للمراجعة
           </button>

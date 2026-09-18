@@ -9,34 +9,32 @@ import {
   BOOKING_LABELS,
   VEHICLE_LABELS,
   VEHICLE_TYPES,
-  REAL_VEHICLE_PHOTOS,
   at12,
   bookingHref,
   dateLine,
   iqd,
-  vehicleImg,
   whatsappBooking,
   type BookingStatus,
   type VehicleType,
 } from '@/lib/wash';
 import { RouteButton } from './RouteButton';
-import { VEHICLE_ART } from './VehicleArtwork';
+import { VehicleImage } from './VehicleArtwork';
 import { CalendarIcon, SpinnerIcon, WhatsappIcon, XIcon } from './icons';
 
 /** نوعٌ معروفٌ أو «أخرى» — القاعدةُ قد تعيد null أو نوعاً قديماً لا نعرفه. */
 export const asVehicle = (v: string | null | undefined): VehicleType =>
   (VEHICLE_TYPES as readonly string[]).includes(v ?? '') ? (v as VehicleType) : 'other';
 
-/** ظلُّ نوع السيارة — أحاديُّ اللون يرث لونَ النصّ حوله (أو الصورةُ الحقيقيّة متى وُجدت). */
+/** صورةُ الحجم داخل السطور — VehicleImage تحسم صورةً أم ظلّاً مرسوماً («أخرى» بلا صورة).
+ *
+ *  aria-hidden: الاسمُ مكتوبٌ بجانبها في كلّ نداء، وبديلُ VehicleImage هو الاسمُ نفسُه —
+ *  فبلا الإخفاء يسمع القارئُ «سيارة كبيرة سيارة كبيرة». (contents كي لا يزيد الغلافُ صندوقاً.) */
 export function CarThumb({ vehicle, className = 'h-9 w-9 text-slate-400' }: { vehicle: string | null | undefined; className?: string }) {
-  const v = asVehicle(vehicle);
-  const Art = VEHICLE_ART[v];
-  if (REAL_VEHICLE_PHOTOS)
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={vehicleImg(v)} alt={VEHICLE_LABELS[v]} loading="lazy" className={`shrink-0 object-contain ${className}`} />
-    );
-  return <Art className={`shrink-0 ${className}`} />;
+  return (
+    <span aria-hidden className="contents">
+      <VehicleImage v={asVehicle(vehicle)} className={`shrink-0 ${className}`} />
+    </span>
+  );
 }
 
 /**
@@ -264,6 +262,16 @@ export function WashBookingScreen() {
             <dt className="shrink-0 text-slate-500">الموعد</dt>
             <dd className="text-end font-bold text-slate-800">{when}</dd>
           </div>
+          {/* الحجمُ المحجوزُ عليه السعر — يُجلب أصلاً، ولا يراه الزبونُ إلّا هنا. */}
+          {b.vehicle && (
+            <div className="flex justify-between gap-3">
+              <dt className="shrink-0 text-slate-500">حجم السيارة</dt>
+              <dd className="flex items-center justify-end gap-1.5 text-end font-bold text-slate-800">
+                <CarThumb vehicle={b.vehicle} className="h-7 w-7 text-slate-400" />
+                {VEHICLE_LABELS[asVehicle(b.vehicle)]}
+              </dd>
+            </div>
+          )}
         </dl>
 
         {b.status === 'completed' ? (

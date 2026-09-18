@@ -52,7 +52,7 @@ const CHECKS = [
   // مغسلةٌ لا وجودَ لها: الدالّةُ موجودةٌ وتردّ رسالةً عربيّة — لا 404 ولا 500.
   ['rpc book_wash_group: مغسلةٌ وهميّة → خطأٌ عربيّ', '/rest/v1/rpc/book_wash_group',
     { p_wash: NIL, p_service: NIL, p_day: new Date().toISOString().slice(0, 10), p_slot: '10:00',
-      p_name: 'فحص', p_phone: PHONE, p_vehicles: { sedan: 1 } },
+      p_name: 'فحص', p_phone: PHONE, p_vehicles: { small: 1 } },
     (r) => (r.status === 400 && arabic(r.json?.message) ? null : brief(r))],
   ['rpc cancel_wash_group: مفتاحٌ وهميّ → 0', '/rest/v1/rpc/cancel_wash_group', { p_group: NIL, p_phone: PHONE },
     (r) => (r.status === 200 && r.json === 0 ? null : brief(r))],

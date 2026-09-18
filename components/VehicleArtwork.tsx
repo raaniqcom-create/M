@@ -1,19 +1,21 @@
-import type { VehicleType } from '@/lib/wash';
+'use client';
 
-/** ظلالٌ ظِليّةٌ أحاديّةُ اللون لأنواع السيارات — لا رسومٌ كرتونيّة.
+import { useState } from 'react';
+import { VEHICLE_LABELS, hasVehiclePhoto, vehiclePhoto, type VehicleType } from '@/lib/wash';
+
+/** صورةُ الحجم: صورةٌ فوتوغرافيّةٌ للأحجام الثلاثة، وظلٌّ مرسومٌ لـ«أخرى» وحدَه.
  *
- *  ── لماذا ظلٌّ لا رسمٌ ملوّن ───────────────────────────────────────────────
- *  المطلوبُ من الصورة شيءٌ واحد: أن يعرف الزبونُ أيَّ نوعٍ سيّارتُه حين تختلف
- *  التسمياتُ (صالون/سيدان، بيك أب/حمل). والظلُّ الظِّليُّ يقول ذلك بالهيئة
- *  وحدَها — طولُ الغطاء، ارتفاعُ السقف، حوضٌ مفتوح، صندوقٌ واحد. أمّا الألوانُ
- *  والحدودُ السميكةُ والعجلاتُ ذاتُ المحاور فزخرفةٌ تُدخل خمسةَ ألوانٍ غريبةٍ
- *  على واجهةٍ خضراء، وتجعل المُنتقي يُقرأ لعبةً لا خدمةً.
+ *  ── لماذا بقي ظلٌّ واحدٌ فقط ──────────────────────────────────────────────
+ *  صغيرة/وسط/كبيرة صارت صوراً حقيقيّةً في public/vehicles، والصورةُ تحسم الحجمَ
+ *  أصدقَ من أيّ رسم. أمّا «أخرى» فليست حجماً رابعاً بل مخرجٌ لمن لا تندرج سيّارتُه
+ *  (حمل، باص) — فلا صورةَ لها عمداً، وظلُّها الظِّليُّ يقول ذلك بالهيئة وحدَها:
+ *  صندوقُ حملٍ عالٍ ومقصورةٌ قصيرة، هيئةٌ لا تشبه أيّاً من الصور الثلاث.
  *
- *  كلُّها `currentColor`: الواجهةُ تلوّنها — رماديّةً هادئةً حين لا تُختار،
- *  وخضراءَ حين تُختار — فيصير اللونُ معنىً (الاختيار) لا زينة.
+ *  الظلُّ `currentColor`: الواجهةُ تلوّنه — رماديّاً حين لا يُختار وأخضرَ حين
+ *  يُختار — فيصير اللونُ معنىً (الاختيار) لا زينة.
  *
- *  هندسةٌ مشتركةٌ تُبقيها عائلةً واحدة: القماشُ 200×88، مركزُ العجلة y=68،
- *  والإطارُ حلقةٌ مرسومةٌ (stroke) فيظهر الرملُ خلفها أيّاً كانت الخلفيّة. */
+ *  هندسةٌ محفوظة: القماشُ 200×88، مركزُ العجلة y=68، والإطارُ حلقةٌ مرسومةٌ
+ *  (stroke) فيظهر الرملُ خلفها أيّاً كانت الخلفيّة. */
 
 const WHEEL = { r: 11, w: 5.5 };
 
@@ -36,66 +38,46 @@ const box = (className?: string) => ({
   'aria-hidden': true as const,
 });
 
-/** صالون: ثلاثةُ صناديق — غطاءٌ طويلٌ وسقفٌ منخفضٌ وصندوقٌ خلفيّ. */
-export const SedanArt = ({ className }: ArtProps) => (
+/** «أخرى»: صندوقُ حملٍ عالٍ ومقصورةٌ قصيرةٌ أمامَه — أوضحُ ما لا يكون سيّارةَ ركّاب.
+ *
+ *  الانعكاسُ (translate+scale) لا زينة: الصورُ الثلاثُ الشاحنةُ في public/vehicles أنوفُها
+ *  إلى اليسار، والرسمُ مبنيٌّ إلى اليمين — وفي قائمةٍ رأسيّةٍ واحدةٍ تُقرأ البطاقةُ الرابعةُ
+ *  مقلوبةً عن أخواتها. نعكسُ الرسمَ لأنّه الأرخص: الصورُ هي ما شُحن. */
+export const OtherVehicleArt = ({ className }: ArtProps) => (
   <svg {...box(className)}>
-    <path
-      fillRule="evenodd"
-      d="M12 64c0-9 4-14 13-16l40-9 18-13c4-3 9-5 15-5h30c8 0 15 3 20 8l14 14 22 5c8 2 12 7 12 14v6h-26a14 14 0 0 0-28 0H66a14 14 0 0 0-28 0H12v-4Zm74-27-13 11h24V36h-6c-2 0-4 0-5 1Zm23 11h39l-11-11c-3-3-7-4-11-4h-17v15Z"
-    />
-    <Wheels rear={52} front={150} />
+    <g transform="translate(200,0) scale(-1,1)">
+      <path
+        fillRule="evenodd"
+        d="M12 62V22c0-5 4-9 9-9h97v17h25c5 0 9 2 12 6l13 16 16 4c4 1 6 4 6 8v4h-14a14 14 0 0 0-28 0H62a14 14 0 0 0-28 0H12Zm114-24v14h18l-11-14h-7Z"
+      />
+      <Wheels rear={48} front={162} />
+    </g>
   </svg>
 );
 
-/** دفعٌ رباعيّ: صندوقان — سقفٌ عالٍ قصيرٌ ثمّ درجةُ غطاءٍ واضحة. أقصرُ من الفان عمداً. */
-export const SuvArt = ({ className }: ArtProps) => (
-  <svg {...box(className)}>
-    <path
-      fillRule="evenodd"
-      d="M26 62V26c0-4 4-8 8-8h84c5 0 9 2 12 6l16 20 18 4c6 2 9 6 9 11v3h-13a14 14 0 0 0-28 0H74a14 14 0 0 0-28 0H26Zm8-36v16h34V26H34Zm42 0v16h34V26H76Zm42 0v16h22l-12-14c-2-2-4-2-6-2h-4Z"
-    />
-    <Wheels rear={60} front={146} />
-  </svg>
-);
-
-/** بيك أب: مقصورةٌ أماماً وحوضٌ مفتوحٌ خلفَها — الفجوةُ هي العلامة. */
-export const PickupArt = ({ className }: ArtProps) => (
-  <svg {...box(className)}>
-    <path
-      fillRule="evenodd"
-      d="M10 62c0-6 3-10 9-11V43h76V26c0-5 4-9 9-9h40c5 0 9 2 12 6l18 20 12 3c8 2 12 7 12 13v5h-24a14 14 0 0 0-28 0H64a14 14 0 0 0-28 0H10v-2Zm101-36v17h26V26h-26Zm38 0v17h25l-12-13c-2-3-5-4-8-4h-5Z"
-    />
-    <Wheels rear={50} front={152} />
-  </svg>
-);
-
-/** فان: صندوقٌ واحد — الأطولُ والأعلى، وغطاءٌ يكاد لا يُرى. */
-export const VanArt = ({ className }: ArtProps) => (
-  <svg {...box(className)}>
-    <path
-      fillRule="evenodd"
-      d="M14 62V20c0-4 4-7 8-7h128c5 0 9 2 12 6l18 25 6 2c4 2 6 6 6 11v5h-14a14 14 0 0 0-28 0H62a14 14 0 0 0-28 0H14Zm8-41v21h34V21H22Zm42 0v21h34V21H64Zm42 0v21h34V21h-34Zm42 0v21h24l-14-19c-2-2-4-2-6-2h-4Z"
-    />
-    <Wheels rear={48} front={164} />
-  </svg>
-);
-
-/** صغيرة: هاتشباك قصيرةٌ بخلفيّةٍ مائلةٍ حادّة — أقصرُ من الجميع عمداً. */
-export const HatchArt = ({ className }: ArtProps) => (
-  <svg {...box(className)}>
-    <path
-      fillRule="evenodd"
-      d="M34 62c0-8 4-13 12-15l10-3 20-17c4-3 8-5 13-5h27c7 0 13 3 17 8l14 17 13 4c7 2 11 7 11 13v4h-22a14 14 0 0 0-28 0H84a14 14 0 0 0-28 0H34v-6Zm48-25-14 12h26V36h-7c-2 0-4 0-5 1Zm24 12h30l-10-12c-3-3-6-5-10-5h-10v17Z"
-    />
-    <Wheels rear={70} front={144} />
-  </svg>
-);
-
-/** الخريطةُ التي تقرؤها الواجهة. */
-export const VEHICLE_ART: Record<VehicleType, (p: ArtProps) => React.ReactElement> = {
-  sedan: SedanArt,
-  suv: SuvArt,
-  pickup: PickupArt,
-  van: VanArt,
-  other: HatchArt,
+/** الخريطةُ التي تقرؤها الواجهة — ناقصةٌ عمداً: الأحجامُ الثلاثةُ صورٌ لا رسوم. */
+export const VEHICLE_ART: Partial<Record<VehicleType, (p: ArtProps) => React.ReactElement>> = {
+  other: OtherVehicleArt,
 };
+
+/** صورةُ الحجم أينما عُرض — البوّابةُ الوحيدة: صورةٌ إن وُجدت، وإلّا الظلّ.
+ *
+ *  الصندوقُ ثابتُ المقاس كي لا ينهار الصفُّ إن غاب الملفّ. وإخفاقُ التحميل يسقط
+ *  إلى الظلِّ مرّةً واحدة: العلامةُ هي مسارُ الصورة لا مجرّدُ صواب/خطأ، فلو بدّل
+ *  النداءُ `v` في المكان نفسِه لم يجرّ إخفاقُ صورةٍ أختَها السليمةَ إلى الظلّ. */
+export function VehicleImage({ v, className = 'h-[88px] w-[132px]' }: { v: VehicleType; className?: string }) {
+  const [fell, setFell] = useState('');
+  const src = vehiclePhoto(v);
+  const Art = VEHICLE_ART[v] ?? OtherVehicleArt;
+  if (!hasVehiclePhoto(v) || fell === src) return <Art className={`shrink-0 ${className}`} />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={VEHICLE_LABELS[v]}
+      loading="lazy"
+      onError={() => setFell(src)}
+      className={`shrink-0 object-contain ${className}`}
+    />
+  );
+}

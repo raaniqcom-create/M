@@ -29,7 +29,12 @@ interface Stats {
   pending_stale?: number;
   tick_last?: string | null;
   tick_age_min?: number | null;
+  claims_open?: number;
 }
+
+/** صفُّ wash_payments بعد هجرة الإيصالات (20260929): الحالةُ وطريقةُ الدفع ومسارُ الإيصال. */
+type Claim = WashPayment;
+const METHOD_LABELS: Record<string, string> = { zaincash: 'زين كاش', qicard: 'كي كارد', later: 'الدفع لاحقاً' };
 
 type Booking = Pick<WashBooking, 'id' | 'code' | 'name' | 'phone' | 'starts_at' | 'status' | 'service_name'>;
 
@@ -54,25 +59,29 @@ function waSignup(w: CarWash, cfg: WashConfig | null): string {
   return `https://wa.me/964${normalizePhone(w.phone)}?text=${encodeURIComponent(text)}`;
 }
 
-/** ورقةُ «تسجيل دفعة»: الباقةُ والمبلغُ والأيّام — تُفعّل المغسلةَ وتمدّ الاشتراكَ (admin_wash_payment). */
+/** ورقةُ «تسجيل دفعة»: الباقةُ والمبلغُ والأيّام — تُفعّل المغسلةَ وتمدّ الاشتراكَ (admin_wash_payment).
+ *  مع claim تُصدّق إيصالاً رفعه المالك بدل إدراج دفعةٍ جديدة. */
 function PaymentForm({
   wash,
   cfg,
   paidBefore,
+  claim,
   onDone,
   onCancel,
 }: {
   wash: CarWash;
   cfg: WashConfig | null;
   paidBefore: boolean;
+  claim?: Claim;
   onDone: () => void;
   onCancel: () => void;
 }) {
   const plans = cfg?.plans ?? [];
-  const [plan, setPlan] = useState(plans.some((p) => p.code === wash.plan) ? wash.plan : (plans[0]?.code ?? 'basic'));
+  const wanted = claim?.plan ?? wash.plan;
+  const [plan, setPlan] = useState(plans.some((p) => p.code === wanted) ? wanted : (plans[0]?.code ?? 'basic'));
   const chosen = plans.find((p) => p.code === plan);
   const suggested = chosen ? firstMonthPrice(chosen, cfg?.promo_first_month ?? 0, paidBefore) : 0;
-  const [amount, setAmount] = useState<number | null>(null);
+  const [amount, setAmount] = useState<number | null>(claim?.amount_iqd ?? null);
   const [days, setDays] = useState(30);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -82,7 +91,7 @@ function PaymentForm({
   async function save() {
     setBusy(true);
     setErr(null);
-    const { error } = await supabase.rpc('admin_wash_payment', { p_wash: wash.id, p_plan: plan, p_amount: value, p_days: days, p_note: note.trim() || null });
+    const { error } = await supabase.rpc('admin_wash_payment', { p_wash: wash.id, p_plan: plan, p_amount: value, p_days: days, p_note: note.trim() || null, p_claim: claim?.id ?? null });
     setBusy(false);
     if (error) return setErr(error.message);
     onDone();
@@ -163,6 +172,13 @@ export function WashAdmin() {
   /** المغسلةُ المفتوحةُ لها ورقةُ الدفع، وسجلُّ الدفعات المجلوب. */
   const [paying, setPaying] = useState<string | null>(null);
   const [payments, setPayments] = useState<Record<string, WashPayment[]>>({});
+  /** إيصالاتٌ رفعها المالكون بانتظار التدقيق، والمفتوحُ منها للتفعيل أو الرفض. */
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [claimOpen, setClaimOpen] = useState<{ id: string; act: 'pay' | 'reject' } | null>(null);
+  /** سببُ رفض الإيصال — مستقلٌّ عن سبب رفض المغسلة (reason) كي لا يمسح أحدُهما الآخر. */
+  const [claimReason, setClaimReason] = useState('');
+  /** روابطُ الإيصالات الموقّعة (حاوية wash-receipts خاصّة) — بالمسار. */
+  const [receipts, setReceipts] = useState<Record<string, string>>({});
   const [showPlans, setShowPlans] = useState(false);
   const [showAds, setShowAds] = useState(false);
   const cfg = useWashConfig();
@@ -171,14 +187,22 @@ export function WashAdmin() {
     const [s, w, p] = await Promise.all([
       supabase.rpc('wash_admin_stats'),
       supabase.from('car_washes').select('*').order('created_at', { ascending: false }).range(0, 499),
-      supabase.from('wash_payments').select('id, wash_id, plan, amount_iqd, days, note, created_at').order('created_at', { ascending: false }).range(0, 999),
+      supabase.from('wash_payments').select('*').order('created_at', { ascending: false }).range(0, 999),
     ]);
     if (s.error || w.error) setNote((s.error ?? w.error)!.message);
     setStats((s.data as Stats | null) ?? null);
     setRows((w.data as CarWash[] | null) ?? []);
+    // المدفوعُ فقط يُعدّ دفعة (صفوفُ ما قبل الهجرة بلا status = مدفوعة)؛ والمعلّقُ يذهب إلى التدقيق.
+    const all = (p.data ?? []) as Claim[];
     const byWash: Record<string, WashPayment[]> = {};
-    for (const row of (p.data ?? []) as WashPayment[]) (byWash[row.wash_id] ??= []).push(row);
+    for (const row of all) if (!row.status || row.status === 'paid') (byWash[row.wash_id] ??= []).push(row);
     setPayments(byWash);
+    const open = all.filter((r) => r.status === 'claimed');
+    setClaims(open);
+    const paths = open.flatMap((r) => (r.receipt_path ? [r.receipt_path] : []));
+    if (!paths.length) return setReceipts({});
+    const { data: signed } = await supabase.storage.from('wash-receipts').createSignedUrls(paths, 3600);
+    setReceipts(Object.fromEntries((signed ?? []).flatMap((d) => (d.path && d.signedUrl ? [[d.path, d.signedUrl]] : []))));
   }, []);
 
   /** التجربةُ المجّانيّة: دفعةٌ بصفر دينار لعدد أيّام التجربة على باقة المغسلة. */
@@ -215,6 +239,17 @@ export function WashAdmin() {
     await set(w, 'rejected', null, null);
     setRejecting(null);
     setReason('');
+  }
+
+  /** رفضُ إيصالٍ بسببٍ يراه المالك في صفحة الاشتراك (admin_reject_wash_claim). */
+  async function rejectClaim(c: Claim) {
+    setBusy(c.id);
+    const { error } = await supabase.rpc('admin_reject_wash_claim', { p_claim: c.id, p_note: claimReason.trim() || null });
+    setBusy(null);
+    if (error) return setNote(error.message);
+    setClaimOpen(null);
+    setClaimReason('');
+    void load();
   }
 
   /** إيقافُ الحجوزات من الإدارة: سنةٌ إلى الأمام (= «حتى أعيد التشغيل» عند المالك)، أو null للاستئناف. */
@@ -273,6 +308,7 @@ export function WashAdmin() {
           {[
             { label: 'منشورة الآن', value: stats?.live, tone: 'brand' },
             { label: 'بانتظار الاعتماد', value: stats?.pending, warn: !!stats?.pending },
+            { label: 'إيصالات للتدقيق', value: stats?.claims_open, warn: !!stats?.claims_open },
             { label: 'تنتهي خلال أسبوع', value: stats?.expiring, warn: !!stats?.expiring },
             { label: 'منتهية', value: stats?.expired, warn: !!stats?.expired },
             { label: 'حجوزات اليوم', value: stats?.today },
@@ -338,7 +374,7 @@ export function WashAdmin() {
               </p>
 
               {paying === w.id ? (
-                <PaymentForm wash={w} cfg={cfg} paidBefore={!!payments[w.id]?.length} onDone={() => { setPaying(null); void load(); }} onCancel={() => setPaying(null)} />
+                <PaymentForm wash={w} cfg={cfg} paidBefore={!!payments[w.id]?.length} claim={claims.find((c) => c.wash_id === w.id)} onDone={() => { setPaying(null); void load(); }} onCancel={() => setPaying(null)} />
               ) : (
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <button type="button" disabled={busy === w.id} onClick={() => setPaying(w.id)} className="btn-primary text-xs">
@@ -379,6 +415,61 @@ export function WashAdmin() {
       </section>
 
       <section className="card p-5">
+        <h2 className="text-sm font-bold">إيصالات بانتظار التدقيق ({claims.length})</h2>
+        {claims.length === 0 && <p className="mt-2 text-sm text-slate-400">لا إيصالاتَ معلّقة</p>}
+        <div className="mt-2 space-y-3">
+          {claims.map((c) => {
+            const w = rows.find((x) => x.id === c.wash_id);
+            const act = claimOpen?.id === c.id ? claimOpen.act : null;
+            return (
+              <article key={c.id} className="rounded-xl border border-slate-200 p-3">
+                <h3 className="text-base font-bold">{w?.name ?? '—'}</h3>
+                <p className="mt-0.5 text-[11px] text-slate-500">
+                  {planName(cfg, c.plan)} · {iqd(c.amount_iqd)} · {METHOD_LABELS[c.method ?? ''] ?? '—'} · {fmtAt(c.created_at)}
+                </p>
+                {c.receipt_path && receipts[c.receipt_path] ? (
+                  <a href={receipts[c.receipt_path]} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block">
+                    <img src={receipts[c.receipt_path]} alt="إيصال الدفع" className="h-24 rounded-lg object-cover" />
+                  </a>
+                ) : c.receipt_path ? (
+                  <p className="mt-1 text-[11px] text-slate-400">تعذّر جلب الإيصال — حدّث الصفحة</p>
+                ) : (
+                  <p className="mt-1 text-[11px] text-slate-400">بلا إيصال</p>
+                )}
+                {act === 'pay' && w ? (
+                  <PaymentForm wash={w} cfg={cfg} paidBefore={!!payments[w.id]?.length} claim={c} onDone={() => { setClaimOpen(null); void load(); }} onCancel={() => setClaimOpen(null)} />
+                ) : act === 'reject' ? (
+                  <div className="mt-2">
+                    <label htmlFor={`cwhy-${c.id}`} className="label text-xs">سبب الرفض — يظهر لصاحب المغسلة</label>
+                    <textarea id={`cwhy-${c.id}`} value={claimReason} onChange={(e) => setClaimReason(e.target.value)} rows={2} maxLength={200} className="field py-2 text-sm" />
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <button type="button" disabled={busy === c.id} onClick={() => rejectClaim(c)} className="btn border border-traffic-red bg-white text-xs text-traffic-red">
+                        <XIcon className="h-4 w-4" />
+                        تأكيد الرفض
+                      </button>
+                      <button type="button" onClick={() => setClaimOpen(null)} className="btn-ghost text-xs">
+                        تراجع
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button type="button" disabled={!w || busy === c.id} onClick={() => setClaimOpen({ id: c.id, act: 'pay' })} className="btn-primary text-xs">
+                      <CheckIcon className="h-4 w-4" />
+                      تفعيل
+                    </button>
+                    <button type="button" onClick={() => { setClaimOpen({ id: c.id, act: 'reject' }); setClaimReason(''); }} className="btn-ghost text-xs text-traffic-red">
+                      رفض
+                    </button>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="card p-5">
         <h2 className="text-sm font-bold">كلّ المغاسل ({rest.length})</h2>
         {rest.length === 0 && <p className="mt-2 text-sm text-slate-400">لا مغاسلَ بعد</p>}
         <ul className="mt-2">
@@ -409,7 +500,7 @@ export function WashAdmin() {
                   <span dir="ltr">{displayPhone(w.phone)}</span>
                 </a>
                 {paying === w.id && (
-                  <PaymentForm wash={w} cfg={cfg} paidBefore={!!payments[w.id]?.length} onDone={() => { setPaying(null); void load(); }} onCancel={() => setPaying(null)} />
+                  <PaymentForm wash={w} cfg={cfg} paidBefore={!!payments[w.id]?.length} claim={claims.find((c) => c.wash_id === w.id)} onDone={() => { setPaying(null); void load(); }} onCancel={() => setPaying(null)} />
                 )}
                 {!!payments[w.id]?.length && (
                   <p className="mt-1 text-[10.5px] text-slate-400">

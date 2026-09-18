@@ -23,7 +23,9 @@ import {
   offerPrice,
   orderTotal,
   readMyBookings,
+  readSize,
   rememberBooking,
+  rememberSize,
   servicePrice,
   slotGrid,
   time12,
@@ -36,7 +38,8 @@ import {
 } from '@/lib/wash';
 import { pokeWashTick, useWashConfig } from '@/lib/washConfig';
 import { RouteCell } from './WashBookingScreen';
-import { VehicleArt, VehicleCounter, carsTo } from './VehiclePicker';
+import { VehicleImage } from './VehicleArtwork';
+import { VehicleCounter, carsTo } from './VehiclePicker';
 import { CheckIcon, MapPinIcon, SpinnerIcon } from './icons';
 
 /** ما يكتبه المواطن مرّةً ويُعاد ملؤه: `wash-me`. */
@@ -62,6 +65,8 @@ export function WashBookFlow() {
   const serviceParam = params.get('service') ?? '';
   const offerParam = params.get('offer') ?? '';
   const replace = params.get('replace') ?? '';
+  /** قادمٌ من شاشة الأحجام — حجمُه محسومٌ فلا يُسأل عنه ثانيةً. */
+  const fromSize = params.get('size') === '1';
   const cfg = useWashConfig();
 
   const [wash, setWash] = useState<WashPublic | null | undefined>(undefined);
@@ -71,8 +76,10 @@ export function WashBookFlow() {
   const [me, setMe] = useState<Me>({ name: '', phone: '', car: '' });
 
   const [service, setService] = useState('');
-  /** كم سيّارةً من كلّ نوع — فارغٌ يعني سيّارةً واحدةً بلا نوع. */
+  /** كم سيّارةً من كلّ حجم — فارغٌ يعني سيّارةً واحدةً بلا حجم. */
   const [counts, setCounts] = useState<VehicleCounts>({});
+  /** العدّادُ مبسوطاً؟ يُطوى ملخّصاً حين يصل الزبونُ وحجمُه محسومٌ سلفاً، ويُفتح بـ«تغيير». */
+  const [sizeOpen, setSizeOpen] = useState(true);
   const [useOffer, setUseOffer] = useState(true);
   const [day, setDay] = useState(() => bgdDate());
   /** الموعدُ → كم سيّارةً يتّسع لها — null أثناء الجلب. */
@@ -101,6 +108,21 @@ export function WashBookFlow() {
     setSubscriber(!!knownAddress());
     setClientKey(crypto.randomUUID());
   }, []);
+
+  // الحجمُ يُسأل مرّةً ويُحفظ على الجهاز: العائدُ من شاشة الأحجام أو من حجزٍ سابقٍ يجد خطوتَه
+  // مملوءةً مطويّةً — ومن لا حجمَ له يرى العدّادَ مبسوطاً كما كان.
+  useEffect(() => {
+    const saved = readSize();
+    if (!fromSize && !totalCars(saved)) return;
+    setCounts(saved);
+    if (totalCars(saved)) setSizeOpen(false);
+  }, [fromSize]);
+
+  /** كلُّ تغييرٍ يُحفظ — فالحجزُ التالي يبدأ بالحجم جاهزاً. */
+  const changeCounts = (next: VehicleCounts) => {
+    setCounts(next);
+    rememberSize(next);
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -264,7 +286,7 @@ export function WashBookFlow() {
                 <ul className="mt-2 space-y-2">
                   {done.cars.map((c) => (
                     <li key={c.code} className="flex items-center gap-2 rounded-xl border border-slate-200 p-2">
-                      <VehicleArt v={c.vehicle ?? 'other'} className="h-10 w-14" />
+                      <VehicleImage v={c.vehicle ?? 'other'} className="h-10 w-14" />
                       <span className="text-[12px] font-bold text-slate-700">{c.vehicle ? VEHICLE_LABELS[c.vehicle] : 'سيّارة'}</span>
                       <span className="ms-auto font-mono text-[15px] font-extrabold tracking-wider text-brand-900" dir="ltr">
                         {c.code}
@@ -387,18 +409,40 @@ export function WashBookFlow() {
         )}
       </section>
 
-      {/* نوعُ السيارة وعددها */}
+      {/* حجمُ السيارة وعددها — خطوةٌ أولى تُطوى ملخّصاً لمن حسم حجمَه سلفاً */}
       <section className="card mt-4 p-4">
         <h2 className="text-sm font-extrabold text-slate-800">نوع السيارة وعددها</h2>
-        <div className="mt-3">
-          <VehicleCounter
-            counts={counts}
-            onChange={setCounts}
-            max={cfg?.max_cars_order ?? 5}
-            remaining={slot ? free?.get(slot) : undefined}
-          />
-        </div>
-        <p className="mt-2 text-[11px] text-slate-400">يمكنك طلب غسل أكثر من سيّارة في طلبٍ واحد.</p>
+        {sizeOpen ? (
+          <>
+            {/* شاشةُ الأحجام أوسعُ وأوضح — تُعرض لمن لم يختر بعد فقط، وإلّا صارت تكراراً. */}
+            {nCars === 0 && (
+              <a href={`/wash/size/?id=${encodeURIComponent(id)}`} className="mt-1 inline-block min-h-[44px] py-2.5 text-[12px] font-bold text-brand-700 underline">
+                اختر الحجم من شاشة الأحجام
+              </a>
+            )}
+            <div className="mt-2">
+              <VehicleCounter
+                counts={counts}
+                onChange={changeCounts}
+                max={cfg?.max_cars_order ?? 5}
+                remaining={slot ? free?.get(slot) : undefined}
+              />
+            </div>
+            <p className="mt-2 text-[11px] text-slate-400">يمكنك طلب غسل أكثر من سيّارة في طلبٍ واحد.</p>
+          </>
+        ) : (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {picked.map((v) => (
+              <span key={v} className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white py-1 pe-2.5 ps-1 text-[12px] font-bold text-slate-700">
+                <VehicleImage v={v} className="h-7 w-10 text-slate-400" />
+                {VEHICLE_LABELS[v]} ×{counts[v]}
+              </span>
+            ))}
+            <button type="button" onClick={() => setSizeOpen(true)} className="ms-auto min-h-[44px] px-2 text-[12px] font-bold text-brand-700 underline">
+              تغيير
+            </button>
+          </div>
+        )}
       </section>
 
       {/* اليوم */}

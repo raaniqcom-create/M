@@ -63,28 +63,54 @@ async function sendSms(msisdn: string, code: string) {
       body?.canCover === false || String(body?.message ?? '').toLowerCase().includes('credit');
     throw Object.assign(new Error('otpiq'), {
       userMessage: out_of_credit
-        ? 'خدمة الرسائل بلا رصيد حالياً. تواصل معنا عبر البوت.'
+        ? 'خدمة الرسائل بلا رصيد حالياً. افتح بوت «محطة الغسل» على تيليجرام وشارك رقمك ثمّ أعد الطلب، أو سجّل بالإيميل.'
         : 'تعذّر إرسال الرمز. حاول بعد قليل.',
     });
   }
   return body;
 }
 
+/** الرمزُ عبر تيليجرام: لمن شارك رقمَه مع بوت «محطة الغسل» (wash_bot_users) أو ربط محطّةَ
+ *  وقودٍ به (telegram_links). يعيد اسمَ البوت الذي أرسل، أو null إن لم يُعرف الرقمُ في أيٍّ منهما. */
+async function sendTelegram(c: string, code: string): Promise<string | null> {
+  const targets: { token: string | undefined; chat: number | null | undefined; via: string }[] = [];
+  const wash = await db.from('wash_bot_users').select('chat_id').eq('phone', `0${c}`).maybeSingle();
+  if (wash.data) targets.push({ token: Deno.env.get('WASH_TELEGRAM_BOT_TOKEN'), chat: wash.data.chat_id, via: 'محطة الغسل' });
+  const fuel = await db.from('telegram_links').select('telegram_id').eq('phone', c).maybeSingle();
+  if (fuel.data) targets.push({ token: Deno.env.get('TELEGRAM_BOT_TOKEN'), chat: fuel.data.telegram_id, via: 'المحطة التقنية' });
+  for (const t of targets) {
+    if (!t.token || !t.chat) continue;
+    const r = await fetch(`https://api.telegram.org/bot${t.token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: t.chat, text: `رمزُ التحقق: <code>${code}</code>\nصالحٌ عشرَ دقائق — لا تشاركه مع أحد.`, parse_mode: 'HTML' }),
+    }).catch(() => null);
+    if (r?.ok) return t.via;
+  }
+  return null;
+}
+
 /** The login account, not the station, is what both flows must agree on.
  *  Checking `stations` for recovery while signup checked accounts produced the
  *  contradiction that an admin's number was "already registered" and "not
- *  registered" at the same time — an account can exist without a station. */
+ *  registered" at the same time — an account can exist without a station.
+ *
+ *  ومن سجّل مغسلتَه بإيميلٍ حقيقيٍّ لا عنوانَ مركّباً له: يُعرف من هاتف المغسلة (car_washes.phone)
+ *  فيسترجع كلمةَ مروره بالرقم نفسِه. */
 async function accountId(c: string): Promise<string | null> {
   const email = `p${c}@muhta.app`;
   const { data } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  return data?.users?.find((u) => u.email === email)?.id ?? null;
+  const synthetic = data?.users?.find((u) => u.email === email)?.id;
+  if (synthetic) return synthetic;
+  const { data: wash } = await db.from('car_washes').select('owner_id').eq('phone', `0${c}`).order('created_at').limit(1).maybeSingle();
+  return wash?.owner_id ?? null;
 }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
 
   try {
-    const { action, phone, code, password, purpose, city } = await req.json();
+    const { action, phone, code, password, purpose, city, channel } = await req.json();
     const c = core(phone);
     if (!/^7\d{9}$/.test(c)) return json({ error: 'رقم الهاتف غير صحيح' }, 400);
 
@@ -143,8 +169,21 @@ Deno.serve(async (req) => {
         { onConflict: 'phone' }
       );
 
-      await sendSms(`964${c}`, value);
-      return json({ ok: true });
+      // قناةُ الإرسال: تيليجرام بطلبٍ صريح، أو الرسائلُ ثمّ تيليجرام حين ينفد رصيدُها/تسقط —
+      // لمن شارك رقمَه مع بوت «محطة الغسل» أو ربط محطّتَه ببوت الوقود. الرمزُ نفسُه بالحدود نفسِها.
+      if (channel === 'telegram') {
+        const via = await sendTelegram(c, value);
+        if (!via) return json({ error: 'رقمك غير مربوط ببوت تيليجرام. افتح بوت «محطة الغسل» وشارك رقمك، ثمّ أعد الطلب.' }, 404);
+        return json({ ok: true, via });
+      }
+      try {
+        await sendSms(`964${c}`, value);
+        return json({ ok: true });
+      } catch (e) {
+        const via = await sendTelegram(c, value);
+        if (via) return json({ ok: true, via });
+        throw e;
+      }
     }
 
     if (action === 'verify') {

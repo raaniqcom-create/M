@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { iqd } from '@/lib/wash';
-import { Sheet } from './Sheet';
+import { WashUIIcon as Icon } from './WashUIIcon';
 
 /** مرشّحاتُ دليل المغاسل — كلُّها في الورقة، واثنان منها («مفتوحة الآن» و«يوجد عرض») لهما رقاقةٌ في الصفّ أيضاً. */
 export interface WashFilters {
@@ -35,14 +35,11 @@ export const kindMatches = (kind: string, serviceName: string): boolean =>
 const PRICES = [0, 5000, 10000, 15000];
 const RATINGS = [0, 4, 4.5];
 
-/** عددُ المرشّحات الفعّالة التي لا رقاقةَ لها في الصفّ — لشارة «كل المحطات». */
+/** عددُ المرشّحات الفعّالة التي لا رقاقةَ لها في الصفّ — لشارة «تصفية المغاسل». */
 export const sheetFilterCount = (f: WashFilters): number =>
   Number(!!f.city) + Number(!!f.area.trim()) + Number(f.maxPrice > 0) + Number(f.kinds.length > 0) + Number(f.minRating > 0) + Number(f.bookable);
 
-export const chipCls = (on: boolean) =>
-  `min-h-[36px] whitespace-nowrap rounded-full border px-3 text-[12px] font-bold transition-colors ${
-    on ? 'border-brand bg-brand text-white' : 'border-slate-200 bg-white text-slate-600'
-  }`;
+export const chipCls = (on: boolean) => `wash-filter-chip ${on ? 'active' : ''}`;
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -72,6 +69,12 @@ export function WashFilterSheet({
 }) {
   // مسوّدةٌ تُثبَّت بـ«تطبيق» — فالإغلاقُ بالخلفية لا يغيّر شيئاً.
   const [d, setD] = useState(value);
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const el = dialog.current;
+    if (open && el && !el.open) el.showModal();
+    if (!open && el?.open) el.close();
+  }, [open]);
   useEffect(() => {
     if (open) setD(value);
   }, [open, value]);
@@ -79,11 +82,11 @@ export function WashFilterSheet({
   const toggleKind = (k: string) => set('kinds', d.kinds.includes(k) ? d.kinds.filter((x) => x !== k) : [...d.kinds, k]);
 
   return (
-    <Sheet open={open} onClose={onClose} title="كل المحطات" hint="ضيّق القائمة بما يهمّك، ثمّ اضغط «تطبيق».">
+    <dialog className="wash-filter-dialog" dir="rtl" ref={dialog} onCancel={onClose} onClose={onClose} aria-labelledby="filter-title" onClick={e=>{if(e.target===e.currentTarget)onClose()}}><div className="wash-filter-inner"><div className="wash-filter-head"><h2 id="filter-title">على ذوقك واحتياجك</h2><button type="button" aria-label="إغلاق الفلاتر" onClick={onClose}><Icon name="close"/></button></div><p className="wash-filter-hint">حدد ما يناسبك، ونرتّب لك الخيارات.</p>
       <div className="mt-1">
-        <p className="label">المنطقة</p>
+        <p className="label">المدينة — الأنبار، العراق</p>
         <select value={d.city} onChange={(e) => set('city', e.target.value)} aria-label="المدينة" className="field">
-          <option value="">كل المدن</option>
+          <option value="">كل مدن الأنبار</option>
           {cities.map((c) => (
             <option key={c} value={c}>
               {c}
@@ -161,6 +164,6 @@ export function WashFilterSheet({
           مسح الكل
         </button>
       </div>
-    </Sheet>
+    </div></dialog>
   );
 }

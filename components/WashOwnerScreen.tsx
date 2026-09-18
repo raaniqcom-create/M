@@ -10,6 +10,7 @@ import {
   ACTION_LABELS,
   ACTIVE_STATUSES,
   BOOKING_LABELS,
+  VEHICLE_HINT,
   VEHICLE_LABELS,
   VEHICLE_TYPES,
   at12,
@@ -59,6 +60,7 @@ import {
   SpinnerIcon,
   StarIcon,
   StoreIcon,
+  TagIcon,
   WhatsappIcon,
   XIcon,
 } from './icons';
@@ -111,7 +113,7 @@ const ACTION_CLS: Partial<Record<BookingStatus, string>> = {
 
 function banner(w: CarWash, today: string): { cls: string; text: string } {
   if (w.status === 'pending')
-    return { cls: 'border-amber-300 bg-amber-50 text-amber-900', text: 'طلبك قيد المراجعة — سنتواصل معك لتفعيل الاشتراك' };
+    return { cls: 'border-amber-300 bg-amber-50 text-amber-900', text: 'طلبك قيد المراجعة — ادخل إلى صفحة الاشتراك وأضف إيصال الدفع واكتب في ملاحظات التحويل «المغسلة»' };
   if (w.status === 'rejected')
     return { cls: 'border-red-200 bg-red-50 text-traffic-red', text: `رُفض الطلب${w.admin_note ? ` — ${w.admin_note}` : ''}` };
   if (w.status === 'suspended') return { cls: 'border-red-200 bg-red-50 text-traffic-red', text: 'موقوفة من الإدارة' };
@@ -123,7 +125,7 @@ function banner(w: CarWash, today: string): { cls: string; text: string } {
 }
 
 /** بطاقةُ الاشتراك (§44): الباقةُ وسعرُها وانتهاؤها والمتبقّي وحدودُها وزرُّ التجديد. */
-function SubscriptionCard({ wash, cfg }: { wash: CarWash; cfg: WashConfig | null }) {
+function SubscriptionCard({ wash, cfg, canPay }: { wash: CarWash; cfg: WashConfig | null; canPay: boolean }) {
   const plan = planOf(cfg, wash.plan);
   const left = daysLeft(wash.paid_until);
   const grace = cfg?.grace_days ?? 3;
@@ -179,8 +181,13 @@ function SubscriptionCard({ wash, cfg }: { wash: CarWash; cfg: WashConfig | null
       {(f.sms_monthly_limit ?? 0) > 0 && (
         <p className="mt-1 text-[11px] text-slate-500">رسائل SMS: {num(f.sms_monthly_limit)} شهرياً — تُفعَّل لاحقاً</p>
       )}
+      {canPay && (
+        <a href="/wash/owner/subscription/" className="btn-primary mt-2 w-full text-xs">
+          إدارة الاشتراك
+        </a>
+      )}
       {(left === null || left <= 7) && (
-        <a href={renew} target="_blank" rel="noopener noreferrer" className="btn-primary mt-2 w-full text-xs">
+        <a href={renew} target="_blank" rel="noopener noreferrer" className="btn-ghost mt-2 w-full text-xs">
           <WhatsappIcon className="h-4 w-4" />
           {left === null ? 'تفعيل الاشتراك عبر واتساب' : 'تجديد الاشتراك عبر واتساب'}
         </a>
@@ -362,10 +369,11 @@ export function WashOwnerScreen() {
       ? ([
           { key: 'services', label: 'الخدمات', icon: CarIcon, onClick: () => setSheet('services') },
           { key: 'offers', label: 'العروض', icon: StarIcon, onClick: () => setSheet('offers') },
-          { key: 'hours', label: 'الدوام والمسارب', icon: CalendarIcon, onClick: () => setSheet('hours') },
+          { key: 'hours', label: 'الدوام والخانات', icon: CalendarIcon, onClick: () => setSheet('hours') },
           { key: 'profile', label: 'بيانات المغسلة', icon: StoreIcon, onClick: () => setSheet('profile') },
           { key: 'photo', label: 'الصورة', icon: ImageIcon, onClick: () => setSheet('photo') },
           { key: 'staff', label: 'الموظّفون', icon: UserIcon, onClick: () => setSheet('staff') },
+          ...(asAdmin ? [] : [{ key: 'sub', label: 'الاشتراك', icon: TagIcon, href: '/wash/owner/subscription/' }]),
         ] as IconGridItem[])
       : []),
     { key: 'walkin', label: 'سيارة الآن', icon: PlusIcon, onClick: () => setSheet('walkin') },
@@ -450,9 +458,16 @@ export function WashOwnerScreen() {
       )}
 
       {wash.status === 'approved' ? (
-        <SubscriptionCard wash={wash} cfg={cfg} />
+        <SubscriptionCard wash={wash} cfg={cfg} canPay={owns && !asAdmin} />
       ) : (
-        <p className={`mt-4 rounded-xl border p-3 text-[12.5px] font-bold leading-relaxed ${note.cls}`}>{note.text}</p>
+        <>
+          <p className={`mt-4 rounded-xl border p-3 text-[12.5px] font-bold leading-relaxed ${note.cls}`}>{note.text}</p>
+          {wash.status === 'pending' && owns && !asAdmin && (
+            <a href="/wash/owner/subscription/" className="btn-primary mt-2 w-full text-xs">
+              إدارة الاشتراك — ارفع إيصال الدفع
+            </a>
+          )}
+        </>
       )}
 
       <section className="mt-3">
@@ -611,7 +626,7 @@ export function WashOwnerScreen() {
           />
         )}
       </Sheet>
-      <Sheet open={sheet === 'hours'} onClose={() => setSheet(null)} title="الدوام والمسارب">
+      <Sheet open={sheet === 'hours'} onClose={() => setSheet(null)} title="الدوام والخانات">
         {sheet === 'hours' && (
           <>
             <HoursEditor wash={wash} onSave={patchWash} />
@@ -636,7 +651,7 @@ export function WashOwnerScreen() {
       <Sheet open={sheet === 'pause'} onClose={() => setSheet(null)} title="إيقاف استقبال الحجوزات" hint="الصفحةُ تبقى ظاهرة، والحجزُ يتوقّف حتى الموعد الذي تختاره.">
         <PauseSheet wash={wash} paused={paused} onSave={async (p) => { const ok = await patchWash(p); if (ok) setSheet(null); }} />
       </Sheet>
-      <Sheet open={sheet === 'walkin'} onClose={() => setSheet(null)} title="سيارة دخلت الآن" hint="تُسجَّل كحجزٍ واصل فيُحجز مسربُها ولا يُعرض للناس.">
+      <Sheet open={sheet === 'walkin'} onClose={() => setSheet(null)} title="سيارة دخلت الآن" hint="تُسجَّل كحجزٍ واصل فيُحجز خانتُها ولا يُعرض للناس.">
         {sheet === 'walkin' && (
           <WalkInSheet wash={wash} services={services.filter((s) => s.active)} onDone={() => { setSheet(null); void loadBookings(wash.id); }} />
         )}
@@ -684,7 +699,10 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
     setMinutes(s.minutes);
     setActive(s.active);
     setDesc(s.description ?? '');
-    const pr = Object.fromEntries(Object.entries(s.prices ?? {}).map(([k, v]) => [k, String(v)]));
+    // بمفاتيح VEHICLE_TYPES وحدَها: صفٌّ قديمٌ فيه مفاتيحُ التصنيف السابق كان يُقرأ
+    // كما هو ثمّ يُكتب كما هو عند الحفظ — فتبقى الأسعارُ الميّتةُ في القاعدة إلى الأبد.
+    const pr: Record<string, string> = {};
+    for (const v of VEHICLE_TYPES) if (typeof s.prices?.[v] === 'number') pr[v] = String(s.prices[v]);
     setPrices(pr);
     setByVehicle(Object.keys(pr).length > 0);
   }
@@ -696,9 +714,16 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
     setBusy(true);
     setErr(null);
     // أسعارُ الأنواع: ما كُتب رقماً صالحاً فقط، وإلّا null (سعرٌ واحد).
-    const pv = byVehicle
-      ? Object.fromEntries(Object.entries(prices).map(([k, v]) => [k, Number(v)]).filter(([, v]) => Number.isFinite(v) && (v as number) >= 0))
-      : {};
+    // الفارغُ ليس صفراً: Number('')===0 وهو رقمٌ صالحٌ ≥0، فحقلٌ مُسِحَ كان يُحفظ سعراً
+    // حقيقيّاً بصفرٍ فتصير الخدمةُ مجّانيّةً لذلك الحجم. والدورانُ على VEHICLE_TYPES
+    // يمنع أيضاً إعادةَ كتابةِ مفتاحٍ قديمٍ مهما جاء في prices.
+    const pv: Record<string, number> = {};
+    if (byVehicle)
+      for (const v of VEHICLE_TYPES) {
+        const raw = prices[v]?.trim();
+        const nv = Number(raw);
+        if (raw && Number.isFinite(nv) && nv >= 0) pv[v] = nv;
+      }
     const row = { name: name.trim(), price: p, minutes, active, prices: Object.keys(pv).length ? pv : null, description: desc.trim().slice(0, 120) || null };
     const { error } = editing
       ? await supabase.from('wash_services').update(row).eq('id', editing.id)
@@ -730,10 +755,11 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
                 </span>
                 {s.description && <span className="block truncate text-[11px] text-slate-500">{s.description}</span>}
               </span>
-              <button type="button" onClick={() => edit(s)} className="font-bold text-brand-700 underline">
+              {/* الهدفُ 44px بلا تطويلِ الصفّ: -my-2 يبتلع حشوَ الصفّ فيصير الزرُّ بارتفاعه. */}
+              <button type="button" onClick={() => edit(s)} className="-my-2 flex min-h-[44px] items-center px-2 font-bold text-brand-700 underline">
                 تعديل
               </button>
-              <button type="button" onClick={() => remove(s)} className="font-bold text-traffic-red underline">
+              <button type="button" onClick={() => remove(s)} className="-my-2 flex min-h-[44px] items-center px-2 font-bold text-traffic-red underline">
                 حذف
               </button>
             </li>
@@ -774,7 +800,9 @@ function ServicesEditor({ washId, rows, onChange }: { washId: string; rows: Wash
           <div className="grid grid-cols-2 gap-2">
             {VEHICLE_TYPES.map((v) => (
               <label key={v} className="text-[11px] text-slate-600">
-                {VEHICLE_LABELS[v]}
+                <span className="block font-bold text-slate-700">{VEHICLE_LABELS[v]}</span>
+                {/* التسمياتُ تختلف بين الناس — السطرُ يحسم ما يندرج تحت كلّ حجم قبل أن يُسعّره. */}
+                <span className="block text-[11px] leading-tight text-slate-500">{VEHICLE_HINT[v]}</span>
                 <input
                   type="number"
                   inputMode="numeric"
@@ -899,7 +927,7 @@ function OffersEditor({ washId, rows, services, enabled, onChange }: { washId: s
                   {o.description && <span className="block truncate text-[11px] text-slate-400">{o.description}</span>}
                 </span>
               </label>
-              <button type="button" onClick={() => remove(o)} className="font-bold text-traffic-red underline">
+              <button type="button" onClick={() => remove(o)} className="-my-2 flex min-h-[44px] items-center px-2 font-bold text-traffic-red underline">
                 حذف
               </button>
             </li>
@@ -963,7 +991,7 @@ function OffersEditor({ washId, rows, services, enabled, onChange }: { washId: s
   );
 }
 
-/* ── الدوام والمسارب ─────────────────────────────────────────────────────── */
+/* ── الدوام والخانات ─────────────────────────────────────────────────────── */
 function HoursEditor({ wash, onSave }: { wash: CarWash; onSave: (p: Partial<CarWash>) => Promise<boolean> }) {
   const [is24h, setIs24h] = useState(wash.is_24h);
   const [opensAt, setOpensAt] = useState(wash.opens_at);
@@ -1004,7 +1032,7 @@ function HoursEditor({ wash, onSave }: { wash: CarWash; onSave: (p: Partial<CarW
       )}
       <div>
         <label htmlFor="hours-bays" className="label">
-          المسارب
+          عدد الخانات
         </label>
         <select id="hours-bays" value={bays} onChange={(e) => setBays(Number(e.target.value))} className="field">
           {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
@@ -1013,7 +1041,7 @@ function HoursEditor({ wash, onSave }: { wash: CarWash; onSave: (p: Partial<CarW
             </option>
           ))}
         </select>
-        <p className="mt-1 text-[11px] text-slate-400">كم سيّارة تُغسل في الوقت نفسه؟</p>
+        <p className="mt-1 text-[11px] text-slate-400">كم خانة؟ — كم سيارة تُغسل في الوقت نفسه</p>
       </div>
       <div>
         <label htmlFor="hours-slot" className="label">
@@ -1192,7 +1220,7 @@ function ClosuresEditor({ washId }: { washId: string }) {
                 <span className="block font-bold">من {shortAt(c.starts_at)} إلى {shortAt(c.ends_at)}</span>
                 {c.reason && <span className="text-slate-500">{c.reason}</span>}
               </span>
-              <button type="button" onClick={() => remove(c.id)} className="font-bold text-traffic-red underline">حذف</button>
+              <button type="button" onClick={() => remove(c.id)} className="-my-2 flex min-h-[44px] items-center px-2 font-bold text-traffic-red underline">حذف</button>
             </li>
           ))}
         </ul>

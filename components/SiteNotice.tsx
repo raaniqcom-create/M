@@ -32,6 +32,8 @@ export function SiteNotice() {
     void (async () => {
       // الرابطُ نفسُه يتخطّى الاثنتين: من يفحص لا يريد شاشةً من أيّ نوع.
       if (new URLSearchParams(window.location.search).get('live') === '1') return;
+      // إنذارُ الوقود لا يظهر في «المغسلة التقنية».
+      if (window.location.pathname.startsWith('/wash')) return;
       const status = await readStatus();
       if (!alive) return;
       // الصيانةُ الواقعةُ تسبق الإنذارَ بها: شاشتان معاً عبثٌ، والواقعُ أولى.
