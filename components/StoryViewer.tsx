@@ -23,7 +23,12 @@ async function recordView(id: string, at: string, fresh: boolean): Promise<numbe
 }
 
 const STEP_MS = 6000;
-/** كلُّ سطرٍ يظهر بعد الذي قبله بهذا القدر — ليُقرأ بالترتيب. */
+/** ما كانت السطورُ تتأخّر به واحداً بعد واحد — صار وقتَ قراءةٍ لا وقتَ ظهور.
+ *
+ *  «اجعل السطور تظهر مرة واحدة» — صاحبُ المنصّة، ١٨ أيلول. والتتابعُ كان
+ *  يُقرأ بالترتيب فعلاً، لكنّ قارئاً يبحث عن اسم مدينته في خمسة أسطر لا
+ *  يقرأ بالترتيب: ينظر إلى الشاشة كلِّها دفعةً، ويمرّر قبل أن يبلغ السطرُ
+ *  الأخيرُ ظهورَه. فيُقاس الطولُ به ولا يُؤخَّر به عرض. */
 const LINE_MS = 1500;
 
 /** مدّةُ القصّة: ستُّ ثوانٍ للصورة، وللنصّ ما يكفي لقراءته سطراً سطراً
@@ -179,7 +184,7 @@ export function StoryViewer({
                 <li
                   key={`${story.id}-${k}`}
                   className="story-line"
-                  style={{ animationDelay: `${k * LINE_MS}ms`, animationPlayState: paused ? 'paused' : 'running' }}
+                  style={{ animationPlayState: paused ? 'paused' : 'running' }}
                 >
                   {l}
                 </li>
