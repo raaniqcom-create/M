@@ -127,9 +127,25 @@ function Panel() {
     setProducts((prev) =>
       prev.map((p) => (p.product === product ? { ...p, is_available: next } : p))
     );
+    // ── والإشعالُ يُصفّر موعدَ النفاد ──────────────────────────────────────
+    //
+    // كان هذا المسلكُ يكتب `is_available` و`updated_at` وحدَهما، وهو أحدُ
+    // الخمسة التي يقول 20260903_runs_out_at.sql:21-28 إنّها **يجب** أن
+    // تُصفّره. فصفٌّ يحمل موعدَ نفادٍ مضى يُشعَل من هنا، ثمّ يطفئه
+    // `expire_run_outs` بعد خمس دقائق — «حاولت فتح حالة الوقود لم تتم».
+    //
+    // ومعه حارسٌ في القاعدة (20260929_runs_out_guard.sql) يمنعها في المسالك
+    // كلِّها. وهذا يبقى: الشاشةُ لا تنتظر مُشغّلاً لتقول الصدق.
+    const now = new Date().toISOString();
+    const was = products.find((p) => p.product === product)?.is_available === true;
     const { error } = await supabase
       .from('station_products')
-      .update({ is_available: next, updated_at: new Date().toISOString() })
+      .update({
+        is_available: next,
+        updated_at: now,
+        // والانتقالُ من التوفّر نفادٌ — كما في لوحة المالك.
+        ...(next ? { runs_out_at: null } : was ? { runs_out_at: now } : {}),
+      })
       .eq('station_id', station.id)
       .eq('product', product);
 
