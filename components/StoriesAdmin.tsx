@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ageLabel } from '@/lib/hours';
-import { platformStory, type PlatformStoryRow } from '@/lib/stories';
+import { DAY_TOKEN, platformStory, type PlatformStoryRow } from '@/lib/stories';
 import { StoryViewer } from './StoryViewer';
 import { encodeStory } from './StoryPreview';
 import { SpinnerIcon } from './icons';
@@ -29,12 +29,14 @@ export function StoriesAdmin() {
   const [preview, setPreview] = useState(false);
   /** موعدُ النشر (اختياري) — فارغٌ = الآن. المستقبلُ لا يراه الزوّار حتى يحين (RLS). */
   const [when, setWhen] = useState('');
+  /** اليومُ الذي تتحدّث عنه الحالة — تُحسب منه «{اليوم}» وتُطوى بانقضائه. */
+  const [forDate, setForDate] = useState('');
   const [previewRow, setPreviewRow] = useState<Row | null>(null);
 
   const load = useCallback(async () => {
     const { data } = await supabase
       .from('platform_stories')
-      .select('id, title, lines, image_url, href, label, published_at, active, pinned')
+      .select('id, title, lines, image_url, href, label, published_at, active, pinned, for_date')
       .order('pinned', { ascending: false })
       .order('published_at', { ascending: false });
     setRows((data ?? []) as Row[]);
@@ -52,6 +54,8 @@ export function StoriesAdmin() {
     href: href.trim() || null,
     label: label.trim() || null,
     published_at: new Date().toISOString(),
+    // فالمعاينةُ تُظهر الكلمةَ كما سيقرؤها الناس، لا العلامةَ خاماً.
+    for_date: forDate || null,
   };
   const valid = !!draft.title && lines.length > 0;
 
@@ -67,6 +71,7 @@ export function StoriesAdmin() {
       href: draft.href,
       label: draft.label,
       ...(at && !Number.isNaN(at.getTime()) ? { published_at: at.toISOString() } : {}),
+      for_date: forDate || null,
     });
     setBusy(false);
     if (error) return setNote('تعذّر الحفظ. أعد المحاولة.');
@@ -76,6 +81,7 @@ export function StoriesAdmin() {
     setHref('');
     setLabel('');
     setWhen('');
+    setForDate('');
     setNote(at && at.getTime() > Date.now()
       ? `جُدولت — تظهر للزوّار ${at.toLocaleString('ar-IQ')}.`
       : 'نُشرت — تظهر أوّلَ شريط الحالات لكلّ الزوّار.');
@@ -168,6 +174,27 @@ export function StoriesAdmin() {
         <div>
           <label htmlFor="st-when" className="label">موعد النشر (اختياري — فارغٌ = الآن)</label>
           <input id="st-when" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="field" dir="ltr" />
+        </div>
+
+        {/* اليومُ الذي تتحدّث عنه الحالة — لا موعدُ نشرها.
+            نُشرت حالةٌ 23:54 تقول «جدول الغد» فصارت بعد ستّ دقائقَ تقول عن
+            جدول اليوم إنّه جدولُ الغد. فيُخزَّن اليومُ وتُحسب الكلمة. */}
+        <div>
+          <label htmlFor="st-for" className="label">
+            اليوم الذي تتحدّث عنه (اختياري)
+          </label>
+          <input
+            id="st-for"
+            type="date"
+            value={forDate}
+            onChange={(e) => setForDate(e.target.value)}
+            className="field"
+            dir="ltr"
+          />
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+            اكتب <b className="text-slate-600">{DAY_TOKEN}</b> في النصّ فيصير «اليوم» أو «غداً» أو
+            اسمَ اليوم بحسب متى فُتحت الحالة. وتُطوى وحدَها بعد انقضاء يومها.
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-2">

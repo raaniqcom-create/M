@@ -35,7 +35,7 @@ export function StoryStrip({
     let alive = true;
     supabase
       .from('platform_stories')
-      .select('id, title, lines, image_url, href, label, published_at, pinned')
+      .select('id, title, lines, image_url, href, label, published_at, pinned, for_date')
       .order('pinned', { ascending: false })
       .order('published_at', { ascending: false })
       .limit(5)

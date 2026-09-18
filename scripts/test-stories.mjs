@@ -148,3 +148,38 @@ ok('حالاتُ المنصّة من القاعدة ولو بلا محطات —
 });
 
 console.log(`\n✔ ${n} تحقّقاً — القصّةُ اشتقاقٌ من isOffered، والاهتماماتُ ترشّح.`);
+
+// ── الحالةُ تحمل يومَها، والكلمةُ تُحسب عند القراءة ──────────────────────
+//
+// نُشرت حالةٌ 23:54 تقول «جدول الغد»، ومضى منتصفُ الليل بعدها بستّ دقائق —
+// فصارت تقول عن جدول اليوم إنّه جدولُ الغد.
+{
+  const { DAY_TOKEN, platformStory, storyDayWord, storyExpired } = await import('../lib/stories.ts');
+  const bg = (o) => new Date(Date.now() + o * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Baghdad' });
+  const NOW = Date.now();
+
+  assert.equal(storyDayWord(bg(0), NOW), 'اليوم');
+  assert.equal(storyDayWord(bg(1), NOW), 'غداً');
+  // وما بَعُد يُسمّى باسمه لا برقم
+  assert.ok(/^[\u0600-\u06FF]+$/.test(storyDayWord(bg(3), NOW)), 'اسمُ يومٍ عربيّ');
+  assert.ok(!/[٠-٩]/.test(storyDayWord(bg(3), NOW)), 'بلا أرقامٍ هنديّة');
+
+  const row = (forDate) => ({
+    id: 's', title: `جدول ${DAY_TOKEN}`, lines: [`${DAY_TOKEN}: 69 محطة`],
+    image_url: null, href: null, label: null, published_at: new Date().toISOString(), for_date: forDate,
+  });
+
+  // **الحالةُ نفسُها** تُقرأ «غداً» قبل منتصف الليل و«اليوم» بعده
+  assert.equal(platformStory(row(bg(1)), NOW).news.title, 'جدول غداً');
+  assert.equal(platformStory(row(bg(1)), NOW + 86_400_000).news.title, 'جدول اليوم');
+  assert.equal(platformStory(row(bg(0)), NOW).news.lines[0], 'اليوم: 69 محطة');
+
+  // وبلا يومٍ تبقى العلامةُ نصّاً خاماً — فلا تُمحى بصمت
+  assert.equal(platformStory(row(null), NOW).news.title, `جدول ${DAY_TOKEN}`);
+
+  // وما انقضى يومُه يُطوى
+  assert.ok(storyExpired(row(bg(-1)), NOW), 'أمسِ تُطوى');
+  assert.ok(!storyExpired(row(bg(0)), NOW), 'واليومُ يبقى');
+  assert.ok(!storyExpired(row(null), NOW), 'وبلا يومٍ لا تنتهي');
+  console.log('  ✓ يومُ الحالة يُحسب عند القراءة ويُطوى بانقضائه');
+}

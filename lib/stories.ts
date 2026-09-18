@@ -1,6 +1,7 @@
 import type { AlertChoice } from './alerts.ts';
 import type { OpenAnnouncement } from './announcements.ts';
 import { isOffered } from './products.ts';
+import { baghdadDay } from './hours.ts';
 import type { FuelProduct, StationWithStatus } from '../types/database.ts';
 
 /** «حالة المحطة» — قصّةٌ كحالات إنستغرام: محطةٌ عندها الآن وقودٌ يُعرض.
@@ -52,7 +53,35 @@ export interface PlatformStoryRow {
   label: string | null;
   published_at: string;
   pinned?: boolean;
+  /** اليومُ الذي تتحدّث عنه — تُحسب منه «{اليوم}»، وما مضى لا يُعرض. */
+  for_date?: string | null;
 }
+
+/** علامةُ اليوم في نصّ الحالة — تُكتب مرّةً وتُقرأ بحسب متى فُتحت.
+ *
+ *  ── ولماذا لا تُكتب الكلمةُ نفسُها ──────────────────────────────────────
+ *
+ *  نُشرت حالةٌ 23:54 تقول «جدول الغد»، ومضى منتصفُ الليل بعدها بستّ دقائق —
+ *  فصارت تقول عن جدول اليوم إنّه جدولُ الغد. ونصُّ الحالة ثابتٌ في القاعدة
+ *  والزمنُ يجري تحته، فمن كتبها ليس حاضراً حين تُقرأ.
+ *
+ *  وهي أختُ «{المدينة}» في اعتذار الجدول: يُخزَّن ما لا يتبدّل (اليومُ،
+ *  والمدنُ المستهدَفة)، ويُحسب ما يتبدّل (الكلمةُ، واسمُ مدينة القارئ). */
+export const DAY_TOKEN = '{اليوم}';
+
+/** «اليوم» · «غداً» · وإلّا اسمُ اليوم بأرقامٍ لاتينيّة. */
+export function storyDayWord(forDate: string, now = Date.now()): string {
+  if (forDate === baghdadDay(now)) return 'اليوم';
+  if (forDate === baghdadDay(now, 1)) return 'غداً';
+  return new Date(`${forDate}T12:00:00+03:00`).toLocaleDateString('ar-IQ-u-nu-latn', {
+    timeZone: 'Asia/Baghdad',
+    weekday: 'long',
+  });
+}
+
+/** هل انقضى يومُها؟ حالةٌ عن جدولٍ مضى ليست خبراً ناقصاً بل خبرٌ خاطئ. */
+export const storyExpired = (r: PlatformStoryRow, now = Date.now()): boolean =>
+  !!r.for_date && r.for_date < baghdadDay(now);
 
 /** اسمُ حلقة المنصّة من عنوانها: كلمةٌ لاتينيّة أولى تُؤخذ كما هي («CarPlay»)،
  *  وإلّا قاعدةُ `shortName` بعد إسقاط علامات الترقيم («الآيفون:» ← «الآيفون»). */
@@ -72,18 +101,22 @@ export function platformShort(title: string): string {
  *  `at` هي `published_at` **حرفيّاً** كما جاءت من القاعدة: «رُئيت» مساواةُ
  *  نصّ، وعدّادُ المشاهدات مفتاحُه هذا النصّ — فإعادةُ النشر (published_at جديدة)
  *  تعيد الحلقةَ خضراء وتبدأ عدّاداً جديداً. */
-export function platformStory(r: PlatformStoryRow): Story {
+export function platformStory(r: PlatformStoryRow, now = Date.now()): Story {
+  // والكلمةُ تُوضع هنا، عند القراءة — فمن فتح الحالةَ بعد منتصف الليل قرأ
+  // «اليوم» عن اليوم الذي كُتب له «غداً» قبل ساعة.
+  const day = r.for_date ? storyDayWord(r.for_date, now) : '';
+  const say = (s: string) => (r.for_date ? s.split(DAY_TOKEN).join(day) : s);
   return {
     id: r.id,
     name: 'المحطة التقنية',
     // حلقاتُ المنصّة لا تحمل الاسمَ نفسَه: البارزُ من العنوان («العبوات»، «دوري»، «CarPlay»).
-    short: platformShort(r.title),
+    short: platformShort(say(r.title)),
     slug: null,
     city: '',
     products: [],
     at: r.published_at,
     kind: 'platform',
-    news: { title: r.title, lines: r.lines, image_url: r.image_url, href: r.href, label: r.label },
+    news: { title: say(r.title), lines: r.lines.map(say), image_url: r.image_url, href: r.href, label: r.label },
     pinned: !!r.pinned,
   };
 }
@@ -180,7 +213,9 @@ export function storiesFor(
   // حلقاتٍ رماديّة للمنصّة تحتلّ يمينَ الشريط وتدفع محطةً أعلنت قبل دقائق إلى
   // ما وراء الحافّة — «أريد الحالاتِ الأحدثَ تظهر يميناً وهكذا» (١٤ أيلول).
   // واللونُ يقول ما رُئي؛ الموضعُ يقول ما جدّ.
-  const all = [...platform.map(platformStory), ...out];
+  // وما مضى يومُه يُطوى هنا لا في الاستعلام: الشريطُ يُبنى مرّةً في المتصفّح،
+  // والصفُّ يبقى في القاعدة ليراه المشغّلُ في لوحته.
+  const all = [...platform.filter((r) => !storyExpired(r)).map((r) => platformStory(r)), ...out];
   // المثبَّتُ أوّلاً (يميناً)، ثمّ بالزمن وحدَه.
   all.sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.at.localeCompare(a.at));
   return all;
