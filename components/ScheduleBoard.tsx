@@ -5,7 +5,7 @@ import { ScheduleNotice } from './ScheduleNotice';
 import { PRODUCT_LABELS } from '@/lib/products';
 import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
-import { baghdadDate, byProduct, type BoardGroup, type BoardRow } from '@/lib/scheduleData';
+import { baghdadDate, byProduct, purposeLabel, type BoardGroup, type BoardRow } from '@/lib/scheduleData';
 import { placeHref, shortAddress } from '@/lib/scheduleRoute';
 
 /** جدولُ الوقود — الخبرُ الوحيد الذي يُقال قبل وقوعه.
@@ -66,6 +66,11 @@ function Row({ r }: { r: BoardRow }) {
         </a>
         {address && (
           <span className={`block text-[11px] leading-snug ${dim ? 'text-slate-300' : 'text-slate-500'}`}>({address})</span>
+        )}
+        {purposeLabel(r.purpose ?? null) && (
+          <span className="mt-0.5 block w-fit rounded bg-slate-100 px-1.5 py-px text-[10px] font-extrabold text-slate-600">
+            {purposeLabel(r.purpose ?? null)}
+          </span>
         )}
         {r.state === 'expected' && whenLabel(r.period, r.time) && (
           <span className="mr-1.5 text-[10.5px] text-amber-700">
@@ -179,13 +184,15 @@ export function ScheduleBoard({
             {g.products.map((p) => PRODUCT_LABELS[p]).join(' · ')}
           </p>
 
-          {/* «الرمادي | بانزين محسن» ثمّ محطاتُه — المنتجُ عنوانٌ لا عمود. */}
-          {byProduct(g.rows).map(({ product, rows }) => (
-            <table key={product} className="mt-2 w-full min-w-[17rem] text-right">
+          {/* «الرمادي | كاز · مصفى الصينية» ثمّ محطاتُه — المنتجُ والمصفى
+              عنوانٌ لا عمود. والمصفى يُذكر إن وُرد: منشورُ القناة لا يسمّيه. */}
+          {byProduct(g.rows).map(({ product, refinery, rows }) => (
+            <table key={`${product}:${refinery ?? ''}`} className="mt-2 w-full min-w-[17rem] text-right">
               <thead>
                 <tr>
                   <th colSpan={3} className="rounded-lg bg-brand-50 px-2 py-1.5 text-right text-[11.5px] font-extrabold text-brand-900">
                     {g.city ?? 'منطقةٌ لم تُذكر'} <span className="text-brand-400">|</span> {PRODUCT_LABELS[product]}
+                    {refinery && <span className="font-bold text-brand-700"> · {refinery}</span>}
                   </th>
                 </tr>
               </thead>

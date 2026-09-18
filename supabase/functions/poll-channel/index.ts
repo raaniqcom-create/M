@@ -181,6 +181,9 @@ Deno.serve(async (req) => {
       .from('fuel_schedule')
       .select('product, city')
       .eq('for_date', day)
+      // وحمولةُ المولّدات وخطِّ التصدير لا تُباع لسائق: `publishDraft` يستثنيها
+      // من إشعاره، فشبكةُ الصباح لا تلتقطها من خلفه.
+      .is('purpose', null)
       .is('alerted_at', null);
 
     let net: { due: number; cities: string[]; products: string[]; sent: number; why: string } | null = null;

@@ -15,6 +15,8 @@ import {
   parseSchedule,
   readManualLine,
   readProduct,
+  readSection,
+  splitPurpose,
 } from '../lib/schedule.ts';
 
 // ــ منشورٌ ذو عنوان، سبعةُ أسماء (٢٠:٣٢) ــــــــــــــــــــــــــــــــــــ
@@ -145,6 +147,131 @@ assert.deepEqual(
 assert.ok(!th.rows.some((r) => r.name.includes('المحطات')), 'العنوانُ الثاني ليس محطة');
 
 console.log('عنوانان في منشورٍ واحد: سليم.');
+
+
+// ــ جدولُ المصافي: «وقود | مصفى» وتحته أسماءٌ مجرّدة ــــــــــــــــــــــ
+//
+// صيغةٌ ثالثةٌ بدأ صاحبُ المنصّة يستلمها ٢٠٢٦-٠٩-١٨، منقولةٌ حرفيّاً (مختصرة
+// في عدد الأسماء، كاملةٌ في الأشكال: العارضةُ بمسافةٍ وبلا مسافة، والقوسُ
+// بفراغٍ داخله، والوسمُ بشرطةٍ وبتطويلٍ وبلا فاصلٍ ظاهر).
+//
+// ولا كلمةَ من قرائن الصياغة فيها — لا «غدا» ولا «تجهيز» ولا «المحطات
+// التالية» — فلو بقي التمييزُ على القرائن وحدَها لَرُدّ المنشورُ كلُّه ولم
+// يُعرض على الإدارة أصلاً.
+const REFINERY = `بانزين عادي | مصفى الصمود (بيجي)
+الخالدية
+غصن الزيتون
+الواحة الخضراء
+
+المحسن| مصفى كركوك
+جوهرة الفلوجة
+المرزوق
+
+كاز | مستودع الانبار الجديد
+مركز توزيع الرمادي - مولدات
+مركز توزيع الفلوجة- مولدات
+الصقلاوية الحكومية - مولدات
+
+كاز | مصفى الصينية
+مركز توزيع الفلوجة -مولدات
+الفلوجة الجديدة الحكومية
+طليحة الحكومية - خط سير تصدير
+طريبيل الحكومية - خط سير تصدير
+عرعر الحكومية
+
+كاز | مصفى الصمود
+جوهرة الفلوجة ـ مولدات
+عبد الحكيم
+الغزال
+
+كاز | مركز توزيع حديثة
+بوابة الرافدين
+الايمن
+
+كاز | مصفى الصمود ( بيجي)
+ذراع دجلة`;
+
+// ــ التمييز ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+assert.ok(looksLikeSchedule(REFINERY), 'صيغةُ المصافي بلا قرينةِ صياغة — تُقرأ بشكلها');
+assert.equal(looksLikeSchedule('كاز | مصفى الصمود'), false, 'عنوانٌ بلا جسمٍ ليس جدولاً');
+assert.equal(looksLikeSchedule('محطة النصر | الرمادي | كاز'), false, 'سطرٌ يدويٌّ ليس عنوانَ قسم');
+assert.ok(looksLikeSchedule(POST_A), 'وما كان يُقرأ يبقى يُقرأ');
+
+assert.deepEqual(readSection('كاز | مصفى الصينية'), {
+  product: 'kerosene',
+  refinery: 'مصفى الصينية',
+});
+assert.deepEqual(
+  readSection('المحسن| مصفى كركوك'),
+  { product: 'gasoline_premium', refinery: 'مصفى كركوك' },
+  'بلا مسافةٍ قبل العارضة، وبأداة التعريف'
+);
+assert.deepEqual(
+  readSection('كاز | مصفى الصمود ( بيجي)'),
+  { product: 'kerosene', refinery: 'مصفى الصمود (بيجي)' },
+  'الصيغتان مصفًى واحد'
+);
+assert.equal(readSection('محطة النصر | الرمادي | كاز'), null, 'يسارُه اسمٌ لا وقود');
+assert.equal(readSection('مركز توزيع الرمادي - مولدات'), null, 'وسطرُ الجسم ليس عنواناً');
+assert.equal(readSection('| مصفى الصمود | عادي |'), null, 'وصفُّ كتابٍ رسميٍّ يسارُه فارغ');
+
+// ــ ١ · المصفى لا يُنشر محطة ــــــــــــــــــــــــــــــــــــــــــــــ
+const rf = parseSchedule(REFINERY);
+assert.ok(rf, 'لم يُقرأ جدولُ المصافي');
+assert.equal(rf.rows.length, 19, `تسعةَ عشرَ اسماً، وقُرئ ${rf.rows.length}`);
+assert.ok(!rf.rows.some((r) => /مصفى|مستودع/.test(r.name)), 'اسمُ المصفى ليس محطة');
+assert.ok(
+  !rf.rows.some((r) => r.name.includes('مركز توزيع حديثة')),
+  'ومركزُ التوزيع في العنوان مصفًى لا محطة'
+);
+
+// ــ ٢ · والوقودُ يجري مع أقسام المصافي ــــــــــــــــــــــــــــــــــــ
+const byPr = {};
+for (const r of rf.rows) byPr[r.product] = (byPr[r.product] ?? 0) + 1;
+assert.deepEqual(
+  byPr,
+  { gasoline_regular: 3, gasoline_premium: 2, kerosene: 14 },
+  `الوقودُ لا يتبع أقسامَه: ${JSON.stringify(byPr)}`
+);
+const at = (n, p) => rf.rows.find((r) => r.name === n && (!p || r.product === p));
+assert.equal(at('المرزوق').product, 'gasoline_premium', '«المحسن|» بلا مسافة');
+assert.equal(at('ذراع دجلة').product, 'kerosene', 'وآخرُ قسمٍ في المنشور');
+assert.equal(at('الخالدية').product, 'gasoline_regular');
+
+// ــ ٣ · والوسمُ لا يُبتلع في الاسم ــــــــــــــــــــــــــــــــــــــــ
+assert.ok(!rf.rows.some((r) => r.name.includes('مولدات')), '«مولدات» وسمٌ لا جزءٌ من اسم');
+assert.ok(!rf.rows.some((r) => r.name.includes('تصدير')), 'وكذلك «خط سير تصدير»');
+assert.equal(at('مركز توزيع الرمادي').purpose, 'generators');
+assert.equal(at('طليحة الحكومية').purpose, 'export');
+assert.equal(at('جوهرة الفلوجة', 'kerosene').purpose, 'generators', 'وبالتطويل U+0640');
+assert.equal(at('جوهرة الفلوجة', 'gasoline_premium').purpose, null, 'واسمٌ بلا وسمٍ يبقى بلا وسم');
+assert.equal(at('الفلوجة الجديدة الحكومية').purpose, null);
+
+// وما لم يُعرَف يبقى في الاسم ولا يُقصّ صامتاً
+assert.equal(splitPurpose('الرمادي - تصدير').purpose, null);
+assert.equal(splitPurpose('الرمادي - تصدير').body, 'الرمادي - تصدير');
+assert.equal(splitPurpose('محطة الغزال — مولدات').body, 'محطة الغزال', 'وشرطةٌ طويلة');
+assert.equal(splitPurpose('مركز توزيع الرمادي مولدات').purpose, 'generators', 'وبلا فاصلٍ ظاهر');
+assert.equal(splitPurpose('مولدات').body, 'مولدات', 'وسمٌ بلا محطةٍ اسمٌ لم يُفهم');
+assert.equal(splitPurpose('مولدات الرمادي الحكومية').purpose, null, 'وفي الصدر ليس وسماً');
+
+// ــ ٤ · والمصفى يصل السطرَ، والصيغتان قسمٌ واحد ــــــــــــــــــــــــــ
+assert.equal(at('ذراع دجلة').refinery, 'مصفى الصمود (بيجي)');
+assert.equal(at('الخالدية').refinery, 'مصفى الصمود (بيجي)');
+assert.equal(new Set(rf.rows.map((r) => r.refinery)).size, 6, 'ستّةُ مصافٍ من سبعة عناوين');
+
+// ــ ٥ · وصيغتان في رسالةٍ واحدة — poll-channel يلصق منشوراتِ الليلة ــــــ
+const merged = parseSchedule(`${POST_A}\n${REFINERY}`);
+assert.equal(merged.rows.length, 26, 'سبعةٌ من القناة وتسعةَ عشرَ من المصافي');
+assert.equal(merged.rows.filter((r) => !r.refinery).length, 7, 'وأسطرُ القناة بلا مصفى');
+const flipped = parseSchedule(`${REFINERY}\n${POST_A}`);
+assert.equal(
+  flipped.rows.filter((r) => !r.refinery).length,
+  7,
+  'وعنوانُ القناة يُسقط المصفى ولا يرثه'
+);
+
+console.log('جدولُ المصافي: سليم.');
 
 
 // ــ سطرٌ يكتبه صاحبُ المنصّة بيده ــــــــــــــــــــــــــــــــــــــــــ

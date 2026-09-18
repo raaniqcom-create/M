@@ -2,6 +2,7 @@ import { PRODUCT_ORDER, isOffered } from './products.ts';
 import { hasRunOut } from './hours.ts';
 import { normalizeName } from './nearbyFuel.ts';
 import type { ExpectedPeriod } from './hours.ts';
+import type { SchedulePurpose } from './schedule.ts';
 import type { FuelProduct, StationWithStatus } from '../types/database.ts';
 
 /** بناءُ لوحة الجدول — حسابٌ خالصٌ بلا شبكة.
@@ -20,6 +21,10 @@ export interface ScheduleRow {
   city: string | null;
   linked_station_id: string | null;
   note: string | null;
+  /** المصفى المجهِّز، من عنوان القسم. فارغٌ لمنشور القناة. */
+  refinery?: string | null;
+  /** `generators` مولّدات · `export` خط سير تصدير · فارغٌ = سيارات. */
+  purpose?: SchedulePurpose;
 }
 
 /** «اليوم» و«غداً» بتقويم بغداد لا بساعة الجهاز.
@@ -128,7 +133,18 @@ export interface BoardRow {
   time: string | null;
   /** وردت في الجدول المنشور أيضاً — تأكيدٌ مضاعفٌ لا تكرار. */
   alsoInChannel?: boolean;
+  /** المصفى المجهِّز — يُقسّم اللوحةَ ويُكتب في عنوان القسم. */
+  refinery?: string | null;
+  /** وسمُ الحمولة: مولّداتٌ أو خطُّ تصدير — لا تُباع لسائق. */
+  purpose?: SchedulePurpose;
 }
+
+/** شارةُ الصفّ — وما لا وسمَ له لا شارةَ له.
+ *
+ *  وتُقال صراحةً لأنّ القارئَ يقرأ اللوحةَ ليقصد: صفٌّ للمولّدات لا يُملأ منه
+ *  خزّان، وصفُّ خطّ التصدير حمولةٌ عابرةٌ لا تنزل أصلاً. */
+export const purposeLabel = (p: SchedulePurpose): string | null =>
+  p === 'generators' ? 'للمولّدات' : p === 'export' ? 'خط سير تصدير' : null;
 
 /** أهما محطةٌ واحدة؟
  *
@@ -226,11 +242,18 @@ export function buildBoard(
     if (r.for_date !== day) continue;
 
     const me = { name: r.station_name, city: r.city };
-    const hit = rows.find(
-      (x) =>
-        x.product === r.product &&
-        ((r.linked_station_id && x.stationId === r.linked_station_id) || sameStation(x, me))
-    );
+    // ── وصفُّ المولّدات لا يُدمج في لوحة المحطة ──────────────────────────
+    //
+    // «وصل ✓» على اللوحة تعني اذهب فاملأ. وحمولةُ المولّدات تمرّ بالمحطة ولا
+    // تصير وقوداً في خزّان سيّارة، وحمولةُ خطّ التصدير عابرةٌ لا تنزل — فدمجُها
+    // في حالة المحطة يُلبسها حالةً ليست لها، ويجعل ما لا يُباع يبدو معروضاً.
+    const hit = r.purpose
+      ? undefined
+      : rows.find(
+          (x) =>
+            x.product === r.product &&
+            ((r.linked_station_id && x.stationId === r.linked_station_id) || sameStation(x, me))
+        );
 
     if (hit) {
       // لوحةُ المحطة تغلب — «لأنّها أدقّ»، قرارُ صاحب المنصّة. ويُقال إنّ
@@ -252,11 +275,15 @@ export function buildBoard(
     //
     // فيُبحث في المحطات نفسِها لا في الصفوف المبنيّة. وحالتُها الحيّةُ أصدقُ
     // من الوعد المنشور على كلّ حال — وهو المبدأ المكتوب أعلاه.
-    const st = stations.find(
-      (s) =>
-        (r.linked_station_id && s.id === r.linked_station_id) ||
-        sameStation({ name: s.name, city: s.city }, me)
-    );
+    // وللسبب نفسِه: صفٌّ موسومٌ لا يأخذ حالةَ المحطة الحيّة، بل يبقى صفَّ جدولٍ
+    // بوسمه.
+    const st = r.purpose
+      ? undefined
+      : stations.find(
+          (s) =>
+            (r.linked_station_id && s.id === r.linked_station_id) ||
+            sameStation({ name: s.name, city: s.city }, me)
+        );
     const live = st?.products.find((p) => p.product === r.product);
 
     if (st && live) {
@@ -295,6 +322,8 @@ export function buildBoard(
       state: 'expected',
       period: null,
       time: null,
+      refinery: r.refinery ?? null,
+      purpose: r.purpose ?? null,
     });
   }
 
@@ -372,13 +401,35 @@ const STATE_RANK = { arrived: 0, expected: 1, out: 2 } as const;
  *  والمنتجُ عمودٌ فيه. وقرارُ صاحب المنصّة: جدولٌ لكلّ منطقةٍ ولو بمحطةٍ واحدة.
  *
  *  و`prefer` مناطقُ القارئ: تُرفع ولا يُحجب غيرُها. */
-/** داخل المجموعة: جدولٌ لكلّ منتج — «الرمادي | بانزين محسن» ثمّ محطاته.
- *  اقتراحُ صاحب المنصّة (١٦ أيلول): المنتجُ عنوانٌ لا عمود. */
-export function byProduct(rows: BoardRow[]): { product: FuelProduct; rows: BoardRow[] }[] {
-  const out: { product: FuelProduct; rows: BoardRow[] }[] = [];
+/** داخل المجموعة: جدولٌ لكلّ **(منتج × مصفى)** — «الرمادي │ كاز · مصفى
+ *  الصينية» ثمّ محطاته.
+ *
+ *  المنتجُ عنوانٌ لا عمود — اقتراحُ صاحب المنصّة (١٦ أيلول). والمصفى معه —
+ *  طلبُه (١٨ أيلول): «سنضيف بجانب اسم منتج الوقود في اعلى الجدول: نوع المصفى».
+ *
+ *  ── ولماذا قسمٌ لا سطرٌ في العنوان ──────────────────────────────────────
+ *
+ *  لأنّ المدينةَ الواحدةَ تستلم الوقودَ نفسَه من مصافٍ عدّة: الرمادي في جدول
+ *  ٢٠٢٦-٠٩-١٨ لها كازٌ من ثلاثة — مستودع الأنبار الجديد، ومصفى الصينية، ومصفى
+ *  الصمود. فمصفًى واحدٌ في عنوانٍ واحدٍ يكذب على صفوف المصفيين الآخرين.
+ *
+ *  وما لا مصفى له يتقدّم: منشورُ القناة لا يسمّي مصفًى، وهو الأكثرُ اليوم. */
+export function byProduct(
+  rows: BoardRow[]
+): { product: FuelProduct; refinery: string | null; rows: BoardRow[] }[] {
+  const out: { product: FuelProduct; refinery: string | null; rows: BoardRow[] }[] = [];
   for (const product of PRODUCT_ORDER) {
     const rs = rows.filter((r) => r.product === product);
-    if (rs.length) out.push({ product, rows: rs });
+    if (!rs.length) continue;
+    // بترتيب الورود بعد الفارغ: أقسامُ اللوحة تتبع ترتيبَ المنشور، فلا تقفز
+    // بين تحديثين لأنّ محطةً تبدّل اسمُها.
+    const refs = [...new Set(rs.map((r) => r.refinery ?? null))].sort(
+      (a, b) => Number(a !== null) - Number(b !== null)
+    );
+    for (const refinery of refs) {
+      const sub = rs.filter((r) => (r.refinery ?? null) === refinery);
+      if (sub.length) out.push({ product, refinery, rows: sub });
+    }
   }
   return out;
 }

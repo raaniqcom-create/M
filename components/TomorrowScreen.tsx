@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { PRODUCT_LABELS } from '@/lib/products';
-import { byProduct } from '@/lib/board';
+import { byProduct, purposeLabel } from '@/lib/board';
 import { whenLabel } from '@/lib/hours';
 import { plural } from '@/lib/freshness';
 import { readChoice } from '@/lib/alerts';
@@ -329,12 +329,13 @@ export function TomorrowScreen() {
               {/* «الرمادي | بانزين محسن» ثمّ الاسمُ (العنوانُ المختصر) | المنصّة | العنوان الكامل
                   — اقتراحُ صاحب المنصّة (١٦ أيلول). العنوانُ في الصورة التي تُنشر،
                   والصفحةُ الكاملة لمن يفتح التطبيق. */}
-              {byProduct(g.rows).map(({ product, rows }) => (
-                <table key={product} className="mt-1.5 w-full text-right">
+              {byProduct(g.rows).map(({ product, refinery, rows }) => (
+                <table key={`${product}:${refinery ?? ''}`} className="mt-1.5 w-full text-right">
                   <thead>
                     <tr>
                       <th colSpan={3} className="rounded-md bg-white/15 px-2 py-1 text-right text-[11px] font-extrabold">
                         {g.city ?? 'منطقةٌ لم تُذكر'} <span className="text-white/50">|</span> {PRODUCT_LABELS[product]}
+                        {refinery && <span className="font-bold text-white/80"> · {refinery}</span>}
                       </th>
                     </tr>
                   </thead>
@@ -352,6 +353,11 @@ export function TomorrowScreen() {
                             {r.name}
                             {/* العنوانُ في سطرٍ تحت الاسم: «محطة الحق» ثمّ «(شارع 60 بجانب جسر الطاش)». */}
                             {address && <span className="block text-[10.5px] font-normal leading-snug text-white/70">({address})</span>}
+                            {purposeLabel(r.purpose ?? null) && (
+                              <span className="mt-0.5 block w-fit rounded bg-white/20 px-1.5 py-px text-[9.5px] font-extrabold">
+                                {purposeLabel(r.purpose ?? null)}
+                              </span>
+                            )}
                             {r.state === 'expected' && whenLabel(r.period, r.time) && (
                               <span className="mr-1.5 text-[10px] text-white/60">
                                 {' '}

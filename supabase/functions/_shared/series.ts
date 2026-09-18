@@ -69,7 +69,10 @@ export async function queueMorningSeries(
   const { data: rows, error: rowsErr } = await db
     .from('fuel_schedule')
     .select('product, station_name, city, linked_station_id')
-    .eq('for_date', forDate);
+    .eq('for_date', forDate)
+    // وسلسلةُ الصباح تسمّي للناس محطاتٍ يقصدونها — فلا تُسمّى حمولةُ مولّداتٍ
+    // ولا حمولةٌ عابرةٌ على خطّ تصدير.
+    .is('purpose', null);
   if (rowsErr) {
     out.why = `fuel_schedule: ${rowsErr.message}`;
     return finish(out, opts.dry);

@@ -13,7 +13,15 @@
 //   ٣ ـ **الوعدُ الفائت.** في القاعدة وعودٌ من آب لم تُنظَّف، و`isListed`
 //       تُبقيها إلى الأبد. فاللوحةُ تأخذ يومَها وحدَه.
 import assert from 'node:assert/strict';
-import { applyOverrides, buildBoard, groupBoard, isBoardOff, baghdadDate } from '../lib/board.ts';
+import {
+  applyOverrides,
+  buildBoard,
+  byProduct,
+  groupBoard,
+  isBoardOff,
+  purposeLabel,
+  baghdadDate,
+} from '../lib/board.ts';
 
 let n = 0;
 const ok = (label, fn) => {
@@ -416,6 +424,53 @@ ok('و«موقوف» تُقرأ خبراً مستقلّاً عن «لم يُنش
   assert.equal(isBoardOff([], DAY), false, 'لوحةٌ فارغةٌ بلا إيقافٍ ليست موقوفة');
   assert.equal(isBoardOff([mark({ city: 'الرمادي' })], DAY), false, 'ولا الإخفاءُ إيقاف');
   assert.equal(isBoardOff([mark({ for_date: OLD, action: 'off' })], DAY), false, 'ولا إيقافُ أمس');
+});
+
+// ــ ٤ ـ المصفى يقسّم، والوسمُ لا يُدمج ــــــــــــــــــــــــــــــــــــ
+console.log('المصفى والوسم:');
+
+ok('مصفيان لمنتجٍ واحدٍ = قسمان، وما لا مصفى له يتقدّم', () => {
+  // الرمادي تستلم كازاً من ثلاثة مصافٍ في جدول ٢٠٢٦-٠٩-١٨ — فمصفًى واحدٌ في
+  // عنوانٍ واحدٍ يكذب على صفوف المصفيين الآخرين.
+  const rows = buildBoard(
+    [
+      chan('c1', 'محطة أ', 'الرمادي', 'kerosene', { refinery: 'مصفى الصينية' }),
+      chan('c2', 'محطة ب', 'الرمادي', 'kerosene', { refinery: 'مصفى الصمود' }),
+      chan('c3', 'محطة ج', 'الرمادي', 'kerosene'),
+    ],
+    [],
+    DAY
+  );
+  const secs = byProduct(rows);
+  assert.equal(secs.length, 3, 'ثلاثةُ أقسامٍ لا واحد');
+  assert.equal(secs[0].refinery, null, 'وما لا مصفى له أوّلاً — وهو منشورُ القناة');
+  assert.deepEqual(
+    secs.slice(1).map((s) => s.refinery).sort(),
+    ['مصفى الصمود', 'مصفى الصينية'].sort()
+  );
+  assert.ok(secs.every((s) => s.rows.length === 1), 'ولا تتكرّر محطةٌ بين قسمين');
+});
+
+ok('وصفُّ المولّدات لا يأخذ حالةَ المحطة الحيّة', () => {
+  // «وصل ✓» تعني اذهب فاملأ — وحمولةُ المولّدات لا تصير وقوداً في خزّان سيّارة.
+  const st = station('S9', 'محطة الأمل', 'الرمادي', [
+    prod('kerosene', { is_available: true, expected_at: DAY }),
+  ]);
+  const plain = buildBoard([chan('c1', 'محطة الأمل', 'الرمادي', 'kerosene')], [st], DAY);
+  assert.equal(plain.length, 1, 'الصفُّ العاديُّ يندمج كما كان');
+  assert.equal(plain[0].state, 'arrived');
+
+  const tagged = buildBoard(
+    [chan('c2', 'محطة الأمل', 'الرمادي', 'kerosene', { purpose: 'generators' })],
+    [st],
+    DAY
+  );
+  assert.equal(tagged.length, 2, 'والموسومُ صفٌّ مستقلّ');
+  const gen = tagged.find((r) => r.purpose === 'generators');
+  assert.equal(gen.source, 'channel', 'يبقى صفَّ جدولٍ لا لوحةَ محطة');
+  assert.equal(gen.state, 'expected', 'ولا يُقال عنه «وصل»');
+  assert.equal(purposeLabel(gen.purpose), 'للمولّدات');
+  assert.equal(purposeLabel(null), null, 'وما لا وسمَ له لا شارةَ له');
 });
 
 console.log(`${n} فحصاً — كلُّها سليمة.`);

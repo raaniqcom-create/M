@@ -2042,12 +2042,19 @@ async function showSchedule(
   const cities = schedCities(d.lines);
   const reach = await scheduleReach(cities, schedProducts(d.lines));
 
+  // والمصفى يُكتب حين تتعدّد المصافي — في جدولٍ مصفاه واحدٌ يكرّره على كلّ سطرٍ
+  // ضجيجٌ يزاحم الأسماءَ على سقف الرسالة.
+  const refineries = [...new Set(d.lines.map((l) => l.refinery).filter(Boolean))] as string[];
+  const tagged = d.lines.filter((l) => l.purpose).length;
+
   const rows = d.lines.map((l, i) => {
     const mark = l.stationId ? '✅' : l.city ? '⚪️' : '❓';
     const where = l.city ?? 'منطقةٌ لم أعرفها';
     const tail = l.stationId ? 'مسجّلة' : 'خارج المنصّة';
     const pr = mixed ? ` · <b>${esc(PRODUCT_LABELS[l.product] ?? l.product)}</b>` : '';
-    return `${i + 1} ${mark} ${esc(l.name)} — ${esc(where)}${pr} · ${tail}`;
+    const rf = refineries.length > 1 && l.refinery ? ` · ${esc(l.refinery)}` : '';
+    const pp = l.purpose === 'generators' ? ' · 🔌 مولدات' : l.purpose === 'export' ? ' · 🚚 تصدير' : '';
+    return `${i + 1} ${mark} ${esc(l.name)} — ${esc(where)}${pr}${rf}${pp} · ${tail}`;
   });
 
   const foot = cities.length
@@ -2073,7 +2080,14 @@ async function showSchedule(
   const official = d.source_ref
     ? `${NL}📄 كتابٌ رسميّ — ${esc(d.note ?? '')}`
     : '';
-  const note = official + (adding ? `${NL}➕ يُضاف إلى جدولٍ منشورٍ فيه ${already} محطة.` : '');
+  // والمصفى يُسمّى في الذيل حين يكون واحداً — يُقال مرّةً لا في كلّ سطر.
+  const oneRef = refineries.length === 1 ? `${NL}🏭 ${esc(refineries[0])}` : '';
+  // **وما لا يدخل الإشعارَ يُقال قبل الضغط.** هذه البوّابةُ البشريّةُ الوحيدة.
+  const tags = tagged
+    ? `${NL}🔌 ${countWord(tagged)} للمولّدات أو التصدير — لا تدخل الإشعارَ ولا لوحاتِ المحطات.`
+    : '';
+  const note =
+    official + oneRef + tags + (adding ? `${NL}➕ يُضاف إلى جدولٍ منشورٍ فيه ${already} محطة.` : '');
   const flip = day === baghdadDay() ? '📅 اجعله غداً' : '📅 اجعله اليوم';
 
   // ── والمعاينةُ تُقصّ لتدخل، والمنشورُ كاملٌ لا يُقصّ ────────────────────
@@ -2664,7 +2678,17 @@ async function correctSchedule(chat: number, userId: number, d: Draft, raw: stri
     const old = sched.lines[i];
     const m = matchLine(v, await platformStations(), old.product);
     const known = !!m.stationId || m.score >= MATCH_FLOOR || !!officialFor(v);
-    sched.lines[i] = { ...m, name: known ? m.name : v, city: m.city ?? old.city, key: old.key };
+    // و`matchLine` تطابق اسماً ولا تعرف قسماً: المصفى والغرضُ يُحملان من السطر
+    // القديم. ولولا ذلك لَفقد صفُّ مولّداتٍ وسمَه لأنّ المشغّل صحّح حرفاً في
+    // اسمه — فيُنشر كازاً للسيارات ويُكتب «متوقَّع» في لوحة المحطة.
+    sched.lines[i] = {
+      ...m,
+      name: known ? m.name : v,
+      city: m.city ?? old.city,
+      refinery: old.refinery,
+      purpose: old.purpose,
+      key: old.key,
+    };
   } else {
     sched.lines[i].city = v;
   }
@@ -2781,7 +2805,11 @@ async function editRoute(chat: number, userId: number, data: string, msgId?: num
 
 /** يكتب «متوقَّع» في لوحات المحطات المسجّلة، ويُشعر أصحابَها. */
 async function linkBack(chat: number, lines: ScheduleLine[], forDate: string) {
-  const linked = lines.filter((l) => l.stationId);
+  // **ولا يُكتب «متوقَّع» عن حمولةٍ ليست للسيارات.** لوحةُ المحطة سطحٌ عامّ: ما
+  // يُكتب فيها يُقرأ «كاز غداً» على صفحتها وفي بطاقتها، ويصل صاحبَها «ورد في
+  // جدول اليوم أنّ عندكم كاز». وحمولةُ المولّدات — وحمولةُ خطّ التصدير العابرة
+  // — لا تُباع لسائق.
+  const linked = lines.filter((l) => l.stationId && !l.purpose);
   if (!linked.length) return;
 
   const ids = [...new Set(linked.map((l) => l.stationId as string))];
@@ -2953,6 +2981,21 @@ async function publishDraft(
   //
   // ومنشورُ القناة لا مرجعَ له، فيبقى إدراجاً: القناةُ تنشر رسالتين وأكثر،
   // والثانيةُ إضافةٌ مقصودة لا تكرار.
+  //
+  // ــ ومفتاحُ المصدر يُبنى هنا لا عند القراءة ــــــــــــــــــــــــــــــ
+  //
+  // لأنّ زرّ 📅 يقلب `for_date` **بعد** المعاينة. ولو خُتم المفتاحُ يومَ اللصق
+  // لَصارت إعادةُ لصق الجدول نفسِه بعد القلب دفعةً ثانيةً في القاعدة.
+  //
+  // وجدولُ المصافي يُعرف بمصافيه: وثيقةُ يومٍ تُلصق كاملةً فتُعاد بلا أثر.
+  const base = d.source_ref ?? (d.lines.some((l) => l.refinery) ? `refinery:${for_date}` : null);
+  // **والمفتاحُ يحمل المنتجَ والمصفى والغرض، لأنّ الاسمَ وحدَه يتكرّر بحقّ.**
+  // في جدول ٢٠٢٦-٠٩-١٨: «مركز توزيع الفلوجة» تحت مستودع الأنبار **وتحت** مصفى
+  // الصينية، و«مصفى الصمود (بيجي)» يجهّز عاديّاً وكازاً معاً. والفهرسُ الفريد
+  // `(source_ref, raw_name)` كان سيبتلع الثانيةَ صامتاً — و`ignoreDuplicates`
+  // لا تقول شيئاً حين تُسقط صفّاً.
+  const refFor = (l: ScheduleLine) =>
+    `${base}:${l.product}:${l.refinery ?? '-'}:${l.purpose ?? '-'}`;
   const rows = d.lines.map((l) => ({
       for_date,
       // **وقودُ الصفّ لا وقودُ المنشور.** كان `d.product` يُكتب للجميع، فسطرٌ
@@ -2968,7 +3011,9 @@ async function publishDraft(
       // خمسٍ وخمسين تُخرج ٢٧٫٥ و٣٦٫٦٦٦. فردّت القاعدةُ «invalid input syntax
       // for type integer» وضاع النشرُ كلُّه على منزلةٍ عشريّة لا تُقرأ أصلاً.
       match_score: Math.round(l.score),
-      ...(d.source_ref ? { source_ref: d.source_ref } : {}),
+      refinery: l.refinery ?? null,
+      purpose: l.purpose ?? null,
+      ...(base ? { source_ref: refFor(l) } : {}),
       ...(d.note ? { note: d.note } : {}),
   }));
 
@@ -2993,7 +3038,7 @@ async function publishDraft(
     removed = gone?.length ?? 0;
   }
 
-  const { error } = d.source_ref && !replace
+  const { error } = base && !replace
     ? await db
         .from('fuel_schedule')
         .upsert(rows, { onConflict: 'source_ref,raw_name', ignoreDuplicates: true })
@@ -3077,12 +3122,29 @@ async function publishDraft(
     };
   }
 
+  // ــ والإشعارُ على صفوف السيارات وحدَها ــــــــــــــــــــــــــــــــــ
+  //
+  // في جدول ٢٠٢٦-٠٩-١٨ أحدَ عشرَ صفَّ كازٍ من أربعةَ عشرَ موسومةٌ للمولّدات أو
+  // لخطّ التصدير. فـ«كاز غداً في ١٤ محطة» خبرٌ يقطع الناسُ إليه الطريقَ فلا
+  // يجدون شيئاً — وحمولةُ خطّ التصدير عابرةٌ لا تنزل أصلاً.
+  const alertable = d.lines.filter((l) => !l.purpose);
+  if (!alertable.length) {
+    await db
+      .from('fuel_schedule')
+      .update({ alerted_at: new Date().toISOString() })
+      .eq('batch_id', batch_id);
+    return {
+      ok: true,
+      text: `✅ ${replace ? 'استُبدل' : 'أُضيف إلى'} جدول ${for_date} — ${countWord(d.lines.length)}، كلُّها مولّداتٌ أو تصدير فلا إشعار.${swap}${resumed}`,
+    };
+  }
+
   // محطاتٌ مميّزةٌ لا أسطر: السطرُ محطةٌ ومنتج، ومحطةٌ بأربعة منتجاتٍ أربعةُ
   // أسطر. والقارئُ يفهم «محطة» محطةً.
-  const stationCount = new Set(d.lines.map((l) => l.name)).size;
+  const stationCount = new Set(alertable.map((l) => l.name)).size;
   const { sent, why } = await sendScheduleAlert(
-    schedCities(d.lines),
-    schedProducts(d.lines),
+    schedCities(alertable),
+    schedProducts(alertable),
     stationCount,
     when
   );

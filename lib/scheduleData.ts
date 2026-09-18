@@ -40,7 +40,9 @@ export async function loadSchedule() {
 async function fetchSchedule() {
   const { data, error } = await supabase
     .from('fuel_schedule')
-    .select('id, for_date, product, batch_id, raw_name, station_name, city, linked_station_id, note')
+    .select(
+      'id, for_date, product, batch_id, raw_name, station_name, city, linked_station_id, note, refinery, purpose'
+    )
     .gte('for_date', baghdadDate())
     .order('for_date')
     .order('created_at');

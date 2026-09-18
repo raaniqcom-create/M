@@ -40,6 +40,10 @@ export interface ScheduleLine {
   score: number;
   /** وقودُ هذا السطر — قد يخالف وقودَ بقيّة المنشور. */
   product: FuelProduct;
+  /** المصفى المجهِّز، من عنوان القسم. غيابُه حالُ منشور القناة — لا مصفى فيه. */
+  refinery?: string | null;
+  /** غرضُ الحمولة — وسمُ صفٍّ لا منتجٌ جديد. */
+  purpose?: SchedulePurpose;
 }
 
 export interface ParsedSchedule {
@@ -117,6 +121,16 @@ export function lineProduct(line: string): FuelProduct | null {
  *  الشرطان معاً: قرينةُ صياغةٍ **و**اسمُ وقود. وواحدةٌ منهما وحدَها تُخطئ —
  *  «غدا» تَرِد في كلام الناس، و«كاز» تَرِد في اسم محطة. */
 export function looksLikeSchedule(text: string): boolean {
+  // ــ جدولُ المصافي: لا قرينةَ صياغةٍ فيه، فالشكلُ هو القرينة ــــــــــــــ
+  //
+  // صيغةٌ ثالثةٌ بدأت تصل: «كاز | مصفى الصينية» ثمّ أسماءٌ مجرّدة. ولا كلمةَ
+  // من `SCHEDULE_HINTS` فيها — لا «غدا» ولا «تجهيز» ولا «المحطات التالية» —
+  // فلولا هذا الفرعُ لَرُدّ المنشورُ كلُّه ولم يُعرض على الإدارة أصلاً.
+  //
+  // ويُشترط **عنوانٌ وجسم**: «كاز | مصفى الصمود» وحدَه سطرٌ يُبحث به عن محطة،
+  // لا جدولٌ يُنشر.
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.some((l) => readSection(l)) && lines.some((l) => !readSection(l))) return true;
   const t = normalizeName(text);
   return SCHEDULE_HINTS.some((h) => t.includes(normalizeName(h))) && readProduct(text) !== null;
 }
@@ -141,10 +155,98 @@ export function looksLikeSchedule(text: string): boolean {
 const PREAMBLE =
   /(?:(?<![ء-ي])(?:غداً|غدا)(?![ء-ي])\s*(?:[اإ]ن\s*شاء\s*الله)?|في\s*المحطات\s*التاليه?|المحطات\s*التاليه?|(?<![ء-ي])تجهيز(?![ء-ي]))/g;
 
+const wordsOf = (pr: FuelProduct) =>
+  new Set(normalizeName(PRODUCT_LABELS[pr]).split(' ').filter(Boolean).map(bareWord));
+
+/** يُسقط الصدرَ واسمَ الوقود — **ويُبقي الحروفَ كما كُتبت.**
+ *
+ *  كان يُطبّع ثمّ يردّ المطبَّع، فيخرج «الخالديه» و«الحبانيه» بالهاء إلى
+ *  الناس. والتطبيعُ مفتاحُ مطابقةٍ لا نصٌّ يُعرض: يُقارَن به ويُرمى، ويبقى
+ *  المعروضُ ما كتبته القناة.
+ *
+ *  والفلترةُ بالكلمات لا بتعبيرٍ نمطيّ: «ال ال» متجاورتان لا يلتقطهما
+ *  تعبيرٌ يشترط فراغاً قبل وبعد — يبتلع الأوّلُ الفراغَ فتنجو الثانية.
+ *  و«ال» بقيّةُ «البنزين» بعد إسقاط «بنزين» من داخلها: أداةٌ يتيمة. */
+const strip = (s: string, pr: FuelProduct) => {
+  const drop = wordsOf(pr);
+  return s
+    .replace(PREAMBLE, ' ')
+    .split(/\s+/)
+    .filter((w) => {
+      const n = normalizeName(w);
+      return n && n !== 'ال' && !drop.has(bareWord(w));
+    })
+    .join(' ')
+    .trim();
+};
+
+/** غرضُ الحمولة. `null` تعني سياراتٍ — وهو الأصل، ولذلك لا اسمَ له في النصّ. */
+export type SchedulePurpose = 'generators' | 'export' | null;
+
+/** وسمُ الغرض في ذيل السطر: «- مولدات» · «ـ مولدات» · «- خط سير تصدير».
+ *
+ *  ── وكلمتان اثنتان لا أيُّ ذيل ──────────────────────────────────────────
+ *
+ *  ما لم يُعرَف يبقى في الاسم. فذيلٌ مجهولٌ يُقصّ صامتاً يمحو ما يميّز الاسمَ:
+ *  «الرمادي - القديمة» تصير «الرمادي»، فتُطابَق محطةً أخرى وتُنشر باسمها.
+ *
+ *  ── والتطويلُ فاصلٌ هنا وحرفٌ في غيره ───────────────────────────────────
+ *
+ *  U+0640 مدُّ حروفٍ داخل الكلمة أيضاً. ولا التباس: الوسمُ يشترط أن تلي
+ *  الفاصلَ **إحدى الكلمتين ثمّ آخرُ السطر** — والتطويلُ داخل كلمةٍ يليه بقيّتُها
+ *  لا آخرُ السطر. وقِيس على قائمتَي الأسماء: صفرُ تطويلٍ في `roadStations.ts`
+ *  و`officialStations.ts`، وصفرُ اسمٍ ينتهي بـ«مولدات» أو «تصدير».
+ *
+ *  والفاصلُ يجوز أن يكون فراغاً: «مركز توزيع الرمادي مولدات» بلا شرطةٍ وسمٌ
+ *  أيضاً — وإلّا نُشرت حمولةُ مولّداتٍ خبراً للسيارات لأنّ الكاتبَ نسي شرطة. */
+const PURPOSE_TAIL = /[\s\-–—ـ]+(مولدات|خط\s*سير\s*تصدير)\s*$/;
+
+export function splitPurpose(line: string): { body: string; purpose: SchedulePurpose } {
+  const m = line.match(PURPOSE_TAIL);
+  if (!m || m.index === undefined) return { body: line.trim(), purpose: null };
+  const body = line.slice(0, m.index).trim();
+  // ولا يُفرَّغ سطر: «مولدات» وحدَها اسمٌ لم أفهمه، لا وسمٌ بلا محطة.
+  if (normalizeName(body).length < 2) return { body: line.trim(), purpose: null };
+  return { body, purpose: m[1].startsWith('مولدات') ? 'generators' : 'export' };
+}
+
+/** «مصفى الصمود ( بيجي)» ← «مصفى الصمود (بيجي)».
+ *
+ *  والتسويةُ لازمةٌ لا زينة: الصيغتان وردتا في **منشورٍ واحد** (القسمان الأوّل
+ *  والسابع من جدول ٢٠٢٦-٠٩-١٨)، فبلا هذا قسمان على اللوحة لمصفًى واحد. */
+export function tidyRefinery(s: string): string {
+  return s.replace(/\s*\(\s*/g, ' (').replace(/\s*\)\s*/g, ') ').replace(/\s+/g, ' ').trim();
+}
+
+/** العارضةُ لاتينيّةً أو عربيّةً عريضة — والقناةُ تكتبها بلا مسافةٍ أحياناً:
+ *  «المحسن| مصفى كركوك». */
+const BAR = /[|｜]/;
+
+/** عنوانُ قسم: وقودٌ يساراً ومصفًى يميناً — أو `null`.
+ *
+ *  **والتمييزُ في اليسار.** لا يُعرف العنوانُ بكلمة «مصفى»: العنوانُ السادس في
+ *  جدول ٢٠٢٦-٠٩-١٨ «كاز | مركز توزيع حديثة»، وهي بعينها صيغةُ أسماء المحطات
+ *  في الجسم. فالشرطُ أن يكون يسارُ العارضة **اسمَ وقودٍ ولا شيء غيره** — وهو
+ *  حكمُ `isHead` القائم منذ أوّل محلّل، مطبَّقاً على شطرٍ لا على سطر.
+ *
+ *  وبه لا يُسرق السطرُ اليدويّ «محطة النصر | الرمادي | كاز» (يسارُه اسم)، ولا
+ *  صفوفُ الكتاب الرسميّ (تبدأ بعارضةٍ فيسارُها فارغ). */
+export function readSection(line: string): { product: FuelProduct; refinery: string } | null {
+  const at = line.search(BAR);
+  if (at < 0) return null;
+  const head = line.slice(0, at);
+  const product = lineProduct(head); // كلمةً بكلمة، لا احتواءَ نصّ
+  if (!product || strip(head, product).length >= 2) return null;
+  const refinery = tidyRefinery(line.slice(at + 1));
+  return refinery.length >= 2 ? { product, refinery } : null;
+}
+
 /** يقرأ المنشورَ ويُخرج الوقودَ وأسماءَ المحطات — بلا مطابقة. */
 export interface ParsedRow {
   name: string;
   product: FuelProduct;
+  refinery: string | null;
+  purpose: SchedulePurpose;
 }
 
 export function parseSchedule(
@@ -159,40 +261,15 @@ export function parseSchedule(
     .filter(Boolean);
   if (!rows.length) return null;
 
-  const label = normalizeName(PRODUCT_LABELS[product]);
-  const wordsOf = (pr: FuelProduct) =>
-    new Set(normalizeName(PRODUCT_LABELS[pr]).split(' ').filter(Boolean).map(bareWord));
-
-  /** يُسقط الصدرَ واسمَ الوقود — **ويُبقي الحروفَ كما كُتبت.**
-   *
-   *  كان يُطبّع ثمّ يردّ المطبَّع، فيخرج «الخالديه» و«الحبانيه» بالهاء إلى
-   *  الناس. والتطبيعُ مفتاحُ مطابقةٍ لا نصٌّ يُعرض: يُقارَن به ويُرمى، ويبقى
-   *  المعروضُ ما كتبته القناة.
-   *
-   *  والفلترةُ بالكلمات لا بتعبيرٍ نمطيّ: «ال ال» متجاورتان لا يلتقطهما
-   *  تعبيرٌ يشترط فراغاً قبل وبعد — يبتلع الأوّلُ الفراغَ فتنجو الثانية.
-   *  و«ال» بقيّةُ «البنزين» بعد إسقاط «بنزين» من داخلها: أداةٌ يتيمة. */
-  const strip = (s: string, pr: FuelProduct) => {
-    const drop = wordsOf(pr);
-    return s
-      .replace(PREAMBLE, ' ')
-      .split(/\s+/)
-      .filter((w) => {
-        const n = normalizeName(w);
-        return n && n !== 'ال' && !drop.has(bareWord(w));
-      })
-      .join(' ')
-      .trim();
-  };
-
   const marker = normalizeName('المحطات التاليه');
 
   // منشورٌ من سطرٍ واحد: هو نفسُه المحطة، والوقودُ في آخره — إلّا أن يَعِد
   // بقائمةٍ لم تصل، فذاك عنوانٌ بلا جسم ولا يُنشر منه شيء.
   if (rows.length === 1) {
     if (normalizeName(rows[0]).includes(marker)) return null;
-    const one = strip(rows[0], product);
-    return one ? { product, rows: [{ name: one, product }] } : null;
+    const { body, purpose } = splitPurpose(rows[0]);
+    const one = strip(body, product);
+    return one ? { product, rows: [{ name: one, product, refinery: null, purpose }] } : null;
   }
 
   // **العنوانُ يُعرَف بما فيه لا بما يبقى منه** — وبأيِّ وقودٍ ذكره لا بوقودٍ
@@ -208,17 +285,37 @@ export function parseSchedule(
   // العنوان التالي — كما تُقرأ الورقةُ بالعين. ولولا هذا لَورثت محطاتُ العنوان
   // الثاني وقودَ الأوّل، وهو خبرٌ خطأ عن وقودٍ يقطع الناسُ إليه الطريق.
   let current = product;
+  let refinery: string | null = null;
   const out: ParsedRow[] = [];
   for (const line of rows) {
-    const named = lineProduct(line);
-    if (isHead(line, named ?? current)) {
+    // **عنوانُ مصفًى يضبط الوقودَ والمصفى معاً، ولا يُعدّ محطة.**
+    //
+    // وكان يُعدّ: `isHead` تُسقط كلماتِ الوقود وحدَها، فيبقى «| مصفى الصينية»
+    // وطولُه أكثرُ من حرفين — فيُنشر «مصفى الصينية» محطةً، **و`current` لا
+    // يتبدّل أبداً** لأنّ ضبطَه داخلَ فرع العنوان. قِيس على جدول ٢٠٢٦-٠٩-١٨:
+    // ستّةٌ وعشرون صفّاً، سبعةٌ منها أسماءُ مصافٍ، وأربعةٌ وعشرون على «بانزين
+    // عادي» — وفيها الكازُ كلُّه.
+    const section = readSection(line);
+    if (section) {
+      current = section.product;
+      refinery = section.refinery;
+      continue;
+    }
+    // ولاحقةُ الغرض تُقصّ من السطر **الخام**: `strip` تبتلع الشرطةَ (تطبيعُ
+    // الترقيم) فتلتصق «مولدات» بالاسم ولا تُعرف بعدها.
+    const { body, purpose } = splitPurpose(line);
+    const named = lineProduct(body);
+    if (isHead(body, named ?? current)) {
       if (named) current = named;
+      // وعنوانُ القناة لا مصفى له — فمنشورٌ مُلصقٌ بعد جدول المصافي لا يرث
+      // مصفى آخرِ قسمٍ فيه. (يقع فعلاً: poll-channel يلصق منشوراتِ الليلة.)
+      refinery = null;
       continue;
     }
     // وقودُ السطر إن سمّاه، وإلّا فوقودُ عنوانه. والإسقاطُ بكلماتِ وقودِه هو.
     const pr = named ?? current;
-    const name = strip(line, pr);
-    if (name.length >= 2) out.push({ name, product: pr });
+    const name = strip(body, pr);
+    if (name.length >= 2) out.push({ name, product: pr, refinery, purpose });
   }
   return out.length ? { product, rows: out } : null;
 }
@@ -642,6 +739,11 @@ export function readSchedule(text: string, platform: PlatformStation[]): ParsedS
   if (!parsed) return null;
   return {
     product: parsed.product,
-    lines: parsed.rows.map((r) => matchLine(r.name, platform, r.product)),
+    // و`matchLine` تطابق اسماً ولا تعرف قسماً: المصفى والغرضُ يركبان بعدها.
+    lines: parsed.rows.map((r) => ({
+      ...matchLine(r.name, platform, r.product),
+      refinery: r.refinery,
+      purpose: r.purpose,
+    })),
   };
 }
