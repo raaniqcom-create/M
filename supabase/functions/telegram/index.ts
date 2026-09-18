@@ -3081,14 +3081,23 @@ async function publishDraft(
     removed = gone?.length ?? 0;
   }
 
-  const { error } = base && !replace
+  // ــ ويُعدّ ما قبلته القاعدةُ لا ما أُرسل إليها ــــــــــــــــــــــــــ
+  //
+  // **`ignoreDuplicates` تُسقط الصفَّ صامتةً ولا تردّ خطأً.** فاسمٌ مكرَّرٌ في
+  // قسمٍ واحدٍ من جدول المصافي يختفي، والبوتُ يقول «١٠١ محطة» — فيبني المشغّلُ
+  // ثقةً في غير محلّها ولا يعرف أنّ سطراً سقط. و`.select('id')` تردّ المُدرَجَ
+  // فعلاً، فيُقارَن بالمُرسَل ويُقال الفرقُ صراحةً.
+  const { data: wrote, error } = base && !replace
     ? await db
         .from('fuel_schedule')
         .upsert(rows, { onConflict: 'source_ref,raw_name', ignoreDuplicates: true })
-    : await db.from('fuel_schedule').insert(rows);
+        .select('id')
+    : await db.from('fuel_schedule').insert(rows).select('id');
   if (error) {
     return { ok: false, text: `⚠️ ${esc(error.message)}${NL}المسوّدةُ محفوظة — أعد المحاولة.` };
   }
+  const dropped = rows.length - (wrote?.length ?? rows.length);
+  const lost = dropped > 0 ? `${NL}⚠️ و${dropped} سطراً لم يُكتب — اسمٌ مكرَّرٌ في القسم نفسِه.` : '';
 
   // ── والخبرُ يعود إلى لوحة المحطة ────────────────────────────────────────
   //
@@ -3161,7 +3170,7 @@ async function publishDraft(
       .eq('batch_id', batch_id);
     return {
       ok: true,
-      text: `✅ ${replace ? 'استُبدل' : 'أُضيف إلى'} جدول ${for_date} — ${countWord(d.lines.length)}، بلا إشعار.${swap}${resumed}`,
+      text: `✅ ${replace ? 'استُبدل' : 'أُضيف إلى'} جدول ${for_date} — ${countWord(d.lines.length)}، بلا إشعار.${lost}${swap}${resumed}`,
     };
   }
 
@@ -3178,7 +3187,7 @@ async function publishDraft(
       .eq('batch_id', batch_id);
     return {
       ok: true,
-      text: `✅ ${replace ? 'استُبدل' : 'أُضيف إلى'} جدول ${for_date} — ${countWord(d.lines.length)}، كلُّها مولّداتٌ أو تصدير فلا إشعار.${swap}${resumed}`,
+      text: `✅ ${replace ? 'استُبدل' : 'أُضيف إلى'} جدول ${for_date} — ${countWord(d.lines.length)}، كلُّها مولّداتٌ أو تصدير فلا إشعار.${lost}${swap}${resumed}`,
     };
   }
 
@@ -3231,7 +3240,7 @@ async function publishDraft(
   return {
     ok: true,
     text:
-      `✅ ${replace ? 'استُبدل' : 'نُشر'} جدولُ ${esc(productsLabel(d.lines))} — ${countWord(d.lines.length)}.${swap}${resumed}${NL}` +
+      `✅ ${replace ? 'استُبدل' : 'نُشر'} جدولُ ${esc(productsLabel(d.lines))} — ${countWord(d.lines.length)}.${lost}${swap}${resumed}${NL}` +
       (sent
         ? `📣 يخرج الإشعارُ إلى ${sent} مشتركاً.`
         : `⚠️ ولم يخرج الإشعار: ${esc(why)}${NL}أعِده بأمر /اشعار.`) +

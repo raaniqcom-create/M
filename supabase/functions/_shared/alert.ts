@@ -20,6 +20,10 @@ export interface AlertOutcome {
 export const countWord = (n: number) =>
   n === 1 ? 'محطة واحدة' : n === 2 ? 'محطتين' : n <= 10 ? `${n} محطات` : `${n} محطة`;
 
+/** وكذلك المناطق: «في 7 منطقة» كانت تخرج إلى واحدٍ وعشرين ألفَ جهاز. */
+export const areaWord = (n: number) =>
+  n === 1 ? 'منطقة واحدة' : n === 2 ? 'منطقتين' : n <= 10 ? `${n} مناطق` : `${n} منطقة`;
+
 /** يُخرج إشعارَ الجدول، ويردّ بعددِ من وصلهم — أو بسببِ الفشل نصّاً.
  *
  *  **والسببُ يُردّ ولا يُكتب في سجلّ.** سجلُّ الدوالّ في هذا المشروع لا
@@ -64,7 +68,7 @@ export async function sendScheduleAlert(
           `${label} ${when} في ${countWord(count)}` +
           (cities.length <= 3
             ? ` — ${cities.join(' و')}.`
-            : ` في ${cities.length} منطقة.`) +
+            : ` في ${areaWord(cities.length)}.`) +
           ' افتح التطبيق لترى القائمة.',
         cities,
         products,

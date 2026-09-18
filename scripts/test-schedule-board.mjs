@@ -473,4 +473,33 @@ ok('وصفُّ المولّدات لا يأخذ حالةَ المحطة الحي
   assert.equal(purposeLabel(null), null, 'وما لا وسمَ له لا شارةَ له');
 });
 
+ok('والمصفى يركب المحطةَ المسجّلة فلا ينقسم قسمين', () => {
+  // محطةٌ مسجّلةٌ وردت في الجدول بمصفًى، وأخرى غيرُ مسجّلةٍ بالمصفى نفسِه.
+  // ولولا حملُ المصفى لَظهر قسمان: «كاز · مصفى الصينية» و«كاز» بلا اسم.
+  const st = station('S7', 'محطة الأمل', 'الرمادي', [
+    prod('kerosene', { is_available: true, expected_at: DAY }),
+  ]);
+  const rows = buildBoard(
+    [
+      chan('c1', 'محطة الأمل', 'الرمادي', 'kerosene', { refinery: 'مصفى الصينية' }),
+      chan('c2', 'محطة أخرى', 'الرمادي', 'kerosene', { refinery: 'مصفى الصينية' }),
+    ],
+    [st],
+    DAY
+  );
+  const secs = byProduct(rows);
+  assert.equal(secs.length, 1, `قسمٌ واحدٌ لا قسمان — وخرج ${secs.map((s) => s.refinery).join(' · ')}`);
+  assert.equal(secs[0].refinery, 'مصفى الصينية');
+  assert.equal(secs[0].rows.length, 2);
+});
+
+ok('ومحطةٌ أعلنت بنفسها بلا جدولٍ تبقى بلا مصفى', () => {
+  const rows = buildBoard(
+    [],
+    [station('S8', 'محطة الوفاء', 'هيت', [prod('kerosene', { expected_at: DAY })])],
+    DAY
+  );
+  assert.equal(byProduct(rows)[0].refinery, null, 'إعلانُ المحطة لا مصفى فيه — ولا يُخترع');
+});
+
 console.log(`${n} فحصاً — كلُّها سليمة.`);

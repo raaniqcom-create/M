@@ -259,6 +259,8 @@ export function buildBoard(
       // لوحةُ المحطة تغلب — «لأنّها أدقّ»، قرارُ صاحب المنصّة. ويُقال إنّ
       // الخبرَ ورد في الجدول المنشور أيضاً: تأكيدٌ مضاعفٌ لا تكرار.
       if (hit.source === 'station') hit.alsoInChannel = true;
+      // وللسبب نفسِه أعلاه: المصفى يركب الصفَّ القائم فلا ينقسم قسمين.
+      hit.refinery = hit.refinery ?? r.refinery ?? null;
       continue;
     }
 
@@ -307,6 +309,10 @@ export function buildBoard(
         period: live.expected_at === day ? live.expected_period : null,
         // وبحارس اليوم نفسِه: ساعةُ وعدٍ ليومٍ آخر تصف لحظةً لا تخصّ هذا السطر.
         time: live.expected_at === day ? (live.expected_time ?? null) : null,
+        // **والمصفى يركب معها.** هذه محطةٌ دخلت اللوحةَ بالجدول، ومصفاها مكتوبٌ
+        // في سطره. ولولا حملُه لَانقسم المصفى الواحدُ قسمين على اللوحة: قسمٌ
+        // باسمه لغير المسجّلات، وقسمٌ بلا اسمٍ للمسجّلات — وهما شيءٌ واحد.
+        refinery: r.refinery ?? null,
         alsoInChannel: true,
       });
       continue;
