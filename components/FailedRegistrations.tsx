@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ageLabel } from '@/lib/hours';
-import { whatsappResumeRegistration } from '@/lib/phone';
+import { whatsappRequestDetails, whatsappResumeRegistration } from '@/lib/phone';
 import { SpinnerIcon } from './icons';
 
 interface Attempt {
@@ -80,13 +80,25 @@ export function FailedRegistrations() {
                 {!r.signed_in && ' · لم يدخل قطّ'}
               </p>
             </div>
+            {/* **رسالتان، وأيُّهما يُرسَل يتبع حالَه.**
+                من أنشأ حساباً ولم يدخل قطّ لا يعرف أنّ له حساباً — فيُطلب منه
+                التفاصيلُ وتُصنع محطتُه بيد الإدارة. ومن دخل يعرف كلمةَ مروره،
+                فأقصرُ طريقٍ أن يُكمل هو تسجيلَه بها. */}
+            <a
+              href={whatsappRequestDetails(r.phone)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-h-[36px] shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-2.5 pt-2 text-[11px] font-extrabold text-amber-900"
+            >
+              اطلب التفاصيل
+            </a>
             <a
               href={whatsappResumeRegistration(r.phone)}
               target="_blank"
               rel="noopener noreferrer"
               className="min-h-[36px] shrink-0 rounded-lg border border-brand-100 px-2.5 pt-2 text-[11px] font-extrabold text-brand-700 active:bg-brand-50"
             >
-              واتساب
+              أكمِل بنفسك
             </a>
             <button
               type="button"

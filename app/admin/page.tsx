@@ -32,7 +32,13 @@ import { IconGrid } from '@/components/IconGrid';
 import { BiometricLockToggle } from '@/components/BiometricLockToggle';
 import { biometricLockEnabled, verifyOwner } from '@/lib/biometric';
 import { BiometricLockScreen } from '@/components/BiometricLockScreen';
-import { whatsappFollowInstead, whatsappLink, whatsappVerifyLocation, whatsappVerifyRole } from '@/lib/phone';
+import {
+  whatsappFollowInstead,
+  whatsappLink,
+  whatsappRequestDetails,
+  whatsappVerifyLocation,
+  whatsappVerifyRole,
+} from '@/lib/phone';
 import { ScheduleAdmin } from '@/components/ScheduleAdmin';
 import { ScheduleNoticeAdmin } from '@/components/ScheduleNoticeAdmin';
 import { AdminStationForm } from '@/components/AdminStationForm';
@@ -727,6 +733,21 @@ export default function AdminPage() {
                   والنصُّ فيها. */}
               {s.phone && (
                 <div className="mt-2 grid gap-2">
+                  {/* **وطلبٌ صُنع من حسابٍ يتيمٍ يُسأل قبل أن يُسأل عن صفته.**
+                      تفاصيلُه لم تصل أصلاً — الاسمُ والعنوانُ والمسؤول — فسؤالُه
+                      «هل أنت من إدارة المحطة؟» عن محطةٍ بلا اسمٍ لا معنى له.
+                      والزرُّ يظهر لهذه وحدَها: طلبٌ عاديٌّ جاء كاملاً. */}
+                  {s.name.startsWith('⚠️') && (
+                    <a
+                      href={whatsappRequestDetails(s.phone)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border-2 border-amber-400 bg-amber-50 px-3 text-xs font-extrabold text-amber-900"
+                    >
+                      <WhatsappIcon className="h-4 w-4" />
+                      استلمنا طلبكم — اطلب التفاصيل
+                    </a>
+                  )}
                   <a
                     href={whatsappVerifyRole(s.phone, s.contact_name, s.name, s.city)}
                     target="_blank"
