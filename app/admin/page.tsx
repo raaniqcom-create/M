@@ -39,6 +39,7 @@ import { AdminStationForm } from '@/components/AdminStationForm';
 import { BroadcastPanel } from '@/components/BroadcastPanel';
 import { AdminThreads } from '@/components/AdminThreads';
 import { DeletedStations } from '@/components/DeletedStations';
+import { FailedRegistrations } from '@/components/FailedRegistrations';
 import { ReviewsPanel } from '@/components/ReviewsPanel';
 import { AvailabilityBoard } from '@/components/AvailabilityBoard';
 import { AdminStats } from '@/components/AdminStats';
@@ -823,6 +824,9 @@ export default function AdminPage() {
           <WashAdmin />
         </div>
       )}
+      {/* من بدأ التسجيل ولم يُكمله — فوق المحذوفات: كلاهما «ما ضاع ويُستعاد»،
+          وهذا أعجلُ لأنّ صاحبَه ينتظر. */}
+      {tab === 'stations' && <FailedRegistrations />}
       {tab === 'stations' && <DeletedStations />}
 
       {tab === 'messages' && <AdminThreads />}

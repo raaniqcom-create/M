@@ -32,12 +32,13 @@ async function call(body: Record<string, unknown>) {
  *  والإيقافُ كلاهما يُراجَع من هذه الشاشة نفسِها. أمّا استعادةُ كلمة المرور
  *  فيبقى رمزُها — هناك حسابٌ يُملَك، ودالّةُ otp تردّها صراحةً من هذا الباب. */
 export function SubscribeForm() {
-  const [step, setStep] = useState<'form' | 'done'>('form');
+  const [step, setStep] = useState<'form' | 'code' | 'done'>('form');
   // Whether this run enrols the number or stops the messages — same code,
   // same proof of ownership, opposite outcome.
   const [mode, setMode] = useState<'subscribe' | 'unsubscribe'>('subscribe');
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState<string>('');
+  const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,9 +54,25 @@ export function SubscribeForm() {
     }
   }
 
+  /** الاشتراكُ بضغطة، والإيقافُ برمز.
+   *
+   *  **والفرقُ ليس ذوقاً.** من اشترك بلا إثباتٍ يصله ما لم يطلبه ويوقفه
+   *  بنفسه من هذه الشاشة. ومن أُوقف بلا إثباتٍ يسكت عنه الخبرُ ولا يدري —
+   *  فيُسكت أحدٌ إشعاراتِ غيره وهو لا يعلم. */
   const submit = () =>
     run(async () => {
-      await call({ action: 'direct', phone, purpose: mode, city: city || null });
+      if (mode === 'unsubscribe') {
+        await call({ action: 'send', phone, purpose: 'unsubscribe' });
+        setStep('code');
+        return;
+      }
+      await call({ action: 'direct', phone, purpose: 'subscribe', city: city || null });
+      setStep('done');
+    });
+
+  const verify = () =>
+    run(async () => {
+      await call({ action: 'verify', phone, code });
       setStep('done');
     });
 
@@ -80,7 +97,8 @@ export function SubscribeForm() {
 
   return (
     <section className="card space-y-4 p-5">
-      <>
+      {step === 'form' ? (
+        <>
           <div>
             <label htmlFor="p" className="block text-sm font-semibold">
               رقم هاتفك
@@ -138,7 +156,43 @@ export function SubscribeForm() {
           >
             {mode === 'subscribe' ? 'إيقاف الرسائل عن رقمي' : 'أريد الاشتراك بدل الإيقاف'}
           </button>
-      </>
+        </>
+      ) : (
+        <>
+          <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700">
+            أرسلنا رمزاً من 6 أرقام إلى <span dir="ltr">{phone}</span>. صالح لعشر دقائق.
+          </p>
+          <input
+            type="text"
+            inputMode="numeric"
+            dir="ltr"
+            maxLength={6}
+            autoComplete="one-time-code"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            placeholder="------"
+            aria-label="رمز التحقّق"
+            className="w-full rounded-xl border border-slate-200 px-3 py-3 text-center text-xl font-bold tracking-[0.4em]"
+          />
+          <button
+            type="button"
+            onClick={verify}
+            disabled={busy || code.length !== 6}
+            className="btn-primary w-full"
+          >
+            {busy && <SpinnerIcon className="h-4 w-4" />}
+            تأكيد إيقاف الرسائل
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={busy}
+            className="w-full py-2 text-xs font-semibold text-brand-700"
+          >
+            لم يصلك الرمز؟ أعد الإرسال
+          </button>
+        </>
+      )}
 
       {error && (
         <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
