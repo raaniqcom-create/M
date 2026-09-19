@@ -278,7 +278,15 @@ export function StationRegisterForm() {
       // ولا تُقال «سجّل الدخول وأكمل البيانات» — لا شاشةَ إكمالٍ في اللوحة.
       // والطريقُ الصحيحُ صار إعادةَ التسجيل بالرقم وكلمة المرور نفسِها، فالنموذجُ
       // يلتقط الحسابَ اليتيمَ ويُكمل ما انقطع.
-      setError('تعذّر حفظ بيانات المحطة. أعد المحاولة بالرقم وكلمة المرور نفسها.');
+      //
+      // **وسببُ القاعدة يُعرض معها.** بقي التسجيلُ ساقطاً أربعةَ أيّامٍ وإحدى
+      // وعشرين محاولة، ولم يكن في يد أحدٍ إلّا هذه الجملةُ العامّة — فلا
+      // صاحبُ المحطة يعرف، ولا نحن. والسببُ من الخادم نصٌّ قصيرٌ يُقرأ.
+      setError(
+        `تعذّر حفظ بيانات المحطة. أعد المحاولة بالرقم وكلمة المرور نفسها.${
+          stationError?.message ? `\n(${stationError.message})` : ''
+        }`
+      );
       return;
     }
 
@@ -698,7 +706,7 @@ export function StationRegisterForm() {
       )}
 
       {error && error !== 'ALREADY' && (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-traffic-red">
+        <p role="alert" className="whitespace-pre-line rounded-xl bg-red-50 p-3 text-sm text-traffic-red">
           {error}
         </p>
       )}

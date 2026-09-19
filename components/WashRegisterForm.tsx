@@ -43,7 +43,7 @@ async function otp(body: Record<string, unknown>): Promise<{ retryIn?: number; v
 }
 
 /** 'email': تسجيلٌ بإيميلٍ حقيقيٍّ بلا رمزِ تحقّق — الهاتفُ يبقى لاسترجاع كلمة المرور والتواصل. */
-type Phase = 'phone' | 'code' | 'login' | 'password' | 'ready' | 'email';
+type Phase = 'phone' | 'login' | 'password' | 'ready' | 'email';
 interface Row {
   name: string;
   price: string;
@@ -71,10 +71,7 @@ export function WashRegisterForm() {
   // 1 — الهاتف
   const [phase, setPhase] = useState<Phase>('email');
   const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [left, setLeft] = useState(0);
   /** من أين وصل الرمز: null = رسالة، وإلّا اسمُ بوت تيليجرام. */
-  const [via, setVia] = useState<string | null>(null);
   const [emailAddr, setEmailAddr] = useState('');
   /** عنوانُ الدخول بعد «مسجّلٌ مسبقاً» من تبويب الإيميل — وإلّا الإيميلُ المشتقُّ من الهاتف. */
   const [loginEmail, setLoginEmail] = useState<string | null>(null);
@@ -140,13 +137,6 @@ export function WashRegisterForm() {
     };
   }, [router]);
 
-  // عدّادُ إعادة الإرسال: ثانيةٌ بثانية حتى الصفر ثمّ يتوقّف.
-  useEffect(() => {
-    if (left <= 0) return;
-    const t = setTimeout(() => setLeft((n) => n - 1), 1000);
-    return () => clearTimeout(t);
-  }, [left]);
-
   function go(delta: 1 | -1) {
     setError(null);
     setStep((s) => Math.min(LAST, Math.max(0, s + delta)));
@@ -168,32 +158,29 @@ export function WashRegisterForm() {
     }
   }
 
-  const send = (channel?: 'telegram') =>
+  /** ــ الرقمُ يُفحص ولا يُستوثق منه برمز ــــــــــــــــــــــــــــــــــ
+   *
+   *  «وارفع التسجيل عن otp الان» — صاحبُ المنصّة، ١٩ أيلول.
+   *
+   *  والرمزُ هنا كان بوّابةً لا كتابة: `verify` لا تُنشئ شيئاً لغرض
+   *  `register`، بل يُنشأ الحسابُ في المتصفّح بعدها. فرفعُه يُسقط خطوةً
+   *  ويُبقي المسارَ كما هو.
+   *
+   *  **وفحصُ التكرار يبقى** — وهو ما كان يقع قبل الإرسال لا به: رقمٌ له
+   *  حسابٌ يُردّ بـ409 فيُساق إلى الدخول بكلمة مروره، لا إلى حسابٍ ثانٍ
+   *  يتيمٍ لا يملك مغسلةً. وذاك أنفعُ ما كانت البوّابةُ تفعله. */
+  const send = () =>
     run(async () => {
       if (!isValidIraqiMobile(phone)) throw new Error('رقم الهاتف غير صحيح. اكتبه هكذا: 07XXXXXXXXX');
       try {
-        const r = await otp({ action: 'send', phone, purpose: 'register', channel });
-        setVia(r.via ?? null);
-        setCode('');
-        setPhase('code');
-        setLeft(60);
+        await otp({ action: 'direct', phone, purpose: 'register' });
+        setPhase('password');
       } catch (e) {
-        const err = e as Error & { status?: number; retryIn?: number };
+        const err = e as Error & { status?: number };
         // مسجّلٌ مسبقاً: صاحبُ محطةِ وقودٍ يضيف مغسلةً، أو محاولةٌ انقطعت — يدخل بكلمة مروره.
         if (err.status === 409) return setPhase('login');
-        // مُقيَّدٌ مؤقّتاً: رمزٌ سابقٌ ما زال صالحاً — نُظهر حقلَه والعدّاد بدل حبسه في خطوة الرقم.
-        if (err.status === 429 && err.retryIn) {
-          setLeft(err.retryIn);
-          setPhase('code');
-        }
         throw err;
       }
-    });
-
-  const verify = () =>
-    run(async () => {
-      await otp({ action: 'verify', phone, code });
-      setPhase('password');
     });
 
   const login = () =>
@@ -210,7 +197,6 @@ export function WashRegisterForm() {
     setPhase('phone');
     setLoginEmail(null);
     setExisting(false);
-    setCode('');
     setLoginPw('');
     setPassword('');
     setConfirm('');
@@ -236,7 +222,6 @@ export function WashRegisterForm() {
   function phoneAction() {
     if (busy) return;
     if (phase === 'phone') return void send();
-    if (phase === 'code' && code.length === 6) return void verify();
     if (phase === 'email' && !canNext) return;
     if (phase === 'login' && loginPw) return void login();
     if (canNext) go(1);
@@ -485,44 +470,8 @@ export function WashRegisterForm() {
               </div>
               <button type="button" onClick={() => send()} disabled={busy || !isValidIraqiMobile(phone)} className="btn-primary w-full">
                 {busy && <SpinnerIcon className="h-4 w-4" />}
-                إرسال رمز التحقق برسالة
+                متابعة
               </button>
-              <button type="button" onClick={() => send('telegram')} disabled={busy || !isValidIraqiMobile(phone)} className="btn-ghost w-full">
-                إرسال الرمز عبر تيليجرام
-              </button>
-              <p className="text-[11px] text-slate-400">تيليجرام يعمل لمن شارك رقمه مع بوت «محطة الغسل».</p>
-            </>
-          )}
-
-          {phase === 'code' && (
-            <>
-              <p className="rounded-xl bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700">
-                أرسلنا رمزاً من 6 أرقام {via ? `عبر تيليجرام (بوت ${via})` : 'برسالة'} إلى <span dir="ltr">{displayPhone(phone)}</span>.
-              </p>
-              <input
-                type="text"
-                inputMode="numeric"
-                dir="ltr"
-                maxLength={6}
-                autoComplete="one-time-code"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                placeholder="------"
-                aria-label="رمز التحقّق"
-                className="field text-center text-xl font-bold tracking-[0.4em]"
-              />
-              <button type="button" onClick={verify} disabled={busy || code.length !== 6} className="btn-primary w-full">
-                {busy && <SpinnerIcon className="h-4 w-4" />}
-                تحقّق
-              </button>
-              <div className="flex items-center justify-between text-xs">
-                <button type="button" onClick={() => send(via ? 'telegram' : undefined)} disabled={busy || left > 0} className="min-h-[44px] font-semibold text-brand-700 disabled:text-slate-400">
-                  {left > 0 ? `إعادة الإرسال بعد ${left} ث` : 'لم يصلك الرمز؟ أعد الإرسال'}
-                </button>
-                <button type="button" onClick={resetPhone} className="min-h-[44px] font-semibold text-slate-500">
-                  تغيير الرقم
-                </button>
-              </div>
             </>
           )}
 

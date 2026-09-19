@@ -186,6 +186,54 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ═══ بلا رمز: بابان رُفع عنهما، وثالثٌ لا يُرفع ═══════════════════════
+    //
+    // «وارفع التسجيل عن otp الان» — صاحبُ المنصّة، ١٩ أيلول، واختار بابَين:
+    // تسجيلَ المغسلة والاشتراكَ بالإشعارات.
+    //
+    // ── ولماذا في الدالّة لا في الاستمارة ──────────────────────────────────
+    //
+    // لأنّ `verify` هي التي تكتب في `subscribers` بمفتاح الخدمة — الرمزُ ليس
+    // زينةً على الاستمارة بل الطريقَ إلى الكتابة. فحذفُه من الواجهة وحدَها
+    // يترك المشترِكَ بلا صفّ. والكتابةُ تبقى في موضعٍ واحد.
+    //
+    // ── والاستعادةُ لا تُرفع ────────────────────────────────────────────────
+    //
+    // `reset` تُغيّر كلمةَ مرور حسابٍ قائم، والحساباتُ هنا بالهاتف لا بالبريد
+    // فلا رابطَ يُرسل — الرمزُ حارسُها الوحيد. ورفعُه يعني أنّ من يعرف رقمَ
+    // محطةٍ يملكها. فتُردّ صراحةً من هذا الباب ولو طُلبت.
+    if (action === 'direct') {
+      if (purpose === 'reset') {
+        return json({ error: 'استعادةُ كلمة المرور تحتاج رمزاً' }, 400);
+      }
+
+      if (purpose === 'subscribe') {
+        await db.from('subscribers').upsert(
+          { phone: c, city: typeof city === 'string' ? city : null, unsubscribed_at: null },
+          { onConflict: 'phone' }
+        );
+        return json({ ok: true });
+      }
+
+      if (purpose === 'unsubscribe') {
+        await db
+          .from('subscribers')
+          .update({ unsubscribed_at: new Date().toISOString() })
+          .eq('phone', c);
+        return json({ ok: true });
+      }
+
+      // والتسجيلُ لا يكتب هنا شيئاً: الحسابُ يُنشأ في المتصفّح بعدها. وهذا
+      // البابُ يحمل فحصَ التكرار وحدَه — وهو ما كان `send` يفعله قبل الإرسال،
+      // فلا يُفقد برفع الرمز.
+      if (purpose === 'register') {
+        if (await accountId(c)) return json({ error: 'هذا الرقم مسجّل مسبقاً' }, 409);
+        return json({ ok: true });
+      }
+
+      return json({ error: 'unknown purpose' }, 400);
+    }
+
     if (action === 'verify') {
       const { data: row } = await db.from('otp_codes').select('*').eq('phone', c).maybeSingle();
       if (!row) return json({ error: 'اطلب رمزاً أولاً' }, 400);

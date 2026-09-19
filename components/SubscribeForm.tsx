@@ -18,17 +18,26 @@ async function call(body: Record<string, unknown>) {
   return data;
 }
 
-/** Signing up a citizen for offers. The code is not bureaucracy: without it
- *  anyone could subscribe a stranger's number to messages they never asked
- *  for, and the first thing that number would do is report us as spam. */
+/** اشتراكُ مواطنٍ بالإشعارات — بضغطةٍ واحدة.
+ *
+ *  ── ورُفع الرمز ─────────────────────────────────────────────────────────
+ *
+ *  «وارفع التسجيل عن otp الان» — صاحبُ المنصّة، ١٩ أيلول.
+ *
+ *  وكان الرمزُ يُثبت أنّ الرقمَ لصاحبه، وبلا ذلك يستطيع أحدٌ أن يُشرك رقمَ
+ *  غيره أو يوقفه عنه. والحاجزُ صار يُسقط مشتركين أكثرَ ممّا يحمي: رسالةٌ
+ *  تتأخّر أو لا تصل، فينصرف من جاء ليشترك.
+ *
+ *  والحسابُ ليس هنا: `subscribers` قائمةُ أرقامٍ لا حسابات، والاشتراكُ
+ *  والإيقافُ كلاهما يُراجَع من هذه الشاشة نفسِها. أمّا استعادةُ كلمة المرور
+ *  فيبقى رمزُها — هناك حسابٌ يُملَك، ودالّةُ otp تردّها صراحةً من هذا الباب. */
 export function SubscribeForm() {
-  const [step, setStep] = useState<'form' | 'code' | 'done'>('form');
+  const [step, setStep] = useState<'form' | 'done'>('form');
   // Whether this run enrols the number or stops the messages — same code,
   // same proof of ownership, opposite outcome.
   const [mode, setMode] = useState<'subscribe' | 'unsubscribe'>('subscribe');
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState<string>('');
-  const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,15 +53,9 @@ export function SubscribeForm() {
     }
   }
 
-  const send = () =>
+  const submit = () =>
     run(async () => {
-      await call({ action: 'send', phone, purpose: mode });
-      setStep('code');
-    });
-
-  const verify = () =>
-    run(async () => {
-      await call({ action: 'verify', phone, code, city: city || null });
+      await call({ action: 'direct', phone, purpose: mode, city: city || null });
       setStep('done');
     });
 
@@ -77,8 +80,7 @@ export function SubscribeForm() {
 
   return (
     <section className="card space-y-4 p-5">
-      {step === 'form' ? (
-        <>
+      <>
           <div>
             <label htmlFor="p" className="block text-sm font-semibold">
               رقم هاتفك
@@ -119,12 +121,12 @@ export function SubscribeForm() {
 
           <button
             type="button"
-            onClick={send}
+            onClick={submit}
             disabled={busy || phone.replace(/\D/g, '').length < 10}
             className="btn-primary w-full"
           >
             {busy && <SpinnerIcon className="h-4 w-4" />}
-            أرسل رمز التحقّق
+            {mode === 'unsubscribe' ? 'أوقف الرسائل عن رقمي' : 'اشترك الآن'}
           </button>
 
           {/* Leaving has to be as easy as joining, and reachable without an
@@ -136,42 +138,7 @@ export function SubscribeForm() {
           >
             {mode === 'subscribe' ? 'إيقاف الرسائل عن رقمي' : 'أريد الاشتراك بدل الإيقاف'}
           </button>
-        </>
-      ) : (
-        <>
-          <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700">
-            أرسلنا رمزاً من 6 أرقام إلى <span dir="ltr">{phone}</span>. صالح لعشر دقائق.
-          </p>
-          <input
-            type="text"
-            inputMode="numeric"
-            dir="ltr"
-            maxLength={6}
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-            placeholder="------"
-            aria-label="رمز التحقّق"
-            className="w-full rounded-xl border border-slate-200 px-3 py-3 text-center text-xl font-bold tracking-[0.4em]"
-          />
-          <button
-            type="button"
-            onClick={verify}
-            disabled={busy || code.length !== 6}
-            className="btn-primary w-full"
-          >
-            {busy && <SpinnerIcon className="h-4 w-4" />}
-            {mode === 'unsubscribe' ? 'تأكيد إيقاف الرسائل' : 'تأكيد الاشتراك'}
-          </button>
-          <button
-            type="button"
-            onClick={send}
-            disabled={busy}
-            className="w-full py-2 text-xs font-semibold text-brand-700"
-          >
-            لم يصلك الرمز؟ أعد الإرسال
-          </button>
-        </>
-      )}
+      </>
 
       {error && (
         <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
